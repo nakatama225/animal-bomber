@@ -1,0 +1,22 @@
+# 依存パッケージ
+node_modules/
+
+# ビルド成果物
+dist/
+*.tsbuildinfo
+
+# テスト・ツールのキャッシュ
+coverage/
+.vitest/
+
+# Python 側（サーバ・ツール）
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# エディタ・OS
+.DS_Store
+.vscode/
+.idea/
