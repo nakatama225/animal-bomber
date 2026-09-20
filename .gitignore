@@ -1,20 +1,24 @@
 # 依存パッケージ
 node_modules/
+.venv/
 
-# ビルド成果物
+# ビルド・配布物
 dist/
+build/
+*.egg-info/
+*.spec
 *.tsbuildinfo
 
-# テスト・ツールのキャッシュ
-coverage/
-.vitest/
-
-# Python 側（サーバ・ツール）
-.venv/
+# キャッシュ
 __pycache__/
 *.py[cod]
+coverage/
+htmlcov/
+.coverage
+.vitest/
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
 
 # エディタ・OS
 .DS_Store
