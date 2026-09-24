@@ -113,19 +113,19 @@ describe('当たり判定', () => {
   it('いま重なっているマスは移動先の判定から外す', () => {
     // 足元のマスが後から壁になっても閉じ込められないようにするため。
     const world = makeWorld();
-    const board = world.board;
-    board.set({ col: 3, row: 3 }, 'soft');
+    world.board.set({ col: 3, row: 3 }, 'soft');
+    const player = world.players[0]!;
     const inside = { x: 3.5, y: 3.5 };
     // 壁の中から、同じ壁の中へわずかに動く分には止まらない。
-    expect(collides(board, inside, { x: 3.52, y: 3.5 })).toBe(false);
+    expect(collides(world, player, inside, { x: 3.52, y: 3.5 })).toBe(false);
   });
 
   it('外へ出たあとは、その壁へ戻れない', () => {
     const world = makeWorld();
-    const board = world.board;
-    board.set({ col: 3, row: 3 }, 'soft');
+    world.board.set({ col: 3, row: 3 }, 'soft');
+    const player = world.players[0]!;
     const outside = { x: 4.5, y: 3.5 };
-    expect(collides(board, outside, { x: 3.9, y: 3.5 })).toBe(true);
+    expect(collides(world, player, outside, { x: 3.9, y: 3.5 })).toBe(true);
   });
 
   it('盤面の外は壁として扱う', () => {

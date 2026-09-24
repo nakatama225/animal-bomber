@@ -3,7 +3,9 @@ import { IdSource } from '../core/EntityId.js';
 import { Rng } from '../core/Rng.js';
 import { StateHasher } from '../core/StateHash.js';
 import { tick, type Tick } from '../core/Tick.js';
+import { IDLE_INTENT, packIntent } from '../intent/PlayerIntent.js';
 import { SPAWN_CELLS } from '../rules/tuning.js';
+import type { Blast, Bomb } from './Bomb.js';
 import type { Board } from './Board.js';
 import { buildBoard } from './Board.js';
 import type { PlayerId, PlayerState } from './PlayerState.js';
@@ -24,6 +26,10 @@ export interface WorldState {
   now: Tick;
   readonly board: Board;
   readonly players: PlayerState[];
+  /** 盤面に置かれている爆弾。置かれた順に並ぶ。 */
+  bombs: Bomb[];
+  /** いま出ている爆風。 */
+  blasts: Blast[];
   /** 結果に影響する乱数。見た目の乱数はここに入れない。 */
   readonly rng: Rng;
   /** 盤面に置かれるものの識別子を発番する。 */
@@ -67,10 +73,11 @@ export function createWorld(config: WorldSeed): WorldState {
       activeBombs: 0,
       invulnerableUntil: tick(0),
       walked: 0,
+      previousIntent: IDLE_INTENT,
     };
   });
 
-  return { now: tick(0), board, players, rng, ids: new IdSource() };
+  return { now: tick(0), board, players, bombs: [], blasts: [], rng, ids: new IdSource() };
 }
 
 /**
@@ -89,6 +96,7 @@ export function hashWorld(world: WorldState): number {
   hasher.text(world.board.encode());
   hasher.int(world.rng.calls);
   hasher.int(world.ids.issued);
+
   for (const player of world.players) {
     hasher
       .int(player.id)
@@ -102,7 +110,31 @@ export function hashWorld(world: WorldState): number {
       .int(player.power)
       .int(player.maxBombs)
       .int(player.activeBombs)
-      .int(player.invulnerableUntil);
+      .int(player.invulnerableUntil)
+      .int(packIntent(player.previousIntent));
   }
+
+  // 配列の並び順も結果の一部として混ぜる。並びが違えば誘爆の順序が変わる。
+  for (const bomb of world.bombs) {
+    hasher
+      .int(bomb.id)
+      .int(bomb.cell.col)
+      .int(bomb.cell.row)
+      .int(bomb.owner)
+      .int(bomb.power)
+      .int(bomb.fuse)
+      .bool(bomb.chained)
+      .int(bomb.passThrough.size);
+  }
+  for (const blast of world.blasts) {
+    hasher
+      .int(blast.id)
+      .int(blast.cell.col)
+      .int(blast.cell.row)
+      .int(blast.owner)
+      .bool(blast.isCenter)
+      .int(blast.remaining);
+  }
+
   return hasher.value;
 }

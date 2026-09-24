@@ -1,6 +1,6 @@
 import type { Point } from '../core/Coord.js';
 import type { PlayerIntent } from '../intent/PlayerIntent.js';
-import type { Board } from '../state/Board.js';
+import { isSolidFor } from '../query/BoardQuery.js';
 import type { PlayerId, PlayerState } from '../state/PlayerState.js';
 import { speedOf } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
@@ -34,11 +34,11 @@ export class MovementSystem {
       if (player.life !== 'alive') continue;
       const intent = intents.get(player.id);
       if (intent === undefined) continue;
-      this.#movePlayer(world.board, player, intent);
+      this.#movePlayer(world, player, intent);
     }
   }
 
-  #movePlayer(board: Board, player: PlayerState, intent: PlayerIntent): void {
+  #movePlayer(world: WorldState, player: PlayerState, intent: PlayerIntent): void {
     const dx = (intent.right ? 1 : 0) - (intent.left ? 1 : 0);
     let dy = (intent.down ? 1 : 0) - (intent.up ? 1 : 0);
     if (dx === 0 && dy === 0) return;
@@ -59,21 +59,21 @@ export class MovementSystem {
 
     let movedAny = false;
     for (let i = 0; i < substeps; i += 1) {
-      const moved = this.#tryMove(board, player, dx * perStep, dy * perStep);
+      const moved = this.#tryMove(world, player, dx * perStep, dy * perStep);
       movedAny = movedAny || moved;
       // 進めたときは寄せを弱める。まっすぐ進んでいる最中に強く寄せると、
       // 通路の中央へ吸い寄せられる動きが目立つ。
       const alignRate = moved ? perStep * ALIGN_RATE_WHEN_MOVING : perStep;
-      this.#alignToCorridor(board, player, dx, dy, alignRate);
+      this.#alignToCorridor(world, player, dx, dy, alignRate);
     }
 
     if (movedAny) player.walked += speed;
   }
 
   /** 1回ぶん動かす。動けたら true。 */
-  #tryMove(board: Board, player: PlayerState, mx: number, my: number): boolean {
+  #tryMove(world: WorldState, player: PlayerState, mx: number, my: number): boolean {
     const target = { x: player.position.x + mx, y: player.position.y + my };
-    if (collides(board, player.position, target)) return false;
+    if (collides(world, player, player.position, target)) return false;
     player.position = target;
     return true;
   }
@@ -86,7 +86,7 @@ export class MovementSystem {
    * という理不尽な挙動になる。
    */
   #alignToCorridor(
-    board: Board,
+    world: WorldState,
     player: PlayerState,
     dx: number,
     dy: number,
@@ -98,14 +98,14 @@ export class MovementSystem {
       if (Math.abs(gap) <= ALIGN_EPSILON) return;
       const move = Math.min(Math.abs(gap), rate) * Math.sign(gap);
       const next = { x: player.position.x, y: player.position.y + move };
-      if (!collides(board, player.position, next)) player.position = next;
+      if (!collides(world, player, player.position, next)) player.position = next;
     } else if (dy !== 0 && dx === 0) {
       const target = Math.floor(player.position.x) + 0.5;
       const gap = target - player.position.x;
       if (Math.abs(gap) <= ALIGN_EPSILON) return;
       const move = Math.min(Math.abs(gap), rate) * Math.sign(gap);
       const next = { x: player.position.x + move, y: player.position.y };
-      if (!collides(board, player.position, next)) player.position = next;
+      if (!collides(world, player, player.position, next)) player.position = next;
     }
   }
 }
@@ -119,8 +119,16 @@ export class MovementSystem {
  *
  * 完全に出たあとは判定の対象へ戻るため、いったん出たら戻れない。
  * これは意図した挙動で、「置いた爆弾をすり抜けて逃げ続ける」ことを防ぐ。
+ *
+ * 何が固いかはプレイヤーによって違う（爆弾の通り抜け、動物ごとの能力）。
+ * その判断は `isSolidFor` に集約してあり、ここは形の計算だけを持つ。
  */
-export function collides(board: Board, from: Point, to: Point): boolean {
+export function collides(
+  world: Readonly<WorldState>,
+  player: PlayerState,
+  from: Point,
+  to: Point,
+): boolean {
   const fromCol0 = Math.floor(from.x - PLAYER_RADIUS);
   const fromCol1 = Math.floor(from.x + PLAYER_RADIUS);
   const fromRow0 = Math.floor(from.y - PLAYER_RADIUS);
@@ -136,7 +144,7 @@ export function collides(board: Board, from: Point, to: Point): boolean {
       const alreadyOverlapping =
         col >= fromCol0 && col <= fromCol1 && row >= fromRow0 && row <= fromRow1;
       if (alreadyOverlapping) continue;
-      if (board.isBlocked({ col, row })) return true;
+      if (isSolidFor(world, { col, row }, player)) return true;
     }
   }
   return false;

@@ -1,4 +1,5 @@
 import type { Direction, Point } from '../core/Coord.js';
+import type { PlayerIntent } from '../intent/PlayerIntent.js';
 import type { Tick } from '../core/Tick.js';
 import { BASE_SPEED, MAX_SPEED, SHOE_STEP } from '../rules/tuning.js';
 
@@ -47,6 +48,27 @@ export interface PlayerState {
 
   /** 歩いた距離の合計。歩行の見た目にだけ使う。 */
   walked: number;
+
+  /**
+   * 前の tick に押していた内容。
+   *
+   * 「押した瞬間」を判定するために持つ。爆弾は押しっぱなしで連射せず、
+   * 押し下げた最初の1回だけ置かれる。
+   *
+   * ⚠️ これを System 側の変数として持つと、記録から状態を復元したときに
+   * 失われる。**状態の一部として持つ**ことで、リプレイと通信対戦で
+   * 押した瞬間の判定まで一致する。
+   */
+  previousIntent: PlayerIntent;
+}
+
+/** そのボタンをこの tick に押し下げたか（押しっぱなしは含まない）。 */
+export function justPressed(
+  player: PlayerState,
+  intent: PlayerIntent,
+  button: 'bomb' | 'action',
+): boolean {
+  return intent[button] && !player.previousIntent[button];
 }
 
 /**
