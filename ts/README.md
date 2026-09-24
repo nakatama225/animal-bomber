@@ -2,7 +2,7 @@
 
 動物同士が爆弾で戦う対戦ゲームの TypeScript 実装。ブラウザで動きます。
 
-**現在の状態：設計完了・実装未着手**
+**現在の状態：段階 0 完了**（骨組みと層の検査）。段階ごとの主題は [docs/00-歩き方](docs/00-歩き方.md) にあります。
 
 なぜ同じゲームを2つの言語で作るのか、2本が共有している設計判断は
 [リポジトリ全体の README](../README.md) にあります。ここには TypeScript 版に
@@ -48,11 +48,20 @@ domain       … ゲームのルール（純粋。ブラウザにも実時間に
 
 ## How-to — 動かし方
 
-実装着手後に記載します。予定しているコマンドは以下のとおりです。
-
 ```sh
 npm install
 npm run dev      # 開発サーバ（Vite）
-npm run verify   # 型チェック + 層の依存検査 + テスト（Vitest）
+npm run verify   # 型検査 + 層の依存検査 + lint + テスト（Vitest）
+npm run graph    # docs/layers.svg に層の図を出す（Graphviz が要る）
 npm run build    # 静的ファイルの出力
 ```
+
+`verify` は5つを順に走らせます。
+
+| | 見るもの |
+|---|---|
+| `tsc --noEmit` | 全体の型 |
+| `tsc -p tsconfig.domain.json` | ルールの層がブラウザ API を使っていないこと |
+| `eslint .` | ルールの層が乱数・実時間・環境依存の数学関数を呼んでいないこと |
+| `depcruise` | 層の依存が逆流していないこと |
+| `vitest run` | 振る舞いと、上の検査が実際に違反を落とすこと |

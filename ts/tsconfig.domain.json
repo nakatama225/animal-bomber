@@ -1,0 +1,34 @@
+{
+  // ルールの層 (src/domain) だけを対象にした型検査。
+  //
+  // この設定の主眼は "lib" に "DOM" を入れないことと "types" を空にすること。
+  // これにより domain/ の中に document や window と書いた時点で
+  // 「名前が見つからない」という型エラーになる。レビューでの指摘や
+  // 命名規約ではなく、コンパイラが落とす。
+  //
+  // ⚠️ この設定を緩めると、層の境界を守る仕組みが1つ失われる。
+  // 実時間や乱数 (Math.random / Date.now) は ES2022 の一部なので
+  // 型検査では止まらない。そちらは ESLint の no-restricted-globals で禁じている。
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "types": [],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
+
+    "noEmit": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/domain"]
+}

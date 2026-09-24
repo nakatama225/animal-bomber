@@ -1,0 +1,29 @@
+{
+  "name": "animal-bomber-ts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "どうぶつボンバー TypeScript 版。ルールの層をブラウザから切り離した実装",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "typecheck:domain": "tsc -p tsconfig.domain.json",
+    "lint": "eslint .",
+    "depcruise": "depcruise src --config .dependency-cruiser.cjs",
+    "graph": "depcruise src --config .dependency-cruiser.cjs --output-type dot | dot -T svg > docs/layers.svg",
+    "test": "vitest run",
+    "verify": "npm run typecheck && npm run typecheck:domain && npm run lint && npm run depcruise && npm run test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.2",
+    "dependency-cruiser": "^18.4.0",
+    "eslint": "^10.11.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.70.1",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.1"
+  }
+}

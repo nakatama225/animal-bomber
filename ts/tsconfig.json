@@ -1,0 +1,33 @@
+{
+  // プロジェクト全体の型検査。ブラウザ API を使う層（platform / presentation）も
+  // ここに含まれるため、DOM の型定義を入れている。
+  //
+  // ルールの層だけを対象にした tsconfig.domain.json は DOM を外してある。
+  // 「domain/ でブラウザ API を使わない」を人が気をつけて守るのではなく、
+  // 型検査が落とす形にするのが目的。両方を verify で走らせる。
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+
+    "strict": true,
+    // 配列や辞書の添字アクセスに undefined を含める。盤面の座標計算が多いため、
+    // 範囲外アクセスを型で検出できる意味が大きい。生の添字アクセスは
+    // Board の内側に閉じ込め、外へは境界を確認した値だけを渡す。
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
+
+    "noEmit": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src", "tests", "vite.config.ts"]
+}
