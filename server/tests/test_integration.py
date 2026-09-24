@@ -1,0 +1,175 @@
+"""実ソケットでの疎通確認。
+
+`test_relay.py` は `Room` の判断ロジックを見ている。
+こちらは「実際に TCP でつないだ2本の WebSocket クライアントが、
+本物の `websockets.serve` を経由して意図通りに繋がるか」を見る。
+`Room` が正しくても、`main.py` の配線を間違えれば動かないため、両方要る。
+
+ポートは 0 を指定して OS に自動採番させる。固定ポートにすると、
+テストを2つ同時に走らせたときや、開発機で同じポートを使う何かが
+既に動いているときに衝突する。
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import tempfile
+from pathlib import Path
+
+import pytest
+import websockets
+from websockets.asyncio.server import serve
+
+from animal_bomber_server.http import make_process_request
+from animal_bomber_server.main import make_handler
+from animal_bomber_server.relay import Room
+
+
+@pytest.fixture
+async def running_server():
+    """本物の `websockets.serve` を、テスト用の HTML を添えて起動する。"""
+    with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as f:
+        f.write(b"<html><body>animal bomber</body></html>")
+        html_path = Path(f.name)
+
+    room = Room(max_seats=2)
+    async with serve(
+        make_handler(room),
+        host="127.0.0.1",
+        port=0,  # OS に空きポートを選ばせる
+        process_request=make_process_request(html_path),
+    ) as server:
+        port = server.sockets[0].getsockname()[1]
+        yield port
+    html_path.unlink()
+
+
+async def test_HTTP_GETでHTMLが返る(running_server):
+    port = running_server
+
+    def fetch():
+        # http.client は同期 API。テスト自体は非同期関数の中で走っており、
+        # サーバも同じイベントループの上で応答を作る。同期呼び出しをそのまま
+        # 呼ぶとイベントループを塞いでサーバが応答できずデッドロックするため、
+        # 別スレッドに逃がして初めて「サーバ→クライアント」の往復が成立する。
+        import http.client
+
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
+        conn.request("GET", "/")
+        resp = conn.getresponse()
+        body = resp.read()
+        content_type = resp.getheader("Content-Type")
+        conn.close()
+        return resp.status, body, content_type
+
+    status, body, content_type = await asyncio.to_thread(fetch)
+
+    assert status == 200
+    assert b"animal bomber" in body
+    assert content_type.startswith("text/html")
+
+
+async def test_1本目のWebSocket接続がホスト座席を受け取る(running_server):
+    port = running_server
+    async with websockets.connect(f"ws://127.0.0.1:{port}") as ws:
+        welcome = json.loads(await ws.recv())
+        assert welcome == {
+            "t": "welcome",
+            "seat": 0,
+            "role": "host",
+            "seats": [],
+        }
+
+
+async def test_2本目はゲスト座席を受け取る(running_server):
+    port = running_server
+    async with websockets.connect(f"ws://127.0.0.1:{port}") as host_ws:
+        await host_ws.recv()  # host の welcome を読み捨てる
+        async with websockets.connect(f"ws://127.0.0.1:{port}") as guest_ws:
+            await host_ws.recv()  # host に届く peer_joined を読み捨てる
+            welcome = json.loads(await guest_ws.recv())
+            assert welcome == {
+                "t": "welcome",
+                "seat": 1,
+                "role": "guest",
+                "seats": [0],
+            }
+
+
+async def test_3本目は満席で切断される(running_server):
+    port = running_server
+    async with (
+        websockets.connect(f"ws://127.0.0.1:{port}") as host_ws,
+        websockets.connect(f"ws://127.0.0.1:{port}") as guest_ws,
+    ):
+        await host_ws.recv()
+        await guest_ws.recv()
+
+        third = await websockets.connect(f"ws://127.0.0.1:{port}")
+        with pytest.raises(websockets.exceptions.ConnectionClosed):
+            await third.recv()
+
+
+async def test_ホストの送信がゲストに実際に届く(running_server):
+    port = running_server
+    async with (
+        websockets.connect(f"ws://127.0.0.1:{port}") as host_ws,
+        websockets.connect(f"ws://127.0.0.1:{port}") as guest_ws,
+    ):
+        await host_ws.recv()
+        await guest_ws.recv()
+
+        await host_ws.send('{"t":"snap","grid":"abc"}')
+        received = json.loads(await guest_ws.recv())
+
+        assert received == {"t": "snap", "grid": "abc"}
+
+
+async def test_ゲストの入力が実際にホストへ届く(running_server):
+    port = running_server
+    async with (
+        websockets.connect(f"ws://127.0.0.1:{port}") as host_ws,
+        websockets.connect(f"ws://127.0.0.1:{port}") as guest_ws,
+    ):
+        await host_ws.recv()  # welcome
+        await guest_ws.recv()
+        await host_ws.recv()  # guest 参加時の peer_joined
+
+        await guest_ws.send('{"right":true}')
+        received = json.loads(await host_ws.recv())
+
+        assert received == {"right": True}
+
+
+async def test_ゲストが切断してもホストの接続は生きている(running_server):
+    port = running_server
+    async with websockets.connect(f"ws://127.0.0.1:{port}") as host_ws:
+        await host_ws.recv()  # welcome
+        guest_ws = await websockets.connect(f"ws://127.0.0.1:{port}")
+        await guest_ws.recv()
+        await host_ws.recv()  # guest 参加時の peer_joined
+
+        await guest_ws.close()
+
+        notice = json.loads(await host_ws.recv())
+        assert notice == {"t": "peer_left", "seat": 1, "host": False}
+        # ホストへ ping を送って、まだ生きていることを確認する
+        pong = await host_ws.ping()
+        await pong
+
+
+async def test_ホストが切断するとゲストの接続も閉じられる(running_server):
+    port = running_server
+    host_ws = await websockets.connect(f"ws://127.0.0.1:{port}")
+    await host_ws.recv()
+    async with websockets.connect(f"ws://127.0.0.1:{port}") as guest_ws:
+        await guest_ws.recv()
+
+        await host_ws.close()
+
+        # 通知を受けたあと、サーバ側から接続も閉じられるはず
+        notice = json.loads(await guest_ws.recv())
+        assert notice == {"t": "peer_left", "seat": 0, "host": True}
+        with pytest.raises(websockets.exceptions.ConnectionClosed):
+            await guest_ws.recv()
