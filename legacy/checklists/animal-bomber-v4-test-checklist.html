@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>どうぶつボンバー v4.0.0 実機テスト</title>
+<style>
+  :root{
+    --bg:#12141a; --panel:#1b1e27; --panel2:#161922; --line:#2b3040;
+    --fg:#e8ecf5; --dim:#8b93a7; --hot:#ffd23f; --on:#3ddc84; --ng:#ff6b6b;
+    --dk:#b08bff; --accent:#5aa9ff;
+    color-scheme: dark;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--fg);
+    font:14px/1.7 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+    padding:20px 16px 80px;
+  }
+  .wrap{max-width:900px; margin:0 auto}
+  h1{font-size:20px; margin:0 0 4px}
+  .sub{color:var(--dim); font-size:13px; margin-bottom:20px}
+
+  /* ---- 環境 ---- */
+  .env{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:18px}
+  .env h2{font-size:13px; color:var(--dim); margin:0 0 10px; font-weight:600}
+  .envrow{display:flex; flex-wrap:wrap; gap:10px}
+  .envrow label{flex:1 1 200px; font-size:12px; color:var(--dim)}
+  .envrow input{
+    width:100%; margin-top:3px; background:var(--panel2); color:var(--fg);
+    border:1px solid var(--line); border-radius:7px; padding:7px 9px; font:inherit; font-size:13px;
+  }
+
+  /* ---- 用語 ---- */
+  details.gloss{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 16px; margin-bottom:18px}
+  details.gloss summary{cursor:pointer; font-weight:700; font-size:14px; color:var(--hot)}
+  details.gloss table{width:100%; border-collapse:collapse; margin-top:12px; font-size:13px}
+  details.gloss td{border-top:1px solid var(--line); padding:8px 6px; vertical-align:top}
+  details.gloss td:first-child{white-space:nowrap; color:var(--hot); font-weight:700; padding-right:14px}
+
+  /* ---- セクション ---- */
+  .sec{border:1px solid var(--line); border-radius:12px; margin-bottom:18px; overflow:hidden}
+  .sechead{background:var(--panel); padding:13px 16px; display:flex; flex-wrap:wrap; gap:8px 12px; align-items:baseline}
+  .sechead .id{font-size:17px; font-weight:800; color:var(--accent)}
+  .sechead .ti{font-size:15px; font-weight:700; flex:1}
+  .sechead .cnt{font-size:12px; color:var(--dim); font-variant-numeric:tabular-nums}
+  .secnote{background:var(--panel); padding:0 16px 13px; color:var(--dim); font-size:12.5px; margin-top:-4px}
+  .secnote b{color:var(--hot)}
+  .secbody{padding:4px 0}
+
+  .warn{
+    background:#2a1f16; border-left:3px solid var(--hot); margin:0 16px 12px;
+    padding:11px 13px; border-radius:0 8px 8px 0; font-size:12.5px;
+  }
+  .warn b{color:var(--hot)}
+
+  pre.cmd{
+    margin:0 16px 12px; background:#0c0e13; border:1px solid var(--line); border-radius:8px;
+    padding:12px 13px; overflow-x:auto; font:12px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace;
+    color:#cfe3ff;
+  }
+  .cmdwrap{position:relative}
+  .cmdwrap button{
+    position:absolute; top:6px; right:24px; background:var(--accent); color:#06121f;
+    border:0; border-radius:6px; padding:4px 10px; font-size:11.5px; font-weight:700; cursor:pointer;
+  }
+
+  /* ---- 項目 ---- */
+  .item{border-top:1px solid var(--line); padding:13px 16px; background:var(--panel2)}
+  .item.done-ok{background:#13211a}
+  .item.done-ng{background:#241618}
+  .item.done-dk{background:#1d1828}
+  .ihead{display:flex; gap:10px; align-items:baseline; margin-bottom:6px}
+  .ino{font-weight:800; font-size:13px; color:var(--dim); min-width:34px; font-variant-numeric:tabular-nums}
+  .item.done-ok .ino{color:var(--on)}
+  .item.done-ng .ino{color:var(--ng)}
+  .item.done-dk .ino{color:var(--dk)}
+  .ido{font-weight:700; flex:1}
+  .star{color:var(--hot); font-size:12px; white-space:nowrap}
+  .isee{color:var(--fg); font-size:13px; background:#0f1219; border:1px solid var(--line);
+        border-radius:8px; padding:8px 11px; margin:0 0 9px 44px}
+  .isee::before{content:"見るもの　"; color:var(--dim); font-size:11.5px; font-weight:700}
+  .ihint{margin:0 0 9px 44px; font-size:12px; color:var(--dim)}
+  .ihint b{color:var(--hot)}
+
+  .pick{display:flex; flex-wrap:wrap; gap:7px; margin-left:44px}
+  .pick label{
+    display:inline-flex; align-items:center; gap:5px; cursor:pointer; user-select:none;
+    border:1px solid var(--line); border-radius:8px; padding:5px 11px; font-size:13px; background:#0f1219;
+  }
+  .pick input{accent-color:var(--accent); margin:0}
+  .pick label.ok.sel{background:var(--on); color:#08130c; border-color:var(--on); font-weight:700}
+  .pick label.ng.sel{background:var(--ng); color:#200b0b; border-color:var(--ng); font-weight:700}
+  .pick label.dk.sel{background:var(--dk); color:#160b26; border-color:var(--dk); font-weight:700}
+  .pick .clr{color:var(--dim); font-size:12px; border-style:dashed}
+
+  .memo{margin:9px 0 0 44px}
+  .memo textarea{
+    width:100%; min-height:52px; background:#0f1219; color:var(--fg); border:1px solid var(--line);
+    border-radius:8px; padding:8px 10px; font:inherit; font-size:13px; resize:vertical;
+  }
+  .memo textarea::placeholder{color:#5d657a}
+
+  /* ---- 出力 ---- */
+  .out{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-top:24px}
+  .out h2{font-size:14px; margin:0 0 4px}
+  .out .h{color:var(--dim); font-size:12.5px; margin-bottom:10px}
+  .out textarea{
+    width:100%; min-height:260px; background:#0c0e13; color:var(--fg); border:1px solid var(--line);
+    border-radius:8px; padding:12px; resize:vertical;
+    font:12.5px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  .btnrow{display:flex; flex-wrap:wrap; gap:9px; margin-top:11px}
+  button.big{
+    background:var(--accent); color:#06121f; border:0; border-radius:8px;
+    padding:9px 18px; font-size:14px; font-weight:800; cursor:pointer;
+  }
+  button.ghost{background:transparent; color:var(--dim); border:1px solid var(--line)}
+
+  .bar{height:5px; background:#0c0e13; border-radius:3px; overflow:hidden; width:100%; margin-top:8px; display:flex}
+  .bar i{height:100%}
+  .bar .b-ok{background:var(--on)} .bar .b-ng{background:var(--ng)} .bar .b-dk{background:var(--dk)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>どうぶつボンバー v4.0.0 実機テスト</h1>
+  <div class="sub">
+    🎮コントローラー対応の確認。<b>A → B → C の順</b>にやる（A が通らないうちに LAN へ行くと、
+    どこが悪いのか分からなくなる）。結果は一番下のテキスト欄に自動でたまるので、
+    コピーして開発側に貼る。<b>途中で閉じても入力は残る</b>。
+  </div>
+
+  <div class="env">
+    <h2>環境</h2>
+    <div class="envrow">
+      <label>この Mac<input id="envMac" placeholder="作者の MacBook Pro"></label>
+      <label>ブラウザ<input id="envBrowser" placeholder="Chrome / Safari など"></label>
+      <label>コントローラー<input id="envPad" placeholder="STK-7043（Bluetooth）"></label>
+    </div>
+  </div>
+
+  <details class="gloss">
+    <summary>言葉の確認（呼び方がズレていたので揃える）</summary>
+    <table>
+      <tr><td>コントローラー</td><td>作者の STK-7043。コード上は「パッド」とも呼ぶが<b>同じもの</b>。コードの中が <code>PAD</code> / <code>Pad:A</code> と書いてあるせい</td></tr>
+      <tr><td>リザルト画面</td><td>ラウンドが終わったとき画面の真ん中に出るカード。「ラウンド3　うさぎの かち」みたいに出て、下に<b>「つぎのラウンド ▶」</b>ボタンがある（優勝が決まった時は<b>「もういっかい」</b>）</td></tr>
+      <tr><td>リザルト画面を進める</td><td>その「つぎのラウンド ▶」を押すこと。マウス・キーボードの Space / Enter・<b>コントローラーの A</b>、どれでもできる。コード上「バナーを送る」と呼んでいるのはこれ</td></tr>
+      <tr><td>技ボタン</td><td>コントローラーだと <b>B・X・Y・L1</b>。ポンと押す＝通常技、0.5秒 押し続ける＝とくぎ🍗</td></tr>
+      <tr><td>ホスト / ゲスト</td><td>ホスト＝<code>.app</code>（サーバ）を立てる方＝作者の Mac。ゲスト＝URL を開くだけの方＝家族の Mac</td></tr>
+    </table>
+  </details>
+
+  <div id="secs"></div>
+
+  <div class="out">
+    <h2>結果（これをコピーして開発側に貼る）</h2>
+    <div class="h">選ぶたびに自動で書き換わる。未入力の項目は「未」として出る。</div>
+    <textarea id="dump" readonly></textarea>
+    <div class="btnrow">
+      <button class="big" id="copyBtn">コピー</button>
+      <button class="big ghost" id="resetBtn">ぜんぶ消す</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* 手順データ。
+   do   = やること（作者が読んで迷わない粒度で書く）
+   see  = 見るもの（期待値）
+   hint = 補足・注意
+   star = 1:⭐ 2:⭐⭐（落ちると困る度） */
+const SECTIONS = [
+  {
+    id:'A', title:'ローカル（1台・コントローラー1個）　✅ 2026-09-20 通過済み',
+    note:'<b>ここはもう触らなくていい。</b>全13項目に加えて、メニュー操作'
+       + '（タイトル → キャラをえらぶ → ルールをきめる → リザルト画面）も'
+       + 'コントローラーだけで通ることを確認済み。<br>'
+       + 'コントローラーの中身はローカルで全部わかっているので、B・C で見るのは'
+       + '<b>「LAN を通しても同じか」だけ</b>。',
+    items:[
+      { n:'A✓', do:'（記録）2026-09-20 にローカルで全部通った',
+        see:'十字とスティックで移動 ／ A で爆弾 ／ 長押しでとくぎ ／ Start でポーズ ／ '
+          + 'リザルト画面を A で送って押しっぱなしでも初期位置で自爆しない ／ '
+          + 'コントローラーの電源を落としても壁に向かって歩き続けない ／ '
+          + '2人プレイではコントローラーが効かない ／ '
+          + '<b>メニューもコントローラーで動かせる（v4.1.0）</b>' },
+],
+  },
+  {
+    id:'B', title:'LAN・ホスト側（作者の Mac・.app を立てる方）',
+    note:'A が全部 ✅ になってから。<b>ここからは家族の Mac も要る。</b>',
+    warn:'⚠️ <b>先に下のデプロイを回す。</b> <code>.app</code> の中に HTML が埋め込まれていて、'
+       + 'サーバは<b>起動したときに一度だけ読んでメモリに持つ</b>。差し替えないと家族の画面に届くのは古い版のまま。<br>'
+       + '症状は「コントローラーが効かない」で、<b>バグにしか見えない</b>。最後の <code>grep -c</code> が <b>0 以外</b>になるまで確認する。<br>'
+       + '⭐ 数えるのは <code>MENU_ORDER</code>。v4.0.0 にも <code>pollGamepads</code> は入っているので、'
+       + 'そちらを数えると「古い版なのに 0 以外」になって差し替え漏れを見逃す。',
+    cmd:'APP="~/animal-bomber/server/dist/どうぶつボンバー LAN対戦サーバ.app"\n'
+      + 'pkill -f "animal-bomber-server"; sleep 1\n'
+      + 'cp ~/animal-bomber/legacy/animal-bomber.html "$APP/Contents/Resources/animal-bomber.html"\n'
+      + 'codesign --force --deep -s - "$APP"\n'
+      + 'codesign --verify --strict "$APP"\n'
+      + 'open "$APP"\n'
+      + 'curl -s http://$(ipconfig getifaddr en0):8777/ | grep -c MENU_ORDER',
+    items:[
+      { n:'B1', do:'上のコマンドを回して <code>.app</code> を起動する',
+        see:'URL が2種類出る。最後の <code>grep -c</code> が <b>0 以外</b>。'
+          + 'ゲームのマニュアル画面の更新履歴の先頭が <b>4.1.0</b> になっている',
+        hint:'4.1.0 が出ていなければ差し替えに失敗している。ここで止めて開発側に伝える' },
+
+      { n:'B2', do:'ホスト（この Mac）でコントローラーを繋いで、<b>タイトルからロビーまでコントローラーだけで進む</b>',
+        see:'十字で白い枠が動く → 「LAN対戦」で A → 「たてる」で A → ロビーに入る',
+        hint:'ここが落ちたら A（ローカル）に戻る。ホストはローカルと同じ道を通る' },
+
+      { n:'B3', do:'ロビーで<b>人数・動物・CPU の強さをコントローラーで変える</b>',
+        see:'上下で行を移り、左右でその行の中を移る。A で決まる。'
+          + '<b>オレンジの枠（選んだ印）と白い枠（カーソル）が別々に見える</b>' },
+
+      { n:'B4', star:1, do:'<b>家族の Mac をつないだ瞬間</b>のホスト画面を見る（B3 でカーソルを動かしている最中がいい）',
+        see:'参加者の欄が「🟢 接続済み」に変わる。<b>カーソルの枠は消えない・変な所へ飛ばない</b>',
+        hint:'今回いちばん不安なところ。本人が何も押していないのに画面が作り直される唯一の場所' },
+
+      { n:'B5', do:'「はじめる ▶」を<b>コントローラーの A で</b>押して試合する',
+        see:'A2〜A10（ローカルで通したやつ）がそのまま通る' },
+
+      { n:'B6', do:'試合中のホストの画面を見る',
+        see:'ポーズボタンと<b>速度スライダーが出ている</b>（ホストだけの権限）' },
+
+      { n:'B7', do:'ラウンドが終わったリザルト画面で<b>十字の上下</b>を押す',
+        see:'「つぎのラウンド ▶」と「⚙ 設定をやりなおす」を行き来できる。A で決まる',
+        hint:'2026-09-20 に作者が見つけたバグ。前は A が「つぎのラウンド」直結で、'
+           + '「設定をやりなおす」に永久に辿りつけなかった' },
+
+      { n:'B8', do:'ゲスト（家族の Mac）の Wi-Fi を切る',
+        see:'その人の枠を <b>CPU が引き継ぐ</b>。試合は続く',
+        hint:'v3.0.0 からある機能。壊れてないかの確認' },
+
+      { n:'B9', star:1, do:'試合中に <code>.app</code> を落とす（サーバを殺す）',
+        see:'<b>ホスト自身も設定画面へ戻る</b>',
+        hint:'v4.0.0 で直したところ。前は役割だけ消えて試合が走り続けていた。C6 と同時に見る' },
+
+      { n:'B10', star:1, do:'ロビー画面で<b>コントローラーの B</b> を押す',
+        see:'いきなり切れず、<b>「せつぞくを切ります。よいですか？」の確認が出る</b>。'
+          + 'カーソルは<b>「やめる」の側</b>に乗っている。もう一度 B で閉じる',
+        hint:'v4.1.0 で足した。⛔ ここで <b>OS の灰色のダイアログ（OK / キャンセル）</b>が出たら作りが違う'
+           + '（それはコントローラーで押せない）。画面の中に出るはず' },
+
+      { n:'B11', star:1, do:'その確認で「せつぞくを切る」を選ぶ → タイトルへ戻る → <b>そのまま1人プレイを始める</b>',
+        see:'普通に遊べる。<b>盤面が固まらない・勝手にタイトルへ飛ばされない</b>',
+        hint:'v4.0.0 で直したところ。LAN から抜けた後始末が遅れて走ってきて、'
+           + '始めたばかりの1人プレイを畳んでしまう問題' },
+
+      { n:'B12', do:'タイトルに戻った直後、<b>何も触らずに</b>画面を見る',
+        see:'<b>白い枠が出ていない</b>。十字を触ると出る',
+        hint:'v4.1.0 で足した処理。枠はコントローラーを触ったときだけ出る約束' },
+],
+  },
+  {
+    id:'C', title:'LAN・ゲスト側（もう1台・URL を開く方）',
+    note:'<code>.app</code> は要らない。ホストが出した URL をブラウザで開くだけ。'
+       + '<b>Mac でも Windows でもいい</b>（ゲーム側に OS に依存する処理は無い）。',
+    warn:'⛔ <b>Windows のときは IP の方の URL を使う。</b> ホストの <code>.app</code> は'
+       + '<code>http://my-macbook.local:8777</code> と <code>http://192.168.x.x:8777</code> の'
+       + '2種類を出すが、<code>.local</code> は Apple 発の仕組み（mDNS）なので'
+       + '<b>Windows だと引けないことがある</b>。症状が「ページが開けません」で、'
+       + 'ゲームのバグには見えない。<br>'
+       + 'ブラウザは <b>Chrome か Edge</b>。<br>'
+       + '⚠️ <b>コントローラーが1個しかないときは、ホスト側をキーボードにしてコントローラーをゲストに回す。</b>'
+       + 'C1 が今回いちばんの見どころなので、そこだけは譲らない。',
+    items:[
+      { n:'C1', star:2, do:'ゲストでコントローラーを繋いで動かす',
+        see:'<b>効く。</b>移動も爆弾も技も、ホストと同じように動く',
+        hint:'<b>今回いちばんの見どころ。</b>通信のコードを1行も触らずにゲストまで通したので、'
+           + 'ここが動けば設計が当たっていた証拠' },
+      { n:'C2', do:'ゲストで <b>URL を開いてからロビーに入るまで</b>をコントローラーだけでやる',
+        see:'タイトルで十字 → 白い枠が出る → 「LAN対戦」で A → 「さんかする」で A → ロビー',
+        hint:'v4.1.0 で足したところ。ゲスト側でもメニューが動くか' },
+      { n:'C3', do:'ゲストのロビー画面でカーソルを動かす',
+        see:'<b>白い枠がどこにも出ない</b>（ゲストは設定を変えられないので、これが正しい）。'
+          + '「はじめる ▶」も出ていない',
+        hint:'設定はホストだけが決める。ゲストが選んでも、始めるときにホストの設定で'
+           + '上書きされるだけなので、そもそも触らせていない' },
+      { n:'C4', star:1, do:'ゲストのロビーで<b>コントローラーの B</b> を押す',
+        see:'<b>「せつぞくを切ります。よいですか？」の確認が出る</b>。'
+          + 'カーソルは「やめる」の側。「やめる」を選べばロビーに残る',
+        hint:'v4.1.0 で足した。ゲストにとってはここが唯一の操作になる' },
+      { n:'C5', do:'ゲストの画面を見る',
+        see:'ポーズボタンと速度スライダーが<b>出ていない</b>' },
+      { n:'C6', do:'ゲストで Start を押す',
+        see:'<b>ポーズできない</b>（止められるのはホストだけ）' },
+      { n:'C7', star:1, do:'ラウンドが終わってリザルト画面が出たら、<b>ゲストで A を押す</b>',
+        see:'<b>ラウンドが進まない</b>（何も起きないのが正解）',
+        hint:'ゲストが進めると、ゲストだけホストと違う盤面を作ってしまって画面が崩れる' },
+      { n:'C8', do:'ゲストの画面の時計と HP（ハート）を見る',
+        see:'ホストと同じ。ずれない' },
+      { n:'C9', star:1, do:'ホストが <code>.app</code> を落とす（B9 と同時に見る）',
+        see:'<b>ゲストも設定画面へ戻る</b>。エラーで固まらない',
+        hint:'v4.0.0 で直したところ。前はゲストが毎フレームエラーを吐き続けて固まっていた' },
+],
+  },
+];
+
+const KEY = 'ab-v4-test';
+const state = JSON.parse(localStorage.getItem(KEY) || '{}');
+
+function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
+
+const secsEl = document.getElementById('secs');
+const dumpEl = document.getElementById('dump');
+
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function build(){
+  let html = '';
+  for (const sec of SECTIONS){
+    html += `<div class="sec" id="sec-${sec.id}">
+      <div class="sechead">
+        <span class="id">${sec.id}</span>
+        <span class="ti">${sec.title}</span>
+        <span class="cnt" id="cnt-${sec.id}"></span>
+      </div>
+      <div class="bar" id="bar-${sec.id}"></div>
+      <div class="secnote">${sec.note}</div>`;
+    if (sec.warn) html += `<div class="warn">${sec.warn}</div>`;
+    if (sec.cmd)  html += `<div class="cmdwrap"><button data-cmd="${sec.id}">コピー</button><pre class="cmd" id="cmd-${sec.id}">${esc(sec.cmd)}</pre></div>`;
+    html += `<div class="secbody">`;
+    for (const it of sec.items){
+      const v = (state[it.n] || {}).v || '';
+      const m = (state[it.n] || {}).m || '';
+      const stars = it.star === 2 ? '⭐⭐' : it.star === 1 ? '⭐' : '';
+      html += `<div class="item ${v ? 'done-'+v : ''}" id="it-${it.n}">
+        <div class="ihead">
+          <span class="ino">${it.n}</span>
+          <span class="ido">${it.do}</span>
+          ${stars ? `<span class="star">${stars}</span>` : ''}
+        </div>
+        <div class="isee">${it.see}</div>
+        ${it.hint ? `<div class="ihint">${it.hint}</div>` : ''}
+        <div class="pick">
+          <label class="ok ${v==='ok'?'sel':''}"><input type="radio" name="${it.n}" value="ok" ${v==='ok'?'checked':''}>できた</label>
+          <label class="ng ${v==='ng'?'sel':''}"><input type="radio" name="${it.n}" value="ng" ${v==='ng'?'checked':''}>ダメだった</label>
+          <label class="dk ${v==='dk'?'sel':''}"><input type="radio" name="${it.n}" value="dk" ${v==='dk'?'checked':''}>やり方がわからん</label>
+          <label class="clr"><input type="radio" name="${it.n}" value="" ${v===''?'checked':''}>未</label>
+        </div>
+        <div class="memo"><textarea data-memo="${it.n}" placeholder="気づいたこと・どう違ったか（ダメだった / わからん のときは書いてほしい）">${esc(m)}</textarea></div>
+      </div>`;
+    }
+    html += `</div></div>`;
+  }
+  secsEl.innerHTML = html;
+
+  secsEl.addEventListener('change', e => {
+    const r = e.target;
+    if (r.type === 'radio'){
+      state[r.name] = state[r.name] || {};
+      state[r.name].v = r.value;
+      save(); refresh();
+    }
+  });
+  secsEl.addEventListener('input', e => {
+    const ta = e.target.closest('[data-memo]');
+    if (ta){
+      const n = ta.dataset.memo;
+      state[n] = state[n] || {};
+      state[n].m = ta.value;
+      save(); render();
+    }
+  });
+  secsEl.addEventListener('click', e => {
+    const b = e.target.closest('[data-cmd]');
+    if (b){
+      navigator.clipboard.writeText(document.getElementById('cmd-' + b.dataset.cmd).textContent)
+        .then(() => { b.textContent = 'コピーした'; setTimeout(() => b.textContent = 'コピー', 1200); });
+    }
+  });
+  for (const id of ['envMac','envBrowser','envPad']){
+    const el = document.getElementById(id);
+    el.value = state[id] || '';
+    el.addEventListener('input', () => { state[id] = el.value; save(); render(); });
+  }
+  refresh();
+}
+
+/** 色とカウンタを塗り直す */
+function refresh(){
+  for (const sec of SECTIONS){
+    let ok=0, ng=0, dk=0, un=0;
+    for (const it of sec.items){
+      const v = (state[it.n] || {}).v || '';
+      const el = document.getElementById('it-' + it.n);
+      el.className = 'item' + (v ? ' done-' + v : '');
+      if (v==='ok') ok++; else if (v==='ng') ng++; else if (v==='dk') dk++; else un++;
+    }
+    const tot = sec.items.length;
+    document.getElementById('cnt-' + sec.id).textContent =
+      un === tot ? `未着手（${tot}項目）` : `✅${ok}　❌${ng}　❓${dk}　未${un}　/ ${tot}項目`;
+    const bar = document.getElementById('bar-' + sec.id);
+    bar.innerHTML = `<i class="b-ok" style="width:${ok/tot*100}%"></i>`
+                  + `<i class="b-ng" style="width:${ng/tot*100}%"></i>`
+                  + `<i class="b-dk" style="width:${dk/tot*100}%"></i>`;
+  }
+  render();
+}
+
+/** 開発側に渡すテキストを組み立てる */
+function render(){
+  const L = [];
+  L.push('どうぶつボンバー v4.0.0 実機テスト結果');
+  L.push('='.repeat(38));
+  L.push('記入: ' + new Date().toLocaleString('ja-JP'));
+  const env = [state.envMac, state.envBrowser, state.envPad].filter(Boolean).join(' / ');
+  L.push('環境: ' + (env || '(未記入)'));
+  L.push('');
+
+  for (const sec of SECTIONS){
+    let ok=0, ng=0, dk=0, un=0;
+    for (const it of sec.items){
+      const v = (state[it.n] || {}).v || '';
+      if (v==='ok') ok++; else if (v==='ng') ng++; else if (v==='dk') dk++; else un++;
+    }
+    L.push(`${sec.id}. ${sec.title}`
+      + (un === sec.items.length ? '  → 未着手'
+        : `  ✅${ok} ❌${ng} ❓${dk} 未${un} (全${sec.items.length})`));
+  }
+
+  const bad = [], dunno = [], good = [], notyet = [];
+  for (const sec of SECTIONS) for (const it of sec.items){
+    const st = state[it.n] || {};
+    const row = { n: it.n, do: it.do.replace(/<[^>]+>/g,''), see: it.see.replace(/<[^>]+>/g,''), m: (st.m||'').trim() };
+    if (st.v === 'ng') bad.push(row);
+    else if (st.v === 'dk') dunno.push(row);
+    else if (st.v === 'ok') good.push(row);
+    else notyet.push(row);
+  }
+
+  if (bad.length){
+    L.push(''); L.push('--- ❌ ダメだった ---');
+    for (const r of bad){
+      L.push(`${r.n} ${r.do}`);
+      L.push(`   期待: ${r.see}`);
+      if (r.m) L.push(`   メモ: ${r.m}`);
+    }
+  }
+  if (dunno.length){
+    L.push(''); L.push('--- ❓ やり方がわからん ---');
+    for (const r of dunno){
+      L.push(`${r.n} ${r.do}`);
+      if (r.m) L.push(`   メモ: ${r.m}`);
+    }
+  }
+  const okMemo = good.filter(r => r.m);
+  if (okMemo.length){
+    L.push(''); L.push('--- ✅ できたけどメモあり ---');
+    for (const r of okMemo) L.push(`${r.n} ${r.m}`);
+  }
+  if (good.length){
+    L.push(''); L.push('--- ✅ できた ---');
+    L.push('   ' + good.map(r => r.n).join(' '));
+  }
+  if (notyet.length){
+    L.push(''); L.push('--- 未 ---');
+    L.push('   ' + notyet.map(r => r.n).join(' '));
+  }
+  dumpEl.value = L.join('\n');
+}
+
+document.getElementById('copyBtn').onclick = () => {
+  navigator.clipboard.writeText(dumpEl.value).then(() => {
+    const b = document.getElementById('copyBtn');
+    b.textContent = 'コピーした'; setTimeout(() => b.textContent = 'コピー', 1400);
+  });
+};
+document.getElementById('resetBtn').onclick = () => {
+  if (!confirm('入力した結果を全部消す。いい？')) return;
+  localStorage.removeItem(KEY);
+  for (const k of Object.keys(state)) delete state[k];
+  build();
+};
+
+build();
+</script>
+</body>
+</html>

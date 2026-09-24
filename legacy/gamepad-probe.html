@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ゲームパッド検出</title>
+<style>
+  :root{
+    --bg:#12141a; --panel:#1b1e27; --line:#2b3040; --fg:#e8ecf5; --dim:#8b93a7;
+    --hot:#ffd23f; --on:#3ddc84; --accent:#5aa9ff;
+    color-scheme: dark;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--fg);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+    padding:20px 16px 60px;
+  }
+  h1{font-size:19px; margin:0 0 4px}
+  .sub{color:var(--dim); font-size:13px; margin-bottom:18px}
+  .wrap{max-width:900px; margin:0 auto}
+
+  .empty{
+    border:2px dashed var(--line); border-radius:12px; padding:36px 20px;
+    text-align:center; color:var(--dim);
+  }
+  .empty b{color:var(--fg); display:block; font-size:16px; margin-bottom:10px}
+  .empty kbd{
+    background:var(--panel); border:1px solid var(--line); border-radius:5px;
+    padding:2px 7px; font-size:13px; color:var(--hot);
+  }
+
+  .pad{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:18px}
+  .padhead{display:flex; flex-wrap:wrap; gap:8px 14px; align-items:baseline; margin-bottom:6px}
+  .padid{font-weight:700; font-size:15px; word-break:break-all}
+  .tag{font-size:12px; padding:2px 9px; border-radius:99px; border:1px solid var(--line); color:var(--dim)}
+  .tag.ok{border-color:var(--on); color:var(--on)}
+  .tag.warn{border-color:var(--hot); color:var(--hot)}
+
+  .sect{margin-top:16px}
+  .sect h2{font-size:13px; color:var(--dim); margin:0 0 8px; font-weight:600; letter-spacing:.04em}
+
+  .btns{display:grid; grid-template-columns:repeat(auto-fill,minmax(112px,1fr)); gap:7px}
+  .b{
+    border:1px solid var(--line); border-radius:8px; padding:7px 9px; background:#161922;
+    display:flex; justify-content:space-between; align-items:center; gap:8px;
+    font-variant-numeric:tabular-nums; transition:none;
+  }
+  .b .n{color:var(--dim); font-size:12px}
+  .b .nm{font-size:12px; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .b.on{background:var(--on); color:#08130c; border-color:var(--on); font-weight:700}
+  .b.on .n,.b.on .nm{color:#08130c}
+  .b.touched{border-color:var(--hot)}
+
+  .axes{display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:10px}
+  .ax{border:1px solid var(--line); border-radius:8px; padding:8px 10px; background:#161922}
+  .axtop{display:flex; justify-content:space-between; font-size:12px; color:var(--dim); margin-bottom:5px}
+  .axtop .v{color:var(--fg); font-variant-numeric:tabular-nums}
+  .bar{position:relative; height:7px; background:#0e1016; border-radius:4px; overflow:hidden}
+  .bar i{position:absolute; top:0; bottom:0; left:50%; background:var(--accent); width:0}
+  .bar u{position:absolute; top:0; bottom:0; left:50%; width:1px; background:var(--line)}
+
+  .log{
+    margin-top:22px; background:var(--panel); border:1px solid var(--line);
+    border-radius:12px; padding:14px 16px;
+  }
+  .log h2{font-size:13px; color:var(--dim); margin:0 0 10px; font-weight:600}
+  .log ol{margin:0; padding-left:22px}
+  .log li{margin-bottom:3px; font-variant-numeric:tabular-nums}
+  .log .k{color:var(--hot); font-weight:700}
+  .log .empty2{color:var(--dim); padding-left:2px}
+  .hint{color:var(--dim); font-size:12.5px; margin-top:8px}
+
+  .out{
+    margin-top:22px; background:#0e1016; border:1px solid var(--line);
+    border-radius:12px; padding:14px 16px;
+  }
+  .out h2{font-size:13px; color:var(--dim); margin:0 0 10px; font-weight:600}
+  pre{
+    margin:0; white-space:pre-wrap; word-break:break-all;
+    font:12.5px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--fg);
+  }
+  button.copy{
+    margin-top:10px; background:var(--accent); color:#06121f; border:0; border-radius:7px;
+    padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>ゲームパッド検出</h1>
+  <div class="sub">
+    ブラウザ標準の Gamepad API が、このコントローラーをどう見ているかを調べる。
+    どのボタンが何番で飛んでくるかの一次資料を取るのが目的。
+  </div>
+
+  <div id="pads"></div>
+
+  <div class="log">
+    <h2>押した順の記録（マッピング表の素）</h2>
+    <ol id="hist"></ol>
+    <div class="empty2" id="histEmpty">まだ何も押されていない。</div>
+    <div class="hint">
+      取説の並び（A / B / X / Y → L1 / R1 / L2 / R2 → セレクト / スタート → 十字キー上下左右）で
+      1つずつ押していくと、この順に番号が並ぶ。同じ番号が2回出たら重複なので言ってほしい。
+    </div>
+  </div>
+
+  <div class="out">
+    <h2>まとめ（開発側に渡す用）</h2>
+    <pre id="dump">（コントローラー未接続）</pre>
+    <button class="copy" id="copyBtn">コピー</button>
+  </div>
+</div>
+
+<script>
+/* Gamepad API は「イベントで届く」のではなく「毎フレーム navigator.getGamepads() で
+   現在の状態を取りに行く」ポーリング方式。押した瞬間を取りたいので、前フレームの
+   状態を持っておいて差分を見る。ゲーム本体（animal-bomber.html）に組み込むときも
+   同じ形になる——既存の hold()/edge() と構造が一致する。 */
+
+/* mapping:"standard" のときブラウザが正規化してくれる並び。
+   標準にならない（mapping:""）コントローラーでは、この名前は当てにならないので
+   「番号」の方を正とする。 */
+const STD_BUTTONS = [
+  'A (下)', 'B (右)', 'X (左)', 'Y (上)',
+  'L1', 'R1', 'L2', 'R2',
+  'セレクト/-', 'スタート/+',
+  'L3 (左スティック押込)', 'R3 (右スティック押込)',
+  '十字 上', '十字 下', '十字 左', '十字 右',
+  'ホーム',
+];
+const STD_AXES = ['左スティック X', '左スティック Y', '右スティック X', '右スティック Y'];
+
+const padsEl  = document.getElementById('pads');
+const histEl  = document.getElementById('hist');
+const histEmpty = document.getElementById('histEmpty');
+const dumpEl  = document.getElementById('dump');
+
+const history = [];          // 押された順（同じボタンの連打は積まない）
+const everPressed = new Set(); // 一度でも押された番号（色を残して見落としを防ぐ）
+const prev = new Map();      // index -> 前フレームの押下状態
+
+function render(){
+  const pads = [...navigator.getGamepads()].filter(Boolean);
+
+  if (!pads.length){
+    padsEl.innerHTML = `<div class="empty">
+      <b>コントローラーが見つからない</b>
+      Bluetooth でも USB でもいい。繋いだあと、
+      <kbd>何かボタンを1つ押す</kbd>
+      と検出される。<br>
+      （ブラウザの仕様で、最初の入力があるまでパッドは見えない）
+    </div>`;
+    dumpEl.textContent = '（コントローラー未接続）';
+    requestAnimationFrame(render);
+    return;
+  }
+
+  let html = '';
+  for (const gp of pads){
+    const std = gp.mapping === 'standard';
+    html += `<div class="pad">
+      <div class="padhead">
+        <span class="padid">${esc(gp.id)}</span>
+        <span class="tag ${std ? 'ok' : 'warn'}">mapping: ${esc(gp.mapping || '(空＝非標準)')}</span>
+        <span class="tag">ボタン ${gp.buttons.length}</span>
+        <span class="tag">軸 ${gp.axes.length}</span>
+        <span class="tag">index ${gp.index}</span>
+      </div>`;
+
+    if (!std){
+      html += `<div class="hint">⚠️ 標準マッピングではない。ボタン名は当てにならないので番号で記録する。</div>`;
+    }
+
+    html += `<div class="sect"><h2>ボタン</h2><div class="btns">`;
+    gp.buttons.forEach((b, i) => {
+      const on = b.pressed || b.value > 0.5;
+      const key = gp.index + ':' + i;
+      const was = prev.get(key) || false;
+      if (on && !was){
+        everPressed.add(key);
+        const last = history[history.length - 1];
+        if (!last || last.key !== key){
+          history.push({ key, pad: gp.index, idx: i, name: std ? (STD_BUTTONS[i] || '') : '' });
+        }
+      }
+      prev.set(key, on);
+      const name = std ? (STD_BUTTONS[i] || '') : '';
+      const cls = on ? 'b on' : (everPressed.has(key) ? 'b touched' : 'b');
+      // アナログトリガー（L2/R2）は 0〜1 の値を持つので、押し切っていない時も見えるようにする
+      const val = (!on && b.value > 0.02) ? ` ${b.value.toFixed(2)}` : '';
+      html += `<div class="${cls}"><span class="n">${i}</span><span class="nm">${esc(name)}${val}</span></div>`;
+    });
+    html += `</div></div>`;
+
+    html += `<div class="sect"><h2>軸（スティック・十字キーがアナログ扱いの場合もここ）</h2><div class="axes">`;
+    gp.axes.forEach((v, i) => {
+      const name = (gp.mapping === 'standard' && STD_AXES[i]) ? STD_AXES[i] : `軸 ${i}`;
+      const w = Math.abs(v) * 50;
+      const left = v < 0 ? (50 - w) : 50;
+      html += `<div class="ax">
+        <div class="axtop"><span>${i}: ${esc(name)}</span><span class="v">${v.toFixed(3)}</span></div>
+        <div class="bar"><u></u><i style="left:${left}%;width:${w}%"></i></div>
+      </div>`;
+    });
+    html += `</div></div></div>`;
+  }
+  padsEl.innerHTML = html;
+
+  histEmpty.style.display = history.length ? 'none' : '';
+  histEl.innerHTML = history.map((h, n) =>
+    `<li><span class="k">${n + 1}.</span> パッド${h.pad} ボタン <span class="k">${h.idx}</span>${h.name ? ` — ${esc(h.name)}` : ''}</li>`
+  ).join('');
+
+  dumpEl.textContent = buildDump(pads);
+  requestAnimationFrame(render);
+}
+
+function buildDump(pads){
+  const lines = [];
+  for (const gp of pads){
+    lines.push(`id        : ${gp.id}`);
+    lines.push(`mapping   : ${gp.mapping || '(空＝非標準)'}`);
+    lines.push(`buttons   : ${gp.buttons.length}`);
+    lines.push(`axes      : ${gp.axes.length}`);
+    lines.push(`index     : ${gp.index}`);
+    lines.push('');
+  }
+  if (history.length){
+    lines.push('押した順:');
+    history.forEach((h, n) => {
+      lines.push(`  ${String(n + 1).padStart(2)}. pad${h.pad} button ${h.idx}${h.name ? `  (${h.name})` : ''}`);
+    });
+  } else {
+    lines.push('押した順: (まだ無し)');
+  }
+  return lines.join('\n');
+}
+
+function esc(s){
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+document.getElementById('copyBtn').onclick = () => {
+  navigator.clipboard.writeText(dumpEl.textContent).then(
+    () => { const b = document.getElementById('copyBtn'); b.textContent = 'コピーした'; setTimeout(() => b.textContent = 'コピー', 1200); }
+  );
+};
+
+// 接続イベントも拾う（押さなくても出ることがある）
+window.addEventListener('gamepadconnected', e => console.log('connected', e.gamepad.id));
+window.addEventListener('gamepaddisconnected', e => console.log('disconnected', e.gamepad.id));
+
+render();
+</script>
+</body>
+</html>

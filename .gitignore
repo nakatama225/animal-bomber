@@ -6,8 +6,14 @@ node_modules/
 dist/
 build/
 *.egg-info/
-*.spec
 *.tsbuildinfo
+
+# 生成物（ソースから毎回作り直せるもの）
+legacy/test/extracted.js
+
+# 作業用の控え
+*.bak
+*.bak_*
 
 # キャッシュ
 __pycache__/
