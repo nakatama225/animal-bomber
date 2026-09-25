@@ -53,3 +53,12 @@ CPU の強さや自爆の割合は、画面なしで測れます。
 ```sh
 MEASURE=1 npx vitest run tests/ai/balance.test.ts
 ```
+
+## 絵と音（`src/presentation/`）
+
+- 試合の状態は読むだけにしてください。書き換えると、画面を出したときだけ試合が変わります
+- 見た目の乱数は `CosmeticRng` を使い、`Math.random` を直接呼ばないでください
+- ファイルの一番外側（関数の外）で `window` `document` `AudioContext` に触れないでください。
+  テストは node で走るので、読み込んだ時点で落ちます
+- 描画のテストで使う偽の canvas（`tests/presentation/fakeCanvas.ts`）は、ブラウザが例外を出す
+  呼び方（負の半径など）で同じく例外を出します。**この検査を緩めないでください**

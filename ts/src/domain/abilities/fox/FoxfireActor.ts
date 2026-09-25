@@ -42,6 +42,11 @@ export class FoxfireActor implements WorldActor {
     this.#position = { ...start };
   }
 
+  /** いまの位置（マス単位の連続座標）。描画のために読むだけで、結果には関わらない。 */
+  get position(): Point {
+    return this.#position;
+  }
+
   tick(world: WorldState): { events: SimEvent[]; done: boolean } {
     this.#remaining = tick(this.#remaining - 1);
 

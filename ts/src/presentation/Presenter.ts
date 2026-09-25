@@ -51,7 +51,22 @@ export class Presenter {
    * @param world イベントが起きた盤面。誰の技かから動物を引くのに使う
    */
   consume(events: readonly SimEvent[], world: Readonly<WorldState>): void {
-    for (const event of events) this.#handle(event, world);
+    // 優勝が決まった tick には、ラウンドの終わりと試合の終わりが一緒に来る。
+    // 2つの曲を重ねると聞き取れないので、優勝のファンファーレだけを鳴らす。
+    const matchOver = events.some((event) => event.type === 'matchEnded');
+    for (const event of events) {
+      if (matchOver && event.type === 'roundEnded') {
+        this.#announceRound(event.round, event.winner);
+        continue;
+      }
+      this.#handle(event, world);
+    }
+  }
+
+  #announceRound(round: number, winner: number | null): void {
+    this.notices.show(
+      winner === null ? `ラウンド ${round} は引き分け` : `ラウンド ${round} は ${winner + 1}P の勝ち`,
+    );
   }
 
   #handle(event: SimEvent, world: Readonly<WorldState>): void {
@@ -94,11 +109,7 @@ export class Presenter {
       }
       case 'roundEnded':
         this.sounds.play(event.winner === null ? 'draw' : 'roundEnd');
-        this.notices.show(
-          event.winner === null
-            ? `ラウンド ${event.round} は引き分け`
-            : `ラウンド ${event.round} は ${event.winner + 1}P の勝ち`,
-        );
+        this.#announceRound(event.round, event.winner);
         return;
       case 'matchEnded':
         this.sounds.play('fanfare');

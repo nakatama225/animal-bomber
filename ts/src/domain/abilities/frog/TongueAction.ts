@@ -37,6 +37,18 @@ export class TongueAction implements ActiveAction {
     this.#direction = direction;
   }
 
+  /**
+   * 舌がいま伸びている長さ（マス、小数）。描画のためだけに読む。
+   *
+   * 往路は経過に比例して伸び、伸びきった後は同じ速さで縮む。
+   * 何かに当たった時点で振る舞いごと終わるので、当たった後の長さは無い。
+   * 読むだけで、状態も要約（ハッシュ）も変えない。
+   */
+  get extent(): number {
+    const out = this.#elapsed / STEP_TIME;
+    return Math.max(0, Math.min(TONGUE_REACH, out, TONGUE_REACH * 2 - out));
+  }
+
   tick(world: WorldState, player: PlayerState): { events: SimEvent[]; done: boolean } {
     this.#elapsed = tick(this.#elapsed + 1);
 

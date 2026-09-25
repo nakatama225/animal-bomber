@@ -71,6 +71,11 @@ export class PitAction implements ActiveAction {
 
   #remaining: Tick = DIG_TIME;
 
+  /** 掘り進んだ割合（0〜1）。描画のためだけに読む。状態も要約（ハッシュ）も変えない。 */
+  get progress(): number {
+    return Math.min(1, Math.max(0, 1 - this.#remaining / DIG_TIME));
+  }
+
   tick(_world: WorldState, _player: PlayerState): { events: SimEvent[]; done: boolean } {
     this.#remaining = tick(this.#remaining - 1);
     return { events: [], done: this.#remaining <= 0 };
