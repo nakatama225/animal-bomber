@@ -1,43 +1,8 @@
-import { assertNever, type SimEvent } from '../domain/events/SimEvent.js';
-
-/**
- * 鳴らせる音の名前。
- *
- * ルールの層はこの一覧を知らない。どのイベントにどの音を当てるかは
- * この層の判断で、変えてもゲームの結果は1ミリも変わらない。
- */
-export type SoundName =
-  | 'place'
-  | 'explode'
-  | 'breakBlock'
-  | 'item'
-  | 'burn'
-  | 'hurt'
-  | 'down'
-  | 'effect'
-  | 'roundEnd'
-  | 'fanfare';
-
-/** 音を鳴らすもの。 */
-export interface SoundBank {
-  /**
-   * @param intensity 大きさの手がかり（連鎖数など）。使うかどうかは実装しだい
-   */
-  play(name: SoundName, intensity?: number): void;
-}
-
-/**
- * 何も鳴らさない実装。
- *
- * 検証のときはこれを差す……という説明をしたくなるが、**実際には
- * それすら要らない**。`Presenter` を作らなければ音は鳴らない。
- * このクラスは「画面は出すが音は消したい」場合のためにある。
- */
-export class NullSoundBank implements SoundBank {
-  play(): void {
-    // 何もしない。
-  }
-}
+import type { SimEvent } from '../domain/events/SimEvent.js';
+import { assertNever } from '../domain/events/SimEvent.js';
+import type { WorldState } from '../domain/state/WorldState.js';
+import { NullSoundBank, type SoundBank, type SoundName } from './audio/SoundBank.js';
+import { techniqueSound } from './audio/techniqueSounds.js';
 
 /** 画面に短く出す通知。 */
 export interface NoticeSink {
@@ -82,11 +47,14 @@ export class Presenter {
     private readonly notices: NoticeSink = new NullNoticeSink(),
   ) {}
 
-  consume(events: readonly SimEvent[]): void {
-    for (const event of events) this.#handle(event);
+  /**
+   * @param world イベントが起きた盤面。誰の技かから動物を引くのに使う
+   */
+  consume(events: readonly SimEvent[], world: Readonly<WorldState>): void {
+    for (const event of events) this.#handle(event, world);
   }
 
-  #handle(event: SimEvent): void {
+  #handle(event: SimEvent, world: Readonly<WorldState>): void {
     switch (event.type) {
       case 'bombPlaced':
         this.sounds.play('place');
@@ -102,13 +70,14 @@ export class Presenter {
         // 落ちた瞬間は鳴らさない。壊した音と重なってうるさくなる。
         return;
       case 'itemTaken':
-        this.sounds.play('item');
+        // とくぎが増えるアイテムだけは別の音にする。拾った瞬間に分かるように。
+        this.sounds.play(event.kind === 'chicken' ? 'chicken' : 'item');
         return;
       case 'itemBurned':
         this.sounds.play('burn');
         return;
       case 'effectApplied':
-        this.sounds.play('effect');
+        this.sounds.play(effectSound(event.effect));
         this.notices.show(`${event.effect} がかかった`);
         return;
       case 'playerHurt':
@@ -117,8 +86,14 @@ export class Presenter {
       case 'playerDown':
         this.sounds.play('down');
         return;
+      case 'techniqueUsed': {
+        const animal = world.players[event.player]?.animal;
+        const sound = animal === undefined ? null : techniqueSound(animal, event.special);
+        if (sound !== null) this.sounds.play(sound);
+        return;
+      }
       case 'roundEnded':
-        this.sounds.play('roundEnd');
+        this.sounds.play(event.winner === null ? 'draw' : 'roundEnd');
         this.notices.show(
           event.winner === null
             ? `ラウンド ${event.round} は引き分け`
@@ -136,4 +111,11 @@ export class Presenter {
         assertNever(event);
     }
   }
+}
+
+/** 悪い状態にかかったときの音。滑る・泣くは専用の音、うんこの効果はまとめて1つ。 */
+function effectSound(effect: string): SoundName {
+  if (effect === 'slide') return 'slip';
+  if (effect === 'stun') return 'cry';
+  return 'poop';
 }

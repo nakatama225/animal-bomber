@@ -67,6 +67,12 @@ export type SimEvent =
     }
   | { readonly type: 'playerDown'; readonly target: PlayerId; readonly by: PlayerId | null }
   | {
+      readonly type: 'techniqueUsed';
+      readonly player: PlayerId;
+      /** 長押しのとくぎか。false なら押して離す通常技。 */
+      readonly special: boolean;
+    }
+  | {
       readonly type: 'roundEnded';
       readonly round: number;
       /** 引き分けなら null。 */

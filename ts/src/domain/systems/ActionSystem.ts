@@ -91,7 +91,7 @@ export class ActionSystem {
         player.specialCharges -= 1;
         const result = ability.onHold(world, player);
         if (result.action !== null) player.action = result.action;
-        return result.events;
+        return [{ type: 'techniqueUsed', player: player.id, special: true }, ...result.events];
       }
       return [];
     }
@@ -101,8 +101,16 @@ export class ActionSystem {
     player.actionHeld = tick(0);
     if (held <= 0 || held >= ability.holdTicks) return [];
     if (ability.onTap === undefined) return [];
+    const cooldownBefore = player.abilityCooldown;
     const result = ability.onTap(world, player);
     if (result.action !== null) player.action = result.action;
-    return result.events;
+    // 技が実際に出たかは、振る舞いが始まった・何かが起きた・間隔が始まった、の
+    // どれかで判断する。間隔中に押しただけなら何も起きないので知らせない。
+    const fired =
+      result.action !== null ||
+      result.events.length > 0 ||
+      player.abilityCooldown !== cooldownBefore;
+    if (!fired) return result.events;
+    return [{ type: 'techniqueUsed', player: player.id, special: false }, ...result.events];
   }
 }

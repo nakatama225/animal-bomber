@@ -285,15 +285,19 @@ describe('イベントの受け取り', () => {
       { type: 'effectApplied', target: 0, effect: 'slow' },
       { type: 'playerHurt', target: 0, by: 1, amount: 2 },
       { type: 'playerDown', target: 0, by: 1 },
+      { type: 'techniqueUsed', player: 0, special: true },
+      { type: 'techniqueUsed', player: 1, special: false },
+      { type: 'roundEnded', round: 1, winner: null },
+      { type: 'matchEnded', champion: 0 },
     ];
-    expect(() => presenter.consume(all)).not.toThrow();
+    expect(() => presenter.consume(all, makeWorld())).not.toThrow();
     expect(played.length).toBeGreaterThan(0);
   });
 
   it('知らない種類が来たら止まる', () => {
     const presenter = new Presenter();
     const bogus = { type: 'そんなイベントはない' } as unknown as SimEvent;
-    expect(() => presenter.consume([bogus])).toThrow();
+    expect(() => presenter.consume([bogus], makeWorld())).toThrow();
   });
 });
 

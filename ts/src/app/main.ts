@@ -64,7 +64,9 @@ function main(): void {
 
   const loop = new FrameLoop({
     onTick: () => {
-      presenter.consume(game.tick());
+      // ラウンドが終わると盤面が作り直されるので、進める前の盤面を渡す。
+      const world = game.world;
+      presenter.consume(game.tick(), world);
     },
     onDraw: () => {
       context.fillStyle = '#101418';
