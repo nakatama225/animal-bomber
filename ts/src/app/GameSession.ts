@@ -1,4 +1,5 @@
 import { abilityOf } from '../domain/abilities/registry.js';
+import { secondsToTicks, type Tick } from '../domain/core/Tick.js';
 import type { SimEvent } from '../domain/events/SimEvent.js';
 import { IntentGatherer, type IntentSource } from '../domain/intent/IntentSource.js';
 import { seedForRound, type MatchConfig } from '../domain/rules/MatchConfig.js';
@@ -27,6 +28,16 @@ import { Simulation } from '../domain/systems/Simulation.js';
  * 束ねる場所を1つ作っておくと、遊ぶとき・記録を再生するとき・
  * 大量に試合を回すときで、同じ形の呼び出しになる。
  */
+/**
+ * ラウンドが決まってから、次の盤面を作るまでの間。
+ *
+ * ⚠️ 決まった tick のうちに盤面を作り直すと、決着をつけた爆発も、倒れる瞬間も
+ * 画面に1度も描かれない（描く前に次の盤面へ切り替わる）。決着の場面を見せる
+ * ために、前の盤面を止めたまま少し待つ。ラウンドの間に出す画面（段階10）は、
+ * この待ちの間に重ねる。
+ */
+export const ROUND_INTERMISSION: Tick = secondsToTicks(2);
+
 export class GameSession {
   readonly #simulation = new Simulation();
   readonly #rounds = new RoundSystem();
@@ -34,6 +45,8 @@ export class GameSession {
   readonly #config: MatchConfig;
   #world: WorldState;
   #match: MatchState;
+  /** 次の盤面を作るまでの残り。0 ならラウンドの最中。 */
+  #intermission = 0;
 
   constructor(config: MatchConfig) {
     this.#config = config;
@@ -67,6 +80,11 @@ export class GameSession {
     return this.#config;
   }
 
+  /** ラウンドが決まり、次の盤面を作るのを待っている最中か。 */
+  get betweenRounds(): boolean {
+    return this.#intermission > 0;
+  }
+
   /**
    * 操作の出どころを登録する。
    *
@@ -86,13 +104,20 @@ export class GameSession {
   tick(): SimEvent[] {
     if (this.#match.finished) return [];
 
+    // 決着のあとは盤面を止めて待つ。操作は集めない（押しても何も起きない）。
+    if (this.#intermission > 0) {
+      this.#intermission -= 1;
+      if (this.#intermission === 0) this.#startNextRound();
+      return [];
+    }
+
     const events = this.#simulation.step(this.#world, this.#gatherer.gather(this.#world));
 
     const outcome = this.#rounds.check(this.#world, this.#config);
     if (outcome === null) return events;
 
     events.push(...applyOutcome(this.#match, this.#config, outcome));
-    if (!this.#match.finished) this.#startNextRound();
+    if (!this.#match.finished) this.#intermission = ROUND_INTERMISSION;
     return events;
   }
 

@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
-import { GameSession } from '../../src/app/GameSession.js';
+import { GameSession, ROUND_INTERMISSION } from '../../src/app/GameSession.js';
 import { IdleIntentSource } from '../../src/domain/intent/IntentSource.js';
 import { defaultMatchConfig, seedForRound } from '../../src/domain/rules/MatchConfig.js';
 import { winsOf } from '../../src/domain/state/MatchState.js';
 import { hashWorld } from '../../src/domain/state/WorldState.js';
 import { secondsToTicks } from '../../src/domain/core/Tick.js';
+
+/** 決着のあとの待ちを飛ばして、次のラウンドの盤面まで進める。 */
+function skipIntermission(game: GameSession): void {
+  while (game.betweenRounds) game.tick();
+}
 
 function session(overrides: Partial<ReturnType<typeof defaultMatchConfig>> = {}): GameSession {
   const config = { ...defaultMatchConfig(777, ['rabbit', 'elephant']), ...overrides };
@@ -43,6 +48,7 @@ describe('ラウンドの進行', () => {
     for (let round = 0; round < 2; round += 1) {
       game.world.players[1]!.life = 'dead';
       game.tick();
+      skipIntermission(game);
     }
     expect(game.match.finished).toBe(true);
     expect(game.match.champion).toBe(0);
@@ -61,9 +67,27 @@ describe('ラウンドの進行', () => {
     const before = hashWorld(game.world);
     game.world.players[1]!.life = 'dead';
     game.tick();
+    skipIntermission(game);
     expect(game.match.round).toBe(2);
     expect(hashWorld(game.world)).not.toBe(before);
     expect(game.world.players[1]!.life).toBe('alive');
+  });
+
+  it('決着のあと、しばらくは前の盤面のまま止まる', () => {
+    // 決まった tick のうちに盤面を作り直すと、決着の場面が1度も描かれない。
+    const game = session({ winsToTake: 3 });
+    game.world.players[1]!.life = 'dead';
+    game.tick();
+    const decided = game.world;
+    const frozen = hashWorld(decided);
+    for (let i = 0; i < ROUND_INTERMISSION - 1; i += 1) {
+      expect(game.tick()).toHaveLength(0);
+      expect(game.world).toBe(decided);
+    }
+    expect(hashWorld(decided)).toBe(frozen);
+    game.tick();
+    expect(game.world).not.toBe(decided);
+    expect(game.betweenRounds).toBe(false);
   });
 
   it('ラウンドごとに違う盤面になる', () => {
@@ -79,6 +103,7 @@ describe('ラウンドの進行', () => {
     for (const game of [first, second]) {
       game.world.players[1]!.life = 'dead';
       game.tick();
+      skipIntermission(game);
     }
     expect(hashWorld(first.world)).toBe(hashWorld(second.world));
   });
