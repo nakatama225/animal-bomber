@@ -3,6 +3,7 @@ import { tick, type Tick } from '../../core/Tick.js';
 import type { SimEvent } from '../../events/SimEvent.js';
 import type { PlayerId } from '../../state/PlayerState.js';
 import type { PlayerState } from '../../state/PlayerState.js';
+import { isAlive } from '../../state/PlayerState.js';
 import type { WorldState } from '../../state/WorldState.js';
 import type { ActiveAction } from '../ActiveAction.js';
 import type { WorldActor } from '../WorldActor.js';
@@ -38,7 +39,7 @@ export class PitActor implements WorldActor {
     this.#remaining = tick(this.#remaining - 1);
 
     for (const player of world.players) {
-      if (player.id === this.owner || player.life !== 'alive') continue;
+      if (player.id === this.owner || !isAlive(player)) continue;
       if (!sameCell(cellOf(player.position), this.cell)) continue;
       player.effects.add('stun', HOLD_TIME, tick(HOLD_TIME * 2));
       // 乗っ取り中の振る舞いも打ち切る。穴は無敵でも避けられない。

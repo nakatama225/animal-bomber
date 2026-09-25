@@ -4,6 +4,7 @@ import { centerOf } from '../../src/domain/core/Coord.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
 import { MAX_BOMBS, MAX_POWER, MAX_SHOES } from '../../src/domain/rules/tuning.js';
 import { itemEffectTicks, POOP_STACK_LIMIT } from '../../src/domain/rules/items.js';
+import { OUT } from '../../src/domain/state/Life.js';
 import { powerOf, speedOf } from '../../src/domain/state/PlayerState.js';
 import { detonate } from '../../src/domain/mutations/explode.js';
 import { placeBomb } from '../../src/domain/mutations/bombs.js';
@@ -234,7 +235,7 @@ describe('被弾', () => {
     player.hp = 2;
     placeBomb(world, player);
     advance(world, onlyFor(world, 0, press({})), 200);
-    expect(player.life).toBe('dead');
+    expect(player.life).toBe(OUT);
   });
 
   it('当たった瞬間に相手を控える', () => {

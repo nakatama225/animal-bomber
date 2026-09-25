@@ -7,7 +7,7 @@ import { isSolidFor, playerById } from '../domain/query/BoardQuery.js';
 import { DangerMap } from '../domain/query/DangerMap.js';
 import { cellsTouchedBy } from '../domain/query/Hitbox.js';
 import type { PlayerId, PlayerState } from '../domain/state/PlayerState.js';
-import { isFrozen } from '../domain/state/PlayerState.js';
+import { isAlive, isFrozen } from '../domain/state/PlayerState.js';
 import type { WorldState } from '../domain/state/WorldState.js';
 import { decideBomb, footBomb } from './BombPlacement.js';
 import { ButtonMacro, type MacroStep } from './ButtonMacro.js';
@@ -78,7 +78,7 @@ export class CpuIntentSource implements IntentSource {
     }
 
     const me = playerById(world, this.playerId);
-    if (me === undefined || me.life !== 'alive') return IDLE_INTENT;
+    if (me === undefined || !isAlive(me)) return IDLE_INTENT;
 
     const memory = this.#memory;
     countDown(memory);

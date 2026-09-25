@@ -1,6 +1,7 @@
 import { cellOf, sameCell, type Cell } from '../core/Coord.js';
 import type { Blast, Bomb } from '../state/Bomb.js';
 import type { PlayerId, PlayerState } from '../state/PlayerState.js';
+import { isAlive } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 
 /**
@@ -24,7 +25,7 @@ export function blastAt(world: Readonly<WorldState>, cell: Cell): Blast | undefi
 /** そのマスの上に、いま体が乗っているプレイヤー。 */
 export function playersOn(world: Readonly<WorldState>, cell: Cell): PlayerState[] {
   return world.players.filter(
-    (player) => player.life === 'alive' && sameCell(cellOf(player.position), cell),
+    (player) => isAlive(player) && sameCell(cellOf(player.position), cell),
   );
 }
 

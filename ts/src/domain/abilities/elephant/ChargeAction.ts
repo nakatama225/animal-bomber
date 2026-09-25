@@ -5,6 +5,7 @@ import { bombAt } from '../../query/BoardQuery.js';
 import { itemDefinition, type ItemKind } from '../../rules/items.js';
 import { MAX_SPEED } from '../../rules/tuning.js';
 import type { PlayerState } from '../../state/PlayerState.js';
+import { isAlive } from '../../state/PlayerState.js';
 import type { WorldState } from '../../state/WorldState.js';
 import { hurt } from '../../mutations/damage.js';
 import { detonate } from '../../mutations/explode.js';
@@ -189,7 +190,7 @@ export class ChargeAction implements ActiveAction {
   ): SimEvent[] {
     const events: SimEvent[] = [];
     for (const other of world.players) {
-      if (other.id === player.id || other.life !== 'alive') continue;
+      if (other.id === player.id || !isAlive(other)) continue;
       if (Math.abs(other.position.x - player.position.x) > CONTACT_RANGE) continue;
       if (Math.abs(other.position.y - player.position.y) > CONTACT_RANGE) continue;
 

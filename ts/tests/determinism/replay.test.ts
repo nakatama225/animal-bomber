@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { IntentGatherer } from '../../src/domain/intent/IntentSource.js';
 import type { PlayerIntent } from '../../src/domain/intent/PlayerIntent.js';
+import { tick } from '../../src/domain/core/Tick.js';
+import { ALIVE, OUT } from '../../src/domain/state/Life.js';
 import type { PlayerId } from '../../src/domain/state/PlayerState.js';
 import { createWorld, hashWorld, type WorldState } from '../../src/domain/state/WorldState.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
@@ -144,5 +146,27 @@ describe('状態の要約', () => {
     const before = hashWorld(world);
     world.rng.next();
     expect(hashWorld(world)).not.toBe(before);
+  });
+
+  it('盤面にいるか退場したかが変われば変わる', () => {
+    const world = createWorld({ seed: SEED, animals: ANIMALS });
+    const player = world.players[0]!;
+    const alive = hashWorld(world);
+    player.life = OUT;
+    expect(hashWorld(world)).not.toBe(alive);
+    player.life = ALIVE;
+    expect(hashWorld(world)).toBe(alive);
+  });
+
+  it('外周にいる間は、外周上の位置と次に撃てる時刻も見る', () => {
+    // 状態の種類だけを混ぜると、外周を回る速さや撃つ間隔がずれても検出できない。
+    const world = createWorld({ seed: SEED, animals: ANIMALS });
+    const player = world.players[0]!;
+    player.life = { kind: 'negibon', along: 3, readyAt: tick(10) };
+    const base = hashWorld(world);
+    player.life = { kind: 'negibon', along: 3 + 1e-9, readyAt: tick(10) };
+    expect(hashWorld(world)).not.toBe(base);
+    player.life = { kind: 'negibon', along: 3, readyAt: tick(11) };
+    expect(hashWorld(world)).not.toBe(base);
   });
 });

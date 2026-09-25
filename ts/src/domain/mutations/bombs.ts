@@ -14,7 +14,7 @@ import { bombAt } from '../query/BoardQuery.js';
 import { BOMB_FUSE } from '../rules/tuning.js';
 import type { Bomb } from '../state/Bomb.js';
 import type { PlayerId, PlayerState } from '../state/PlayerState.js';
-import { powerOf } from '../state/PlayerState.js';
+import { isAlive, powerOf } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 
 /**
@@ -45,7 +45,7 @@ export function placeBombAt(
   // 本人だけにすると、足元へ置かれた側がその場から動けなくなる。
   const passThrough = new Set<PlayerId>();
   for (const other of world.players) {
-    if (other.life !== 'alive') continue;
+    if (!isAlive(other)) continue;
     if (sameCell(cellOf(other.position), cell)) passThrough.add(other.id);
   }
 

@@ -3,6 +3,7 @@ import { tick } from '../core/Tick.js';
 import type { SimEvent } from '../events/SimEvent.js';
 import type { PlayerIntent } from '../intent/PlayerIntent.js';
 import type { PlayerId, PlayerState } from '../state/PlayerState.js';
+import { isAlive } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 
 /**
@@ -48,7 +49,7 @@ export class ActionSystem {
         events.push(...this.#advance(world, player));
         continue;
       }
-      if (player.life !== 'alive') continue;
+      if (!isAlive(player)) continue;
       events.push(...this.#watchButton(world, player, intent));
     }
     return events;
@@ -62,7 +63,7 @@ export class ActionSystem {
     const result = action.tick(world, player);
     const events = [...result.events];
     // 倒れたら途中でも打ち切る。
-    if (result.done || player.life !== 'alive') {
+    if (result.done || !isAlive(player)) {
       if (action.finish !== undefined) events.push(...action.finish(world, player));
       player.action = null;
     }

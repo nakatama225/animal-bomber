@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { collides } from '../../src/domain/systems/MovementSystem.js';
 import { MAX_SHOES, MAX_SPEED, PLAYER_RADIUS } from '../../src/domain/rules/tuning.js';
+import { OUT } from '../../src/domain/state/Life.js';
 import { speedOf } from '../../src/domain/state/PlayerState.js';
 import { advance, makeWorld, onlyFor, press } from '../helpers.js';
 
@@ -102,7 +103,7 @@ describe('移動', () => {
   it('倒れているプレイヤーは動かない', () => {
     const world = makeWorld();
     const player = world.players[0]!;
-    player.life = 'dead';
+    player.life = OUT;
     const before = { ...player.position };
     advance(world, onlyFor(world, 0, press({ right: true })), 60);
     expect(player.position).toEqual(before);

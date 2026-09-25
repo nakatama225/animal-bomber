@@ -3,6 +3,7 @@ import { FoxfireActor } from '../../domain/abilities/fox/FoxfireActor.js';
 import { PitActor } from '../../domain/abilities/mole/PitAction.js';
 import { ScatteredActor } from '../../domain/abilities/rabbit/ScatterAction.js';
 import { cellOf, sameCell } from '../../domain/core/Coord.js';
+import { isAlive } from '../../domain/state/PlayerState.js';
 import type { WorldState } from '../../domain/state/WorldState.js';
 import type { CosmeticRng } from '../CosmeticRng.js';
 import { glow, puff, type Particle } from './particles.js';
@@ -83,7 +84,7 @@ export class ActorEffects {
       // 時間切れで消えた穴は、最後まで見せない。踏まれたときだけ出す。
       const stepped = world.players.some(
         (player) =>
-          player.id !== actor.owner && player.life === 'alive' && sameCell(cellOf(player.position), actor.cell),
+          player.id !== actor.owner && isAlive(player) && sameCell(cellOf(player.position), actor.cell),
       );
       if (!stepped) return 0;
       puff(out, rng, actor.cell, '#8a5a2a', '🕳️');

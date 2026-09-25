@@ -7,6 +7,7 @@ import type { PassesThrough } from '../domain/query/BoardQuery.js';
 import type { DangerMap } from '../domain/query/DangerMap.js';
 import { findPath, type PathOptions } from '../domain/query/PathFinder.js';
 import type { PlayerState } from '../domain/state/PlayerState.js';
+import { isAlive } from '../domain/state/PlayerState.js';
 import type { WorldState } from '../domain/state/WorldState.js';
 import type { CpuLevel } from './CpuLevel.js';
 import type { CpuMemory } from './CpuMemory.js';
@@ -42,7 +43,7 @@ export class CpuContext {
     readonly rng: Rng,
   ) {
     this.ability = abilityOf(me.animal);
-    this.foes = world.players.filter((p) => p.id !== me.id && p.life === 'alive');
+    this.foes = world.players.filter((p) => p.id !== me.id && isAlive(p));
   }
 
   /**

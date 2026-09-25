@@ -3,6 +3,7 @@ import { cellOf, sameCell } from '../core/Coord.js';
 import type { SimEvent } from '../events/SimEvent.js';
 import { applyItem } from '../mutations/items.js';
 import type { Item } from '../state/Item.js';
+import { isAlive } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 
 /**
@@ -15,7 +16,7 @@ export class ItemSystem {
   step(world: WorldState): SimEvent[] {
     const events: SimEvent[] = [];
     for (const player of world.players) {
-      if (player.life !== 'alive') continue;
+      if (!isAlive(player)) continue;
       const cell = cellOf(player.position);
       const index = world.items.findIndex((item) => sameCell(item.cell, cell));
       if (index < 0) continue;

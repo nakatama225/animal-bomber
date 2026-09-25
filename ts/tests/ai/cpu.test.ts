@@ -22,7 +22,7 @@ import { placeBomb, placeBombAt } from '../../src/domain/mutations/bombs.js';
 import { DangerMap } from '../../src/domain/query/DangerMap.js';
 import { findPath } from '../../src/domain/query/PathFinder.js';
 import { BLAST_DURATION, BOMB_FUSE } from '../../src/domain/rules/tuning.js';
-import type { PlayerId } from '../../src/domain/state/PlayerState.js';
+import { isAlive, type PlayerId } from '../../src/domain/state/PlayerState.js';
 import { hashWorld, type WorldState } from '../../src/domain/state/WorldState.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
 import { clearBoard, makeWorld } from '../helpers.js';
@@ -111,7 +111,7 @@ describe('身を守る', () => {
     placeBomb(world, cpu);
     const hp = cpu.hp;
     game.run(BOMB_FUSE + BLAST_DURATION + 10);
-    expect(cpu.life).toBe('alive');
+    expect(isAlive(cpu)).toBe(true);
     expect(cpu.hp).toBe(hp);
   });
 

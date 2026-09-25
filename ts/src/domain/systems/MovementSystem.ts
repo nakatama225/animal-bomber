@@ -3,7 +3,7 @@ import type { PlayerIntent } from '../intent/PlayerIntent.js';
 import { abilityOf } from '../abilities/registry.js';
 import { isSolidFor } from '../query/BoardQuery.js';
 import type { PlayerId, PlayerState } from '../state/PlayerState.js';
-import { speedOf } from '../state/PlayerState.js';
+import { isAlive, speedOf } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 import {
   ALIGN_EPSILON,
@@ -35,7 +35,7 @@ import type { Direction } from '../core/Coord.js';
 export class MovementSystem {
   step(world: WorldState, intents: ReadonlyMap<PlayerId, PlayerIntent>): void {
     for (const player of world.players) {
-      if (player.life !== 'alive') continue;
+      if (!isAlive(player)) continue;
       const intent = intents.get(player.id);
       if (intent === undefined) continue;
       this.#movePlayer(world, player, intent);

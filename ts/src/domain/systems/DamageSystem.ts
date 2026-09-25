@@ -3,7 +3,7 @@ import { hurt } from '../mutations/damage.js';
 import { sameCell } from '../core/Coord.js';
 import { cellsTouchedBy } from '../query/Hitbox.js';
 import type { PlayerId, PlayerState } from '../state/PlayerState.js';
-import { isInvulnerable } from '../state/PlayerState.js';
+import { isAlive, isInvulnerable } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 
 /** 爆風1回あたりに減る体力（半分の単位。2 で1個ぶん）。 */
@@ -24,7 +24,7 @@ export class DamageSystem {
   step(world: WorldState): SimEvent[] {
     const events: SimEvent[] = [];
     for (const player of world.players) {
-      if (player.life !== 'alive') continue;
+      if (!isAlive(player)) continue;
       if (isInvulnerable(player, world.now)) continue;
 
       const by = this.#blastOwnerTouching(world, player);

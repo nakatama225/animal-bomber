@@ -4,7 +4,7 @@ import type { SimEvent } from '../events/SimEvent.js';
 import type { PlayerIntent } from '../intent/PlayerIntent.js';
 import { placeBomb } from '../mutations/bombs.js';
 import type { PlayerId } from '../state/PlayerState.js';
-import { justPressed } from '../state/PlayerState.js';
+import { isAlive, justPressed } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 
 /**
@@ -26,7 +26,7 @@ export class BombSystem {
   #place(world: WorldState, intents: ReadonlyMap<PlayerId, PlayerIntent>): SimEvent[] {
     const events: SimEvent[] = [];
     for (const player of world.players) {
-      if (player.life !== 'alive') continue;
+      if (!isAlive(player)) continue;
       const intent = intents.get(player.id);
       if (intent === undefined) continue;
 

@@ -2,6 +2,7 @@ import type { Direction, Point } from '../core/Coord.js';
 import type { ActiveAction } from '../abilities/ActiveAction.js';
 import type { PlayerIntent } from '../intent/PlayerIntent.js';
 import type { EffectBag } from './EffectBag.js';
+import type { Life } from './Life.js';
 import type { Tick } from '../core/Tick.js';
 import {
   BASE_SPEED,
@@ -17,9 +18,6 @@ export type PlayerId = 0 | 1 | 2 | 3;
 
 /** すべてのプレイヤー番号を、いつも同じ順で並べたもの。 */
 export const PLAYER_IDS: readonly PlayerId[] = [0, 1, 2, 3];
-
-/** プレイヤーの生死。 */
-export type LifeState = 'alive' | 'dead';
 
 /**
  * プレイヤー1人ぶんの状態。
@@ -39,7 +37,8 @@ export interface PlayerState {
   /** 向いている方向。爆風や技の向きに使う。 */
   facing: Direction;
 
-  life: LifeState;
+  /** 盤面で戦っているか・外周にいるか・退場したか。変えるときは丸ごと差し替える。 */
+  life: Life;
   /** 体力。半分の単位の整数で持つ。 */
   hp: number;
 
@@ -138,6 +137,16 @@ export function speedOf(player: PlayerState, animalMultiplier = 1): number {
 export function powerOf(player: PlayerState): number {
   if (player.effects.has('weak')) return WEAKENED_POWER;
   return player.power;
+}
+
+/**
+ * 盤面の上で戦っているか。
+ *
+ * 外周にいるプレイヤーと退場したプレイヤーは、爆風にも拾い物にも関わらない。
+ * 盤面の処理は、ほぼすべてこの判定から始まる。
+ */
+export function isAlive(player: PlayerState): boolean {
+  return player.life.kind === 'alive';
 }
 
 /** 動けない状態か。 */

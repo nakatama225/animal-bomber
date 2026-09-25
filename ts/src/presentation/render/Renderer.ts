@@ -1,6 +1,6 @@
 import { TICKS_PER_SECOND } from '../../domain/core/Tick.js';
 import type { SimEvent } from '../../domain/events/SimEvent.js';
-import { isInvulnerable } from '../../domain/state/PlayerState.js';
+import { isAlive, isInvulnerable } from '../../domain/state/PlayerState.js';
 import type { WorldState } from '../../domain/state/WorldState.js';
 import { CosmeticRng } from '../CosmeticRng.js';
 import { drawAirActor, drawGroundActor } from './actors.js';
@@ -94,7 +94,7 @@ export class Renderer {
     for (const blast of world.blasts) drawBlast(frame, blast);
 
     const views = world.players
-      .filter((player) => player.life === 'alive')
+      .filter((player) => isAlive(player))
       .map((player) => this.#viewOf(world, player.id, alpha))
       .sort((a, b) => a.y - b.y);
     for (const view of views) drawPlayer(frame, view);

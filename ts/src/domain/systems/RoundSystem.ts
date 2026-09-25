@@ -2,6 +2,7 @@ import type { SimEvent } from '../events/SimEvent.js';
 import type { MatchConfig } from '../rules/MatchConfig.js';
 import { addWin, winsOf, type MatchState } from '../state/MatchState.js';
 import type { PlayerId } from '../state/PlayerState.js';
+import { isAlive } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 
 /** ラウンドが終わった理由と結果。 */
@@ -26,7 +27,7 @@ export class RoundSystem {
    * @returns 終わっていれば結果、続いていれば null
    */
   check(world: WorldState, config: MatchConfig): RoundOutcome | null {
-    const alive = world.players.filter((player) => player.life === 'alive');
+    const alive = world.players.filter((player) => isAlive(player));
 
     if (alive.length <= 1) {
       return { winner: alive[0]?.id ?? null, reason: 'lastStanding' };

@@ -4,6 +4,7 @@ import { tick, type Tick } from '../../core/Tick.js';
 import type { SimEvent } from '../../events/SimEvent.js';
 import { hurt } from '../../mutations/damage.js';
 import type { PlayerId } from '../../state/PlayerState.js';
+import { isAlive } from '../../state/PlayerState.js';
 import type { WorldState } from '../../state/WorldState.js';
 import type { WorldActor } from '../WorldActor.js';
 
@@ -68,7 +69,7 @@ export class FoxfireActor implements WorldActor {
 
     const events: SimEvent[] = [];
     for (const player of world.players) {
-      if (player.id === this.owner || player.life !== 'alive') continue;
+      if (player.id === this.owner || !isAlive(player)) continue;
       if (player.action?.untouchable === true) continue;
       if (world.now < player.invulnerableUntil) continue;
       if (distance(this.#position, player.position) > HIT_RANGE) continue;
@@ -85,7 +86,7 @@ export class FoxfireActor implements WorldActor {
     let bestDistance = Infinity;
     // プレイヤー番号の順に見る。同じ距離なら番号の小さいほうを選ぶ、で並びを固定する。
     for (const player of world.players) {
-      if (player.id === this.owner || player.life !== 'alive') continue;
+      if (player.id === this.owner || !isAlive(player)) continue;
       const d = distance(this.#position, player.position);
       if (d < bestDistance) {
         bestDistance = d;

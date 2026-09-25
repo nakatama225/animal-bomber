@@ -12,6 +12,7 @@
 import { tick } from '../core/Tick.js';
 import type { SimEvent } from '../events/SimEvent.js';
 import { INVULNERABLE } from '../rules/tuning.js';
+import { OUT } from '../state/Life.js';
 import type { PlayerId, PlayerState } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 import { spitPowerUp } from './items.js';
@@ -45,7 +46,7 @@ export function hurt(
 
   if (player.hp <= 0) {
     player.hp = 0;
-    player.life = 'dead';
+    player.life = OUT;
     events.push({ type: 'playerDown', target: player.id, by });
   }
   return events;

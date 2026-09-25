@@ -11,6 +11,7 @@ import { EffectBag } from './EffectBag.js';
 import type { Item } from './Item.js';
 import type { Board } from './Board.js';
 import { buildBoard } from './Board.js';
+import { ALIVE, type Life } from './Life.js';
 import type { PlayerId, PlayerState } from './PlayerState.js';
 
 /**
@@ -91,7 +92,7 @@ export function createWorld(config: WorldSeed): WorldState {
       animal,
       position: centerOf(spawn),
       facing: index < 2 ? 'down' : 'up',
-      life: 'alive',
+      life: ALIVE,
       hp: 6 + bonus.hp,
       shoes: 0,
       power: 1 + bonus.power,
@@ -148,8 +149,9 @@ export function hashWorld(world: WorldState): number {
       .text(player.animal)
       .float(player.position.x)
       .float(player.position.y)
-      .text(player.facing)
-      .text(player.life)
+      .text(player.facing);
+    hashLife(hasher, player.life);
+    hasher
       .int(player.hp)
       .int(player.shoes)
       .int(player.power)
@@ -194,4 +196,26 @@ export function hashWorld(world: WorldState): number {
   }
 
   return hasher.value;
+}
+
+/**
+ * プレイヤーの状態（盤面・外周・退場）を混ぜる。外周にいる間だけ持つ値は、そのときだけ混ぜる。
+ *
+ * ⚠️ 状態を1つ足したら、ここにも足す。書き忘れると、その状態の値がずれても
+ * 検出できない。`never` への代入は、書き忘れをコンパイルエラーにするためのもの。
+ */
+function hashLife(hasher: StateHasher, life: Life): void {
+  hasher.text(life.kind);
+  switch (life.kind) {
+    case 'alive':
+    case 'out':
+      return;
+    case 'negibon':
+      hasher.float(life.along).int(life.readyAt);
+      return;
+    default: {
+      const unhandled: never = life;
+      throw new Error(`扱っていない状態: ${JSON.stringify(unhandled)}`);
+    }
+  }
 }

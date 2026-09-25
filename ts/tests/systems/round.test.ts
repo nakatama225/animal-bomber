@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { GameSession, ROUND_INTERMISSION } from '../../src/app/GameSession.js';
 import { IdleIntentSource } from '../../src/domain/intent/IntentSource.js';
 import { defaultMatchConfig, seedForRound } from '../../src/domain/rules/MatchConfig.js';
+import { OUT } from '../../src/domain/state/Life.js';
 import { winsOf } from '../../src/domain/state/MatchState.js';
+import { isAlive } from '../../src/domain/state/PlayerState.js';
 import { hashWorld } from '../../src/domain/state/WorldState.js';
 import { secondsToTicks } from '../../src/domain/core/Tick.js';
 
@@ -22,7 +24,7 @@ function session(overrides: Partial<ReturnType<typeof defaultMatchConfig>> = {})
 describe('ラウンドの進行', () => {
   it('最後の1人になるとラウンドが終わる', () => {
     const game = session();
-    game.world.players[1]!.life = 'dead';
+    game.world.players[1]!.life = OUT;
     const events = game.tick();
     expect(events.some((e) => e.type === 'roundEnded')).toBe(true);
     expect(winsOf(game.match, 0)).toBe(1);
@@ -46,7 +48,7 @@ describe('ラウンドの進行', () => {
   it('勝利数が揃うと試合が終わる', () => {
     const game = session({ winsToTake: 2 });
     for (let round = 0; round < 2; round += 1) {
-      game.world.players[1]!.life = 'dead';
+      game.world.players[1]!.life = OUT;
       game.tick();
       skipIntermission(game);
     }
@@ -56,7 +58,7 @@ describe('ラウンドの進行', () => {
 
   it('試合が終わったあとは進まない', () => {
     const game = session({ winsToTake: 1 });
-    game.world.players[1]!.life = 'dead';
+    game.world.players[1]!.life = OUT;
     game.tick();
     expect(game.match.finished).toBe(true);
     expect(game.tick()).toHaveLength(0);
@@ -65,18 +67,18 @@ describe('ラウンドの進行', () => {
   it('次のラウンドでは盤面が作り直される', () => {
     const game = session({ winsToTake: 3 });
     const before = hashWorld(game.world);
-    game.world.players[1]!.life = 'dead';
+    game.world.players[1]!.life = OUT;
     game.tick();
     skipIntermission(game);
     expect(game.match.round).toBe(2);
     expect(hashWorld(game.world)).not.toBe(before);
-    expect(game.world.players[1]!.life).toBe('alive');
+    expect(isAlive(game.world.players[1]!)).toBe(true);
   });
 
   it('決着のあと、しばらくは前の盤面のまま止まる', () => {
     // 決まった tick のうちに盤面を作り直すと、決着の場面が1度も描かれない。
     const game = session({ winsToTake: 3 });
-    game.world.players[1]!.life = 'dead';
+    game.world.players[1]!.life = OUT;
     game.tick();
     const decided = game.world;
     const frozen = hashWorld(decided);
@@ -101,7 +103,7 @@ describe('ラウンドの進行', () => {
     const first = session({ winsToTake: 3 });
     const second = session({ winsToTake: 3 });
     for (const game of [first, second]) {
-      game.world.players[1]!.life = 'dead';
+      game.world.players[1]!.life = OUT;
       game.tick();
       skipIntermission(game);
     }

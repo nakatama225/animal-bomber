@@ -3,6 +3,7 @@ import { tick, type Tick } from '../../core/Tick.js';
 import type { SimEvent } from '../../events/SimEvent.js';
 import { bombAt } from '../../query/BoardQuery.js';
 import type { PlayerId, PlayerState } from '../../state/PlayerState.js';
+import { isAlive } from '../../state/PlayerState.js';
 import type { WorldState } from '../../state/WorldState.js';
 import type { ActiveAction } from '../ActiveAction.js';
 import type { WorldActor } from '../WorldActor.js';
@@ -42,7 +43,7 @@ export class ScatteredActor implements WorldActor {
 
     // 撒いた本人以外が踏んだら効く。
     for (const player of world.players) {
-      if (player.id === this.owner || player.life !== 'alive') continue;
+      if (player.id === this.owner || !isAlive(player)) continue;
       if (!sameCell(cellOf(player.position), this.cell)) continue;
       player.effects.add('slow', tick(120), tick(360));
       return {
