@@ -1,4 +1,4 @@
-"""`Room`（中継）の座席割当と転送ロジック。
+"""`Room`（中継）のプレイヤー番号の割り当てと転送ロジック。
 
 実ソケットを使わない。`FakeConnection` で `Room` の判断だけを検査する。
 実ソケットを使った疎通そのものは `test_integration.py` で見る。
@@ -14,8 +14,8 @@ from animal_bomber_server.relay import HOST_SEAT, Room, RoomFullError
 from tests.conftest import FakeConnection
 
 
-class Test座席割当:
-    async def test_最初に繋いだ接続がホスト座席になる(self):
+class Testプレイヤー番号の割り当て:
+    async def test_最初に繋いだ接続がホストの0番になる(self):
         room = Room(max_seats=2)
         ws = FakeConnection()
 
@@ -29,7 +29,7 @@ class Test座席割当:
             "seats": [],
         }
 
-    async def test_2人目はゲスト座席になる(self):
+    async def test_2人目はゲストの番号になる(self):
         room = Room(max_seats=2)
         await room.join(FakeConnection())
         guest = FakeConnection()
@@ -44,7 +44,7 @@ class Test座席割当:
             "seats": [0],
         }
 
-    async def test_welcomeの座席一覧は自分自身を含まない(self):
+    async def test_welcomeの番号一覧は自分自身を含まない(self):
         room = Room(max_seats=4)
         await room.join(FakeConnection())
         await room.join(FakeConnection())
@@ -54,7 +54,7 @@ class Test座席割当:
 
         assert third.last_json()["seats"] == [0, 1]
 
-    async def test_3人目4人目も座席に入れる(self):
+    async def test_3人目4人目も番号を受け取れる(self):
         room = Room(max_seats=4)
         await room.join(FakeConnection())
         await room.join(FakeConnection())
@@ -63,7 +63,7 @@ class Test座席割当:
 
         assert (seat3, seat4) == (2, 3)
 
-    async def test_満席の5人目は入れない(self):
+    async def test_定員いっぱいなら5人目は入れない(self):
         room = Room(max_seats=4)
         for _ in range(4):
             await room.join(FakeConnection())
@@ -191,7 +191,7 @@ class Test切断:
         notice = json.loads(guest1.received[-1])
         assert notice == {"t": "peer_left", "seat": 0, "host": True}
 
-    async def test_ホスト切断後は座席が空になり新規接続を受け付けられる(self):
+    async def test_ホスト切断後は0番が空になり新規接続を受け付けられる(self):
         room = Room(max_seats=2)
         host = FakeConnection()
         await room.join(host)
@@ -202,26 +202,26 @@ class Test切断:
 
         assert seat == HOST_SEAT
 
-    async def test_存在しない座席の退出は何も起きない(self):
+    async def test_存在しない番号の退出は何も起きない(self):
         room = Room(max_seats=2)
         # 例外にせず静かに無視する。二重に disconnect イベントが
         # 飛んできても構わない設計にしておく（ネットワークの世界では起こりうる）。
         await room.leave(99)
 
 
-class Testサーバ持ちのためのホスト席予約:
+class Testサーバ持ちのためのホストの0番の予約:
     """2026-08-22、家族と実機で繋いだときに出た混乱への対処。
 
     それまでは純粋な先着順だったので、家族が先にブラウザを開くと
     サーバを立てた本人がゲストになった。UI は「たてる」「さんかする」と
     役割を選ばせているのに、その選択が捨てられていた状態。
 
-    今は `reserve_host_seat=True` のとき、ホスト席をサーバ持ちのために
+    今は `reserve_host_seat=True` のとき、ホストの0番をサーバ持ちのために
     **空けて待つ**。単に「希望者を優先する」だけでは足りない——先に
-    よそが座ってしまえば席は無く、元の混乱がそのまま戻るため。
+    よその端末が先に0番を取ってしまえば、元の混乱がそのまま戻るため。
     """
 
-    async def test_サーバ持ちはホスト席に座る(self):
+    async def test_サーバ持ちはホストの0番になる(self):
         room = Room(max_seats=4, reserve_host_seat=True)
         owner = FakeConnection()
 
@@ -230,14 +230,14 @@ class Testサーバ持ちのためのホスト席予約:
         assert seat == HOST_SEAT
         assert owner.last_json()["role"] == "host"
 
-    async def test_重要_よそから先に2人来てもホスト席は空いたまま待つ(self):
+    async def test_重要_よそから先に2人来てもホストの0番は空いたまま待つ(self):
         # これが実機で起きた状況そのもの。家族が2人先に繋いだ後で、
         # サーバを立てた本人が繋ぐ。
         room = Room(max_seats=4, reserve_host_seat=True)
         family1 = FakeConnection()
         family2 = FakeConnection()
 
-        assert await room.join(family1) == 1  # 座席0 は取らせない
+        assert await room.join(family1) == 1  # 0番は取らせない
         # welcome は最初に届く1通目。last_json() だと family2 参加時の
         # peer_joined を拾ってしまうので、ここは received[0] を見る
         assert json.loads(family1.received[0])["role"] == "guest"
@@ -249,8 +249,8 @@ class Testサーバ持ちのためのホスト席予約:
         assert seat == HOST_SEAT
         assert owner.last_json()["role"] == "host"
 
-    async def test_サーバ持ちが2窓開いたら2枚目は普通の席へ(self):
-        # ホスト席は既に自分の1窓目が使っている。奪い合わない。
+    async def test_サーバ持ちが2窓開いたら2枚目は1番以降へ(self):
+        # ホストの0番は既に自分の1窓目が使っている。奪い合わない。
         room = Room(max_seats=4, reserve_host_seat=True)
         await room.join(FakeConnection(), prefer_host=True)
 
@@ -260,7 +260,7 @@ class Testサーバ持ちのためのホスト席予約:
         assert seat == 1
         assert second_window.last_json()["role"] == "guest"
 
-    async def test_よそだけでは予約席のぶん定員が減る(self):
+    async def test_よそだけでは予約した0番のぶん定員が減る(self):
         # 割り切りの明示。ホストが来ないうちは3人までしか座れない。
         room = Room(max_seats=4, reserve_host_seat=True)
         for expected in (1, 2, 3):
@@ -275,7 +275,7 @@ class Testサーバ持ちのためのホスト席予約:
         assert await room.join(FakeConnection()) == 0
         assert await room.join(FakeConnection()) == 1
 
-    async def test_満席ならprefer_hostでも入れない(self):
+    async def test_定員いっぱいならprefer_hostでも入れない(self):
         room = Room(max_seats=2, reserve_host_seat=True)
         await room.join(FakeConnection(), prefer_host=True)
         await room.join(FakeConnection())

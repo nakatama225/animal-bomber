@@ -70,7 +70,7 @@ async def test_HTTP_GETでHTMLが返る(running_server):
     assert content_type.startswith("text/html")
 
 
-async def test_1本目のWebSocket接続がホスト座席を受け取る(running_server):
+async def test_1本目のWebSocket接続がホストの0番を受け取る(running_server):
     port = running_server
     async with websockets.connect(f"ws://127.0.0.1:{port}") as ws:
         welcome = json.loads(await ws.recv())
@@ -82,7 +82,7 @@ async def test_1本目のWebSocket接続がホスト座席を受け取る(runnin
         }
 
 
-async def test_2本目はゲスト座席を受け取る(running_server):
+async def test_2本目はゲストの番号を受け取る(running_server):
     port = running_server
     async with websockets.connect(f"ws://127.0.0.1:{port}") as host_ws:
         await host_ws.recv()  # host の welcome を読み捨てる
@@ -97,7 +97,7 @@ async def test_2本目はゲスト座席を受け取る(running_server):
             }
 
 
-async def test_3本目は満席で切断される(running_server):
+async def test_3本目は定員いっぱいで切断される(running_server):
     port = running_server
     async with (
         websockets.connect(f"ws://127.0.0.1:{port}") as host_ws,

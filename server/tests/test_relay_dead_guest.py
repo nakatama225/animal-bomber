@@ -7,7 +7,7 @@
 
 Wi-Fi を切っても TCP は FIN を出さない。だから「送れない」ことは
 **例外ではなく、まず沈黙（ブロック）として現れる**。
-`Room.route()` がその席への `send()` を素のまま `await` していると、
+`Room.route()` がその接続への `send()` を素のまま `await` していると、
 
 1. ホストのハンドラが `route()` の中で止まる
 2. 生きているゲストへの配信も一緒に止まる
@@ -98,12 +98,12 @@ class Test死んだゲストがいても試合は続く:
         await asyncio.wait_for(room.route(HOST_SEAT, '{"t":"snap"}'), timeout=2.0)
         assert '{"t":"snap"}' in alive.received
 
-    async def test_ホスト席は残る(self, dead_cls):
+    async def test_ホストの0番は残る(self, dead_cls):
         room, *_ = await _room_with(dead_cls)
         await asyncio.wait_for(room.route(HOST_SEAT, '{"t":"snap"}'), timeout=2.0)
         assert HOST_SEAT in room.seats
 
-    async def test_死んだ席は畳まれる(self, dead_cls):
+    async def test_応答しない接続は外される(self, dead_cls):
         room, _host, _dead, _alive, dead_seat = await _room_with(dead_cls)
         await asyncio.wait_for(room.route(HOST_SEAT, '{"t":"snap"}'), timeout=2.0)
         assert dead_seat not in room.seats
@@ -116,15 +116,15 @@ class Test死んだゲストがいても試合は続く:
         assert {"t": "peer_left", "seat": dead_seat, "host": False} in notices
 
     async def test_次のフレームで待たされない(self, dead_cls):
-        """死んだ席は1回で外れる。毎フレーム待たされたら 60Hz が維持できない。"""
+        """応答しない接続は1回で外れる。毎フレーム待たされたら 60Hz が維持できない。"""
         room, *_ = await _room_with(dead_cls)
         await asyncio.wait_for(room.route(HOST_SEAT, '{"t":"snap"}'), timeout=2.0)
         await asyncio.wait_for(room.route(HOST_SEAT, '{"t":"snap2"}'), timeout=0.05)
 
 
-class Test死んだ席が複数あっても遅れない:
+class Test応答しない接続が複数あっても遅れない:
     async def test_2人黙っても待ち時間は1人ぶん(self):
-        """⭐ 1席ずつ順に送ると、黙っている人の数だけ待ち時間が積み上がる。
+        """⭐ 1人ずつ順に送ると、黙っている人の数だけ待ち時間が積み上がる。
 
         `SEND_TIMEOUT` は 0.1 秒。2人ぶん順に待つと 0.2 秒を超えるので、
         0.18 秒で切れば「まとめて投げている」ことだけを見られる。
@@ -143,10 +143,10 @@ class Test死んだ席が複数あっても遅れない:
         assert '{"t":"snap"}' in alive.received
 
 
-    async def test_残った席に黙った人が複数いても通知は1人ぶんの待ち(self):
-        """席自身のハンドラから畳まれる経路（route を通らない）。
+    async def test_残った接続に黙った人が複数いても通知は1人ぶんの待ち(self):
+        """接続自身のハンドラから外される経路（route を通らない）。
 
-        ⭐ このとき「まだ生きている扱いだが実は黙っている席」が残っていることがある
+        ⭐ このとき「まだ生きている扱いだが実は黙っている接続」が残っていることがある
         （ルータが落ちて全員同時に無音になった直後など）。退出の知らせを
         1人ずつ順に送ると、そこでまた人数ぶん待たされる。
         """
@@ -169,7 +169,7 @@ class Test死んだ席が複数あっても遅れない:
 
 class Test後始末:
     async def test_leaveは二重に呼ばれても壊れない(self):
-        """死んだ席は route からも、その席自身のハンドラの finally からも畳まれる。"""
+        """応答しない接続は route からも、その接続自身のハンドラの finally からも外される。"""
         room = Room(max_seats=4)
         host, guest = FakeConnection(), FakeConnection()
         await room.join(host)

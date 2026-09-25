@@ -73,10 +73,10 @@ def from_same_machine(ws: ServerConnection) -> bool:
 def make_handler(room: Room):
     """WebSocket 接続1本ぶんの一生を扱う関数を作る。
 
-    やることは3つだけ: 座席に着ける・届いたメッセージを右から左へ流す・
-    切れたら座席を空ける。ゲームのルールはここにも一切出てこない。
+    やることは3つだけ: プレイヤー番号を割り当てる・届いたメッセージを右から左へ流す・
+    切れたらその番号を空ける。ゲームのルールはここにも一切出てこない。
 
-    座席を決めるとき、ホスト席はサーバと同じマシンから来た接続のために
+    番号を決めるとき、ホストの0番はサーバと同じマシンから来た接続のために
     **空けて待つ**（`reserve_host_seat=True`）。「サーバを起動した人がホスト」
     という物理的な事実に役割を合わせるため
     （2026-08-22: それまでは純粋な先着順で、家族が先に繋ぐと
@@ -91,17 +91,17 @@ def make_handler(room: Room):
         try:
             seat = await room.join(ws, prefer_host=from_same_machine(ws))
         except RoomFullError:
-            logger.info("満席のため接続を拒否した")
+            logger.info("定員いっぱいのため接続を拒否した")
             await ws.close(code=1013, reason="room full")
             return
 
-        logger.info("座席 %d が接続した", seat)
+        logger.info("プレイヤー %d が接続した", seat)
         try:
             async for message in ws:
                 await room.route(seat, message)
         finally:
             await room.leave(seat)
-            logger.info("座席 %d が切断した", seat)
+            logger.info("プレイヤー %d が切断した", seat)
 
     return handler
 

@@ -809,7 +809,7 @@ const CFG = {
   cpuLevel:['futsu','futsu','futsu'],   // CPU 1体ずつの強さ
   sfx:true, bgm:true,
   // LAN対戦。4枠のうち先頭 lanHumans 人が人間、残りは CPU で埋める。
-  // lanLocal は「このマシンで動かす枠」で、サーバの座席通知だけが正しい値の出どころ
+  // lanLocal は「このマシンで動かす枠」で、サーバが通知するプレイヤー番号だけが正しい値の出どころ
   // （ここに書く既定値の 0 は、まだ何にも接続していない状態の仮置き）。
   lanHumans:2,
   lanPicks:['rabbit','frog','fox','elephant'],
@@ -1263,7 +1263,7 @@ function setupPlayersLan(){
       // ⛔ CONTROLS に p3/p4 を足さない。LAN では1台に1人しか座らないので、
       //    人間枠は全員 solo（キー配置が衝突しない）
       controls: isHuman ? CONTROLS.solo : null,
-      // 体力は枠ごと。CPU 枠も人間枠と同じく、座席の番号で引く
+      // 体力は枠ごと。CPU 枠も人間枠と同じく、プレイヤー番号で引く
       hpSlot: 'lan'+i,
       cpuIdx: isHuman ? 0 : cpuIdx++,
       spawnIdx: i,
@@ -3715,8 +3715,8 @@ const NET_ROUND = new Set(['x','y','cx','cy','vx','vy','sx','sy','ox','oy']);
 const NET = {
   role: null,      // 'host' | 'guest' | null（ローカル対戦）
   ws: null,        // 実際の WebSocket。connect() の中でしか作らない
-  seat: null,      // このタブに割り当てられた座席番号（サーバの welcome だけが出どころ）
-  roster: new Set(), // 今つながっている座席番号の集合（ロビー画面の人数表示に使う）
+  seat: null,      // このタブに割り当てられたプレイヤー番号（サーバの welcome だけが出どころ）
+  roster: new Set(), // 今つながっているプレイヤー番号の集合（ロビー画面の人数表示に使う）
   fx: [],          // 音・トースト等、状態から導けないもの（ホストが積んで毎フレーム送る）
   _lastCards: 0,   // ゲストが最後にカード（時計・体力）を描き直した時刻。apply() が 4Hz に間引くのに使う
 
@@ -3766,7 +3766,7 @@ const NET = {
     if (msg.t === 'welcome'){
       NET.seat = msg.seat;
       NET.role = msg.role;
-      CFG.lanLocal = msg.seat;           // ★席番号の唯一の出どころ。begin では絶対に上書きしない
+      CFG.lanLocal = msg.seat;           // ★プレイヤー番号の唯一の出どころ。begin では絶対に上書きしない
       NET.roster = new Set(msg.seats); NET.roster.add(msg.seat);
       if (G.phase==='lobby') buildLobby();
       return;
@@ -3971,7 +3971,7 @@ const NET = {
          新しい種類のメッセージを足すのに中継の合意が要らないのは、
          中継を無知に作ったことの見返り。
 
-      ⛔ lanLocal は載せない（begin と同じ理由。全ゲストが「自分は座席0」だと
+      ⛔ lanLocal は載せない（begin と同じ理由。全ゲストが「自分はプレイヤー0」だと
          誤解する）。⛔ mode も載せない——各自がタイトルで「LAN対戦」を押した時点で
          自分で 'lan' を立てている（v4.2.1）ので、配る必要が無い。
          配らないものを増やさないほど、事故の経路が減る。 */
@@ -3989,21 +3989,21 @@ const NET = {
 
   /** ホストがロビーで「はじめる」を押したとき。
       交渉した設定を自分の CFG に書いてから、全ゲストへ配って始める。
-      ⛔ lanLocal は cfg に含めない。Object.assign で各ゲストの席番号を
-         0 で塗りつぶすと、全員が「自分は座席0」だと誤解する
+      ⛔ lanLocal は cfg に含めない。Object.assign で各ゲストのプレイヤー番号を
+         0 で塗りつぶすと、全員が「自分はプレイヤー0」だと誤解する
          （症状は「入力が効かない」ではなく renderKeyHelp の表示崩れに見える）。 */
   beginAsHost(){
     if (!NET.ws || NET.role!=='host') return;
-    /* ⛔ 実際に座っている席より多くの人間枠を作らない。
-       空席を人間枠のまま残すと、その枠は p.net を持たないので inputOf() が
+    /* ⛔ 実際に接続している人数より多くの人間枠を作らない。
+       空き枠を人間枠のまま残すと、その枠は p.net を持たないので inputOf() が
        ローカルのキーボードに落ち、**ホストの分身がもう1体動き出す**
        （2026-08-22 実測: 誰も繋いでいない枠2が、作者の枠0と同じ向きに
-       2.097 タイル動いた）。ロビーは空席を「⚪ 空席・待機中」と出すので、
+       2.097 タイル動いた）。ロビーは空き枠を「⚪ 空き・待機中」と出すので、
        人数を多めに選んで待つ操作が自然にできてしまう＝踏みやすい。
 
        「繋がっている人数」ではなく「**先頭から連続して**埋まっている数」で
-       切るのが要点。座席1が抜けて2だけ残った穴あきのとき、人数で切ると
-       枠1が空席のまま人間扱いになり、同じ分身が復活する。 */
+       切るのが要点。プレイヤー1が抜けて2だけ残った穴あきのとき、人数で切ると
+       枠1が空いたまま人間扱いになり、同じ分身が復活する。 */
     let seated = 0;
     while (NET.roster.has(seated)) seated++;
     CFG.lanHumans = Math.max(1, Math.min(CFG.lanHumans, seated));
@@ -4024,7 +4024,7 @@ const NET = {
     //    「ホストだけ 1人＋CPU3、ゲストからはその1人プレイが見える」状態になる。
     //    通信は正常に見えるので原因がネットワーク側に見えるのが厄介
     //    （2026-08-22 に家族と初めて繋いだ実機で発生）。
-    //    lanLocal は cfg に含めていないので、ここで席番号は壊れない（welcome が唯一の出どころ）。
+    //    lanLocal は cfg に含めていないので、ここでプレイヤー番号は壊れない（welcome が唯一の出どころ）。
     Object.assign(CFG, cfg);
     NET.ws.send(JSON.stringify({ t:'begin', cfg }));
     startGame();
@@ -5727,7 +5727,7 @@ function setupScreenNav(){
 
   /* LAN対戦。「たてる」も「さんかする」も、やることは同じ接続処理になる。
      この画面を開けている時点で、そのブラウザは既にホストが立てたサーバから
-     HTML をダウンロード済み（＝サーバはもう動いている）。あとは座席が
+     HTML をダウンロード済み（＝サーバはもう動いている）。あとはプレイヤー番号が
      空いてる順に埋まるだけなので、クリックした側の「意図」で処理を分ける
      必要が無い。実際の役割（ホスト/ゲスト）はサーバの welcome が唯一決める。
      実際の接続は connect() の中でしか起きない
@@ -5803,12 +5803,12 @@ function buildLobby(){
   wrap.innerHTML='';
   /* ⛔ 動的グループを先に全部空にする。ここは本人の操作と無関係に
      peer_joined / peer_left からも呼ばれる（家族がもう1台つないだ瞬間）。
-     消し忘れると、居なくなった席のカードにカーソルが乗る */
+     消し忘れると、居なくなったプレイヤーのカードにカーソルが乗る */
   for (const g of MENU_ORDER.lobby) if (g!=='nav') MENU.clear('lobby', g);
 
   const me=document.createElement('div');
   me.className='note';
-  me.textContent=`あなたは 座席${NET.seat}（${NET.role==='host'?'ホスト':'ゲスト'}）`;
+  me.textContent=`あなたは ${NET.seat+1}P（${NET.role==='host'?'ホスト':'ゲスト'}）`;
   wrap.appendChild(me);
 
   if (NET.role==='host'){
@@ -5829,7 +5829,7 @@ function buildLobby(){
     const row=document.createElement('div');
     row.className='pickhdr';
     const who = isHuman ? `${i+1}P${i===NET.seat?'（あなた）':''}` : 'CPU';
-    const status = isHuman ? (NET.roster.has(i)?'🟢 接続済み':'⚪ 空席・待機中') : '🤖';
+    const status = isHuman ? (NET.roster.has(i)?'🟢 接続済み':'⚪ 空き・待機中') : '🤖';
     row.innerHTML=`<span class="who">${who}</span><span class="keys">${status}</span>`;
     wrap.appendChild(row);
 

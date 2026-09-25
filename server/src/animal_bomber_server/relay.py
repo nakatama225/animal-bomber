@@ -7,12 +7,19 @@
 どちらか一方だけ仕様を変えると、もう一方が黙って古い理解のまま動き続け、
 不整合の原因が「サーバのバグ」に見えて実体は「仕様の言い忘れ」になる。
 
-`Room` が知っているのは「誰が何番目の椅子に座っているか」だけ。
+`Room` が知っているのは「どの接続が何番のプレイヤーか」だけ。
 中身は不透明なバイト列（実際には文字列）として右から左へ流すだけでよい。
+
+## プレイヤー番号（コード上の名前は `seat`）
+
+つないできた接続に、`Room` が 0〜3 の番号を割り当てる。ゲームの側はこの番号を
+そのままプレイヤー番号として使う（番号 N の端末が、プレイヤー N を操作する）。
+TypeScript 版・Python 版の「プレイヤー番号」と同じもの。
+人間が接続していない番号は CPU が受け持つので、`Room` の中の番号は空きがありうる。
 
 ## 中継の方向
 
-- **ホスト（座席0）→ 全ゲストへ配る**（盤面のスナップショット）
+- **ホスト（プレイヤー0）→ 全ゲストへ配る**（盤面のスナップショット）
 - **ゲスト → ホストだけへ送る**（自分の入力）
 - ゲスト同士は直接やり取りしない（ホストが唯一の権威を持つ設計そのもの）
 
@@ -22,13 +29,13 @@
 回線が切れた人へ送ろうとして中継ごと止まると、生きている人の試合まで死ぬ
 （実機で「ゲスト1人の Wi-Fi を切ったらホストもタイトルに戻った」として出た）。
 
-だから `route` は**まとめて投げて、送れなかった席だけを畳む**。
-畳むときに配るのは `peer_left` ——既に中継が発行している制御メッセージなので、
+だから `route` は**まとめて投げて、送れなかった接続だけを外す**。
+外すときに配るのは `peer_left` ——既に中継が発行している制御メッセージなので、
 新しい約束は1つも増えていない。中身は相変わらず1バイトも読まない。
 
 ## 制御メッセージだけは中継が発行する
 
-座席の割り当てと退出通知だけは、`Room` 自身が JSON で送る。
+プレイヤー番号の割り当てと退出通知だけは、`Room` 自身が JSON で送る。
 これは「中身を理解する」のではなく「誰が繋がっているか」を伝えるだけなので、
 無知の原則には反しない。
 """
@@ -53,14 +60,14 @@ class SendableConnection(Protocol):
 
 
 class RoomFullError(Exception):
-    """満席の部屋に入ろうとしたときの例外。"""
+    """定員いっぱいの部屋に入ろうとしたときの例外。"""
 
 
 HOST_SEAT = 0
-"""ホストの座席番号。最初に繋いだ1人が必ずここに座る。"""
+"""ホストのプレイヤー番号。最初に繋いだ1人が必ずこの番号になる。"""
 
 SEND_TIMEOUT = 0.1
-"""1つの席への送信をあきらめるまでの秒数。
+"""1つの接続への送信をあきらめるまでの秒数。
 
 ⛔ 「送れない」は、まず例外ではなく**沈黙**として現れる。
 Wi-Fi を切られた端末は TCP の FIN を出さないので、こちらの `send()` は
@@ -95,18 +102,18 @@ class Room:
         return seat == HOST_SEAT
 
     def _next_seat(self, prefer_host: bool) -> int | None:
-        """この接続に割り当てる座席を決める。空きが無ければ None。
+        """この接続に割り当てるプレイヤー番号を決める。空きが無ければ None。
 
         Args:
-            prefer_host: ホスト席を優先的に取りたい接続かどうか。
+            prefer_host: ホストの0番を優先的に取りたい接続かどうか。
                 「なぜ優先されるのか」（＝サーバと同じマシンから来た接続だから）は
                 呼び出し側の判断で、`Room` はその理由を知らない——中継が
                 ネットワークの詳細を知り始めると、無知の原則が崩れる。
 
-        `reserve_host_seat` が立っているとき、ホスト席は `prefer_host` の
+        `reserve_host_seat` が立っているとき、ホストの0番は `prefer_host` の
         接続だけのために空けておく。**単に優先するだけでは足りない**のがここの肝で、
-        「早い者勝ちだが希望者は優先」だと、希望者より先によそが座った時点で
-        席が無くなり、元の混乱（サーバを立てた本人がゲストになる）がそのまま戻る。
+        「早い者勝ちだが希望者は優先」だと、希望者より先によその端末が0番を取った時点で
+        元の混乱（サーバを立てた本人がゲストになる）がそのまま戻る。
         """
         if prefer_host and HOST_SEAT not in self.seats:
             return HOST_SEAT
@@ -117,16 +124,16 @@ class Room:
         return None
 
     async def join(self, ws: SendableConnection, *, prefer_host: bool = False) -> int:
-        """座席にこの接続を割り当てる。既定では空いている最も若い座席。
+        """この接続にプレイヤー番号を割り当てる。既定では空いている最も小さい番号。
 
-        新しい接続に `welcome`（自分の座席）を送るのに加えて、
+        新しい接続に `welcome`（自分のプレイヤー番号）を送るのに加えて、
         **既に居る全員へ `peer_joined` を知らせる**。ロビー画面が
         「今何人繋がっているか」を出すには、これが無いと新規参加が
         誰にも気づかれない。
 
         Args:
             ws: 参加する接続。
-            prefer_host: True なら、ホスト席が空いている限りそこへ座らせる。
+            prefer_host: True なら、ホストの0番が空いている限りそれを割り当てる。
                 サーバを動かしているマシン自身から来た接続に使う
                 （2026-08-22: 「たてる」を押したのにゲストになる、という
                 実機での混乱への対処。UI が役割を選ばせているのに
@@ -134,14 +141,14 @@ class Room:
                 マシンがホスト——に合わせた）。
 
         Returns:
-            割り当てた座席番号。
+            割り当てたプレイヤー番号。
 
         Raises:
-            RoomFullError: 空席が無いとき。呼び出し側は接続を閉じること。
+            RoomFullError: 空いている番号が無いとき。呼び出し側は接続を閉じること。
         """
         seat = self._next_seat(prefer_host)
         if seat is None:
-            raise RoomFullError(f"満席（定員 {self.max_seats}）")
+            raise RoomFullError(f"定員いっぱい（定員 {self.max_seats}）")
 
         existing = sorted(self.seats.keys())  # 自分を足す前に確定させる
         for other_ws in self.seats.values():
@@ -161,7 +168,7 @@ class Room:
         return seat
 
     async def leave(self, seat: int) -> None:
-        """この座席の接続が切れたことを扱う。
+        """このプレイヤー番号の接続が切れたことを扱う。
 
         ホストが抜けた場合は試合の続行不能を意味する（ホスト権威の必然）ので、
         残っている全員に通知したうえで、その接続も閉じる。
@@ -171,9 +178,9 @@ class Room:
         await self.drop([seat])
 
     async def drop(self, seats: list[int]) -> None:
-        """複数の座席をまとめて畳む。**通知は1回ぶんの待ち時間で配る。**
+        """複数のプレイヤー番号をまとめて外す。**通知は1回ぶんの待ち時間で配る。**
 
-        ⛔ `leave()` を1席ずつ順に呼ばない。畳むたびに「まだ残っている黙った席」へ
+        ⛔ `leave()` を1人ずつ順に呼ばない。外すたびに「まだ残っている黙った接続」へ
         通知しに行くので、同時に何人か落ちると待ち時間が人数ぶん積み上がる。
         4人部屋で3人が同時に落ちると 0.3 秒——60Hz で18フレームぶんで、
         ホスト側の受信キュー（既定16）が溢れる（`SEND_TIMEOUT` の説明を見ること）。
@@ -182,8 +189,8 @@ class Room:
         """
         seats = [s for s in seats if s in self.seats]
         if not seats:
-            # 既に畳んである（route が先に気づいた席を、その席自身のハンドラの
-            # finally がもう一度畳みに来る）。2回 peer_left を配ると、ホストに
+            # 既に外してある（route が先に気づいた接続を、その接続自身のハンドラの
+            # finally がもう一度外しに来る）。2回 peer_left を配ると、ホストに
             # 「回線が切れた」トーストが二重に出る
             return
         for s in seats:
@@ -204,22 +211,22 @@ class Room:
             self.seats.clear()
 
     async def route(self, sender_seat: int, message: str) -> None:
-        """中身を見ずに、送り主の座席だけを見て転送先を決める。
+        """中身を見ずに、送り主のプレイヤー番号だけを見て転送先を決める。
 
         Args:
-            sender_seat: 送り主の座席番号。
+            sender_seat: 送り主のプレイヤー番号。
             message: 転送するメッセージ本文。中継はこれを一切解釈しない。
         """
         if self.is_host(sender_seat):
-            # ⭐ 1席ずつ順に送らない。1人が黙り込むと後ろの人に永久に届かなくなる。
-            #    まとめて投げて、送れなかった席だけを畳む
+            # ⭐ 1人ずつ順に送らない。1人が黙り込むと後ろの人に永久に届かなくなる。
+            #    まとめて投げて、送れなかった接続だけを外す
             targets = [(s, ws) for s, ws in self.seats.items() if s != sender_seat]
             if not targets:
                 return
             results = await asyncio.gather(
                 *(self._send_to(seat, ws, message) for seat, ws in targets)
             )
-            # 畳むところまでやる。peer_left が届かないと、HTML 側は
+            # 外すところまでやる。peer_left が届かないと、HTML 側は
             # 「CPU が引き継ぐ」きっかけを受け取れないまま、居ない人の枠が残る
             await self.drop([r for r in results if r is not None])
         else:
@@ -233,7 +240,7 @@ class Room:
     async def _send_to(
         self, seat: int, ws: SendableConnection, message: str
     ) -> int | None:
-        """1つの席へ送る。送れなかったらその席番号を返す（送れたら None）。
+        """1つの接続へ送る。送れなかったらそのプレイヤー番号を返す（送れたら None）。
 
         ⛔ 捕まえるのは例外**と**沈黙の両方。`SEND_TIMEOUT` の説明を見ること。
         """
@@ -259,7 +266,7 @@ class Room:
             await ws.close(code=1000, reason="host disconnected")
 
     def seat_of(self, ws: SendableConnection) -> int | None:
-        """この接続がどの座席にいるかを引く（切断処理で使う）。"""
+        """この接続が何番のプレイヤーかを引く（切断処理で使う）。"""
         for seat, conn in self.seats.items():
             if conn is ws:
                 return seat

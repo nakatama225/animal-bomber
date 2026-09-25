@@ -430,16 +430,16 @@ t('NET を使わないローカル対戦の挙動が変わっていない', () =
   return 'ok';
 });
 
-/* ============ LAN対戦 Phase 4（ロビー・begin の座席保護） ============ */
-t('★begin配信後もゲストのCFG.lanLocalは自分の本当の座席のまま（サーバの welcome だけが出どころ）', () => {
+/* ============ LAN対戦 Phase 4（ロビー・begin でプレイヤー番号を守る） ============ */
+t('★begin配信後もゲストのCFG.lanLocalは自分の本当のプレイヤー番号のまま（サーバの welcome だけが出どころ）', () => {
   // プランの警告：begin に lanLocal を乗せて Object.assign すると、
-  // 全ゲストの席番号が host の値（常に0）で塗り潰される。
+  // 全ゲストのプレイヤー番号が host の値（常に0）で塗り潰される。
   // このテストは「begin のたびに実際に壊れていないか」を確認する回帰テスト。
   const host = makeWorld('host');
   const guest = makeWorld('guest');
 
   // 1. 各ワールドがサーバの welcome を受け取った状態を作る
-  //    （host=座席0・guest=座席2。あえて0以外にして、0での塗り潰しが
+  //    （host=プレイヤー0・guest=プレイヤー2。あえて0以外にして、0での塗り潰しが
   //     起きたら即座に矛盾が出るようにする）
   host.X.NET.role = 'host'; host.X.NET.seat = 0; host.X.CFG.lanLocal = 0;
   guest.X.NET.role = 'guest'; guest.X.NET.seat = 2; guest.X.CFG.lanLocal = 2;
@@ -458,7 +458,7 @@ t('★begin配信後もゲストのCFG.lanLocalは自分の本当の座席のま
 
   eq(guest.X.CFG.lanLocal, 2, 'begin 受信後に lanLocal が書き換わってしまった');
   const me = guest.X.players[guest.X.CFG.lanLocal];
-  ok(me, 'players[lanLocal] が存在しない（席番号が壊れている証拠）');
+  ok(me, 'players[lanLocal] が存在しない（プレイヤー番号が壊れている証拠）');
   eq(me.controls, guest.X.CONTROLS.solo, 'players[lanLocal].controls が solo でない');
   return `lanLocal=${guest.X.CFG.lanLocal} で正しい枠を指せている`;
 });
@@ -491,8 +491,8 @@ t('★「はじめる」でホスト自身もLANモードになる（beginAsHost
 
   host.X.CFG.lanHumans = 3;
   host.X.CFG.lanPicks = ['rabbit', 'frog', 'fox', 'elephant'];
-  // 3人ぶんの席が実際に埋まっている状態にする。beginAsHost() は
-  // 座っている数を超える人間枠を作らない（下の「分身」テストを参照）ので、
+  // 3人ぶんのプレイヤー番号が実際に埋まっている状態にする。beginAsHost() は
+  // 接続している数を超える人間枠を作らない（下の「分身」テストを参照）ので、
   // ここを省くと人数が 1 に切り詰められる
   host.X.NET.roster = new Set([0, 1, 2]);
 
@@ -508,7 +508,7 @@ t('★「はじめる」でホスト自身もLANモードになる（beginAsHost
   eq(humans, 3, `ホスト側の人間枠が lanHumans と一致しない（1 なら 1p 分岐に落ちている）`);
   eq(host.X.players.length, 4, 'LAN は4枠固定');
 
-  // 送信内容も同時に見張る（座席の塗り潰し事故の再発防止）
+  // 送信内容も同時に確かめる（プレイヤー番号の塗り潰し事故の再発防止）
   eq(sent.t, 'begin', 'begin メッセージが送られていない');
   eq(sent.cfg.mode, 'lan', '送る cfg の mode が lan でない');
   ok(!('lanLocal' in sent.cfg), 'cfg に lanLocal を含めてはいけない');
@@ -562,13 +562,13 @@ t('もし誤って cfg に lanLocal:0 を含めてしまったら、このテス
   Object.assign(guest.X.CFG, brokenCfg);
   guest.X.startGame();
 
-  // lanHumans:1 の場合、座席0だけが人間で1〜3はCPU。
-  // 本当の座席は2なのに、塗り潰された0を読んでしまうと
-  // 「自分のはずの枠（座席2・本来CPU）が誤って人間の枠であるかのように扱われる」
+  // lanHumans:1 の場合、プレイヤー0だけが人間で1〜3はCPU。
+  // 本当のプレイヤー番号は2なのに、塗り潰された0を読んでしまうと
+  // 「自分のはずの枠（プレイヤー2・本来CPU）が誤って人間の枠であるかのように扱われる」
   eq(guest.X.CFG.lanLocal, 0, '（対照実験）意図的に壊した値が入っている');
-  eq(guest.X.players[2].isCPU, true, '座席2は本来 CPU のはず（lanHumans:1 のため）');
+  eq(guest.X.players[2].isCPU, true, 'プレイヤー2は本来 CPU のはず（lanHumans:1 のため）');
   eq(guest.X.players[guest.X.CFG.lanLocal].isCPU, false,
-     '壊れた lanLocal が指す座席0は human 側になっている（矛盾の再現）');
+     '壊れた lanLocal が指すプレイヤー0は human 側になっている（矛盾の再現）');
   return '対照実験: 壊れた状態を再現できた（＝上のテストは実際に効く）';
 });
 
@@ -597,7 +597,7 @@ t('★「はじめる」で配る cfg にロビーのルールが全部乗る（
   eq(sent.cfg.wins, 5, '送る cfg に wins が乗っていない');
   eq(sent.cfg.time, 60, '送る cfg に time が乗っていない');
   eq(sent.cfg.sudden, false, '送る cfg に sudden が乗っていない');
-  // ⛔ 席番号だけは絶対に乗せない（全ゲストが「自分は座席0」だと誤解する）
+  // ⛔ プレイヤー番号だけは絶対に乗せない（全ゲストが「自分はプレイヤー0」だと誤解する）
   ok(!('lanLocal' in sent.cfg), 'cfg に lanLocal を含めてはいけない');
   // lanHp は配列。参照をそのまま渡すと、ホストが後でロビーを触ったときに
   // 送信済みの内容が書き換わる（JSON 化済みなので実害は無いが、写しを渡す）
@@ -631,7 +631,7 @@ t('★ゲストが begin を受けると4枠の体力がホストと同じにな
     const want = [1, 2, 3, 4][i] + (p.animal.hpBonus || 0);
     eq(p.maxHp, want, `ゲスト側 ${i + 1}P の maxHp`);
   });
-  eq(guest.X.CFG.lanLocal, 1, 'begin でゲストの席番号が壊れた');
+  eq(guest.X.CFG.lanLocal, 1, 'begin でゲストのプレイヤー番号が壊れた');
   eq(guest.X.CFG.sudden, false, 'サドンデスの設定が届いていない');
   return guest.X.players.map(p => p.maxHp).join(' / ');
 });
@@ -680,7 +680,7 @@ t('★ホストがロビーで決めたルールがゲストに届く（中継�
   return `lanHp=${guest.X.CFG.lanHp} wins=${guest.X.CFG.wins}`;
 });
 
-t('★lobby メッセージは席番号もモードも書き換えない', () => {
+t('★lobby メッセージはプレイヤー番号もモードも書き換えない', () => {
   /* ⛔ begin と同じ事故がここでも起きうる。Object.assign(CFG, msg) にすると
      t が混ざり、将来ホスト側が項目を足したとき lanLocal / mode まで
      流れ込む経路ができる。受け取る側は名指しの列挙で受ける */
@@ -692,10 +692,10 @@ t('★lobby メッセージは席番号もモードも書き換えない', () =>
   ok(!('mode' in msg), 'lobby メッセージに mode を含めてはいけない');
 
   guest.X.NET.handleMessage(JSON.stringify(msg));
-  eq(guest.X.CFG.lanLocal, 1, 'ゲストの席番号が書き換わった');
+  eq(guest.X.CFG.lanLocal, 1, 'ゲストのプレイヤー番号が書き換わった');
   eq(guest.X.CFG.mode, '1p', 'lobby でゲストの mode まで書き換えた');
   ok(!('t' in guest.X.CFG), 'CFG にメッセージ種別 t が混ざった');
-  return '席番号もモードも無傷';
+  return 'プレイヤー番号もモードも無傷';
 });
 
 t('★ホストは自分が送った lobby を受け取っても何も変えない', () => {
@@ -740,16 +740,16 @@ t('★ゲストが遅れて入っても今の設定が届く（buildLobby が配
 });
 
 /* ---------- report ---------- */
-t('★誰も座っていない人間枠を作らない（ホストの分身が動き出すのを防ぐ）', () => {
+t('★誰も接続していない人間枠を作らない（ホストの分身が動き出すのを防ぐ）', () => {
   /* 2026-08-22 実測の回帰テスト。修正#1（ホストも LAN モードに入る）を入れた
      ことで初めて到達するようになった経路。
 
      setupPlayersLan() は i < lanHumans の枠を全部 isCPU:false + solo にする。
      誰も繋いでいない枠には p.net が付かない（receiveInput でしか付かない）ので、
      inputOf() がローカルのキーボードへ落ちる。結果、ホストが右を押すと
-     空席の枠も一緒に右へ動く——ラウンド中ずっと付いてくる分身になる。
+     空き枠も一緒に右へ動く——ラウンド中ずっと付いてくる分身になる。
 
-     ロビーは空席を「⚪ 空席・待機中」と表示するので、
+     ロビーは空き枠を「⚪ 空き・待機中」と表示するので、
      「あとで入れるように多めに」と人数を選ぶ操作でそのまま踏む。 */
   const w = makeWorld('host');
   w.X.NET.role = 'host'; w.X.NET.seat = 0; w.X.CFG.lanLocal = 0;
@@ -760,7 +760,7 @@ t('★誰も座っていない人間枠を作らない（ホストの分身が�
 
   w.X.NET.beginAsHost();
 
-  eq(w.X.CFG.lanHumans, 1, '座っているのは1人なのに人間枠が減らされていない');
+  eq(w.X.CFG.lanHumans, 1, '接続しているのは1人なのに人間枠が減らされていない');
   const ghosts = w.X.players.filter((p, i) => !p.isCPU && !p.net && i !== w.X.CFG.lanLocal);
   eq(ghosts.length, 0, `操作者のいない人間枠が ${ghosts.length} 個ある（分身になる）`);
 
@@ -771,26 +771,26 @@ t('★誰も座っていない人間枠を作らない（ホストの分身が�
   const moved = w.X.players.map((p, i) =>
     Math.hypot(p.cx - before[i].cx, p.cy - before[i].cy));
   ok(moved[0] > 0.5, `操作している枠0が動いていない（${moved[0].toFixed(2)}）`);
-  return `枠0=${moved[0].toFixed(2)}タイル移動 / 空席の人間枠 0 個`;
+  return `枠0=${moved[0].toFixed(2)}タイル移動 / 空いた人間枠 0 個`;
 });
 
-t('★穴あきの座席でも分身を作らない（座席1が抜けて2だけ残った状態）', () => {
-  /* 「繋がっている人数」でクランプすると、ここで枠1が空席のまま
+t('★番号が歯抜けでも分身を作らない（プレイヤー1が抜けて2だけ残った状態）', () => {
+  /* 「繋がっている人数」でクランプすると、ここで枠1が空いたまま
      人間扱いになって分身が復活する。先頭から連続して埋まっている数で
      切っているかを見張る。 */
   const w = makeWorld('host');
   w.X.NET.role = 'host'; w.X.NET.seat = 0; w.X.CFG.lanLocal = 0;
-  w.X.NET.roster = new Set([0, 2]);          // 座席1が抜けている
+  w.X.NET.roster = new Set([0, 2]);          // プレイヤー1が抜けている
   w.X.NET.ws = { readyState: 1, send() {} };
   Object.assign(w.X.CFG, { lanHumans: 3, lanPicks: ['rabbit','frog','fox','elephant'],
     hpP1: 3, hpP2: 3, hpCPU: 3, time: 180, wins: 3, sfx: false, bgm: false });
 
   w.X.NET.beginAsHost();
 
-  eq(w.X.CFG.lanHumans, 1, '連続して埋まっているのは座席0だけなので人間枠は1');
+  eq(w.X.CFG.lanHumans, 1, '連続して埋まっているのはプレイヤー0だけなので人間枠は1');
   const ghosts = w.X.players.filter((p, i) => !p.isCPU && !p.net && i !== w.X.CFG.lanLocal);
   eq(ghosts.length, 0, '穴あきで分身が復活している');
-  return '座席1の穴で分身が生まれない';
+  return 'プレイヤー1が抜けていても分身が生まれない';
 });
 
 console.log('');
