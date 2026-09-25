@@ -71,7 +71,7 @@ export class GameSession {
    * 操作の出どころを登録する。
    *
    * キーボードでも CPU でも記録の再生でも、同じ形で受け取る。
-   * 途中で差し替えれば、接続が切れた席を CPU が引き継ぐこともできる。
+   * 途中で差し替えれば、接続が切れたプレイヤーを CPU が引き継ぐこともできる。
    */
   attach(source: IntentSource): this {
     this.#gatherer.add(source);

@@ -26,7 +26,7 @@ import { IDLE_INTENT, type PlayerIntent } from './PlayerIntent.js';
  *    （間に合わなければ前回の意思を使い回すなど、この層の内側で吸収する）
  */
 export interface IntentSource {
-  /** どの席の意思を返すか。 */
+  /** どのプレイヤーの意思を返すか。 */
   readonly playerId: PlayerId;
 
   /**
@@ -41,7 +41,7 @@ export interface IntentSource {
 /**
  * 何もしない窓口。
  *
- * 接続が切れた席や、まだ誰も座っていない席を、`undefined` の分岐を
+ * 接続が切れたプレイヤーや、まだ誰も操作していないプレイヤーを、`undefined` の分岐を
  * 増やさずに扱うために使う。
  */
 export class IdleIntentSource implements IntentSource {
@@ -55,7 +55,7 @@ export class IdleIntentSource implements IntentSource {
 /**
  * 窓口を集めて、1 tick ぶんの意思をまとめて取り出す。
  *
- * 席ごとに窓口が違ってよい。人間1人・CPU3人でも、人間2人・記録の再生2人でも、
+ * プレイヤーごとに窓口が違ってよい。人間1人・CPU3人でも、人間2人・記録の再生2人でも、
  * ゲーム本体から見ると区別がつかない。
  */
 export class IntentGatherer {
@@ -66,10 +66,10 @@ export class IntentGatherer {
     return this;
   }
 
-  /** この tick の意思を、席ごとに集める。 */
+  /** この tick の意思を、プレイヤーごとに集める。 */
   gather(world: Readonly<WorldState>): ReadonlyMap<PlayerId, PlayerIntent> {
     const result = new Map<PlayerId, PlayerIntent>();
-    // 席の順に集める。窓口を登録した順ではない。登録順に依存すると、
+    // プレイヤー番号の順に集める。窓口を登録した順ではない。登録順に依存すると、
     // 参加の仕方で結果が変わりうる。
     for (const player of world.players) {
       const source = this.#sources.get(player.id);

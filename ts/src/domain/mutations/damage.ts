@@ -19,7 +19,7 @@ import { spitPowerUp } from './items.js';
 /**
  * 体力を減らす。0 以下になったら倒れる。
  *
- * @param by 誰の爆風か。自分の爆弾なら自分の席番号が入る
+ * @param by 誰の爆風か。自分の爆弾なら自分のプレイヤー番号が入る
  */
 export function hurt(
   world: WorldState,

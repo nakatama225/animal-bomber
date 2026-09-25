@@ -7,7 +7,7 @@ export interface MatchConfig {
   readonly roundLimit: Tick;
   /** 何勝で試合を取るか。 */
   readonly winsToTake: number;
-  /** 各席の初期体力（半分の単位。6 で3個ぶん）。 */
+  /** 各プレイヤーの初期体力（半分の単位。6 で3個ぶん）。 */
   readonly startingHp: number;
   /**
    * 盤面と抽選に使う種。
@@ -16,7 +16,7 @@ export interface MatchConfig {
    * 「ラウンド2の盤面」も設定から決まるため、試合全体が再現できる。
    */
   readonly seed: number;
-  /** 参加する動物。席順。 */
+  /** 参加する動物。プレイヤー番号の順。 */
   readonly animals: readonly string[];
 }
 

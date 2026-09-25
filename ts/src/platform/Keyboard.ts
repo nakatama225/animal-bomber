@@ -11,7 +11,7 @@ import type { PlayerId } from '../domain/state/PlayerState.js';
  *
  * ⛔ Option（Alt）を主のキーにしない。macOS は修飾キーを押している間
  * 他のキーの keyup を送らないことがあり、「たまに効かない」が起きる。
- * ⛔ Command（Meta）はどの席にも使えない。ブラウザが予約していて
+ * ⛔ Command（Meta）はどのプレイヤーの操作にも使えない。ブラウザが予約していて
  * `preventDefault` も効かないため、cmd+W でタブが閉じる。
  */
 export interface KeyBinding {
@@ -33,7 +33,7 @@ export const SOLO_KEYS: KeyBinding = {
   action: ['KeyE', 'KeyQ', 'ShiftLeft', 'ShiftRight'],
 };
 
-/** 2人で遊ぶときの、左側の席。 */
+/** 2人で遊ぶときの、キーボードの左側を使うプレイヤー。 */
 export const PLAYER1_KEYS: KeyBinding = {
   up: ['KeyW'],
   down: ['KeyS'],
@@ -43,7 +43,7 @@ export const PLAYER1_KEYS: KeyBinding = {
   action: ['KeyE', 'KeyQ', 'ShiftLeft'],
 };
 
-/** 2人で遊ぶときの、右側の席。 */
+/** 2人で遊ぶときの、キーボードの右側を使うプレイヤー。 */
 export const PLAYER2_KEYS: KeyBinding = {
   up: ['ArrowUp'],
   down: ['ArrowDown'],

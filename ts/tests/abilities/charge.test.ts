@@ -9,7 +9,7 @@ import { advance, makeWorld, onlyFor, press } from '../helpers.js';
 
 const ELEPHANT_HOLD = abilityOf('elephant').holdTicks;
 
-/** ぞうを席0に置いた世界。 */
+/** プレイヤー0をぞうにした世界。 */
 function elephantWorld(): ReturnType<typeof makeWorld> {
   return makeWorld(31337, ['elephant', 'rabbit']);
 }

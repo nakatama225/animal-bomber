@@ -78,7 +78,7 @@ export class FoxfireActor implements WorldActor {
   #nearestTarget(world: WorldState): Point | null {
     let best: Point | null = null;
     let bestDistance = Infinity;
-    // 席の順に見る。同じ距離なら席の若いほうを選ぶ、で並びを固定する。
+    // プレイヤー番号の順に見る。同じ距離なら番号の小さいほうを選ぶ、で並びを固定する。
     for (const player of world.players) {
       if (player.id === this.owner || player.life !== 'alive') continue;
       const d = distance(this.#position, player.position);

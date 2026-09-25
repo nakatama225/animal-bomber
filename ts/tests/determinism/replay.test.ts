@@ -27,7 +27,7 @@ class ScriptedSource {
   }
 }
 
-/** 席0は右と左を往復し、席1は上下に動く台本。 */
+/** プレイヤー0は右と左を往復し、プレイヤー1は上下に動く台本。 */
 function scriptFor(playerId: PlayerId): (tickValue: number) => PlayerIntent {
   if (playerId === 0) {
     return (t) => (Math.floor(t / 37) % 2 === 0 ? press({ right: true }) : press({ left: true }));

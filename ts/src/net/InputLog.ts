@@ -26,7 +26,7 @@ import type { WorldState } from '../domain/state/WorldState.js';
  * その数十分の1しかない。
  */
 export class InputLog {
-  /** 席ごとの、変化した時点の一覧。tick の昇順で並ぶ。 */
+  /** プレイヤーごとの、変化した時点の一覧。tick の昇順で並ぶ。 */
   readonly #changes = new Map<PlayerId, { tick: number; bits: number }[]>();
 
   /**
@@ -52,7 +52,7 @@ export class InputLog {
   /**
    * ある tick の意思を取り出す。
    *
-   * 記録の無い席と、記録が始まる前の tick には何もしない意思を返す。
+   * 記録の無いプレイヤーと、記録が始まる前の tick には何もしない意思を返す。
    */
   at(atTick: number, playerId: PlayerId): PlayerIntent {
     const list = this.#changes.get(playerId);
@@ -90,12 +90,12 @@ export class InputLog {
   /**
    * 保存できる文字列にする。
    *
-   * 形式は `席:tick,ビット;tick,ビット|席:...`。読んで確かめられることを
+   * 形式は `プレイヤー番号:tick,ビット;tick,ビット|プレイヤー番号:...`。読んで確かめられることを
    * 優先し、圧縮はしていない。3分の試合でも数キロバイトに収まる。
    */
   encode(): string {
     const parts: string[] = [];
-    // 席の順に並べる。Map の挿入順に依存させない。
+    // プレイヤー番号の順に並べる。Map の挿入順に依存させない。
     for (const playerId of [...this.#changes.keys()].sort((a, b) => a - b)) {
       const list = this.#changes.get(playerId);
       if (list === undefined) continue;

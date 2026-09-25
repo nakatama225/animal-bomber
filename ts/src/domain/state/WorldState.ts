@@ -47,7 +47,7 @@ export interface WorldState {
 export interface WorldSeed {
   /** 盤面とアイテム抽選に使う種。同じ種なら同じ試合になる。 */
   readonly seed: number;
-  /** 参加する動物。席順に並べる。 */
+  /** 参加する動物。プレイヤー番号の順に並べる。 */
   readonly animals: readonly string[];
   /**
    * 動物ごとの初期値の上乗せ。
@@ -80,10 +80,10 @@ export function createWorld(config: WorldSeed): WorldState {
   const board = buildBoard(rng, SPAWN_CELLS);
 
   const players: PlayerState[] = config.animals.map((animal, index) => {
-    // 席は最大4つ。SPAWN_CELLS と同じ数に揃えてある。
+    // プレイヤーは最大4人。開始位置（SPAWN_CELLS）と同じ数に揃えてある。
     const spawn = SPAWN_CELLS[index];
     if (spawn === undefined) {
-      throw new Error(`席が足りない: ${index}`);
+      throw new Error(`開始位置が足りない: ${index}`);
     }
     const bonus = config.bonusOf?.(animal) ?? NO_BONUS;
     return {

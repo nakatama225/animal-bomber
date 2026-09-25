@@ -8,7 +8,7 @@ import { isSolidFor } from '../../src/domain/query/BoardQuery.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
 import { advance, makeWorld, onlyFor, press } from '../helpers.js';
 
-/** その動物を席0に置いた世界。 */
+/** プレイヤー0をその動物にした世界。 */
 function worldWith(animal: string): ReturnType<typeof makeWorld> {
   return makeWorld(2468, [animal, 'rabbit']);
 }

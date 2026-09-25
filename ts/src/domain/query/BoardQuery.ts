@@ -76,7 +76,7 @@ export function isStandingOn(player: PlayerState, bomb: Bomb): boolean {
   return sameCell(cellOf(player.position), bomb.cell);
 }
 
-/** 席番号からプレイヤーを引く。 */
+/** プレイヤー番号からプレイヤーを引く。 */
 export function playerById(
   world: Readonly<WorldState>,
   id: PlayerId,

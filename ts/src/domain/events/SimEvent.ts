@@ -60,7 +60,7 @@ export type SimEvent =
   | {
       readonly type: 'playerHurt';
       readonly target: PlayerId;
-      /** 倒した相手。自爆なら自分自身の席番号が入る。 */
+      /** 倒した相手。自爆なら自分自身のプレイヤー番号が入る。 */
       readonly by: PlayerId | null;
       /** 減った体力（半分の単位）。 */
       readonly amount: number;

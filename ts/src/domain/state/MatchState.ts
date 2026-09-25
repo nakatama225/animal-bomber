@@ -9,7 +9,7 @@ import type { PlayerId } from './PlayerState.js';
 export interface MatchState {
   /** いま何ラウンド目か。1 から数える。 */
   round: number;
-  /** 席ごとの勝利数。 */
+  /** プレイヤーごとの勝利数。 */
   readonly wins: Map<PlayerId, number>;
   /** 試合が決まっていれば、その勝者。引き分けで終わった場合は null。 */
   champion: PlayerId | null;
@@ -22,7 +22,7 @@ export function createMatch(): MatchState {
   return { round: 1, wins: new Map(), champion: null, finished: false };
 }
 
-/** 席の勝利数。 */
+/** そのプレイヤーの勝利数。 */
 export function winsOf(match: MatchState, id: PlayerId): number {
   return match.wins.get(id) ?? 0;
 }
