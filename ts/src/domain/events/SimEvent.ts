@@ -65,7 +65,18 @@ export type SimEvent =
       /** 減った体力（半分の単位）。 */
       readonly amount: number;
     }
-  | { readonly type: 'playerDown'; readonly target: PlayerId; readonly by: PlayerId | null };
+  | { readonly type: 'playerDown'; readonly target: PlayerId; readonly by: PlayerId | null }
+  | {
+      readonly type: 'roundEnded';
+      readonly round: number;
+      /** 引き分けなら null。 */
+      readonly winner: PlayerId | null;
+    }
+  | {
+      readonly type: 'matchEnded';
+      /** 引き分けで終わった場合は null。 */
+      readonly champion: PlayerId | null;
+    };
 
 /**
  * 扱い漏れを型検査で見つけるための仕掛け。

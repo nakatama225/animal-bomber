@@ -14,7 +14,9 @@ export type SoundName =
   | 'burn'
   | 'hurt'
   | 'down'
-  | 'effect';
+  | 'effect'
+  | 'roundEnd'
+  | 'fanfare';
 
 /** 音を鳴らすもの。 */
 export interface SoundBank {
@@ -114,6 +116,20 @@ export class Presenter {
         return;
       case 'playerDown':
         this.sounds.play('down');
+        return;
+      case 'roundEnded':
+        this.sounds.play('roundEnd');
+        this.notices.show(
+          event.winner === null
+            ? `ラウンド ${event.round} は引き分け`
+            : `ラウンド ${event.round} は ${event.winner + 1}P の勝ち`,
+        );
+        return;
+      case 'matchEnded':
+        this.sounds.play('fanfare');
+        this.notices.show(
+          event.champion === null ? '引き分け' : `${event.champion + 1}P の優勝`,
+        );
         return;
       default:
         // ここに到達する型が残っていれば、コンパイルが通らない。
