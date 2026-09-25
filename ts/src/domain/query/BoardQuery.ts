@@ -29,6 +29,19 @@ export function playersOn(world: Readonly<WorldState>, cell: Cell): PlayerState[
 }
 
 /**
+ * 壊せるブロックを通り抜けられるかを答えるもの。
+ *
+ * ⚠️ 動物ごとの能力をここで引かない。引くと
+ * `query` → `abilities` → `mutations` → `query` の循環になる。
+ * 判定そのものを引数で受け取る。
+ */
+export type PassesThrough = (
+  world: Readonly<WorldState>,
+  cell: Cell,
+  player: PlayerState,
+) => boolean;
+
+/**
  * そのプレイヤーにとって、そのマスが通れないか。
  *
  * 「通れるか」は見る人によって違う。壊せるブロックを抜けられる動物がいて、
@@ -36,15 +49,20 @@ export function playersOn(world: Readonly<WorldState>, cell: Cell): PlayerState[
  *
  * @param player 省略すると「誰にとっても通れないか」を返す。
  *   爆風の伸びる先など、プレイヤーに紐づかない判定に使う
+ * @param passesThrough 壊せるブロックを抜けられるかの判定
  */
 export function isSolidFor(
   world: Readonly<WorldState>,
   cell: Cell,
   player?: PlayerState,
+  passesThrough?: PassesThrough,
 ): boolean {
   const tile = world.board.at(cell);
   if (tile === 'hard') return true;
-  if (tile === 'soft') return true;
+  if (tile === 'soft') {
+    if (player === undefined || passesThrough === undefined) return true;
+    return !passesThrough(world, cell, player);
+  }
 
   const bomb = bombAt(world, cell);
   if (bomb === undefined) return false;

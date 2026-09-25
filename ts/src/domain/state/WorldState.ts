@@ -1,3 +1,4 @@
+import type { WorldActor } from '../abilities/WorldActor.js';
 import { centerOf } from '../core/Coord.js';
 import { IdSource } from '../core/EntityId.js';
 import { Rng } from '../core/Rng.js';
@@ -34,6 +35,8 @@ export interface WorldState {
   blasts: Blast[];
   /** 盤面に落ちているアイテム。 */
   items: Item[];
+  /** 自分で動き続けるもの（飛び道具・落とし穴など）。 */
+  actors: WorldActor[];
   /** 結果に影響する乱数。見た目の乱数はここに入れない。 */
   readonly rng: Rng;
   /** 盤面に置かれるものの識別子を発番する。 */
@@ -104,6 +107,7 @@ export function createWorld(config: WorldSeed): WorldState {
       // 一度離すまで技が出ない。パッドは次の tick で押下が戻るため、
       // これが無いと開始 0.5 秒でとくぎが暴発する。
       actionHeld: tick(-1),
+      abilityCooldown: tick(0),
       lastHitBy: null,
     };
   });
@@ -115,6 +119,7 @@ export function createWorld(config: WorldSeed): WorldState {
     bombs: [],
     blasts: [],
     items: [],
+    actors: [],
     rng,
     ids: new IdSource(),
   };
@@ -156,6 +161,7 @@ export function hashWorld(world: WorldState): number {
       .int(player.specialCharges)
       .text(player.action?.kind ?? '')
       .int(player.actionHeld)
+      .int(player.abilityCooldown)
       .int(player.lastHitBy ?? -1);
   }
 
@@ -182,6 +188,9 @@ export function hashWorld(world: WorldState): number {
   }
   for (const item of world.items) {
     hasher.int(item.id).int(item.cell.col).int(item.cell.row).text(item.kind);
+  }
+  for (const actor of world.actors) {
+    hasher.text(actor.kind).text(actor.encode());
   }
 
   return hasher.value;

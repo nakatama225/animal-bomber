@@ -169,6 +169,8 @@ export function collides(
   from: Point,
   to: Point,
 ): boolean {
+  // 壊せるブロックを抜けられるかは、その動物の能力が決める。
+  const passesThrough = abilityOf(player.animal).passesThrough;
   const fromCol0 = Math.floor(from.x - PLAYER_RADIUS);
   const fromCol1 = Math.floor(from.x + PLAYER_RADIUS);
   const fromRow0 = Math.floor(from.y - PLAYER_RADIUS);
@@ -184,7 +186,7 @@ export function collides(
       const alreadyOverlapping =
         col >= fromCol0 && col <= fromCol1 && row >= fromRow0 && row <= fromRow1;
       if (alreadyOverlapping) continue;
-      if (isSolidFor(world, { col, row }, player)) return true;
+      if (isSolidFor(world, { col, row }, player, passesThrough)) return true;
     }
   }
   return false;

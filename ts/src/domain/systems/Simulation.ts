@@ -4,6 +4,7 @@ import type { PlayerId } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 import type { SimEvent } from '../events/SimEvent.js';
 import { ActionSystem } from './ActionSystem.js';
+import { ActorSystem } from './ActorSystem.js';
 import { BlastSystem } from './BlastSystem.js';
 import { BombSystem } from './BombSystem.js';
 import { DamageSystem } from './DamageSystem.js';
@@ -42,6 +43,7 @@ import { MovementSystem } from './MovementSystem.js';
  */
 export class Simulation {
   readonly #actions = new ActionSystem();
+  readonly #actors = new ActorSystem();
   readonly #movement = new MovementSystem();
   readonly #bombs = new BombSystem();
   readonly #blasts = new BlastSystem();
@@ -67,6 +69,10 @@ export class Simulation {
     this.#movement.step(world, intents);
     events.push(...this.#bombs.step(world, intents));
     events.push(...this.#blasts.step(world));
+
+    // 飛び道具や落とし穴を進める。爆発のあとに置くのは、
+    // 爆風で消えるものを同じ tick で処理するため。
+    events.push(...this.#actors.step(world));
 
     // 拾うのは爆発のあと。逆にすると、爆風に焼かれるはずのアイテムを
     // 同じ tick に拾えてしまう。

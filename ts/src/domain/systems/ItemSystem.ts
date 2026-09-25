@@ -1,3 +1,4 @@
+import { abilityOf } from '../abilities/registry.js';
 import { cellOf, sameCell } from '../core/Coord.js';
 import type { SimEvent } from '../events/SimEvent.js';
 import { applyItem } from '../mutations/items.js';
@@ -21,7 +22,8 @@ export class ItemSystem {
       const item = world.items[index] as Item;
       world.items.splice(index, 1);
       events.push({ type: 'itemTaken', cell, kind: item.kind, taker: player.id });
-      events.push(...applyItem(world, player, item.kind));
+      const multiplier = abilityOf(player.animal).itemMultiplier;
+      events.push(...applyItem(world, player, item.kind, multiplier));
     }
     return events;
   }

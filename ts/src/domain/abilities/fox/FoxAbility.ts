@@ -1,21 +1,55 @@
-import { secondsToTicks } from '../../core/Tick.js';
+import { cellOf, step } from '../../core/Coord.js';
+import { secondsToTicks, tick } from '../../core/Tick.js';
+import { placeBombAt } from '../../mutations/bombs.js';
+import { INVULNERABLE } from '../../rules/tuning.js';
 import type { Ability } from '../Ability.js';
 import { NEUTRAL_ABILITY } from '../Ability.js';
+import { FoxfireActor } from './FoxfireActor.js';
+
+/** 一列に置いたあとの間隔。 */
+const LINE_COOLDOWN = secondsToTicks(1);
 
 /**
- * きつね。爆弾を最初から1個多く持つ。通常技は一列への連続設置、とくぎは追いかける炎。
+ * きつね。爆弾を最初から1個多く持つ。
  *
- * ⚠️ 現在は数値の違いだけを持つ。通常技ととくぎは段階 5b で足す。
- * 抽象の引き方が正しいかを、いちばん割り込みの多いぞうの突進で
- * 先に確かめてから残りを書く、という順序にしている。
+ * 通常技は正面へ一列に置くこと。とくぎは追いかける炎で、
+ * 放つ瞬間に短い無敵がつく。
  */
 export const FOX: Ability = {
   ...NEUTRAL_ABILITY,
   key: 'fox',
-  speedMultiplier: 1.0,
-  powerBonus: 0,
-  hpBonus: 0,
   bombBonus: 1,
-  itemMultiplier: 1,
   holdTicks: secondsToTicks(1.5),
+
+  /**
+   * 手持ちのぶんだけ、正面へ一列に置く。
+   *
+   * ⚠️ 足元ではなく「1マス前」から並べる。足元から置くと自分が列の
+   * 先頭に埋まって逃げ場を失う。前から置けば後ろへ下がれる。
+   */
+  onTap(world, player) {
+    if (player.abilityCooldown > 0) return { action: null, events: [] };
+
+    const events = [];
+    const origin = cellOf(player.position);
+    let budget = player.maxBombs - player.activeBombs;
+    for (let i = 1; budget > 0; i += 1) {
+      const cell = step(origin, player.facing, i);
+      if (world.board.at(cell) !== 'empty') break;
+      const bomb = placeBombAt(world, player, cell);
+      if (bomb === undefined) break;
+      events.push({ type: 'bombPlaced' as const, cell, owner: player.id });
+      budget -= 1;
+    }
+    if (events.length > 0) player.abilityCooldown = tick(LINE_COOLDOWN);
+    return { action: null, events };
+  },
+
+  onHold(world, player) {
+    // 放つ瞬間に短い無敵がつく。撃ったあと無防備になると、
+    // 相手が近いほど使えない技になってしまう。
+    player.invulnerableUntil = tick(world.now + INVULNERABLE);
+    world.actors.push(new FoxfireActor(player.position, player.id));
+    return { action: null, events: [] };
+  },
 };

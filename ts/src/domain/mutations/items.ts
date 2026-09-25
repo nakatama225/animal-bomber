@@ -40,22 +40,29 @@ export function applyItem(
   world: WorldState,
   player: PlayerState,
   kind: ItemKind,
+  /**
+   * 効果の倍率。良いものにも悪いものにもかかる。
+   *
+   * ⚠️ ここで動物の表を引かない。引くと `mutations` が `abilities` を
+   * 知ることになり、依存が循環する。呼び出し側から渡す。
+   */
+  multiplier = 1,
 ): SimEvent[] {
   switch (kind) {
     case 'bomb':
-      player.maxBombs = Math.min(MAX_BOMBS, player.maxBombs + 1);
+      player.maxBombs = Math.min(MAX_BOMBS, player.maxBombs + multiplier);
       return [];
     case 'fire':
-      player.power = Math.min(MAX_POWER, player.power + 1);
+      player.power = Math.min(MAX_POWER, player.power + multiplier);
       return [];
     case 'shoe':
-      player.shoes = Math.min(MAX_SHOES, player.shoes + 1);
+      player.shoes = Math.min(MAX_SHOES, player.shoes + multiplier);
       return [];
     case 'banana':
       player.effects.add(
         'slide',
-        itemEffectTicks(SLIDE_SECONDS),
-        itemEffectTicks(SLIDE_SECONDS * POOP_STACK_LIMIT),
+        itemEffectTicks(SLIDE_SECONDS * multiplier),
+        itemEffectTicks(SLIDE_SECONDS * multiplier * POOP_STACK_LIMIT),
       );
       return [{ type: 'effectApplied', target: player.id, effect: 'slide' }];
     case 'onion':
@@ -63,17 +70,21 @@ export function applyItem(
       player.effects.clear('slide');
       player.effects.add(
         'stun',
-        itemEffectTicks(STUN_SECONDS),
-        itemEffectTicks(STUN_SECONDS * POOP_STACK_LIMIT),
+        itemEffectTicks(STUN_SECONDS * multiplier),
+        itemEffectTicks(STUN_SECONDS * multiplier * POOP_STACK_LIMIT),
       );
       return [{ type: 'effectApplied', target: player.id, effect: 'stun' }];
     case 'chicken':
-      player.specialCharges += 1;
+      player.specialCharges += multiplier;
       return [];
     case 'poop': {
       const poop = world.rng.pick(POOP_EFFECTS);
-      const base = itemEffectTicks(poop.seconds);
-      player.effects.add(poop.kind, base, itemEffectTicks(poop.seconds * POOP_STACK_LIMIT));
+      const base = itemEffectTicks(poop.seconds * multiplier);
+      player.effects.add(
+        poop.kind,
+        base,
+        itemEffectTicks(poop.seconds * multiplier * POOP_STACK_LIMIT),
+      );
       return [{ type: 'effectApplied', target: player.id, effect: poop.kind }];
     }
   }

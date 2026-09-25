@@ -9,7 +9,7 @@
  * 呼ばれる側に置くことで、依存が一方向に流れる。
  */
 
-import { cellOf, sameCell } from '../core/Coord.js';
+import { cellOf, sameCell, type Cell } from '../core/Coord.js';
 import { bombAt } from '../query/BoardQuery.js';
 import { BOMB_FUSE } from '../rules/tuning.js';
 import type { Bomb } from '../state/Bomb.js';
@@ -24,9 +24,20 @@ import type { WorldState } from '../state/WorldState.js';
  * そのマスが空いていない。
  */
 export function placeBomb(world: WorldState, player: PlayerState): Bomb | undefined {
-  if (player.activeBombs >= player.maxBombs) return undefined;
+  return placeBombAt(world, player, cellOf(player.position));
+}
 
-  const cell = cellOf(player.position);
+/**
+ * 指定したマスに爆弾を置く。
+ *
+ * 足元以外へ置く技のために、置く場所を引数で受け取る形を分けてある。
+ */
+export function placeBombAt(
+  world: WorldState,
+  player: PlayerState,
+  cell: Cell,
+): Bomb | undefined {
+  if (player.activeBombs >= player.maxBombs) return undefined;
   if (world.board.at(cell) !== 'empty') return undefined;
   if (bombAt(world, cell) !== undefined) return undefined;
 

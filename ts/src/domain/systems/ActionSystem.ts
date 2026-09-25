@@ -40,6 +40,10 @@ export class ActionSystem {
       const intent = intents.get(player.id);
       if (intent === undefined) continue;
 
+      if (player.abilityCooldown > 0) {
+        player.abilityCooldown = tick(player.abilityCooldown - 1);
+      }
+
       if (player.action !== null) {
         events.push(...this.#advance(world, player));
         continue;

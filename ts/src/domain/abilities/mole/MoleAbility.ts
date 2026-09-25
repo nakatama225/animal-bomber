@@ -1,21 +1,42 @@
+import { DIRECTIONS, step } from '../../core/Coord.js';
 import { secondsToTicks } from '../../core/Tick.js';
+import { bombAt } from '../../query/BoardQuery.js';
 import type { Ability } from '../Ability.js';
 import { NEUTRAL_ABILITY } from '../Ability.js';
+import { PitAction } from './PitAction.js';
 
 /**
- * もぐら。壊せるブロックを通り抜けられる。とくぎは踏んだ相手を止める落とし穴。
+ * もぐら。壊せるブロックを通り抜けられる。
  *
- * ⚠️ 現在は数値の違いだけを持つ。通常技ととくぎは段階 5b で足す。
- * 抽象の引き方が正しいかを、いちばん割り込みの多いぞうの突進で
- * 先に確かめてから残りを書く、という順序にしている。
+ * とくぎは見えない落とし穴。
  */
 export const MOLE: Ability = {
   ...NEUTRAL_ABILITY,
   key: 'mole',
   speedMultiplier: 0.9,
-  powerBonus: 0,
-  hpBonus: 0,
-  bombBonus: 0,
-  itemMultiplier: 1,
   holdTicks: secondsToTicks(1.5),
+
+  /**
+   * 壊せるブロックだけ通り抜けられる。
+   *
+   * ⚠️ 他人の爆弾の隣のブロックは通り抜けられない。これが無いと、
+   * 爆弾で追い込んでも毎回壁抜けで逃げられ、追い詰めるという行為が
+   * 成立しなくなる。
+   */
+  passesThrough(world, cell, player) {
+    if (world.board.at(cell) !== 'soft') return false;
+    for (const direction of DIRECTIONS) {
+      const neighbour = step(cell, direction);
+      const bomb = bombAt(world, neighbour);
+      if (bomb === undefined) continue;
+      // 自分が乗っている爆弾は数えない。置いた直後に閉じ込められる。
+      if (bomb.passThrough.has(player.id)) continue;
+      return false;
+    }
+    return true;
+  },
+
+  onHold() {
+    return { action: new PitAction(), events: [] };
+  },
 };
