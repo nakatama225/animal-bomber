@@ -32,6 +32,11 @@ export class ScatteredActor implements WorldActor {
     readonly owner: PlayerId,
   ) {}
 
+  /** 消えるまでの残り tick。描画で消える前に点滅させるために読む。 */
+  get remaining(): Tick {
+    return this.#remaining;
+  }
+
   tick(world: WorldState): { events: SimEvent[]; done: boolean } {
     this.#remaining = tick(this.#remaining - 1);
 
@@ -102,6 +107,9 @@ export class ScatterAction implements ActiveAction {
       if (cell === undefined) continue;
       if (world.board.at(cell) !== 'empty') continue;
       if (bombAt(world, cell) !== undefined) continue;
+      // アイテムのあるマスには撒かない。重なると片方が隠れ、踏むと損をするうんこが
+      // アイテムの下で見えなくなる（原型ではうんこ自体がアイテムだったので重ならなかった）。
+      if (world.items.some((item) => sameCell(item.cell, cell))) continue;
       if (world.actors.some((actor) => actor.encode().startsWith(`${cell.col},${cell.row},`)))
         continue;
       world.actors.push(new ScatteredActor(cell, player.id));

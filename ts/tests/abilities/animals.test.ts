@@ -6,7 +6,9 @@ import { placeBomb } from '../../src/domain/mutations/bombs.js';
 import { applyItem } from '../../src/domain/mutations/items.js';
 import { isSolidFor } from '../../src/domain/query/BoardQuery.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
-import { advance, makeWorld, onlyFor, press } from '../helpers.js';
+import { advance, clearBoard, makeWorld, onlyFor, press } from '../helpers.js';
+import { SlimeBombActor } from '../../src/domain/abilities/frog/SlimeBombActor.js';
+import { ScatteredActor } from '../../src/domain/abilities/rabbit/ScatterAction.js';
 
 /** プレイヤー0をその動物にした世界。 */
 function worldWith(animal: string): ReturnType<typeof makeWorld> {
@@ -219,5 +221,45 @@ describe('かえる', () => {
     hold(world, 'frog');
     advance(world, onlyFor(world, 0, press({})), 400);
     expect(world.actors.some((a) => a.kind === 'slime')).toBe(false);
+  });
+});
+
+describe('飛び道具と撒く技の置き場所', () => {
+  it('跳ね回る爆弾は、正面3マス先の空きマスに落ちる', () => {
+    const world = worldWith('frog');
+    clearBoard(world);
+    const frog = world.players[0]!;
+    frog.position = centerOf({ col: 1, row: 1 });
+    frog.facing = 'right';
+    const slime = SlimeBombActor.launch(world, frog);
+    expect(slime.cell).toEqual({ col: 4, row: 1 });
+  });
+
+  it('盤面の端で外側を向いて投げても、盤面の外には落ちない', () => {
+    // 3マス先に決め打ちすると外に落ち、跳ねる先も無いまま不発で終わる。
+    const world = worldWith('frog');
+    clearBoard(world);
+    const frog = world.players[0]!;
+    frog.position = centerOf({ col: 1, row: 1 });
+    frog.facing = 'up';
+    const slime = SlimeBombActor.launch(world, frog);
+    expect(world.board.inBounds(slime.cell)).toBe(true);
+    expect(world.board.at(slime.cell)).toBe('empty');
+  });
+
+  it('撒く技は、アイテムのあるマスを避ける', () => {
+    // 重なると、踏むと損をするうんこがアイテムの下に隠れる。
+    const world = worldWith('rabbit');
+    clearBoard(world);
+    const rabbit = world.players[0]!;
+    rabbit.position = centerOf({ col: 3, row: 3 });
+    world.items.push({ id: world.ids.take(), cell: { col: 4, row: 3 }, kind: 'fire' });
+    hold(world, 'rabbit');
+    advance(world, onlyFor(world, 0, press({})), 150);
+    const onItem = world.actors.filter(
+      (actor) => actor instanceof ScatteredActor && actor.cell.col === 4 && actor.cell.row === 3,
+    );
+    expect(onItem).toHaveLength(0);
+    expect(world.actors.some((actor) => actor instanceof ScatteredActor)).toBe(true);
   });
 });

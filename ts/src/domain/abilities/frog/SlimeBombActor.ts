@@ -13,6 +13,9 @@ const HOP_INTERVAL: Tick = tick(21);
 /** 1回で跳ぶ距離（マス）。 */
 const HOP_DISTANCE = 2;
 
+/** 投げたときに届く、いちばん遠いマス数。 */
+const THROW_DISTANCE = 3;
+
 /** 爆発するまでに跳ねる回数の下限と上限。 */
 const HOP_MIN = 6;
 const HOP_MAX = 8;
@@ -41,9 +44,41 @@ export class SlimeBombActor implements WorldActor {
     this.#hopsLeft = hops;
   }
 
-  /** 跳ねる回数を決めて作る。 */
+  /** いま乗っているマス。描画のために読むだけで、結果には関わらない。 */
+  get cell(): Cell {
+    return this.#cell;
+  }
+
+  /** 爆発するまでに残っている跳ねる回数。0 なら次の区切りで爆発する。 */
+  get hopsLeft(): number {
+    return this.#hopsLeft;
+  }
+
+  /** 最後に着地してから（跳ぶ前なら投げられてから）の tick 数。着地の揺れの位相に使う。 */
+  get sinceLanding(): Tick {
+    return tick(HOP_INTERVAL - this.#timer);
+  }
+
+  /**
+   * 跳ねる回数を決めて作る。
+   *
+   * 落ちる先は、正面3マス先から手前へ順に見て、最初に見つかった空きマス。
+   * どれも空いていなければ足元に落とす。
+   *
+   * ⚠️ 3マス先に決め打ちすると、盤面の端で外側を向いて投げたときに盤面の外へ落ち、
+   * 外では跳ねる先もほとんど無いまま、最後は爆弾を置けずに不発で終わる。
+   * 原型も空きマスを手前へ探していた。
+   */
   static launch(world: WorldState, player: PlayerState): SlimeBombActor {
-    const landing = step(cellOf(player.position), player.facing, 3);
+    const origin = cellOf(player.position);
+    let landing = origin;
+    for (let distance = THROW_DISTANCE; distance >= 1; distance -= 1) {
+      const cell = step(origin, player.facing, distance);
+      if (world.board.inBounds(cell) && world.board.at(cell) === 'empty') {
+        landing = cell;
+        break;
+      }
+    }
     const hops = world.rng.range(HOP_MIN, HOP_MAX + 1);
     return new SlimeBombActor(landing, player, hops);
   }
