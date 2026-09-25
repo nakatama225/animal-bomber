@@ -6,6 +6,8 @@ import { tick, type Tick } from '../core/Tick.js';
 import { IDLE_INTENT, packIntent } from '../intent/PlayerIntent.js';
 import { SPAWN_CELLS } from '../rules/tuning.js';
 import type { Blast, Bomb } from './Bomb.js';
+import { EffectBag } from './EffectBag.js';
+import type { Item } from './Item.js';
 import type { Board } from './Board.js';
 import { buildBoard } from './Board.js';
 import type { PlayerId, PlayerState } from './PlayerState.js';
@@ -30,6 +32,8 @@ export interface WorldState {
   bombs: Bomb[];
   /** いま出ている爆風。 */
   blasts: Blast[];
+  /** 盤面に落ちているアイテム。 */
+  items: Item[];
   /** 結果に影響する乱数。見た目の乱数はここに入れない。 */
   readonly rng: Rng;
   /** 盤面に置かれるものの識別子を発番する。 */
@@ -74,10 +78,22 @@ export function createWorld(config: WorldSeed): WorldState {
       invulnerableUntil: tick(0),
       walked: 0,
       previousIntent: IDLE_INTENT,
+      effects: new EffectBag(),
+      specialCharges: 0,
+      lastHitBy: null,
     };
   });
 
-  return { now: tick(0), board, players, bombs: [], blasts: [], rng, ids: new IdSource() };
+  return {
+    now: tick(0),
+    board,
+    players,
+    bombs: [],
+    blasts: [],
+    items: [],
+    rng,
+    ids: new IdSource(),
+  };
 }
 
 /**
@@ -111,7 +127,10 @@ export function hashWorld(world: WorldState): number {
       .int(player.maxBombs)
       .int(player.activeBombs)
       .int(player.invulnerableUntil)
-      .int(packIntent(player.previousIntent));
+      .int(packIntent(player.previousIntent))
+      .text(player.effects.encode())
+      .int(player.specialCharges)
+      .int(player.lastHitBy ?? -1);
   }
 
   // 配列の並び順も結果の一部として混ぜる。並びが違えば誘爆の順序が変わる。
@@ -134,6 +153,9 @@ export function hashWorld(world: WorldState): number {
       .int(blast.owner)
       .bool(blast.isCenter)
       .int(blast.remaining);
+  }
+  for (const item of world.items) {
+    hasher.int(item.id).int(item.cell.col).int(item.cell.row).text(item.kind);
   }
 
   return hasher.value;

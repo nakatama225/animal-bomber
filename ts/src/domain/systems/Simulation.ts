@@ -2,8 +2,12 @@ import { tick } from '../core/Tick.js';
 import type { PlayerIntent } from '../intent/PlayerIntent.js';
 import type { PlayerId } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
+import type { SimEvent } from '../events/SimEvent.js';
 import { BlastSystem } from './BlastSystem.js';
 import { BombSystem } from './BombSystem.js';
+import { DamageSystem } from './DamageSystem.js';
+import { EffectSystem } from './EffectSystem.js';
+import { ItemSystem } from './ItemSystem.js';
 import { MovementSystem } from './MovementSystem.js';
 
 /**
@@ -26,12 +30,22 @@ import { MovementSystem } from './MovementSystem.js';
  * 一覧になる。順序は結果を左右するので、並べ替えるときは
  * 何が変わるかを確かめる。
  *
- * ⚠️ アイテムと被弾は、対応する System ができ次第この並びへ足していく。
+ * ## 起きたことを戻り値で返す
+ *
+ * この関数は音も鳴らさず画面も触らない。何が起きたかを配列で返すだけで、
+ * それをどう扱うかは受け取った側が決める。検証のときは受け取らなければ
+ * よく、そのために特別な設定を用意する必要がない。
+ *
+ * ⚠️ 動物ごとの能力とラウンドの進行は、対応する System ができ次第
+ * この並びへ足していく。
  */
 export class Simulation {
   readonly #movement = new MovementSystem();
   readonly #bombs = new BombSystem();
   readonly #blasts = new BlastSystem();
+  readonly #items = new ItemSystem();
+  readonly #damage = new DamageSystem();
+  readonly #effects = new EffectSystem();
 
   /**
    * 1 tick 進める。
@@ -39,12 +53,21 @@ export class Simulation {
    * @param intents この tick に各プレイヤーが何をしたいか。
    *   出どころ（キーボード・CPU・通信・記録の再生）は問わない
    */
-  step(world: WorldState, intents: ReadonlyMap<PlayerId, PlayerIntent>): void {
+  step(world: WorldState, intents: ReadonlyMap<PlayerId, PlayerIntent>): SimEvent[] {
+    const events: SimEvent[] = [];
+
     // 動いてから置く。置いてから動く形にすると、置いた瞬間に
     // そのマスから出られてしまい、通り抜けの扱いが1 tick ずれる。
     this.#movement.step(world, intents);
-    this.#bombs.step(world, intents);
-    this.#blasts.step(world);
+    events.push(...this.#bombs.step(world, intents));
+    events.push(...this.#blasts.step(world));
+
+    // 拾うのは爆発のあと。逆にすると、爆風に焼かれるはずのアイテムを
+    // 同じ tick に拾えてしまう。
+    events.push(...this.#items.step(world));
+    events.push(...this.#damage.step(world));
+
+    this.#effects.step(world);
 
     // ⚠️ この tick の入力を控えるのは、すべての System が終わったあと。
     // 途中で控えると、後ろの System から見て「押した瞬間」が消える。
@@ -54,5 +77,6 @@ export class Simulation {
     }
 
     world.now = tick(world.now + 1);
+    return events;
   }
 }

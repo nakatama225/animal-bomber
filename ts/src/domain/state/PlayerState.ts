@@ -1,7 +1,15 @@
 import type { Direction, Point } from '../core/Coord.js';
 import type { PlayerIntent } from '../intent/PlayerIntent.js';
+import type { EffectBag } from './EffectBag.js';
 import type { Tick } from '../core/Tick.js';
-import { BASE_SPEED, MAX_SPEED, SHOE_STEP } from '../rules/tuning.js';
+import {
+  BASE_SPEED,
+  MAX_SPEED,
+  RUNAWAY_SPEED_FLOOR_RATIO,
+  SHOE_STEP,
+  SLOW_FACTOR,
+  WEAKENED_POWER,
+} from '../rules/tuning.js';
 
 /** プレイヤーの席番号。0 から 3。 */
 export type PlayerId = 0 | 1 | 2 | 3;
@@ -46,6 +54,20 @@ export interface PlayerState {
   /** 無敵が切れる tick。それまでは被弾しない。 */
   invulnerableUntil: Tick;
 
+  /** かかっている一時的な状態。 */
+  readonly effects: EffectBag;
+
+  /** 溜めてあるとくぎの回数。チキンを拾うと増える。 */
+  specialCharges: number;
+
+  /**
+   * 最後に自分を傷つけた相手。自分の爆弾なら自分の席番号が入る。
+   *
+   * ⚠️ 倒れた時点で改めて爆風の持ち主を引き直してはいけない。その頃には
+   * 爆風が消えていることがあり、原因が分からなくなる。当たった瞬間に控える。
+   */
+  lastHitBy: PlayerId | null;
+
   /** 歩いた距離の合計。歩行の見た目にだけ使う。 */
   walked: number;
 
@@ -77,7 +99,29 @@ export function justPressed(
  * 靴の段数だけ速くなり、上限で頭打ちになる。
  */
 export function speedOf(player: PlayerState): number {
-  return Math.min(MAX_SPEED, BASE_SPEED + player.shoes * SHOE_STEP);
+  let speed = Math.min(MAX_SPEED, BASE_SPEED + player.shoes * SHOE_STEP);
+  if (player.effects.has('slow')) speed *= SLOW_FACTOR;
+
+  // ⚠️ 「とまれない」は速度に下限を敷く効果。下限に「超スロー」の倍率を
+  // かけないと、超スローを踏んだあとにこれを踏んだ人が速くなるという
+  // 逆転が起きる。後から踏んだ悪い状態が前のものを打ち消してしまう。
+  if (player.effects.has('runaway')) {
+    const floor =
+      MAX_SPEED * RUNAWAY_SPEED_FLOOR_RATIO * (player.effects.has('slow') ? SLOW_FACTOR : 1);
+    speed = Math.max(speed, floor);
+  }
+  return speed;
+}
+
+/** そのプレイヤーがいま置く爆弾の火力。 */
+export function powerOf(player: PlayerState): number {
+  if (player.effects.has('weak')) return WEAKENED_POWER;
+  return player.power;
+}
+
+/** 動けない状態か。 */
+export function isFrozen(player: PlayerState): boolean {
+  return player.effects.has('stun');
 }
 
 /** 無敵の最中か。 */
@@ -87,5 +131,5 @@ export function isInvulnerable(player: PlayerState, now: Tick): boolean {
 
 /** 状態を複製する。試算に使う。 */
 export function clonePlayer(player: PlayerState): PlayerState {
-  return { ...player, position: { ...player.position } };
+  return { ...player, position: { ...player.position }, effects: player.effects.clone() };
 }

@@ -1,11 +1,12 @@
 import { cellOf, sameCell } from '../core/Coord.js';
 import { tick } from '../core/Tick.js';
+import type { SimEvent } from '../events/SimEvent.js';
 import type { PlayerIntent } from '../intent/PlayerIntent.js';
 import { bombAt } from '../query/BoardQuery.js';
 import { BOMB_FUSE } from '../rules/tuning.js';
 import type { Bomb } from '../state/Bomb.js';
 import type { PlayerId, PlayerState } from '../state/PlayerState.js';
-import { justPressed } from '../state/PlayerState.js';
+import { justPressed, powerOf } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 
 /**
@@ -16,21 +17,33 @@ import type { WorldState } from '../state/WorldState.js';
  * 「1つの爆弾の話」ではなく「連鎖でまとめて起きる出来事」だから。
  */
 export class BombSystem {
-  step(world: WorldState, intents: ReadonlyMap<PlayerId, PlayerIntent>): void {
-    this.#place(world, intents);
+  step(world: WorldState, intents: ReadonlyMap<PlayerId, PlayerIntent>): SimEvent[] {
+    const events = this.#place(world, intents);
     this.#advanceFuses(world);
     this.#releasePassThrough(world);
+    return events;
   }
 
   /** 押し下げた瞬間に1つ置く。 */
-  #place(world: WorldState, intents: ReadonlyMap<PlayerId, PlayerIntent>): void {
+  #place(world: WorldState, intents: ReadonlyMap<PlayerId, PlayerIntent>): SimEvent[] {
+    const events: SimEvent[] = [];
     for (const player of world.players) {
       if (player.life !== 'alive') continue;
       const intent = intents.get(player.id);
       if (intent === undefined) continue;
-      if (!justPressed(player, intent, 'bomb')) continue;
-      placeBomb(world, player);
+
+      // ⚠️ 「勝手に設置」がかかっていると、「爆弾おけない」を上書きして
+      // 毎 tick 置こうとする。2つの悪い状態が重なったときにどちらが
+      // 勝つかを決めておかないと、組み合わせで挙動が読めなくなる。
+      const forced = player.effects.has('autobomb');
+      if (!forced && player.effects.has('nobomb')) continue;
+      if (!forced && !justPressed(player, intent, 'bomb')) continue;
+      const bomb = placeBomb(world, player);
+      if (bomb !== undefined) {
+        events.push({ type: 'bombPlaced', cell: bomb.cell, owner: bomb.owner });
+      }
     }
+    return events;
   }
 
   /** 導火線を1 tick 進める。 */
@@ -84,7 +97,7 @@ export function placeBomb(world: WorldState, player: PlayerState): Bomb | undefi
     id: world.ids.take(),
     cell,
     owner: player.id,
-    power: player.power,
+    power: powerOf(player),
     fuse: BOMB_FUSE,
     passThrough,
     chained: false,

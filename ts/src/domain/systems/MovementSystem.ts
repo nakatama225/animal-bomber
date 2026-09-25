@@ -9,7 +9,10 @@ import {
   ALIGN_RATE_WHEN_MOVING,
   MOVE_SUBSTEP_DISTANCE,
   PLAYER_RADIUS,
+  SLIDE_SPEED_RATIO,
 } from '../rules/tuning.js';
+import { isFrozen } from '../state/PlayerState.js';
+import type { Direction } from '../core/Coord.js';
 
 /**
  * プレイヤーの移動。
@@ -39,9 +42,27 @@ export class MovementSystem {
   }
 
   #movePlayer(world: WorldState, player: PlayerState, intent: PlayerIntent): void {
-    const dx = (intent.right ? 1 : 0) - (intent.left ? 1 : 0);
+    // 泣いている間はどの入力も通らない。
+    if (isFrozen(player)) return;
+
+    let dx = (intent.right ? 1 : 0) - (intent.left ? 1 : 0);
     let dy = (intent.down ? 1 : 0) - (intent.up ? 1 : 0);
-    if (dx === 0 && dy === 0) return;
+
+    // 「そうさ反転」がかかっていると、押した向きと逆へ進む。
+    if (player.effects.has('reverse')) {
+      dx = -dx;
+      dy = -dy;
+    }
+
+    // 「滑る」「とまれない」は、手を離していても向いている方向へ進み続ける。
+    let sliding = false;
+    if (dx === 0 && dy === 0) {
+      if (!player.effects.has('slide') && !player.effects.has('runaway')) return;
+      const forward = STEP_OF[player.facing];
+      dx = forward.dx;
+      dy = forward.dy;
+      sliding = player.effects.has('slide');
+    }
 
     // 斜めは水平を優先して1軸に丸める。斜めに進めるようにすると、
     // 通路が格子状のこの盤面では「壁に沿って滑る」動きになり、
@@ -53,7 +74,7 @@ export class MovementSystem {
     else if (dy > 0) player.facing = 'down';
     else if (dy < 0) player.facing = 'up';
 
-    const speed = speedOf(player);
+    const speed = speedOf(player) * (sliding ? SLIDE_SPEED_RATIO : 1);
     const substeps = Math.max(1, Math.ceil(speed / MOVE_SUBSTEP_DISTANCE));
     const perStep = speed / substeps;
 
@@ -68,6 +89,9 @@ export class MovementSystem {
     }
 
     if (movedAny) player.walked += speed;
+    // 壁にぶつかったら滑りは終わる。ぶつかっても滑り続けると、
+    // 壁ぎわで復帰できないまま爆風を待つことになる。
+    else if (sliding) player.effects.clear('slide');
   }
 
   /** 1回ぶん動かす。動けたら true。 */
@@ -109,6 +133,14 @@ export class MovementSystem {
     }
   }
 }
+
+/** 各方向へ1歩ぶんの差分。 */
+const STEP_OF: Readonly<Record<Direction, { dx: number; dy: number }>> = {
+  up: { dx: 0, dy: -1 },
+  down: { dx: 0, dy: 1 },
+  left: { dx: -1, dy: 0 },
+  right: { dx: 1, dy: 0 },
+};
 
 /**
  * 移動先が壁と重なるか。

@@ -1,10 +1,12 @@
-import { DIRECTIONS, step, type Cell } from '../core/Coord.js';
+import { DIRECTIONS, sameCell, step, type Cell } from '../core/Coord.js';
 import { tick } from '../core/Tick.js';
+import type { SimEvent } from '../events/SimEvent.js';
 import { bombAt } from '../query/BoardQuery.js';
 import { BLAST_DURATION } from '../rules/tuning.js';
 import type { Blast, Bomb } from '../state/Bomb.js';
 import type { WorldState } from '../state/WorldState.js';
 import { removeBomb } from './BombSystem.js';
+import { rollDrop } from './ItemSystem.js';
 
 /**
  * 爆発・誘爆・爆風の寿命。
@@ -17,20 +19,27 @@ import { removeBomb } from './BombSystem.js';
  * 1 tick の中でまとめて処理する。
  */
 export class BlastSystem {
-  step(world: WorldState): void {
-    this.#detonateExpired(world);
+  step(world: WorldState): SimEvent[] {
+    const events = this.#detonateExpired(world);
     this.#expireBlasts(world);
+    return events;
   }
 
   /** 導火線が尽きた爆弾を、連鎖ごと爆発させる。 */
-  #detonateExpired(world: WorldState): void {
+  #detonateExpired(world: WorldState): SimEvent[] {
     // 走査中に world.bombs が変わるので、対象を先に確定させる。
     const expired = world.bombs.filter((bomb) => bomb.fuse <= 0 && !bomb.chained);
+    const events: SimEvent[] = [];
     for (const bomb of expired) {
       // 先に起きた連鎖に巻き込まれて、すでに盤面から消えていることがある。
       if (!world.bombs.includes(bomb)) continue;
-      detonate(world, bomb);
+      const cell = bomb.cell;
+      const owner = bomb.owner;
+      const result = detonate(world, bomb);
+      events.push({ type: 'exploded', cell, owner, chained: result.chained });
+      events.push(...result.events);
     }
+    return events;
   }
 
   /** 爆風の残り時間を進め、尽きたものを消す。 */
@@ -50,7 +59,7 @@ export class BlastSystem {
 export function detonate(
   world: WorldState,
   seed: Bomb,
-): { chained: number; destroyed: Cell[] } {
+): { chained: number; destroyed: Cell[]; events: SimEvent[] } {
   const queue: Bomb[] = [seed];
   seed.chained = true;
   let chained = 0;
@@ -86,13 +95,30 @@ export function detonate(
     }
   }
 
-  // ⚠️ ブロックを壊すのは、連鎖をすべて処理し終えたあと。
-  // 途中で壊すと、その先へ爆風が伸びるかどうかが処理の順序で変わる。
-  for (const cell of destroyed) {
-    world.board.set(cell, 'empty');
+  const events: SimEvent[] = [];
+
+  // ⚠️ 順序が2つの意味で効く。
+  //
+  // 1. 爆風にふれたアイテムを焼くのが先、ブロックを壊すのが後。
+  //    逆にすると、いま壊した箱から出たアイテムを同じ爆風で即座に
+  //    焼いてしまい、アイテムが一生出てこなくなる。
+  // 2. ブロックを壊すのは連鎖をすべて処理し終えたあと。
+  //    途中で壊すと、その先へ爆風が伸びるかどうかが処理の順序で変わる。
+  for (let index = world.items.length - 1; index >= 0; index -= 1) {
+    const item = world.items[index];
+    if (item === undefined) continue;
+    if (!world.blasts.some((blast) => sameCell(blast.cell, item.cell))) continue;
+    world.items.splice(index, 1);
+    events.push({ type: 'itemBurned', cell: item.cell, kind: item.kind });
   }
 
-  return { chained, destroyed };
+  for (const cell of destroyed) {
+    world.board.set(cell, 'empty');
+    events.push({ type: 'blockDestroyed', cell });
+    events.push(...rollDrop(world, cell));
+  }
+
+  return { chained, destroyed, events };
 }
 
 /** そのマスに爆風を置く。盤面の外には置かない。 */
