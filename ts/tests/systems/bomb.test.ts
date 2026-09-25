@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { centerOf } from '../../src/domain/core/Coord.js';
 import { bombAt, blastAt, isSolidFor } from '../../src/domain/query/BoardQuery.js';
 import { BOMB_FUSE, BLAST_DURATION } from '../../src/domain/rules/tuning.js';
-import { detonate } from '../../src/domain/systems/BlastSystem.js';
-import { placeBomb } from '../../src/domain/systems/BombSystem.js';
+import { detonate } from '../../src/domain/mutations/explode.js';
+import { placeBomb } from '../../src/domain/mutations/bombs.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
 import { advance, makeWorld, onlyFor, press } from '../helpers.js';
 

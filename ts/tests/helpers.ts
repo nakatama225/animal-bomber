@@ -1,11 +1,12 @@
 import { IDLE_INTENT, type PlayerIntent } from '../src/domain/intent/PlayerIntent.js';
 import type { PlayerId } from '../src/domain/state/PlayerState.js';
 import { createWorld, type WorldState } from '../src/domain/state/WorldState.js';
+import { startingBonusOf } from '../src/app/GameSession.js';
 import { Simulation } from '../src/domain/systems/Simulation.js';
 
 /** テスト用の世界を作る。種を変えなければ何度でも同じ盤面になる。 */
 export function makeWorld(seed = 1234, animals: string[] = ['rabbit', 'elephant']): WorldState {
-  return createWorld({ seed, animals });
+  return createWorld({ seed, animals, bonusOf: startingBonusOf });
 }
 
 /** 指定した向きだけを押している意思。 */

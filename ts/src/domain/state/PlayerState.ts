@@ -1,4 +1,5 @@
 import type { Direction, Point } from '../core/Coord.js';
+import type { ActiveAction } from '../abilities/ActiveAction.js';
 import type { PlayerIntent } from '../intent/PlayerIntent.js';
 import type { EffectBag } from './EffectBag.js';
 import type { Tick } from '../core/Tick.js';
@@ -61,6 +62,18 @@ export interface PlayerState {
   specialCharges: number;
 
   /**
+   * いまプレイヤーを乗っ取っている振る舞い。無ければ null。
+   *
+   * 突進や穴掘りのように、始まってから終わるまで本人の操作を
+   * 受け付けないもの。各 System はこの中身の種類を見ず、
+   * `drivesMovement` などの性質だけを見る。
+   */
+  action: ActiveAction | null;
+
+  /** 技のボタンを押し続けている長さ。長押しのとくぎの判定に使う。 */
+  actionHeld: Tick;
+
+  /**
    * 最後に自分を傷つけた相手。自分の爆弾なら自分の席番号が入る。
    *
    * ⚠️ 倒れた時点で改めて爆風の持ち主を引き直してはいけない。その頃には
@@ -98,8 +111,8 @@ export function justPressed(
  *
  * 靴の段数だけ速くなり、上限で頭打ちになる。
  */
-export function speedOf(player: PlayerState): number {
-  let speed = Math.min(MAX_SPEED, BASE_SPEED + player.shoes * SHOE_STEP);
+export function speedOf(player: PlayerState, animalMultiplier = 1): number {
+  let speed = Math.min(MAX_SPEED, BASE_SPEED * animalMultiplier + player.shoes * SHOE_STEP);
   if (player.effects.has('slow')) speed *= SLOW_FACTOR;
 
   // ⚠️ 「とまれない」は速度に下限を敷く効果。下限に「超スロー」の倍率を

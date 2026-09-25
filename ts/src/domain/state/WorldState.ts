@@ -46,7 +46,25 @@ export interface WorldSeed {
   readonly seed: number;
   /** 参加する動物。席順に並べる。 */
   readonly animals: readonly string[];
+  /**
+   * 動物ごとの初期値の上乗せ。
+   *
+   * ⚠️ ここで能力の表を引かず、呼び出し側から受け取る。引いてしまうと
+   * 「状態」が「動物の振る舞い」を知ることになり、依存が逆流する。
+   * 省略した場合は全員が素の値で始まる。
+   */
+  readonly bonusOf?: (animal: string) => StartingBonus;
 }
+
+/** 動物ごとの、始まりの上乗せ。 */
+export interface StartingBonus {
+  /** 体力（半分の単位）。 */
+  readonly hp: number;
+  readonly power: number;
+  readonly bombs: number;
+}
+
+const NO_BONUS: StartingBonus = { hp: 0, power: 0, bombs: 0 };
 
 /**
  * 試合の初期状態を作る。
@@ -64,22 +82,28 @@ export function createWorld(config: WorldSeed): WorldState {
     if (spawn === undefined) {
       throw new Error(`席が足りない: ${index}`);
     }
+    const bonus = config.bonusOf?.(animal) ?? NO_BONUS;
     return {
       id: index as PlayerId,
       animal,
       position: centerOf(spawn),
       facing: index < 2 ? 'down' : 'up',
       life: 'alive',
-      hp: 6,
+      hp: 6 + bonus.hp,
       shoes: 0,
-      power: 1,
-      maxBombs: 1,
+      power: 1 + bonus.power,
+      maxBombs: 1 + bonus.bombs,
       activeBombs: 0,
       invulnerableUntil: tick(0),
       walked: 0,
       previousIntent: IDLE_INTENT,
       effects: new EffectBag(),
       specialCharges: 0,
+      action: null,
+      // ⚠️ -1 はロックの印。ラウンド開始時から押しっぱなしのボタンは、
+      // 一度離すまで技が出ない。パッドは次の tick で押下が戻るため、
+      // これが無いと開始 0.5 秒でとくぎが暴発する。
+      actionHeld: tick(-1),
       lastHitBy: null,
     };
   });
@@ -130,6 +154,8 @@ export function hashWorld(world: WorldState): number {
       .int(packIntent(player.previousIntent))
       .text(player.effects.encode())
       .int(player.specialCharges)
+      .text(player.action?.kind ?? '')
+      .int(player.actionHeld)
       .int(player.lastHitBy ?? -1);
   }
 

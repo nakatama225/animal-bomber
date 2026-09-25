@@ -3,6 +3,7 @@ import type { PlayerIntent } from '../intent/PlayerIntent.js';
 import type { PlayerId } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 import type { SimEvent } from '../events/SimEvent.js';
+import { ActionSystem } from './ActionSystem.js';
 import { BlastSystem } from './BlastSystem.js';
 import { BombSystem } from './BombSystem.js';
 import { DamageSystem } from './DamageSystem.js';
@@ -40,6 +41,7 @@ import { MovementSystem } from './MovementSystem.js';
  * この並びへ足していく。
  */
 export class Simulation {
+  readonly #actions = new ActionSystem();
   readonly #movement = new MovementSystem();
   readonly #bombs = new BombSystem();
   readonly #blasts = new BlastSystem();
@@ -55,6 +57,10 @@ export class Simulation {
    */
   step(world: WorldState, intents: ReadonlyMap<PlayerId, PlayerIntent>): SimEvent[] {
     const events: SimEvent[] = [];
+
+    // 乗っ取り中の振る舞いを先に進める。位置を決めるのがそちらなので、
+    // あとから移動の入力を当てると1 tick ぶん食い違う。
+    events.push(...this.#actions.step(world, intents));
 
     // 動いてから置く。置いてから動く形にすると、置いた瞬間に
     // そのマスから出られてしまい、通り抜けの扱いが1 tick ずれる。

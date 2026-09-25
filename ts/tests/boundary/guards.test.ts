@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { rmSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
@@ -72,4 +72,40 @@ describe('境界を守る仕組み', () => {
     expect(result.failed).toBe(true);
     expect(result.output).toContain('domain-は-上の層を使わない');
   }, 60_000);
+});
+
+/**
+ * 動物を追加しても、共通の処理に手を入れずに済むことの確認。
+ *
+ * ⚠️ これは「拡張に開いた形」が守られているかを、文字列の有無という
+ * 機械的な形で見張るもの。設計を語る文章より、この1本のほうが崩れにくい。
+ *
+ * 突進は移動・破壊・取得・被弾の4つに同時に割り込むため、いちばん
+ * 特別扱いを誘発しやすい。ここが通れば、他の動物は自動的に通る。
+ */
+describe('動物の追加が閉じていること', () => {
+  const ANIMAL_WORDS =
+    /rabbit|elephant|mole|fox|frog|charge|うさぎ|ぞう|もぐら|きつね|かえる|突進/;
+
+  it('共通の処理に動物の名前が現れない', () => {
+    const dirs = ['src/domain/systems', 'src/domain/mutations'];
+    const offenders: string[] = [];
+    for (const dir of dirs) {
+      for (const name of readdirSync(join(ROOT, dir))) {
+        if (!name.endsWith('.ts')) continue;
+        const body = readFileSync(join(ROOT, dir, name), 'utf8');
+        if (ANIMAL_WORDS.test(body)) offenders.push(`${dir}/${name}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('見張る言葉が、実際に動物のファイルには現れる', () => {
+    // 前の確認が「その言葉がどこにも無いだけ」で通ってしまわないための対照。
+    const body = readFileSync(
+      join(ROOT, 'src/domain/abilities/elephant/ChargeAction.ts'),
+      'utf8',
+    );
+    expect(ANIMAL_WORDS.test(body)).toBe(true);
+  });
 });

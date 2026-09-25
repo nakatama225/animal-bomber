@@ -1,10 +1,9 @@
 import type { SimEvent } from '../events/SimEvent.js';
-import { BLAST_HITBOX, INVULNERABLE } from '../rules/tuning.js';
+import { hurt } from '../mutations/damage.js';
+import { BLAST_HITBOX } from '../rules/tuning.js';
 import type { PlayerId, PlayerState } from '../state/PlayerState.js';
 import { isInvulnerable } from '../state/PlayerState.js';
-import { tick } from '../core/Tick.js';
 import type { WorldState } from '../state/WorldState.js';
-import { spitPowerUp } from './ItemSystem.js';
 
 /** 爆風1回あたりに減る体力（半分の単位。2 で1個ぶん）。 */
 const BLAST_DAMAGE = 2;
@@ -52,33 +51,4 @@ export class DamageSystem {
     }
     return null;
   }
-}
-
-/**
- * 体力を減らす。0 以下になったら倒れる。
- *
- * @param by 誰の爆風か。自分の爆弾なら自分の席番号が入る
- */
-export function hurt(
-  world: WorldState,
-  player: PlayerState,
-  by: PlayerId | null,
-  amount: number,
-): SimEvent[] {
-  player.hp -= amount;
-  player.invulnerableUntil = tick(world.now + INVULNERABLE);
-  player.lastHitBy = by;
-
-  const events: SimEvent[] = [{ type: 'playerHurt', target: player.id, by, amount }];
-
-  // 被弾のたびに1つ吐き出す。倒された側が一方的に損をするのではなく、
-  // 盤面にアイテムが出回るようにしている。
-  events.push(...spitPowerUp(world, player));
-
-  if (player.hp <= 0) {
-    player.hp = 0;
-    player.life = 'dead';
-    events.push({ type: 'playerDown', target: player.id, by });
-  }
-  return events;
 }

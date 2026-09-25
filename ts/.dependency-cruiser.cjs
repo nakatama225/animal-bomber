@@ -64,10 +64,14 @@ module.exports = {
 
     {
       name: '循環した依存を作らない',
-      comment: '層をまたがない循環も、読む順序が決まらなくなるので禁じる。',
+      comment:
+        '層をまたがない循環も、読む順序が決まらなくなるので禁じる。\n' +
+        '⚠️ ただし型だけの循環は除く。プレイヤーの状態と、その状態を' +
+        '書き換える振る舞いのように、互いの型を参照し合う組はある。' +
+        '型は実行時に残らないので、モジュールの初期化順の問題は起きない。',
       severity: 'error',
       from: {},
-      to: { circular: true },
+      to: { circular: true, dependencyTypesNot: ['type-only'] },
     },
 
     {

@@ -1,8 +1,13 @@
+import { abilityOf } from '../domain/abilities/registry.js';
 import type { SimEvent } from '../domain/events/SimEvent.js';
 import { IntentGatherer, type IntentSource } from '../domain/intent/IntentSource.js';
 import { seedForRound, type MatchConfig } from '../domain/rules/MatchConfig.js';
 import { createMatch, type MatchState } from '../domain/state/MatchState.js';
-import { createWorld, type WorldState } from '../domain/state/WorldState.js';
+import {
+  createWorld,
+  type StartingBonus,
+  type WorldState,
+} from '../domain/state/WorldState.js';
 import { applyOutcome, RoundSystem } from '../domain/systems/RoundSystem.js';
 import { Simulation } from '../domain/systems/Simulation.js';
 
@@ -33,9 +38,20 @@ export class GameSession {
   constructor(config: MatchConfig) {
     this.#config = config;
     this.#match = createMatch();
-    this.#world = createWorld({
-      seed: seedForRound(config, this.#match.round),
-      animals: config.animals,
+    this.#world = this.#makeWorld();
+  }
+
+  /**
+   * 盤面を作る。
+   *
+   * 動物ごとの初期値をここで引いて渡している。状態を作る側が
+   * 能力の表を引くと、依存が逆流する。
+   */
+  #makeWorld(): WorldState {
+    return createWorld({
+      seed: seedForRound(this.#config, this.#match.round),
+      animals: this.#config.animals,
+      bonusOf: startingBonusOf,
     });
   }
 
@@ -87,9 +103,12 @@ export class GameSession {
    * 「3ラウンド目だけ再現したい」も設定だけで足りる。
    */
   #startNextRound(): void {
-    this.#world = createWorld({
-      seed: seedForRound(this.#config, this.#match.round),
-      animals: this.#config.animals,
-    });
+    this.#world = this.#makeWorld();
   }
+}
+
+/** 動物ごとの、始まりの上乗せを引く。 */
+export function startingBonusOf(animal: string): StartingBonus {
+  const ability = abilityOf(animal);
+  return { hp: ability.hpBonus, power: ability.powerBonus, bombs: ability.bombBonus };
 }

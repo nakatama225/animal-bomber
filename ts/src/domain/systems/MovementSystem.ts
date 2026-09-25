@@ -1,5 +1,6 @@
 import type { Point } from '../core/Coord.js';
 import type { PlayerIntent } from '../intent/PlayerIntent.js';
+import { abilityOf } from '../abilities/registry.js';
 import { isSolidFor } from '../query/BoardQuery.js';
 import type { PlayerId, PlayerState } from '../state/PlayerState.js';
 import { speedOf } from '../state/PlayerState.js';
@@ -45,6 +46,11 @@ export class MovementSystem {
     // 泣いている間はどの入力も通らない。
     if (isFrozen(player)) return;
 
+    // 何かに乗っ取られている間は、その振る舞いが位置を決める。
+    // ⚠️ ここで振る舞いの種類を見ない。1つでも見た瞬間、
+    // 動物を足すたびにこの行が増えていく。
+    if (player.action?.drivesMovement === true) return;
+
     let dx = (intent.right ? 1 : 0) - (intent.left ? 1 : 0);
     let dy = (intent.down ? 1 : 0) - (intent.up ? 1 : 0);
 
@@ -74,7 +80,9 @@ export class MovementSystem {
     else if (dy > 0) player.facing = 'down';
     else if (dy < 0) player.facing = 'up';
 
-    const speed = speedOf(player) * (sliding ? SLIDE_SPEED_RATIO : 1);
+    const speed =
+      speedOf(player, abilityOf(player.animal).speedMultiplier) *
+      (sliding ? SLIDE_SPEED_RATIO : 1);
     const substeps = Math.max(1, Math.ceil(speed / MOVE_SUBSTEP_DISTANCE));
     const perStep = speed / substeps;
 
