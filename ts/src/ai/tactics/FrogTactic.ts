@@ -1,0 +1,48 @@
+import { sameCell, step } from '../../domain/core/Coord.js';
+import { TONGUE_REACH } from '../../domain/abilities/frog/TongueAction.js';
+import { bombAt } from '../../domain/query/BoardQuery.js';
+import { itemDefinition } from '../../domain/rules/items.js';
+import { holdSpecial } from '../BombPlacement.js';
+import { ButtonMacro } from '../ButtonMacro.js';
+import type { CpuContext } from '../CpuContext.js';
+import type { AnimalTactic } from './AnimalTactic.js';
+
+/** 跳ね回る爆弾を投げる相手までの距離（歩ける経路のマス数）。 */
+const SLIME_RANGE = 8;
+
+/**
+ * かえるの戦い方。
+ *
+ * 通常技の舌で、正面の遠くにあるアイテムを引き寄せる。とくぎは
+ * 投げっぱなしの爆弾なので、相手がほどよく近いときに投げる。
+ *
+ * ⚠️ 舌は良いものも悪いものも区別なく掴み、かえるは効果が2倍になる。
+ * 手前に悪いアイテムがあれば伸ばさない。
+ */
+export const FROG_TACTIC: AnimalTactic = {
+  animal: 'frog',
+
+  reflex(ctx) {
+    if (ctx.inDanger) return null;
+    if (goodItemAhead(ctx)) return ButtonMacro.tap();
+
+    if (ctx.me.specialCharges <= 0) return null;
+    if (ctx.foePathDistance(SLIME_RANGE + 1) > SLIME_RANGE) return null;
+    if (!ctx.skillReady()) return null;
+    return holdSpecial(ctx, false);
+  },
+};
+
+/** 舌の届く範囲の正面に、損をしないアイテムがあるか。 */
+function goodItemAhead(ctx: CpuContext): boolean {
+  for (let i = 1; i <= TONGUE_REACH; i += 1) {
+    const cell = step(ctx.here, ctx.me.facing, i);
+    if (ctx.world.board.at(cell) !== 'empty') return false;
+    // 爆弾に舌を伸ばすのは避ける。その先は狙わない。
+    if (bombAt(ctx.world, cell) !== undefined) return false;
+    const item = ctx.world.items.find((it) => sameCell(it.cell, cell));
+    if (item === undefined) continue;
+    return !itemDefinition(item.kind).harmful;
+  }
+  return false;
+}

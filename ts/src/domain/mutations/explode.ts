@@ -9,8 +9,9 @@
  * 呼ばれる側に置くことで、依存が一方向に流れる。
  */
 
-import { DIRECTIONS, sameCell, step, type Cell } from '../core/Coord.js';
+import { sameCell, type Cell } from '../core/Coord.js';
 import type { SimEvent } from '../events/SimEvent.js';
+import { blastReach } from '../query/BlastReach.js';
 import { bombAt } from '../query/BoardQuery.js';
 import { BLAST_DURATION } from '../rules/tuning.js';
 import type { Blast, Bomb } from '../state/Bomb.js';
@@ -38,27 +39,18 @@ export function detonate(
     removeBomb(world, bomb);
     addBlast(world, bomb.cell, bomb.owner, true);
 
-    for (const direction of DIRECTIONS) {
-      for (let distance = 1; distance <= bomb.power; distance += 1) {
-        const cell = step(bomb.cell, direction, distance);
-        const tile = world.board.at(cell);
-        // 壊せない壁はここで止まる。爆風も置かない。
-        if (tile === 'hard') break;
+    // 届く範囲は CPU の危険の見積もりと同じ関数で求める。
+    // 壁で止まる・壊せるブロックで止まる、の規則は blastReach の側にある。
+    for (const arm of blastReach(world, bomb.cell, bomb.power).arms) {
+      addBlast(world, arm.cell, bomb.owner, false);
 
-        addBlast(world, cell, bomb.owner, false);
-
-        const next = bombAt(world, cell);
-        if (next !== undefined && !next.chained) {
-          next.chained = true;
-          queue.push(next);
-        }
-
-        // 壊せるブロックは、そのマスまで爆風が届いて止まる。
-        if (tile === 'soft') {
-          destroyed.push(cell);
-          break;
-        }
+      const next = bombAt(world, arm.cell);
+      if (next !== undefined && !next.chained) {
+        next.chained = true;
+        queue.push(next);
       }
+
+      if (arm.stoppedBySoft) destroyed.push(arm.cell);
     }
   }
 

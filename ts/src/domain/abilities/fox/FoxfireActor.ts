@@ -13,6 +13,13 @@ const LIFETIME: Tick = tick(90);
 /** 1 tick に進む距離（マス）。 */
 const SPEED = 0.17;
 
+/**
+ * 寿命のうちに進めるマス数。CPU が「届くか」を判断するのに使う。
+ *
+ * 炎は通路を曲がらないので、実際に届く距離はこれより短いことが多い。
+ */
+export const FOXFIRE_REACH = Math.floor(LIFETIME * SPEED);
+
 /** 当たったと判定する距離（マス）。 */
 const HIT_RANGE = 0.4;
 

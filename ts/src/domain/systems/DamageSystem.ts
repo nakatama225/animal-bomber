@@ -1,6 +1,7 @@
 import type { SimEvent } from '../events/SimEvent.js';
 import { hurt } from '../mutations/damage.js';
-import { BLAST_HITBOX } from '../rules/tuning.js';
+import { sameCell } from '../core/Coord.js';
+import { cellsTouchedBy } from '../query/Hitbox.js';
 import type { PlayerId, PlayerState } from '../state/PlayerState.js';
 import { isInvulnerable } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
@@ -36,18 +37,10 @@ export class DamageSystem {
 
   /** 体に触れている爆風の持ち主。触れていなければ null。 */
   #blastOwnerTouching(world: WorldState, player: PlayerState): PlayerId | null {
-    const col0 = Math.floor(player.position.x - BLAST_HITBOX);
-    const col1 = Math.floor(player.position.x + BLAST_HITBOX);
-    const row0 = Math.floor(player.position.y - BLAST_HITBOX);
-    const row1 = Math.floor(player.position.y + BLAST_HITBOX);
-
-    for (let row = row0; row <= row1; row += 1) {
-      for (let col = col0; col <= col1; col += 1) {
-        const blast = world.blasts.find(
-          (candidate) => candidate.cell.col === col && candidate.cell.row === row,
-        );
-        if (blast !== undefined) return blast.owner;
-      }
+    // 体が触れているマスの求め方は、CPU が危険を見る処理と同じ関数を使う。
+    for (const cell of cellsTouchedBy(player.position)) {
+      const blast = world.blasts.find((candidate) => sameCell(candidate.cell, cell));
+      if (blast !== undefined) return blast.owner;
     }
     return null;
   }

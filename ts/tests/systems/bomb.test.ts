@@ -6,14 +6,8 @@ import { BOMB_FUSE, BLAST_DURATION } from '../../src/domain/rules/tuning.js';
 import { detonate } from '../../src/domain/mutations/explode.js';
 import { placeBomb } from '../../src/domain/mutations/bombs.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
-import { advance, makeWorld, onlyFor, press } from '../helpers.js';
+import { advance, clearBoard, makeWorld, onlyFor, press } from '../helpers.js';
 
-/** 盤面を全部空にする。爆風の伸び方を確かめやすくするため。 */
-function clearBoard(world: ReturnType<typeof makeWorld>): void {
-  for (const { cell, tile } of world.board.cells()) {
-    if (tile === 'soft') world.board.set(cell, 'empty');
-  }
-}
 
 describe('爆弾を置く', () => {
   it('押し下げた瞬間に1つ置かれる', () => {

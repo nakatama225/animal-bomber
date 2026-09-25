@@ -6,7 +6,11 @@ import tseslint from 'typescript-eslint';
  *
  * tsconfig.domain.json は「domain/ がブラウザ API を使うこと」を型エラーにするが、
  * Math.random や Date.now は ES2022 の一部なので型検査は通ってしまう。
- * 決定性を壊すのはむしろこちらなので、domain/ に限って禁止する。
+ * 決定性を壊すのはむしろこちらなので、domain/ と ai/ に限って禁止する。
+ *
+ * ai/（CPU の思考）も対象にしているのは、CPU の判断も種から決まる必要が
+ * あるため。通信対戦では各端末が同じ CPU を動かすので、1台だけ違う乱数を
+ * 引くと、その端末でだけ CPU が別の手を指して試合がずれる。
  *
  * ⚠️ この設定を緩めると、同じ入力で同じ試合にならなくなる。
  * 症状は「たまに結果が違う」という形で出るため、原因にたどり着くまでが長い。
@@ -73,7 +77,7 @@ export default tseslint.config(
   },
 
   {
-    files: ['src/domain/**/*.ts'],
+    files: ['src/domain/**/*.ts', 'src/ai/**/*.ts'],
     rules: {
       'no-restricted-properties': ['error', ...FORBIDDEN_IN_DOMAIN],
       'no-restricted-syntax': [

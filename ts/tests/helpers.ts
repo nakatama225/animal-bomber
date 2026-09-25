@@ -46,3 +46,15 @@ export function advance(
 ): void {
   for (let i = 0; i < ticks; i += 1) sim.step(world, intents);
 }
+
+/**
+ * 盤面の壊せるブロックを全部消す。
+ *
+ * 爆風の伸び方や経路を確かめるとき、種ごとに違うブロックの配置に
+ * 結果が左右されないようにするため。
+ */
+export function clearBoard(world: WorldState): void {
+  for (const { cell, tile } of world.board.cells()) {
+    if (tile === 'soft') world.board.set(cell, 'empty');
+  }
+}

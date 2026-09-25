@@ -1,3 +1,5 @@
+import { CPU_LEVELS } from '../ai/CpuLevel.js';
+import { CpuIntentSource, cpuSeed } from '../ai/CpuIntentSource.js';
 import { defaultMatchConfig } from '../domain/rules/MatchConfig.js';
 import { FrameLoop } from '../platform/FrameLoop.js';
 import {
@@ -45,14 +47,18 @@ function main(): void {
   // 種は起動のたびに変えたいが、ルールの層で乱数や時刻に触れない。
   // 実時間を読むのはブラウザに近いこの層の役目なので、ここで決める。
   const seed = Math.floor(Date.now() % 0xffffffff);
-  const config = defaultMatchConfig(seed, ['rabbit', 'elephant']);
+  const config = defaultMatchConfig(seed, ['rabbit', 'elephant', 'fox', 'frog']);
 
   const keyboard = new KeyboardWatcher();
   keyboard.attach();
 
+  // プレイヤー 0・1 はキーボード、2・3 は CPU。ゲーム本体からは区別がつかない。
+  // 強さを選ぶ画面は段階10で足す。
   const game = new GameSession(config)
     .attach(new KeyboardIntentSource(0, keyboard, PLAYER1_KEYS))
-    .attach(new KeyboardIntentSource(1, keyboard, PLAYER2_KEYS));
+    .attach(new KeyboardIntentSource(1, keyboard, PLAYER2_KEYS))
+    .attach(new CpuIntentSource(2, CPU_LEVELS.normal, cpuSeed(seed, 2)))
+    .attach(new CpuIntentSource(3, CPU_LEVELS.normal, cpuSeed(seed, 3)));
 
   const presenter = new Presenter();
 

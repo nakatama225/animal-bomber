@@ -1,5 +1,8 @@
 {
-  // ルールの層 (src/domain) だけを対象にした型検査。
+  // ルールの層 (src/domain) と CPU の思考 (src/ai) だけを対象にした型検査。
+  //
+  // CPU の思考を含めるのは、画面を出さずに大量の試合を回して強さを
+  // 測るため。CPU がブラウザ API に触れていると、その検証ができなくなる。
   //
   // この設定の主眼は "lib" に "DOM" を入れないことと "types" を空にすること。
   // これにより domain/ の中に document や window と書いた時点で
@@ -30,5 +33,5 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/domain"]
+  "include": ["src/domain", "src/ai"]
 }

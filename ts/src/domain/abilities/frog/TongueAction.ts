@@ -6,8 +6,8 @@ import type { PlayerState } from '../../state/PlayerState.js';
 import type { WorldState } from '../../state/WorldState.js';
 import type { ActiveAction } from '../ActiveAction.js';
 
-/** 舌が届くマス数。 */
-const REACH = 6;
+/** 舌が届くマス数。CPU が「届くか」を判断するのにも使う。 */
+export const TONGUE_REACH = 6;
 
 /** 1マス伸びるのにかかる長さ。 */
 const STEP_TIME: Tick = tick(4);
@@ -41,7 +41,7 @@ export class TongueAction implements ActiveAction {
     this.#elapsed = tick(this.#elapsed + 1);
 
     // 伸びきったら戻り始める。ここでは往路だけを数える。
-    const want = Math.min(REACH, Math.floor(this.#elapsed / STEP_TIME));
+    const want = Math.min(TONGUE_REACH, Math.floor(this.#elapsed / STEP_TIME));
     const events: SimEvent[] = [];
 
     while (this.#reached < want && !this.#caught) {
@@ -66,7 +66,7 @@ export class TongueAction implements ActiveAction {
     }
 
     // 往路と復路で同じだけ時間をかける。
-    const done = this.#caught || this.#elapsed >= STEP_TIME * REACH * 2;
+    const done = this.#caught || this.#elapsed >= STEP_TIME * TONGUE_REACH * 2;
     return { events, done };
   }
 }
