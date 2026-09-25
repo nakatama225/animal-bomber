@@ -12,7 +12,7 @@ import type { WorldState } from '../state/WorldState.js';
  *
  * 爆発そのものは扱わない。導火線が尽きた爆弾に印を付けるところまでで、
  * 連鎖と爆風は `BlastSystem` が引き受ける。分けてあるのは、爆発が
- * 「1つの爆弾の話」ではなく「連鎖でまとめて起きる出来事」だから。
+ * 「1つの爆弾の話」ではなく「連鎖でまとめて起きること」だから。
  */
 export class BombSystem {
   step(world: WorldState, intents: ReadonlyMap<PlayerId, PlayerIntent>): SimEvent[] {
