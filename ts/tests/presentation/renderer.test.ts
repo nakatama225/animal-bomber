@@ -20,42 +20,49 @@ import { fakeCanvas } from './fakeCanvas.js';
  * 描画の通し検査。
  *
  * CPU どうしの試合を、決着まで毎 tick 描く。舌・跳ね回る爆弾・突進・撒く技・
- * 追いかける炎が現れ、ラウンドの切り替わり（決着のあとの待ちと、盤面の作り直し）も
- * 通る。この種と顔ぶれで何が現れるかは、試合の中身が変わると変わるので、
+ * 追いかける炎・外周の葱ボンと葱が現れ、ラウンドの切り替わり（決着のあとの待ちと、
+ * 盤面の作り直し）も通る。この種と顔ぶれで何が現れるかは、試合の中身が変わると変わるので、
  * 途中で現れたものを数えて確かめている。
  */
 describe('描画', () => {
   it('CPU どうしの試合を毎 tick 描いても例外が出ず、状態も変わらない', () => {
-    const seed = 31;
+    // 種は、すべての技と外周の葱ボン・葱が現れるものを選んである。CPU の判断を変えると
+    // 現れるものが変わるので、下の確認が落ちたら種を選び直す。
+    const seed = 18;
     const animals = ['rabbit', 'frog', 'elephant', 'fox'];
     const game = new GameSession({ ...defaultMatchConfig(seed, animals), winsToTake: 2 });
     game.world.players.forEach((player) =>
       game.attach(new CpuIntentSource(player.id, CPU_LEVELS.oni, cpuSeed(seed, player.id))),
     );
-    const canvas = fakeCanvas();
+    const canvas = fakeCanvas({ keepLog: false });
     const renderer = new Renderer(canvas.context, 920, 680);
 
     const seen = new Set<string>();
     let intermissions = 0;
-    for (let i = 0; i < 20000 && !game.match.finished; i += 1) {
+    // 試合の長さは種によって大きく変わる（この顔ぶれで 80 通りの種を試すと 7,290〜33,162 tick）。
+    // 上限は余裕を見て大きくとる。
+    for (let i = 0; i < 60000 && !game.match.finished; i += 1) {
       const world = game.world;
       renderer.beforeTick(world);
       const events = game.tick();
       renderer.afterTick(events, world);
       if (game.betweenRounds) intermissions += 1;
       for (const actor of game.world.actors) seen.add(actor.kind);
-      for (const player of game.world.players) if (player.action !== null) seen.add(player.action.kind);
+      for (const player of game.world.players) {
+        if (player.action !== null) seen.add(player.action.kind);
+        if (player.life.kind === 'negibon') seen.add('negibon');
+      }
       const before = hashWorld(game.world);
       renderer.draw(game.world, 0.5);
       expect(hashWorld(game.world)).toBe(before);
     }
     expect(game.match.finished).toBe(true);
     expect(intermissions).toBeGreaterThan(0);
-    for (const kind of ['tongue', 'slime', 'charge', 'scatter', 'foxfire']) {
+    for (const kind of ['tongue', 'slime', 'charge', 'scatter', 'foxfire', 'negibon', 'leek']) {
       expect(seen.has(kind), kind).toBe(true);
     }
-    // 1万回を超える描画を偽の canvas に通すので、既定の制限時間では足りない。
-  }, 120_000);
+    // 数万回の描画を偽の canvas に通すので、既定の制限時間では足りない。
+  }, 240_000);
 
   it('延長戦で開始位置へ飛び移ったプレイヤーを、前の位置との途中に描かない', () => {
     // 歩いた距離なら間を埋めると滑らかに見えるが、飛び移ったぶんを埋めると

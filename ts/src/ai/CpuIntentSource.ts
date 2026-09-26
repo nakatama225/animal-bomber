@@ -18,6 +18,7 @@ import { freshMemory, type CpuMemory } from './CpuMemory.js';
 import { BLIND_MIN_SECONDS, BLIND_SPREAD_SECONDS, SHARP_THINK } from './margins.js';
 import { compensateReverse, directionAlong } from './PathFollower.js';
 import { DEFAULT_CHAIN } from './behaviors/DefaultChain.js';
+import { NegibonPilot } from './NegibonPilot.js';
 import { tacticOf } from './tactics/registry.js';
 
 /**
@@ -49,6 +50,10 @@ export class CpuIntentSource implements IntentSource {
   #world: Readonly<WorldState> | null = null;
   /** 最後に見た盤面が延長戦に入っていたか。 */
   #sawSuddenDeath = false;
+  /** 最後に見たとき、自分が盤面にいたか。外周から戻ったことを知るのに使う。 */
+  #onBoard = true;
+  /** 外周にいる間の操縦。外周へ回るたびに作り直す。 */
+  #pilot: NegibonPilot | null = null;
   #memory: CpuMemory;
 
   /**
@@ -79,10 +84,27 @@ export class CpuIntentSource implements IntentSource {
       this.#world = world;
       this.#sawSuddenDeath = world.suddenDeath;
       this.#memory = freshMemory(this.#rng);
+      this.#onBoard = true;
+      this.#pilot = null;
     }
 
     const me = playerById(world, this.playerId);
-    if (me === undefined || !isAlive(me)) return IDLE_INTENT;
+    if (me === undefined) return IDLE_INTENT;
+    if (me.life.kind === 'negibon') {
+      this.#onBoard = false;
+      this.#pilot ??= new NegibonPilot();
+      return this.#pilot.next(world, me.life);
+    }
+    this.#pilot = null;
+    if (!isAlive(me)) {
+      this.#onBoard = false;
+      return IDLE_INTENT;
+    }
+    // 外周から葱を当てて戻ると、当てた相手の位置へ移る。倒れる前の道筋は使えない。
+    if (!this.#onBoard) {
+      this.#onBoard = true;
+      this.#memory = freshMemory(this.#rng);
+    }
 
     const memory = this.#memory;
     countDown(memory);

@@ -75,6 +75,26 @@ export function alongsFacing(cell: Cell): readonly [number, number, number, numb
 }
 
 /**
+ * その点をまっすぐ撃てる、帯の上の4つの位置（上辺・右辺・下辺・左辺の順）。
+ *
+ * `alongsFacing` がマスの中央を狙うのに対し、こちらは点そのものを狙う。撃つ位置が
+ * 点の真上（真横）に来るので、マスの中央からずれて立つ相手にもまっすぐ撃てる。
+ *
+ * 位置はその辺の中に収める。辺の始まり（位置 0）より手前の点、たとえば外壁に寄って
+ * 立つ相手は、辺の始まりに切り詰める。そこからの撃つ向きと直角のずれは、プレイヤーの
+ * 体の半径ぶん（0.14 マス）までに収まる。
+ */
+export function alongsAiming(point: Point): readonly [number, number, number, number] {
+  const clamp = (value: number, length: number): number => Math.min(Math.max(value, 0), length - 0.5);
+  return [
+    clamp(point.x - 1.5, INNER_COLS),
+    INNER_COLS + clamp(point.y - 1.5, INNER_ROWS),
+    INNER_COLS + INNER_ROWS + clamp(COLS - 1.5 - point.x, INNER_COLS),
+    2 * INNER_COLS + INNER_ROWS + clamp(ROWS - 1.5 - point.y, INNER_ROWS),
+  ];
+}
+
+/**
  * 倒れた位置にいちばん近い、帯の上の位置。
  *
  * 4辺のうち、縁までの距離がいちばん短い辺の、倒れた列（行）に向き合う位置を選ぶ。

@@ -35,7 +35,11 @@ function rejectInvalid(property: string, args: readonly unknown[]): void {
   }
 }
 
-export function fakeCanvas(): FakeCanvas {
+/**
+ * @param keepLog 呼ばれた命令と引数を残すか。試合を通して描く検査では、残すと
+ *   数千万件になってメモリが尽きるので切る。回数（`calls`）は切っても数える。
+ */
+export function fakeCanvas({ keepLog = true }: { readonly keepLog?: boolean } = {}): FakeCanvas {
   const calls = new Map<string, number>();
   const log: { name: string; args: readonly unknown[] }[] = [];
   const gradient = {
@@ -51,7 +55,7 @@ export function fakeCanvas(): FakeCanvas {
       return (...args: unknown[]) => {
         rejectInvalid(property, args);
         calls.set(property, (calls.get(property) ?? 0) + 1);
-        log.push({ name: property, args });
+        if (keepLog) log.push({ name: property, args });
         if (property === 'createLinearGradient' || property === 'createRadialGradient') return gradient;
         if (property === 'measureText') return { width: String(args[0] ?? '').length * 8 };
         if (property === 'getTransform') return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
