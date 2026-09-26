@@ -10,6 +10,7 @@ import { ParticleField } from './ParticleField.js';
 import type { Frame } from './Frame.js';
 import { drawItem } from './items.js';
 import { layoutFor, type Layout } from './Layout.js';
+import { drawNegibon } from './negibon.js';
 import { drawPlayer } from './players.js';
 import type { PlayerView } from './PlayerView.js';
 import { PositionHistory } from './PositionHistory.js';
@@ -30,8 +31,9 @@ import { PositionHistory } from './PositionHistory.js';
  * 4. 爆弾
  * 5. 爆風
  * 6. プレイヤー（画面の奥＝上にいる者から）
- * 7. 宙を飛ぶ自律物（追いかける炎・跳ね回る爆弾）
- * 8. 粒子
+ * 7. 外周の葱ボン
+ * 8. 宙を飛ぶ自律物（追いかける炎・跳ね回る爆弾・葱）
+ * 9. 粒子
  */
 export class Renderer {
   readonly #g: CanvasRenderingContext2D;
@@ -100,6 +102,11 @@ export class Renderer {
       .sort((a, b) => a.y - b.y);
     for (const view of views) drawPlayer(frame, view);
 
+    // 葱ボンは宙を飛ぶ自律物より下に描く。撃った葱は葱ボンの位置から飛び出すので、
+    // 逆にすると、出たばかりの葱が葱ボンの絵に隠れる。
+    for (const player of world.players) {
+      if (player.life.kind === 'negibon') drawNegibon(frame, player.animal, player.life, world.now);
+    }
     for (const actor of world.actors) drawAirActor(frame, actor);
     this.#effects.draw(frame);
     g.restore();

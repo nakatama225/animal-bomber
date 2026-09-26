@@ -10,6 +10,7 @@ import type { SimEvent } from '../../src/domain/events/SimEvent.js';
 import { placeBombAt } from '../../src/domain/mutations/bombs.js';
 import { detonate } from '../../src/domain/mutations/explode.js';
 import { enterSuddenDeath } from '../../src/domain/mutations/suddenDeath.js';
+import { LeekActor } from '../../src/domain/negibon/LeekActor.js';
 import { ITEM_DEFINITIONS } from '../../src/domain/rules/items.js';
 import { BLAST_DURATION, BOMB_FUSE } from '../../src/domain/rules/tuning.js';
 import type { Blast, Bomb } from '../../src/domain/state/Bomb.js';
@@ -126,6 +127,7 @@ describe('自律物', () => {
     { name: '落とし穴', actor: new PitActor({ col: 5, row: 5 }, 0), ground: false, air: false },
     { name: '追いかける炎', actor: new FoxfireActor({ x: 5.5, y: 5.5 }, 0), ground: false, air: true },
     { name: '跳ね回る爆弾', actor: new SlimeBombActor({ col: 5, row: 5 }, owner, 6), ground: false, air: true },
+    { name: '飛んでいる葱', actor: new LeekActor({ x: 5.5, y: 5.5 }, 'down', 0), ground: false, air: true },
   ];
 
   it.each(cases)('$name は描くべき層にだけ描かれ、状態は変わらない', ({ actor, ground, air }) => {

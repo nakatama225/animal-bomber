@@ -3,11 +3,13 @@ import { FoxfireActor } from '../../domain/abilities/fox/FoxfireActor.js';
 import { SlimeBombActor } from '../../domain/abilities/frog/SlimeBombActor.js';
 import { ScatteredActor } from '../../domain/abilities/rabbit/ScatterAction.js';
 import { secondsToTicks } from '../../domain/core/Tick.js';
+import { LeekActor } from '../../domain/negibon/LeekActor.js';
 import { itemDefinition } from '../../domain/rules/items.js';
 import type { Frame } from './Frame.js';
 import { FULL_TURN } from './Frame.js';
 import { drawBadge } from './items.js';
 import { screenX, screenY } from './Layout.js';
+import { drawLeek } from './negibon.js';
 import { drawSlime } from './slime.js';
 
 /** 撒かれた障害物が、消える前に点滅を始める残り時間。原型と同じ値。 */
@@ -33,9 +35,8 @@ export function drawGroundActor(frame: Frame, actor: WorldActor): void {
  */
 export function drawAirActor(frame: Frame, actor: WorldActor): void {
   if (actor instanceof FoxfireActor) drawFoxfire(frame, actor);
-  else if (actor instanceof SlimeBombActor) {
-    drawSlime(frame, actor.cell, actor.sinceLanding, actor.hopsLeft);
-  }
+  else if (actor instanceof SlimeBombActor) drawSlime(frame, actor.cell, actor.sinceLanding, actor.hopsLeft);
+  else if (actor instanceof LeekActor) drawLeek(frame, actor.position, actor.facing);
 }
 
 /**

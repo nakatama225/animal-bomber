@@ -1,13 +1,15 @@
 import { centerOf, type Cell } from '../../domain/core/Coord.js';
+import { LANE_WIDTH } from '../../domain/rules/negibon.js';
 import { COLS, ROWS } from '../../domain/rules/tuning.js';
 
 /**
- * 盤面の外側に空ける余白（マス単位）。
+ * 盤面の外側に空ける余白（マス単位）。外周の帯にあたり、葱ボンはここに描く。
  *
- * 倒れたプレイヤーが外周から葱を撃つ通り道（段階8）の幅。いまは余白として空けておく。
- * 原型と同じ値。
+ * 値はルールの層の帯の幅をそのまま使い、この層では持たない。葱ボンの位置はルールの層が
+ * 帯の真ん中に決めるので、余白の幅が帯の幅とずれると葱ボンが余白の真ん中から外れ、
+ * 狭ければ画面の端で切れる。
  */
-export const LANE = 0.62;
+const LANE = LANE_WIDTH;
 
 /** マスの大きさの下限と上限（ピクセル）。小さすぎると絵が潰れ、大きすぎると粗くなる。 */
 const TILE_MIN = 26;
