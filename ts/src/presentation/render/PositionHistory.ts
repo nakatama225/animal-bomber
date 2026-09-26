@@ -55,6 +55,8 @@ export class PositionHistory {
       if (event.type === 'suddenDeath') {
         for (const player of world.players) this.#before.delete(player.id);
       }
+      // 葱で戻った人は、外周から当てた相手の位置へ移る。
+      if (event.type === 'revived') this.#before.delete(event.player);
     }
   }
 }

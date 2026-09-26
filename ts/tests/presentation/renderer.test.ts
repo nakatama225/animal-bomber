@@ -4,9 +4,12 @@ import { CpuIntentSource, cpuSeed } from '../../src/ai/CpuIntentSource.js';
 import { CPU_LEVELS } from '../../src/ai/CpuLevel.js';
 import { GameSession } from '../../src/app/GameSession.js';
 import { centerOf } from '../../src/domain/core/Coord.js';
+import { swapPlaces } from '../../src/domain/mutations/negibon.js';
 import { enterSuddenDeath } from '../../src/domain/mutations/suddenDeath.js';
 import { defaultMatchConfig } from '../../src/domain/rules/MatchConfig.js';
 import { SPAWN_CELLS } from '../../src/domain/rules/tuning.js';
+import { tick } from '../../src/domain/core/Tick.js';
+import type { PlayerState } from '../../src/domain/state/PlayerState.js';
 import { hashWorld } from '../../src/domain/state/WorldState.js';
 import { layoutFor, screenX } from '../../src/presentation/render/Layout.js';
 import { Renderer } from '../../src/presentation/render/Renderer.js';
@@ -71,6 +74,26 @@ describe('描画', () => {
     const near = (x: number): boolean => drawnAt.some((drawn) => Math.abs(drawn - screenX(layout, x)) < 1);
     expect(near(spawn.x)).toBe(true);
     expect(near((20.5 + spawn.x) / 2)).toBe(false);
+  });
+
+  it('葱を当てて戻ったプレイヤーを、倒れた場所との途中に描かない', () => {
+    // 外周にいる間は描かないので、1つ前の位置は倒れた場所のまま残っている。
+    const world = makeWorld(3, ['rabbit', 'elephant']);
+    const [shooter, target] = world.players as [PlayerState, PlayerState];
+    shooter.position = { x: 20.5, y: 14.5 };
+    shooter.life = { kind: 'negibon', along: 0, readyAt: tick(0) };
+    target.position = { x: 1.5, y: 3.5 };
+    const canvas = fakeCanvas();
+    const renderer = new Renderer(canvas.context, 920, 680);
+    renderer.beforeTick(world);
+    renderer.afterTick(swapPlaces(world, shooter, target), world);
+    renderer.draw(world, 0.5);
+
+    const layout = layoutFor(920, 680);
+    const drawnAt = canvas.log.filter((call) => call.name === 'translate').map((call) => call.args[0] as number);
+    const near = (x: number): boolean => drawnAt.some((drawn) => Math.abs(drawn - screenX(layout, x)) < 1);
+    expect(near(1.5)).toBe(true);
+    expect(near((20.5 + 1.5) / 2)).toBe(false);
   });
 });
 

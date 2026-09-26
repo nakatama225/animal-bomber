@@ -5,7 +5,9 @@ import type { SimEvent } from '../../src/domain/events/SimEvent.js';
 import { MAX_BOMBS, MAX_POWER, MAX_SHOES } from '../../src/domain/rules/tuning.js';
 import { itemEffectTicks, POOP_STACK_LIMIT } from '../../src/domain/rules/items.js';
 import { OUT } from '../../src/domain/state/Life.js';
-import { powerOf, speedOf } from '../../src/domain/state/PlayerState.js';
+import { isAlive, powerOf, speedOf } from '../../src/domain/state/PlayerState.js';
+import { NEGIBON_CUTOFF } from '../../src/domain/rules/negibon.js';
+import { tick } from '../../src/domain/core/Tick.js';
 import { detonate } from '../../src/domain/mutations/explode.js';
 import { placeBomb } from '../../src/domain/mutations/bombs.js';
 import { applyItem, spitPowerUp } from '../../src/domain/mutations/items.js';
@@ -229,12 +231,30 @@ describe('被弾', () => {
     expect(player.hp).toBe(98);
   });
 
-  it('体力が尽きると倒れる', () => {
+  it('体力が尽きると盤面から外れ、残り時間があれば外周へ回る', () => {
     const world = makeWorld();
     const player = world.players[0]!;
     player.hp = 2;
     placeBomb(world, player);
     advance(world, onlyFor(world, 0, press({})), 200);
+    expect(isAlive(player)).toBe(false);
+    expect(player.life.kind).toBe('negibon');
+  });
+
+  it('残り時間が短ければ、倒れた人は外周へ回らず退場する', () => {
+    // 倒れた tick のうちに退場していることを見る。いったん外周へ回ってから、
+    // 次の tick に外周が閉じて退場しても、最後の状態だけでは区別がつかない。
+    const world = makeWorld();
+    world.endsAt = tick(world.now + NEGIBON_CUTOFF);
+    const player = world.players[0]!;
+    player.hp = 2;
+    placeBomb(world, player);
+    const sim = new Simulation();
+    for (let i = 0; i < 200; i += 1) {
+      const events = sim.step(world, onlyFor(world, 0, press({})));
+      expect(events.some((e) => e.type === 'lanesClosed')).toBe(false);
+      if (events.some((e) => e.type === 'playerDown')) break;
+    }
     expect(player.life).toBe(OUT);
   });
 
@@ -287,6 +307,11 @@ describe('イベントの受け取り', () => {
       { type: 'playerHurt', target: 0, by: 1, amount: 2 },
       { type: 'playerDown', target: 0, by: 1, at: { x: 1.5, y: 1.5 } },
       { type: 'suddenDeath', reason: 'timeUp', players: [0, 1] },
+      { type: 'leekThrown', player: 0, from: { x: 1.5, y: -0.31 }, facing: 'down' },
+      { type: 'leekStopped', cell: { col: 1, row: 1 }, by: 'bomb' },
+      { type: 'leekStopped', cell: { col: 1, row: 1 }, by: 'range' },
+      { type: 'revived', player: 0, replaced: 1, at: { x: 1.5, y: 1.5 } },
+      { type: 'lanesClosed', players: [0] },
       { type: 'techniqueUsed', player: 0, special: true },
       { type: 'techniqueUsed', player: 1, special: false },
       { type: 'roundEnded', round: 1, winner: null },

@@ -34,9 +34,21 @@ CPU の戦い方も同じ形です。`src/ai/tactics/` に戦い方を1つ書き
 `src/ai/tactics/registry.ts` に登録の1行を足します。書かなくても、
 省略時の戦い方（足元に爆弾を置く・技は使わない）でその動物は戦えます。
 
-⛔ 共通の処理（`domain/systems/` `domain/mutations/` `domain/query/` `ai/` 直下 `ai/behaviors/`）に
+⛔ 共通の処理（`domain/systems/` `domain/mutations/` `domain/query/` `domain/negibon/` `ai/` 直下 `ai/behaviors/`）に
 動物の名前を書かないでください。**コメントも含みます。** 書くと
 `tests/boundary/guards.test.ts` が落ちます。
+
+## プレイヤーの状態（`src/domain/state/Life.ts`）
+
+盤面にいる・外周にいる（葱ボン）・退場した、の3つを判別可能ユニオンで持っています。
+
+- ⛔ `player.life` の中身を書き換えないでください。丸ごと差し替えます。`ALIVE` と `OUT` は全員で
+  1つを使い回しているので、書き換えると全員の状態が変わります（型も `readonly` にしてあります）
+- 盤面の上の処理は、最初に `isAlive(player)` で外周の人と退場した人を外します。
+  葱ボンのための分岐を盤面の処理に足さないでください
+- 状態を1つ足すと、状態の要約（`hashWorld` の `hashLife`）がコンパイルエラーで書き足しを求めます
+- ⛔ 延長戦（`mutations/suddenDeath.ts`）で技のボタンを押した長さ（`actionHeld`）に触らないでください。
+  この版は離した瞬間に通常技を出すので、長さを戻すと通常技が暴発します
 
 ## CPU の判断の規則を足すとき
 

@@ -1,5 +1,5 @@
 import { lookOf } from '../../content/animals.js';
-import { cellKey, centerOf, type Point } from '../../domain/core/Coord.js';
+import { cellKey, cellOf, centerOf, type Point } from '../../domain/core/Coord.js';
 import { SECONDS_PER_TICK } from '../../domain/core/Tick.js';
 import { assertNever, type SimEvent } from '../../domain/events/SimEvent.js';
 import { itemDefinition } from '../../domain/rules/items.js';
@@ -119,6 +119,14 @@ export class ParticleField {
         if (player !== undefined) this.#knockedOut(event.at, lookOf(player.animal));
         return;
       }
+      case 'leekStopped':
+        // 焼けた葱は炎の色、弾かれた葱は盾の顔。
+        puff(out, rng, event.cell, event.by === 'blast' ? '#ffd23f' : '#a6e06a', event.by === 'bomb' ? '🛡️' : '🌿');
+        return;
+      case 'revived':
+        puff(out, rng, cellOf(event.at), '#a6e06a', '🌿');
+        this.#addShake(9);
+        return;
       case 'suddenDeath':
         // 延長戦に入るとき、自律物はまとめて片付けられる。踏まれたのでも寿命でもないので、
         // 消えたときの煙を出さないよう、見えている顔ぶれをいまの盤面で取り直す。
@@ -144,6 +152,8 @@ export class ParticleField {
       }
       case 'bombPlaced':
       case 'effectApplied':
+      case 'leekThrown':
+      case 'lanesClosed':
       case 'roundEnded':
       case 'matchEnded':
         // 原型でも、置いた瞬間・効いた瞬間には粒子を出していない。効いたきっかけ

@@ -101,6 +101,28 @@ export const SOUND_RECIPES: Readonly<Record<SoundName, Recipe>> = {
     arpeggio(v, 392, [0, -2, -4], 0.16, { type: 'square', dur: 0.35, vol: 0.18 });
   },
 
+  leek(v) {
+    // 葱を撃った音。高い音が落ちていくのに、風を切るノイズを重ねる。
+    v.tone({ f0: 1500, f1: 640, type: 'triangle', dur: 0.15, vol: 0.2 });
+    v.noiseBurst({ dur: 0.1, f0: 4000, f1: 1200, vol: 0.1, type: 'highpass' });
+  },
+
+  leekBlock(v) {
+    // 葱が爆弾に弾かれた音。
+    v.tone({ f0: 180, f1: 90, type: 'square', dur: 0.1, vol: 0.22 });
+    v.noiseBurst({ dur: 0.09, f0: 1600, f1: 500, vol: 0.16, type: 'bandpass', q: 3 });
+  },
+
+  leekHit(v) {
+    // 葱が当たって入れ替わった音。駆け上がる音に、弾けるノイズを重ねる。
+    arpeggio(v, 523, [0, 4, 7, 12, 16], 0.06, { type: 'square', dur: 0.16, vol: 0.2 });
+    v.noiseBurst({ dur: 0.25, f0: 2200, f1: 400, vol: 0.2 });
+  },
+
+  lanesClosed(v) {
+    arpeggio(v, 392, [0, -3, -7], 0.12, { type: 'square', dur: 0.2, vol: 0.16 });
+  },
+
   sudden(v) {
     // 高低2音の警報を4回。下に長い地鳴りを重ねる。
     for (let i = 0; i < 4; i += 1) {

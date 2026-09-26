@@ -108,6 +108,21 @@ export class Presenter {
         if (sound !== null) this.sounds.play(sound);
         return;
       }
+      case 'leekThrown':
+        this.sounds.play('leek');
+        return;
+      case 'leekStopped':
+        // 音を鳴らすのは爆弾に弾かれたときだけ。盾にして防いだことが分かるように。
+        if (event.by === 'bomb') this.sounds.play('leekBlock');
+        return;
+      case 'revived':
+        this.sounds.play('leekHit');
+        this.notices.show(`${event.player + 1}P が復活！ ${event.replaced + 1}P が葱ボンへ`);
+        return;
+      case 'lanesClosed':
+        this.sounds.play('lanesClosed');
+        this.notices.show('葱ボンは退場！ もう復活できない');
+        return;
       case 'suddenDeath':
         this.sounds.play('sudden');
         this.notices.show(

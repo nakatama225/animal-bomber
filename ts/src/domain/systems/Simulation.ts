@@ -11,6 +11,7 @@ import { DamageSystem } from './DamageSystem.js';
 import { EffectSystem } from './EffectSystem.js';
 import { ItemSystem } from './ItemSystem.js';
 import { MovementSystem } from './MovementSystem.js';
+import { NegibonSystem } from './NegibonSystem.js';
 
 /**
  * 試合を1 tick 進める。
@@ -37,14 +38,12 @@ import { MovementSystem } from './MovementSystem.js';
  * この関数は音も鳴らさず画面も触らない。何が起きたかを配列で返すだけで、
  * それをどう扱うかは受け取った側が決める。検証のときは受け取らなければ
  * よく、そのために特別な設定を用意する必要がない。
- *
- * ⚠️ 動物ごとの能力とラウンドの進行は、対応する System ができ次第
- * この並びへ足していく。
  */
 export class Simulation {
   readonly #actions = new ActionSystem();
   readonly #actors = new ActorSystem();
   readonly #movement = new MovementSystem();
+  readonly #negibon = new NegibonSystem();
   readonly #bombs = new BombSystem();
   readonly #blasts = new BlastSystem();
   readonly #items = new ItemSystem();
@@ -67,6 +66,8 @@ export class Simulation {
     // 動いてから置く。置いてから動く形にすると、置いた瞬間に
     // そのマスから出られてしまい、通り抜けの扱いが1 tick ずれる。
     this.#movement.step(world, intents);
+    // 外周の葱ボンは盤面の外を動く。盤面の上の移動とは互いに影響しない。
+    events.push(...this.#negibon.step(world, intents));
     events.push(...this.#bombs.step(world, intents));
     events.push(...this.#blasts.step(world));
 

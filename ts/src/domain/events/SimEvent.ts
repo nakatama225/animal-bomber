@@ -1,4 +1,4 @@
-import type { Cell, Point } from '../core/Coord.js';
+import type { Cell, Direction, Point } from '../core/Coord.js';
 import type { PlayerId } from '../state/PlayerState.js';
 import type { EffectKind } from '../state/EffectBag.js';
 import type { ItemKind } from '../rules/items.js';
@@ -82,6 +82,34 @@ export type SimEvent =
       readonly player: PlayerId;
       /** 長押しのとくぎか。false なら押して離す通常技。 */
       readonly special: boolean;
+    }
+  | {
+      readonly type: 'leekThrown';
+      /** 撃った葱ボン。 */
+      readonly player: PlayerId;
+      /** 撃った位置。外周の帯の上なので、盤面の外にある。 */
+      readonly from: Point;
+      readonly facing: Direction;
+    }
+  | {
+      readonly type: 'leekStopped';
+      readonly cell: Cell;
+      /** 何で止まったか。柱かブロック・爆風・爆弾・射程切れ。 */
+      readonly by: 'wall' | 'blast' | 'bomb' | 'range';
+    }
+  | {
+      readonly type: 'revived';
+      /** 葱を当てて盤面へ戻ったプレイヤー。 */
+      readonly player: PlayerId;
+      /** 葱が当たって外周へ回ったプレイヤー。 */
+      readonly replaced: PlayerId;
+      /** 入れ替わった位置。戻ったプレイヤーはここに立つ。 */
+      readonly at: Point;
+    }
+  | {
+      readonly type: 'lanesClosed';
+      /** 外周から退場したプレイヤー。 */
+      readonly players: readonly PlayerId[];
     }
   | {
       readonly type: 'suddenDeath';

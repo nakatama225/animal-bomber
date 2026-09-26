@@ -60,7 +60,10 @@ export class ActionSystem {
     const action = player.action;
     if (action === null) return [];
 
-    const result = action.tick(world, player);
+    // ⚠️ 前の tick のうちに盤面を離れていたら（倒れた・外周へ回った）、もう進めずに
+    // 打ち切る。進めると、盤面にいない人の技が1 tick ぶん働く（拾った物が外周の
+    // 葱ボンに渡る、など）。
+    const result = isAlive(player) ? action.tick(world, player) : { events: [], done: true };
     const events = [...result.events];
     // 倒れたら途中でも打ち切る。
     if (result.done || !isAlive(player)) {

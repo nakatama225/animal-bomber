@@ -143,16 +143,18 @@ describe('動物の追加が閉じていること', () => {
       ...listTs('src/domain/systems'),
       ...listTs('src/domain/mutations'),
       ...listTs('src/domain/query'),
+      ...listTs('src/domain/negibon'),
       ...listTs('src/ai').filter((file) => !file.startsWith('src/ai/tactics/')),
     ];
     const offenders = files.filter((file) => ANIMAL_WORDS.test(readFileSync(join(ROOT, file), 'utf8')));
     expect(offenders).toEqual([]);
   });
 
-  it('見張る対象に、CPU の共通の判断が入っている', () => {
+  it('見張る対象に、CPU の共通の判断と葱ボンが入っている', () => {
     // 見張るファイルの一覧が空だと、上の確認は何も見ずに通る。
     expect(listTs('src/ai')).toContain('src/ai/behaviors/Flee.ts');
     expect(listTs('src/ai')).toContain('src/ai/CpuIntentSource.ts');
+    expect(listTs('src/domain/negibon')).toContain('src/domain/negibon/LeekActor.ts');
   });
 
   it('見張る言葉が、実際に動物のファイルには現れる', () => {

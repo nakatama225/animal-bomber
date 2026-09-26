@@ -16,9 +16,10 @@ import { OUT } from '../state/Life.js';
 import type { PlayerId, PlayerState } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 import { spitPowerUp } from './items.js';
+import { lanesOpen, sendToLane } from './negibon.js';
 
 /**
- * 体力を減らす。0 以下になったら倒れる。
+ * 体力を減らす。0 以下になったら倒れる。倒れた人は、残り時間があれば外周へ回る（葱ボン）。
  *
  * @param by 誰の爆風か。自分の爆弾なら自分のプレイヤー番号が入る
  */
@@ -46,8 +47,11 @@ export function hurt(
 
   if (player.hp <= 0) {
     player.hp = 0;
-    player.life = OUT;
-    events.push({ type: 'playerDown', target: player.id, by, at: { ...player.position } });
+    const at = { ...player.position };
+    // 残り時間があれば外周へ回って葱ボンになり、無ければ退場する。
+    if (lanesOpen(world)) sendToLane(world, player);
+    else player.life = OUT;
+    events.push({ type: 'playerDown', target: player.id, by, at });
   }
   return events;
 }

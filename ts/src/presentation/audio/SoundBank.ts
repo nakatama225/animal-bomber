@@ -28,7 +28,11 @@ export type SoundName =
   | 'charge'
   | 'dig'
   | 'foxfire'
-  | 'slime';
+  | 'slime'
+  | 'leek'
+  | 'leekBlock'
+  | 'leekHit'
+  | 'lanesClosed';
 
 /** すべての音の名前。表の漏れを検査するのに使う。 */
 export const SOUND_NAMES: readonly SoundName[] = [
@@ -56,6 +60,10 @@ export const SOUND_NAMES: readonly SoundName[] = [
   'dig',
   'foxfire',
   'slime',
+  'leek',
+  'leekBlock',
+  'leekHit',
+  'lanesClosed',
 ];
 
 /** 音を鳴らすもの。 */
