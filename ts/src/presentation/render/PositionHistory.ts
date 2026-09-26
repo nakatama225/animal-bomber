@@ -1,3 +1,4 @@
+import type { SimEvent } from '../../domain/events/SimEvent.js';
 import type { PlayerId } from '../../domain/state/PlayerState.js';
 import type { WorldState } from '../../domain/state/WorldState.js';
 
@@ -40,5 +41,20 @@ export class PositionHistory {
   before(world: Readonly<WorldState>, id: PlayerId): Snapshot | undefined {
     if (world !== this.#world) return undefined;
     return this.#before.get(id);
+  }
+
+  /**
+   * tick を進めた直後に、起きたイベントを渡す。
+   *
+   * 歩いたのではなく飛び移ったプレイヤーは、1つ前の位置を捨てる。次に控えを取るまで、
+   * いまの位置にそのまま描く。間を埋めると、盤面を横切って滑っていくように見える。
+   */
+  onEvents(events: readonly SimEvent[], world: Readonly<WorldState>): void {
+    for (const event of events) {
+      // 延長戦では、加わる全員が開始位置へ移る。
+      if (event.type === 'suddenDeath') {
+        for (const player of world.players) this.#before.delete(player.id);
+      }
+    }
   }
 }

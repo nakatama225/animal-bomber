@@ -1,5 +1,6 @@
 import type { SimEvent } from '../domain/events/SimEvent.js';
 import { assertNever } from '../domain/events/SimEvent.js';
+import { SUDDEN_DEATH_SECONDS } from '../domain/rules/suddenDeath.js';
 import type { WorldState } from '../domain/state/WorldState.js';
 import { NullSoundBank, type SoundBank, type SoundName } from './audio/SoundBank.js';
 import { techniqueSound } from './audio/techniqueSounds.js';
@@ -107,6 +108,13 @@ export class Presenter {
         if (sound !== null) this.sounds.play(sound);
         return;
       }
+      case 'suddenDeath':
+        this.sounds.play('sudden');
+        this.notices.show(
+          `サドンデス！（${event.reason === 'allDown' ? '同時に倒れた' : '時間切れ'}）` +
+            `体力1つ・爆弾と火力と靴は最大・${SUDDEN_DEATH_SECONDS}秒`,
+        );
+        return;
       case 'roundEnded':
         this.sounds.play(event.winner === null ? 'draw' : 'roundEnd');
         this.#announceRound(event.round, event.winner);

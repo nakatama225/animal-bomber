@@ -1,4 +1,4 @@
-import type { Cell } from '../core/Coord.js';
+import type { Cell, Point } from '../core/Coord.js';
 import type { PlayerId } from '../state/PlayerState.js';
 import type { EffectKind } from '../state/EffectBag.js';
 import type { ItemKind } from '../rules/items.js';
@@ -65,12 +65,30 @@ export type SimEvent =
       /** 減った体力（半分の単位）。 */
       readonly amount: number;
     }
-  | { readonly type: 'playerDown'; readonly target: PlayerId; readonly by: PlayerId | null }
+  | {
+      readonly type: 'playerDown';
+      readonly target: PlayerId;
+      readonly by: PlayerId | null;
+      /**
+       * 倒れた位置。
+       *
+       * ⚠️ 受け取った側は、プレイヤーのいまの位置を読まずにこちらを使う。同じ tick の
+       * うちに延長戦へ入ると、受け取る頃には開始位置へ移っている。
+       */
+      readonly at: Point;
+    }
   | {
       readonly type: 'techniqueUsed';
       readonly player: PlayerId;
       /** 長押しのとくぎか。false なら押して離す通常技。 */
       readonly special: boolean;
+    }
+  | {
+      readonly type: 'suddenDeath';
+      /** 延長戦に入ったわけ。全員が同じ tick に倒れたか、時間切れか。 */
+      readonly reason: 'allDown' | 'timeUp';
+      /** 延長戦に加わるプレイヤー。 */
+      readonly players: readonly PlayerId[];
     }
   | {
       readonly type: 'roundEnded';

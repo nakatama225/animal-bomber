@@ -101,6 +101,14 @@ export const SOUND_RECIPES: Readonly<Record<SoundName, Recipe>> = {
     arpeggio(v, 392, [0, -2, -4], 0.16, { type: 'square', dur: 0.35, vol: 0.18 });
   },
 
+  sudden(v) {
+    // 高低2音の警報を4回。下に長い地鳴りを重ねる。
+    for (let i = 0; i < 4; i += 1) {
+      v.tone({ f0: i % 2 === 1 ? 880 : 660, type: 'square', dur: 0.14, vol: 0.24, delay: i * 0.17 });
+    }
+    v.tone({ f0: 80, f1: 40, type: 'sine', dur: 0.9, vol: 0.35, delay: 0.1 });
+  },
+
   fanfare(v) {
     // 優勝ファンファーレ。[半音, 鳴らす時刻] の組を、1オクターブ下と重ねて鳴らす。
     const notes: readonly (readonly [number, number])[] = [

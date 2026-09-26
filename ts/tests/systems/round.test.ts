@@ -30,10 +30,10 @@ describe('ラウンドの進行', () => {
     expect(winsOf(game.match, 0)).toBe(1);
   });
 
-  it('時間切れは引き分けにする', () => {
+  it('延長戦を切ってあれば、時間切れは引き分けにする', () => {
     // 体力の多いほうを勝ちにすると、開幕から隅で待つのが
     // いちばん強い戦術になってしまう。
-    const game = session({ roundLimit: secondsToTicks(0.05) });
+    const game = session({ roundLimit: secondsToTicks(0.05), suddenDeath: false });
     let ended: { winner: number | null } | null = null;
     for (let i = 0; i < 10 && ended === null; i += 1) {
       for (const event of game.tick()) {

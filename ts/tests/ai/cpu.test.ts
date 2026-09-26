@@ -19,6 +19,7 @@ import type { SimEvent } from '../../src/domain/events/SimEvent.js';
 import { IdleIntentSource, IntentGatherer } from '../../src/domain/intent/IntentSource.js';
 import { IDLE_INTENT } from '../../src/domain/intent/PlayerIntent.js';
 import { placeBomb, placeBombAt } from '../../src/domain/mutations/bombs.js';
+import { enterSuddenDeath } from '../../src/domain/mutations/suddenDeath.js';
 import { DangerMap } from '../../src/domain/query/DangerMap.js';
 import { findPath } from '../../src/domain/query/PathFinder.js';
 import { BLAST_DURATION, BOMB_FUSE } from '../../src/domain/rules/tuning.js';
@@ -288,6 +289,22 @@ describe('ラウンドをまたぐ', () => {
     expect(source.memory.lastBomb).not.toBeNull();
 
     source.next(makeWorld(4, ['rabbit', 'elephant']));
+    expect(source.memory.lastBomb).toBeNull();
+  });
+
+  it('延長戦に入ったら、それまでの記憶を捨てる', () => {
+    // 延長戦では盤面を作り直さず、全員を開始位置へ移す。盤面が同じものなので、
+    // 作り直しだけを見ていると、移る前の場所で立てた道筋をたどり続ける。
+    const world = makeWorld(3, ['rabbit', 'elephant']);
+    const source = new CpuIntentSource(0, CPU_LEVELS.hard, 1);
+    const sim = new Simulation();
+    for (let i = 0; i < 600 && source.memory.lastBomb === null; i += 1) {
+      sim.step(world, new Map([[0, source.next(world)]]));
+    }
+    expect(source.memory.lastBomb).not.toBeNull();
+
+    enterSuddenDeath(world, [0, 1], 'timeUp');
+    source.next(world);
     expect(source.memory.lastBomb).toBeNull();
   });
 });

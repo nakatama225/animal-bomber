@@ -9,6 +9,7 @@ import { tick } from '../../src/domain/core/Tick.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
 import { placeBombAt } from '../../src/domain/mutations/bombs.js';
 import { detonate } from '../../src/domain/mutations/explode.js';
+import { enterSuddenDeath } from '../../src/domain/mutations/suddenDeath.js';
 import { ITEM_DEFINITIONS } from '../../src/domain/rules/items.js';
 import { BLAST_DURATION, BOMB_FUSE } from '../../src/domain/rules/tuning.js';
 import type { Blast, Bomb } from '../../src/domain/state/Bomb.js';
@@ -21,7 +22,7 @@ import { drawBlast, drawBomb } from '../../src/presentation/render/bombs.js';
 import { ParticleField } from '../../src/presentation/render/ParticleField.js';
 import type { Frame } from '../../src/presentation/render/Frame.js';
 import { drawItem } from '../../src/presentation/render/items.js';
-import { layoutFor } from '../../src/presentation/render/Layout.js';
+import { layoutFor, screenX } from '../../src/presentation/render/Layout.js';
 import { makeWorld } from '../helpers.js';
 import { fakeCanvas, type FakeCanvas } from './fakeCanvas.js';
 
@@ -207,10 +208,38 @@ describe('粒子と画面の揺れ', () => {
   it('倒れたときは、回りながら浮かぶ顔を出す', () => {
     const world = makeWorld();
     const field = new ParticleField(new CosmeticRng());
-    field.onEvents([{ type: 'playerDown', target: 1, by: 0 }], world);
+    field.onEvents([{ type: 'playerDown', target: 1, by: 0, at: { x: 5.5, y: 5.5 } }], world);
     const canvas = fakeCanvas();
     field.draw(frameOn(canvas));
     expect(count(canvas, 'rotate')).toBe(1);
+  });
+
+  it('倒れた顔は、プレイヤーのいまの位置ではなく倒れた位置に出す', () => {
+    // 同じ tick に延長戦へ入ると、受け取る頃には開始位置へ移っている。
+    const world = makeWorld();
+    const layout = layoutFor(920, 680);
+    world.players[1]!.position = { x: 20.5, y: 14.5 };
+    const field = new ParticleField(new CosmeticRng());
+    field.onEvents([{ type: 'playerDown', target: 1, by: 0, at: { x: 1.5, y: 1.5 } }], world);
+    const canvas = fakeCanvas();
+    field.draw({ g: canvas.context, layout, time: 0.5, cosmetic: new CosmeticRng() });
+    const face = canvas.log.find((call) => call.name === 'translate');
+    const faceX = face?.args[0] as number;
+    // 顔は浮かびながら少し横へ流れるので、盤面の左端寄りにあるかだけを見る。
+    expect(Math.abs(faceX - screenX(layout, 1.5))).toBeLessThan(layout.tile * 2);
+  });
+
+  it('延長戦で自律物が片付けられても、消えたときの煙を出さない', () => {
+    // 片付けは踏まれたのでも寿命でもない。
+    const world = makeWorld();
+    const field = new ParticleField(new CosmeticRng());
+    observeNew(field, world, new ScatteredActor({ col: 5, row: 5 }, 0));
+    field.onEvents([], world);
+    const before = paintedParticles(field);
+    const events = enterSuddenDeath(world, [0, 1], 'timeUp');
+    field.onEvents(events, world);
+    expect(paintedParticles(field)).toBeLessThanOrEqual(before);
+    expect(field.shake).toBe(0);
   });
 
   it('落とし穴は、仕掛けられても粒子を出さない', () => {

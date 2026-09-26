@@ -47,7 +47,7 @@ export function hurt(
   if (player.hp <= 0) {
     player.hp = 0;
     player.life = OUT;
-    events.push({ type: 'playerDown', target: player.id, by });
+    events.push({ type: 'playerDown', target: player.id, by, at: { ...player.position } });
   }
   return events;
 }

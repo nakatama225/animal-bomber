@@ -3,9 +3,9 @@ import { centerOf } from '../core/Coord.js';
 import { IdSource } from '../core/EntityId.js';
 import { Rng } from '../core/Rng.js';
 import { StateHasher } from '../core/StateHash.js';
-import { tick, type Tick } from '../core/Tick.js';
+import { secondsToTicks, tick, type Tick } from '../core/Tick.js';
 import { IDLE_INTENT, packIntent } from '../intent/PlayerIntent.js';
-import { SPAWN_CELLS } from '../rules/tuning.js';
+import { ROUND_SECONDS, SPAWN_CELLS } from '../rules/tuning.js';
 import type { Blast, Bomb } from './Bomb.js';
 import { EffectBag } from './EffectBag.js';
 import type { Item } from './Item.js';
@@ -28,6 +28,21 @@ import type { PlayerId, PlayerState } from './PlayerState.js';
 export interface WorldState {
   /** いままでに進めた tick 数。 */
   now: Tick;
+  /**
+   * 時間切れになる tick。
+   *
+   * 試合の設定の制限時間から始まり、サドンデスに入るとその時点から延長戦の長さぶん先に
+   * 置き直す。全員が同じ tick に倒れて延長戦に入った場合は、早まることもある。
+   * ⚠️ 残り時間の判定は、設定ではなくこちらを見る。設定の値は延長を知らない。
+   */
+  endsAt: Tick;
+  /**
+   * このラウンドがサドンデスに入ったか。
+   *
+   * 盤面はラウンドごとに作り直すので、「このラウンドで延長を使ったか」と
+   * 同じ意味になる。延長は1ラウンドに1回だけ。
+   */
+  suddenDeath: boolean;
   readonly board: Board;
   readonly players: PlayerState[];
   /** 盤面に置かれている爆弾。置かれた順に並ぶ。 */
@@ -50,6 +65,8 @@ export interface WorldSeed {
   readonly seed: number;
   /** 参加する動物。プレイヤー番号の順に並べる。 */
   readonly animals: readonly string[];
+  /** 1ラウンドの制限時間。省略した場合は既定の長さ。 */
+  readonly roundLimit?: Tick;
   /**
    * 動物ごとの初期値の上乗せ。
    *
@@ -115,6 +132,8 @@ export function createWorld(config: WorldSeed): WorldState {
 
   return {
     now: tick(0),
+    endsAt: config.roundLimit ?? secondsToTicks(ROUND_SECONDS),
+    suddenDeath: false,
     board,
     players,
     bombs: [],
@@ -139,6 +158,8 @@ export function createWorld(config: WorldSeed): WorldState {
 export function hashWorld(world: WorldState): number {
   const hasher = new StateHasher();
   hasher.int(world.now);
+  hasher.int(world.endsAt);
+  hasher.bool(world.suddenDeath);
   hasher.text(world.board.encode());
   hasher.int(world.rng.calls);
   hasher.int(world.ids.issued);

@@ -2,6 +2,7 @@ import { abilityOf } from '../domain/abilities/registry.js';
 import { secondsToTicks, type Tick } from '../domain/core/Tick.js';
 import type { SimEvent } from '../domain/events/SimEvent.js';
 import { IntentGatherer, type IntentSource } from '../domain/intent/IntentSource.js';
+import { enterSuddenDeath } from '../domain/mutations/suddenDeath.js';
 import { seedForRound, type MatchConfig } from '../domain/rules/MatchConfig.js';
 import { createMatch, type MatchState } from '../domain/state/MatchState.js';
 import {
@@ -22,7 +23,8 @@ import { Simulation } from '../domain/systems/Simulation.js';
  * ## ここが束ねているだけで、判断を持たないこと
  *
  * ラウンドが終わったかを決めるのは `RoundSystem`、盤面を作るのは
- * `createWorld`、1 tick 進めるのは `Simulation`。このクラスは
+ * `createWorld`、延長戦の準備は `enterSuddenDeath`、1 tick 進めるのは
+ * `Simulation`。このクラスは
  * その順番を知っているだけで、ゲームのルールを持たない。
  *
  * 束ねる場所を1つ作っておくと、遊ぶとき・記録を再生するとき・
@@ -64,6 +66,7 @@ export class GameSession {
     return createWorld({
       seed: seedForRound(this.#config, this.#match.round),
       animals: this.#config.animals,
+      roundLimit: this.#config.roundLimit,
       bonusOf: startingBonusOf,
     });
   }
@@ -113,12 +116,18 @@ export class GameSession {
 
     const events = this.#simulation.step(this.#world, this.#gatherer.gather(this.#world));
 
-    const outcome = this.#rounds.check(this.#world, this.#config);
-    if (outcome === null) return events;
-
-    events.push(...applyOutcome(this.#match, this.#config, outcome));
-    if (!this.#match.finished) this.#intermission = ROUND_INTERMISSION;
-    return events;
+    const verdict = this.#rounds.judge(this.#world, this.#config, events);
+    switch (verdict.type) {
+      case 'continue':
+        return events;
+      case 'suddenDeath':
+        events.push(...enterSuddenDeath(this.#world, verdict.players, verdict.reason));
+        return events;
+      case 'over':
+        events.push(...applyOutcome(this.#match, this.#config, verdict.outcome));
+        if (!this.#match.finished) this.#intermission = ROUND_INTERMISSION;
+        return events;
+    }
   }
 
   /**

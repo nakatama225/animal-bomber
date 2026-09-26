@@ -47,6 +47,8 @@ export class CpuIntentSource implements IntentSource {
   readonly #rng: Rng;
   readonly #chain: readonly CpuBehavior[];
   #world: Readonly<WorldState> | null = null;
+  /** 最後に見た盤面が延長戦に入っていたか。 */
+  #sawSuddenDeath = false;
   #memory: CpuMemory;
 
   /**
@@ -72,8 +74,10 @@ export class CpuIntentSource implements IntentSource {
 
   next(world: Readonly<WorldState>): PlayerIntent {
     // ラウンドが変わると盤面が作り直される。前のラウンドの経路を捨てる。
-    if (world !== this.#world) {
+    // 延長戦に入ったときも、全員が開始位置へ移って盤面が片付くので同じく捨てる。
+    if (world !== this.#world || world.suddenDeath !== this.#sawSuddenDeath) {
       this.#world = world;
+      this.#sawSuddenDeath = world.suddenDeath;
       this.#memory = freshMemory(this.#rng);
     }
 

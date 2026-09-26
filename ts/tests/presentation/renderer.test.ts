@@ -3,9 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { CpuIntentSource, cpuSeed } from '../../src/ai/CpuIntentSource.js';
 import { CPU_LEVELS } from '../../src/ai/CpuLevel.js';
 import { GameSession } from '../../src/app/GameSession.js';
+import { centerOf } from '../../src/domain/core/Coord.js';
+import { enterSuddenDeath } from '../../src/domain/mutations/suddenDeath.js';
 import { defaultMatchConfig } from '../../src/domain/rules/MatchConfig.js';
+import { SPAWN_CELLS } from '../../src/domain/rules/tuning.js';
 import { hashWorld } from '../../src/domain/state/WorldState.js';
+import { layoutFor, screenX } from '../../src/presentation/render/Layout.js';
 import { Renderer } from '../../src/presentation/render/Renderer.js';
+import { makeWorld } from '../helpers.js';
 import { fakeCanvas } from './fakeCanvas.js';
 
 /**
@@ -48,6 +53,25 @@ describe('描画', () => {
     }
     // 1万回を超える描画を偽の canvas に通すので、既定の制限時間では足りない。
   }, 120_000);
+
+  it('延長戦で開始位置へ飛び移ったプレイヤーを、前の位置との途中に描かない', () => {
+    // 歩いた距離なら間を埋めると滑らかに見えるが、飛び移ったぶんを埋めると
+    // 盤面を横切って滑っていくように見える。
+    const world = makeWorld(3, ['rabbit']);
+    world.players[0]!.position = { x: 20.5, y: 14.5 };
+    const canvas = fakeCanvas();
+    const renderer = new Renderer(canvas.context, 920, 680);
+    renderer.beforeTick(world);
+    renderer.afterTick(enterSuddenDeath(world, [0], 'timeUp'), world);
+    renderer.draw(world, 0.5);
+
+    const layout = layoutFor(920, 680);
+    const spawn = centerOf(SPAWN_CELLS[0]!);
+    const drawnAt = canvas.log.filter((call) => call.name === 'translate').map((call) => call.args[0] as number);
+    const near = (x: number): boolean => drawnAt.some((drawn) => Math.abs(drawn - screenX(layout, x)) < 1);
+    expect(near(spawn.x)).toBe(true);
+    expect(near((20.5 + spawn.x) / 2)).toBe(false);
+  });
 });
 
 describe('描画の検査に使う偽の canvas', () => {

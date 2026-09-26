@@ -113,10 +113,17 @@ export class ParticleField {
         this.#addShake(6);
         return;
       case 'playerDown': {
+        // 位置はイベントが運んだものを使う。同じ tick に延長戦へ入ると、
+        // プレイヤーはもう開始位置へ移っている。
         const player = world.players[event.target];
-        if (player !== undefined) this.#knockedOut(player.position, lookOf(player.animal));
+        if (player !== undefined) this.#knockedOut(event.at, lookOf(player.animal));
         return;
       }
+      case 'suddenDeath':
+        // 延長戦に入るとき、自律物はまとめて片付けられる。踏まれたのでも寿命でもないので、
+        // 消えたときの煙を出さないよう、見えている顔ぶれをいまの盤面で取り直す。
+        this.#actors.reset(world);
+        return;
       case 'techniqueUsed': {
         // とくぎは、出したもの（炎・爆弾・障害物）がそのまま見えるので足さない。
         // 落とし穴のように、見せてはいけないものもある。

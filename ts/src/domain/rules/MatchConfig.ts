@@ -7,6 +7,8 @@ export interface MatchConfig {
   readonly roundLimit: Tick;
   /** 何勝で試合を取るか。 */
   readonly winsToTake: number;
+  /** 決着がつかないとき、1回だけ延長戦（サドンデス）に入るか。切ると引き分けにする。 */
+  readonly suddenDeath: boolean;
   /** 各プレイヤーの初期体力（半分の単位。6 で3個ぶん）。 */
   readonly startingHp: number;
   /**
@@ -25,6 +27,7 @@ export function defaultMatchConfig(seed: number, animals: readonly string[]): Ma
   return {
     roundLimit: secondsToTicks(ROUND_SECONDS),
     winsToTake: WINS_TO_TAKE_MATCH,
+    suddenDeath: true,
     startingHp: 6,
     seed,
     animals,

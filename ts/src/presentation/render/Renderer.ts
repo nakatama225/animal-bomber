@@ -53,6 +53,7 @@ export class Renderer {
 
   /** tick を進めた直後に、起きたイベントを渡す。粒子を出す。 */
   afterTick(events: readonly SimEvent[], world: Readonly<WorldState>): void {
+    this.#history.onEvents(events, world);
     this.#effects.onEvents(events, world);
     this.#effects.step();
   }
