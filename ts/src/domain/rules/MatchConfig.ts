@@ -29,7 +29,8 @@ export interface MatchConfig {
    * 各プレイヤーが始まる隅（`SPAWN_CELLS` の番号）。プレイヤー番号の順に、全員ぶん。
    *
    * 省くと、2人なら左上と右下の対角、それ以外は番号の順（1P 左上・2P 右上・3P 左下・4P 右下）。
-   * 1台で2人＋CPU2体のときだけ、原型に合わせて 2P を右下にするために使う（`localSetup.ts`）。
+   * 1台の試合は、遊び方ごとの並びをいつも渡す（`localSetup.ts`）。省いたときと並びが違うのは2人＋CPU2体だけで、
+   * 原型に合わせて 2P を右下にする（番号の順だと右上になる）。
    * ⚠️ 通信対戦では読まない（`protocol.ts` の `parseLanSettings`）。原型の通信対戦は番号の順。
    */
   readonly spawnOrder?: readonly number[];

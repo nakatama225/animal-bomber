@@ -169,6 +169,17 @@ describe('開始位置', () => {
     for (const spawnOrder of [[0, 3, 1], [0, 3, 1, 4], [0, 3, 1, 1], [0, 3, 1, 1.5], [0, 3, 1, -1]]) {
       expect(() => createWorld({ seed: 5, animals, spawnOrder }), JSON.stringify(spawnOrder)).toThrow('開始位置の並び');
     }
+    // 人数より長く、違う隅がちょうど人数ぶんある並び。長さを比べる条件でしか止まらず、止めないと
+    // 余りを黙って捨てて試合が始まる。上の [0, 3, 1] は、隅が重ならないかの条件でも止まる。
+    const tooLong = [
+      { animals: ['rabbit', 'frog'], spawnOrder: [0, 3, 0] },
+      { animals, spawnOrder: [0, 3, 1, 2, 0] },
+    ];
+    for (const { animals: players, spawnOrder } of tooLong) {
+      expect(() => createWorld({ seed: 5, animals: players, spawnOrder }), JSON.stringify(spawnOrder)).toThrow(
+        '開始位置の並び',
+      );
+    }
   });
 
   it('次のラウンドも、渡した並びの隅から始まる', () => {

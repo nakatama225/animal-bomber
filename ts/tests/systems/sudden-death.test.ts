@@ -147,7 +147,7 @@ describe('延長戦の準備', () => {
     expect(world.players.every((p) => p.activeBombs === 0)).toBe(true);
   });
 
-  it('加わる者は開始位置へ戻り、体力1つ・爆弾と火力と靴が上限・しばらく無敵になる', () => {
+  it('加わる者はプレイヤー番号の順に開始位置の表の隅へ移り、体力1つ・爆弾と火力と靴が上限・しばらく無敵になる', () => {
     const world = makeWorld(3, THREE);
     world.now = tick(500);
     const player = world.players[2]!;
@@ -166,7 +166,7 @@ describe('延長戦の準備', () => {
     expect(player.invulnerableUntil).toBe(500 + SUDDEN_DEATH_INVULNERABLE);
     expect(player.specialCharges).toBe(0);
     expect(player.effects.active()).toEqual([]);
-    // 技の途中でも外す。外さないと、技の続きが開始位置で走る。
+    // 技の途中でも外す。外さないと、技の続きが移った先の隅で走る。
     expect(player.action).toBeNull();
   });
 
