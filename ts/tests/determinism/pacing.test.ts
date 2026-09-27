@@ -4,7 +4,7 @@ import { IntentGatherer } from '../../src/domain/intent/IntentSource.js';
 import { createWorld, hashWorld } from '../../src/domain/state/WorldState.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
 import { InputLog, ReplayIntentSource } from '../../src/net/InputLog.js';
-import { TickAccumulator } from '../../src/platform/FrameLoop.js';
+import { GameSpeed, TickAccumulator } from '../../src/platform/FrameLoop.js';
 import { press } from '../helpers.js';
 
 const SEED = 20260925;
@@ -110,5 +110,45 @@ describe('実時間から tick への換算', () => {
     accumulator.consume(1000 / 60 / 2);
     expect(accumulator.alpha).toBeGreaterThan(0.4);
     expect(accumulator.alpha).toBeLessThan(0.6);
+  });
+});
+
+describe('ゲームの速さ', () => {
+  /** `take()` を n 回呼んだ結果の並び。 */
+  const takes = (speed: GameSpeed, n: number): number[] => Array.from({ length: n }, () => speed.take());
+
+  it('等倍では、1回の呼び出しで 1 tick 進む', () => {
+    expect(takes(new GameSpeed(), 4)).toEqual([1, 1, 1, 1]);
+  });
+
+  it('倍率ぶんの tick を進め、端数は次へ持ち越す', () => {
+    const half = new GameSpeed();
+    half.set(0.5);
+    expect(takes(half, 4)).toEqual([0, 1, 0, 1]);
+
+    const quick = new GameSpeed();
+    quick.set(1.25);
+    expect(takes(quick, 8)).toEqual([1, 1, 1, 2, 1, 1, 1, 2]);
+
+    const triple = new GameSpeed();
+    triple.set(3);
+    expect(takes(triple, 2)).toEqual([3, 3]);
+  });
+
+  it('長く回しても、進んだ tick の合計は倍率どおり（端数の誤差が積もらない）', () => {
+    const speed = new GameSpeed();
+    speed.set(1.75);
+    let total = 0;
+    for (let i = 0; i < 60_000; i += 1) total += speed.take();
+    expect(total).toBe(105_000);
+  });
+
+  it('範囲の外と、刻みに乗らない値にはできない', () => {
+    const speed = new GameSpeed();
+    for (const rate of [0.25, 3.25, 1.1, Number.NaN]) {
+      expect(() => speed.set(rate), String(rate)).toThrow('ゲームの速さにできない値');
+    }
+    // できなかったときは、前の倍率のまま。
+    expect(speed.rate).toBe(1);
   });
 });

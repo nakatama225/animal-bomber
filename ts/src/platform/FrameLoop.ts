@@ -53,6 +53,55 @@ export class TickAccumulator {
   }
 }
 
+/**
+ * ゲームの速さに選べる範囲。原型と同じく 0.5〜3 倍を 0.25 刻み。
+ *
+ * CPU どうしの試合を眺めるのが退屈なときに上げる（原型のつまみの説明）。
+ * 刻みを 0.25 にしてあるので、下の `GameSpeed` の端数の足し算は2進数で割り切れ、誤差が積もらない。
+ */
+export const SPEED_RANGE = { min: 0.5, max: 3, step: 0.25 } as const;
+
+/**
+ * ゲームの速さ（倍率）を、進める tick の数に換える。
+ *
+ * 倍速は経過時間を伸ばさず、進める tick の数を変えて表す（`FrameLoop` の説明を参照）。
+ * 1 tick ぶんの時間が経つたびに `take()` を呼ぶと、0.5 倍なら2回に1回だけ 1 を、
+ * 1.5 倍なら 1 と 2 を交互に返す。端数は次の呼び出しへ持ち越す。
+ *
+ * ⚠️ 通信対戦には使わない。全員の端末が同じ速さで進める必要があり、1台だけ速くしても
+ * ほかの人の入力を待って止まるだけになる。
+ */
+export class GameSpeed {
+  #rate = 1;
+  #carry = 0;
+
+  /** いまの倍率。 */
+  get rate(): number {
+    return this.#rate;
+  }
+
+  /**
+   * 倍率を変える。持ち越した端数はそのまま残す。
+   *
+   * @throws RangeError 範囲の外か、刻みに乗らない値のとき
+   */
+  set(rate: number): void {
+    const steps = (rate - SPEED_RANGE.min) / SPEED_RANGE.step;
+    if (!(rate >= SPEED_RANGE.min && rate <= SPEED_RANGE.max) || !Number.isInteger(steps)) {
+      throw new RangeError(`ゲームの速さにできない値：${rate}`);
+    }
+    this.#rate = rate;
+  }
+
+  /** 1 tick ぶんの時間が経つたびに呼び、この回に進める tick の数を受け取る。 */
+  take(): number {
+    this.#carry += this.#rate;
+    const ticks = Math.floor(this.#carry);
+    this.#carry -= ticks;
+    return ticks;
+  }
+}
+
 export interface FrameLoopHandlers {
   /** 1 tick 進める。 */
   readonly onTick: () => void;

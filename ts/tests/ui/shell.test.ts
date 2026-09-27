@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { Shell, type ShellElements, type ShellTools } from '../../src/app/Shell.js';
+import type { PeerMessage } from '../../src/net/protocol.js';
 import type { WebSocketLinkHandlers } from '../../src/platform/WebSocketLink.js';
 import type { SoundName } from '../../src/presentation/audio/SoundBank.js';
 import type { SoundSetting } from '../../src/presentation/menu/MenuFlow.js';
@@ -24,9 +25,10 @@ function mount(sound: SoundSetting = 'both'): {
   shell: Shell;
   elements: ShellElements;
   played: SoundName[];
-  music: { started: number; stopped: number };
+  music: { started: number; stopped: number; speeds: number[] };
   captured: boolean[];
   relay: () => WebSocketLinkHandlers;
+  sent: PeerMessage[];
 } {
   const make = (id: string): HTMLElement => {
     const element = document.createElement('div');
@@ -49,7 +51,8 @@ function mount(sound: SoundSetting = 'both'): {
     lanStatus: make('lan-status'),
   };
   const played: SoundName[] = [];
-  const music = { started: 0, stopped: 0 };
+  const music = { started: 0, stopped: 0, speeds: [] as number[] };
+  const sent: PeerMessage[] = [];
   const captured: boolean[] = [];
   let relay: WebSocketLinkHandlers | null = null;
   const tools: ShellTools = {
@@ -57,7 +60,11 @@ function mount(sound: SoundSetting = 'both'): {
     keyboard: { anyOf: () => false },
     gamepads: () => [],
     sounds: { play: (name) => played.push(name) },
-    music: { start: () => (music.started += 1), stop: () => (music.stopped += 1) },
+    music: {
+      start: () => (music.started += 1),
+      stop: () => (music.stopped += 1),
+      setSpeed: (multiplier) => music.speeds.push(multiplier),
+    },
     sound,
     setSound: () => undefined,
     captureKeys: (on) => captured.push(on),
@@ -66,14 +73,14 @@ function mount(sound: SoundSetting = 'both'): {
     leaveLan: () => undefined,
     connect: (_url, handlers) => {
       relay = handlers;
-      return { send: () => undefined, close: () => undefined };
+      return { send: (text) => sent.push(text), close: () => undefined };
     },
   };
   const connected = (): WebSocketLinkHandlers => {
     if (relay === null) throw new Error('つないでいない');
     return relay;
   };
-  return { shell: new Shell(elements, tools), elements, played, music, captured, relay: connected };
+  return { shell: new Shell(elements, tools), elements, played, music, captured, relay: connected, sent };
 }
 
 afterEach(() => document.body.replaceChildren());
@@ -215,5 +222,86 @@ describe('画面の切り替え', () => {
     // 51秒ぶん進めると、残り10秒と9秒の2回が鳴っている。
     for (let i = 0; i < 60 * 51; i += 1) shell.tick();
     expect(played.filter((name) => name === 'tick')).toHaveLength(2);
+  });
+});
+
+describe('ゲームの速さ', () => {
+  function startSolo(shell: Shell, elements: ShellElements): void {
+    shell.showMenu();
+    press(elements.menu, '[data-choice="solo"]');
+    press(elements.menu, '[data-action="next"]');
+    press(elements.menu, '[data-action="start"]');
+    shell.draw(0);
+  }
+
+  /** ツールバーのつまみを動かす（マウスで動かしたときと同じく input が起きる）。 */
+  function slide(elements: ShellElements, rate: number): void {
+    const input = elements.toolbar.querySelector('[data-field="speed"] input');
+    if (!(input instanceof HTMLInputElement)) throw new Error('つまみが無い');
+    input.value = String(rate);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  const clock = (elements: ShellElements): string | null | undefined =>
+    elements.side.querySelector('.time')?.textContent;
+
+  it('1台の試合では、つまみを2倍にすると、1回の呼び出しで 2 tick 進み、曲も速くなる', () => {
+    const { shell, elements, music } = mount();
+    startSolo(shell, elements);
+    slide(elements, 2);
+    // 60回の呼び出しで 120 tick（2秒）。等倍なら 1 秒で「2:59」になる。
+    for (let i = 0; i < 60; i += 1) shell.tick();
+    shell.draw(0);
+    expect(clock(elements)).toBe('2:58');
+    expect(music.speeds).toEqual([2]);
+  });
+
+  it('0.5倍なら、2回の呼び出しで 1 tick 進む', () => {
+    const { shell, elements } = mount();
+    startSolo(shell, elements);
+    slide(elements, 0.5);
+    for (let i = 0; i < 120; i += 1) shell.tick();
+    shell.draw(0);
+    expect(clock(elements)).toBe('2:59');
+    for (let i = 0; i < 120; i += 1) shell.tick();
+    shell.draw(0);
+    expect(clock(elements)).toBe('2:58');
+  });
+
+  it('もういっかいでも速さを保ち、つまみもその倍率から始まる', () => {
+    const { shell, elements } = mount();
+    startSolo(shell, elements);
+    slide(elements, 2);
+    shell.restart();
+    shell.draw(0);
+    expect(elements.toolbar.querySelector('[data-field="speed"] .speed-value')?.textContent).toBe('2×');
+    for (let i = 0; i < 60; i += 1) shell.tick();
+    shell.draw(0);
+    expect(clock(elements)).toBe('2:58');
+  });
+
+  it('通信対戦にはつまみを出さず、前の試合で速くしていても1回の呼び出しで 1 tick だけ進める', () => {
+    // 全員の端末が同じ速さで進める必要がある。1台だけ速くしても、ほかの人の入力を待って止まる。
+    const { shell, elements, relay, sent } = mount();
+    startSolo(shell, elements);
+    slide(elements, 3);
+
+    shell.startLan('relay.local:8777');
+    const config = {
+      match: { roundLimit: 600, winsToTake: 3, suddenDeath: true, startingHp: [6, 6, 6, 6], seed: 1, animals: ['rabbit', 'fox', 'frog', 'mole'] },
+      cpu: ['easy', 'easy', 'easy', 'easy'],
+    };
+    relay().onMessage(JSON.stringify({ t: 'welcome', seat: 1, role: 'guest', seats: [0] }));
+    relay().onMessage(JSON.stringify({ t: 'start', seats: [0, 1], config }));
+    // 相手（0番）の入力を先に10 tick ぶん届けておく。待たずに進められる状態にする。
+    for (let t = 0; t < 10; t += 1) relay().onMessage(JSON.stringify({ t: 'input', seat: 0, tick: t, bits: 0 }));
+    shell.draw(0);
+    expect(elements.toolbar.querySelector('[data-field="speed"]')).toBeNull();
+
+    const inputs = (): number => sent.filter((message) => message.t === 'input').length;
+    const before = inputs();
+    shell.tick();
+    // 1 tick 進めるごとに、自分の入力を1通送る。
+    expect(inputs() - before).toBe(1);
   });
 });

@@ -3,6 +3,7 @@ import { CpuIntentSource, cpuSeed } from '../ai/CpuIntentSource.js';
 import type { IntentSource } from '../domain/intent/IntentSource.js';
 import type { PlayerId } from '../domain/state/PlayerState.js';
 import { CombinedIntentSource } from '../platform/CombinedIntentSource.js';
+import { GameSpeed } from '../platform/FrameLoop.js';
 import { GamepadIntentSource, type PadSnapshot } from '../platform/GamepadInput.js';
 import { GAMEPAD_HELP, keyHelpFor, type KeyHelp } from '../platform/keyHelp.js';
 import {
@@ -17,6 +18,7 @@ import { BannerOverlay } from '../platform/ui/BannerOverlay.js';
 import { pointerButton } from '../platform/ui/dom.js';
 import { MenuView } from '../platform/ui/MenuView.js';
 import { SidePanel, type KeyHelpEntry, type KeyHelpFor } from '../platform/ui/SidePanel.js';
+import { speedControl } from '../platform/ui/SpeedControl.js';
 import { Toasts } from '../platform/ui/Toasts.js';
 import { Countdown } from '../presentation/audio/Countdown.js';
 import type { SoundBank } from '../presentation/audio/SoundBank.js';
@@ -51,6 +53,8 @@ export interface MusicControl {
   /** 鳴っていなければ頭から鳴らす。鳴っていれば何もしない。 */
   readonly start: () => void;
   readonly stop: () => void;
+  /** ゲームの速さの倍率に合わせて、曲の速さを変える。 */
+  readonly setSpeed: (multiplier: number) => void;
 }
 
 /** 外から受け取る道具。ブラウザの API に触れるものは、起動の入口が作って渡す。 */
@@ -90,6 +94,8 @@ interface ActiveMatch {
   readonly side: SidePanel;
   /** 試合が決まった幕に並べるボタン。 */
   readonly finalActions: readonly HTMLElement[];
+  /** ゲームの速さの倍率を効かせるか。1台で遊ぶときだけ。通信対戦は全員が同じ速さで進める。 */
+  readonly paced: boolean;
 }
 
 const KEY_LAYOUTS: Readonly<Record<'solo' | 'left' | 'right', KeyBinding>> = {
@@ -114,6 +120,8 @@ export class Shell {
   readonly #toasts: Toasts;
   #match: ActiveMatch | null = null;
   #lastSetup: LocalSetup | null = null;
+  /** ゲームの速さ。試合をまたいで持つ（もういっかいで等倍に戻さない。原型と同じ）。 */
+  readonly #speed = new GameSpeed();
 
   constructor(elements: ShellElements, tools: ShellTools) {
     this.#elements = elements;
@@ -151,8 +159,9 @@ export class Shell {
     this.#begin(runner, () => help, [
       pointerButton('もういっかい', () => this.restart(), { data: { action: 'again' } }),
       pointerButton('タイトルへ', () => this.showMenu(), { data: { action: 'title' } }),
-    ]);
+    ], true);
     this.#setToolbar([
+      speedControl(this.#speed.rate, (rate) => this.#setSpeed(rate)),
       pointerButton('⏸ ポーズ', () => this.togglePause(), { data: { action: 'pause' } }),
       pointerButton('タイトルへ', () => this.showMenu(), { data: { action: 'quit' } }),
     ]);
@@ -171,7 +180,7 @@ export class Shell {
       ...(this.#tools.connect === undefined ? {} : { connect: this.#tools.connect }),
     });
     // 自分のプレイヤー番号は、つないで受け取るまで分からない。名札の「あなた」から選ぶ。
-    this.#begin(runner, (source) => this.#localHelp(source), []);
+    this.#begin(runner, (source) => this.#localHelp(source), [], false);
     this.#setToolbar([pointerButton('ぬける', () => this.#tools.leaveLan(), { data: { action: 'leave' } })]);
   }
 
@@ -185,14 +194,27 @@ export class Shell {
     this.#match?.runner.togglePause();
   }
 
-  /** 画面のループから、1 tick ごとに呼ばれる。 */
+  /**
+   * 画面のループから、1 tick ぶんの時間が経つごとに呼ばれる。
+   *
+   * 1台で遊ぶときは、ゲームの速さの倍率ぶんの tick を進める（0.5 倍なら2回に1回）。
+   */
   tick(): void {
     const match = this.#match;
-    if (match === null) return;
+    if (match === null || !this.#canStep(match)) return;
+    const count = match.paced ? this.#speed.take() : 1;
+    for (let i = 0; i < count && this.#canStep(match); i += 1) this.#step(match);
+  }
+
+  /** いま1 tick 進められるか。止めている間と、通信対戦で全員の入力がそろうまでは進めない。 */
+  #canStep(match: ActiveMatch): boolean {
+    return match.runner.hud !== null && match.runner.ready;
+  }
+
+  #step(match: ActiveMatch): void {
     const { runner } = match;
     const hud = runner.hud;
-    // 通信対戦では、全員の入力がそろうまで進めない。
-    if (hud === null || !runner.ready) return;
+    if (hud === null) return;
     // ラウンドが終わると盤面が作り直されるので、進める前の盤面を控えて渡す。
     const world = hud.world;
     match.renderer.beforeTick(world);
@@ -227,7 +249,7 @@ export class Shell {
     else music.stop();
   }
 
-  #begin(runner: MatchRunner, help: KeyHelpFor, finalActions: readonly HTMLElement[]): void {
+  #begin(runner: MatchRunner, help: KeyHelpFor, finalActions: readonly HTMLElement[], paced: boolean): void {
     this.#endMatch();
     const presenter = new Presenter(this.#tools.sounds, this.#toasts, (id, world) => {
       const roster = runner.hud?.roster;
@@ -242,6 +264,7 @@ export class Shell {
       countdown: new Countdown(this.#tools.sounds),
       side: new SidePanel(this.#elements.side, help),
       finalActions,
+      paced,
     };
     this.#showBoard(runner.world !== null);
   }
@@ -273,6 +296,11 @@ export class Shell {
     this.#bannerView.show(null);
     this.#elements.pause.hidden = true;
     this.#setToolbar([]);
+  }
+
+  #setSpeed(rate: number): void {
+    this.#speed.set(rate);
+    this.#tools.music.setSpeed(rate);
   }
 
   #setToolbar(buttons: readonly HTMLElement[]): void {

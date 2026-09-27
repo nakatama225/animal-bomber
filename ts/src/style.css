@@ -195,7 +195,86 @@ button {
 
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+/* ゲームの速さのつまみ（1台で遊ぶときだけ、ツールバーの先頭に出す）。色と形は原型から */
+.speed {
+  flex: 1 0 100%;
+  background: var(--panel);
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  padding: 9px 11px;
+}
+
+.speed.fast {
+  border-color: var(--accent2);
+  box-shadow: 0 0 0 2px rgba(255, 210, 63, 0.15) inset;
+}
+
+.speed-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 10.5px;
+  color: var(--dim);
+  letter-spacing: 0.12em;
+  margin-bottom: 7px;
+}
+
+.speed-value {
+  color: var(--accent2);
+  font-weight: 900;
+  font-size: 15px;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.speed input[type='range'] {
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  height: 7px;
+  border-radius: 4px;
+  outline: none;
+  cursor: pointer;
+  background: linear-gradient(90deg, #5c4433 0%, var(--accent) 50%, var(--accent2) 100%);
+}
+
+/* ⚠️ つまみの幅（17px）は、目盛りの位置の計算（src/platform/ui/SpeedControl.ts の THUMB_PX）と揃える。
+   Firefox 用の寸法（下）は原型の値のまま */
+.speed input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #fff6ec;
+  border: 3px solid var(--accent);
+  cursor: pointer;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.55);
+}
+
+.speed input[type='range']::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #fff6ec;
+  border: 3px solid var(--accent);
+  cursor: pointer;
+}
+
+.speed-marks {
+  position: relative;
+  height: 12px;
+  font-size: 9.5px;
+  color: var(--dim);
+  margin-top: 4px;
+}
+
+.speed-marks span {
+  position: absolute;
+  white-space: nowrap;
 }
 
 .toolbar button,
