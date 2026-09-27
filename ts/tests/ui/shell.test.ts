@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { Shell, type ShellElements, type ShellTools } from '../../src/app/Shell.js';
 import { ANIMAL_LOOKS } from '../../src/content/animals.js';
 import type { PeerMessage } from '../../src/net/protocol.js';
+import type { PadSnapshot } from '../../src/platform/GamepadInput.js';
 import type { WebSocketLinkHandlers } from '../../src/platform/WebSocketLink.js';
 import type { SoundName } from '../../src/presentation/audio/SoundBank.js';
 import type { SoundSetting } from '../../src/presentation/menu/MenuFlow.js';
@@ -26,8 +27,13 @@ function press(root: ParentNode, selector: string): void {
  * 画面を組み立てる。
  *
  * @param held いま押しているキー（`KeyboardEvent.code`）。呼ばれるたびに読むので、途中で変えられる
+ * @param pads いまのゲームパッド。同じく呼ばれるたびに読む
  */
-function mount(sound: SoundSetting = 'both', held: () => readonly string[] = () => []): {
+function mount(
+  sound: SoundSetting = 'both',
+  held: () => readonly string[] = () => [],
+  pads: () => readonly (PadSnapshot | null)[] = () => [],
+): {
   shell: Shell;
   elements: ShellElements;
   played: SoundName[];
@@ -35,6 +41,7 @@ function mount(sound: SoundSetting = 'both', held: () => readonly string[] = () 
   captured: ('play' | 'menu')[];
   relay: () => WebSocketLinkHandlers;
   sent: PeerMessage[];
+  left: { count: number };
 } {
   const make = (id: string): HTMLElement => {
     const element = document.createElement('div');
@@ -59,12 +66,13 @@ function mount(sound: SoundSetting = 'both', held: () => readonly string[] = () 
   const played: SoundName[] = [];
   const music = { started: 0, stopped: 0, speeds: [] as number[] };
   const sent: PeerMessage[] = [];
+  const left = { count: 0 };
   const captured: ('play' | 'menu')[] = [];
   let relay: WebSocketLinkHandlers | null = null;
   const tools: ShellTools = {
     context: fakeCanvas({ keepLog: false }).context,
     keyboard: { anyOf: (codes) => codes.some((code) => held().includes(code)) },
-    gamepads: () => [],
+    gamepads: pads,
     sounds: { play: (name) => played.push(name) },
     music: {
       start: () => (music.started += 1),
@@ -76,7 +84,7 @@ function mount(sound: SoundSetting = 'both', held: () => readonly string[] = () 
     captureKeys: (screen) => captured.push(screen),
     newSeed: () => 7,
     openLan: () => undefined,
-    leaveLan: () => undefined,
+    leaveLan: () => (left.count += 1),
     connect: (_url, handlers) => {
       relay = handlers;
       return { send: (text) => sent.push(text), close: () => undefined };
@@ -86,7 +94,7 @@ function mount(sound: SoundSetting = 'both', held: () => readonly string[] = () 
     if (relay === null) throw new Error('つないでいない');
     return relay;
   };
-  return { shell: new Shell(elements, tools), elements, played, music, captured, relay: connected, sent };
+  return { shell: new Shell(elements, tools), elements, played, music, captured, relay: connected, sent, left };
 }
 
 afterEach(() => document.body.replaceChildren());
@@ -453,4 +461,128 @@ describe('キーボードでメニューを動かす', () => {
     expect(elements.menu.hidden).toBe(false);
     expect(screenOf(elements)).toBe('title');
   }, 120_000);
+});
+
+describe('ゲームパッドとロビーでメニューを動かす', () => {
+  const cursorOf = (root: HTMLElement): HTMLElement | null => root.querySelector('.navcur');
+  const screenOf = (elements: ShellElements): string | undefined =>
+    elements.menu.querySelector<HTMLElement>('[data-screen]')?.dataset['screen'];
+
+  /** 押しているボタンの番号を差し替えられるパッド（標準の並び）。 */
+  function fakePad(): { read: () => readonly (PadSnapshot | null)[]; hold: (...buttons: number[]) => void } {
+    let held = new Set<number>();
+    const read = (): readonly (PadSnapshot | null)[] => [
+      null,
+      {
+        mapping: 'standard',
+        connected: true,
+        index: 1,
+        buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: held.has(i) })),
+        axes: [0, 0, 0, 0],
+      },
+    ];
+    return { read, hold: (...buttons) => (held = new Set(buttons)) };
+  }
+  const A = 0;
+  const UP = 12;
+  const DOWN = 13;
+
+  /** 押して1枚描き、離して1枚描く。 */
+  function tap(shell: Shell, pad: ReturnType<typeof fakePad>, button: number): void {
+    pad.hold(button);
+    shell.draw(0);
+    pad.hold();
+    shell.draw(0);
+  }
+
+  it('パッドだけで、遊び方を選んで次の画面へ進める', () => {
+    const pad = fakePad();
+    const { shell, elements } = mount('both', () => [], pad.read);
+    shell.showMenu();
+    tap(shell, pad, DOWN);
+    expect(cursorOf(elements.menu)?.dataset['choice']).toBe('duo');
+    tap(shell, pad, A);
+    expect(screenOf(elements)).toBe('pick');
+    expect(elements.menu.querySelectorAll('[data-nav="pick-1"]').length).toBeGreaterThan(0);
+  });
+
+  it('A を押したまま次の画面へ移っても、離すまで次の決定は起きない', () => {
+    // 前回の状態を画面の切り替えで消すと、押したままの A が次の画面の先頭の項目も押してしまう。
+    const pad = fakePad();
+    const { shell, elements } = mount('both', () => [], pad.read);
+    shell.showMenu();
+    tap(shell, pad, A);
+    tap(shell, pad, A);
+    expect(screenOf(elements)).toBe('pick');
+    tap(shell, pad, UP);
+    expect(cursorOf(elements.menu)?.dataset['action']).toBe('next');
+    pad.hold(A);
+    for (let i = 0; i < 5; i += 1) shell.draw(0);
+    expect(screenOf(elements)).toBe('rules');
+    // 押されていれば、先頭の行（1P の爆風の回数）の1つ目（1回）が選ばれる。
+    expect(elements.menu.querySelector('[data-field="hits-p1"] .on')?.textContent).toBe('3回');
+  });
+
+  it('パッドの A を押したまま「はじめる」を決めても、開始位置に爆弾を置かない', () => {
+    const pad = fakePad();
+    const { shell, elements, played } = mount('both', () => [], pad.read);
+    shell.showMenu();
+    tap(shell, pad, A);
+    tap(shell, pad, A);
+    tap(shell, pad, UP);
+    tap(shell, pad, A);
+    expect(screenOf(elements)).toBe('rules');
+    tap(shell, pad, UP);
+    pad.hold(A);
+    shell.draw(0);
+    expect(elements.menu.hidden).toBe(true);
+    for (let i = 0; i < 30; i += 1) shell.tick();
+    expect(played.filter((name) => name === 'place')).toHaveLength(0);
+    // 対照：離して押し直せば置く。
+    pad.hold();
+    shell.tick();
+    pad.hold(A);
+    shell.tick();
+    expect(played.filter((name) => name === 'place')).toHaveLength(1);
+  });
+
+  /** 通信対戦のロビーまで進める。 */
+  function lobby(seat: number): ReturnType<typeof mount> {
+    const mounted = mount();
+    mounted.shell.startLan('relay.local:8777');
+    mounted.relay().onMessage(JSON.stringify({ t: 'welcome', seat, role: seat === 0 ? 'host' : 'guest', seats: seat === 0 ? [] : [0] }));
+    mounted.shell.draw(0);
+    return mounted;
+  }
+
+  it('ロビーでは、ホストがキーボードで動物を選び、「はじめる」を決められる', () => {
+    const { shell, elements, sent } = lobby(0);
+    expect(screenOf(elements)).toBe('lobby');
+    shell.navigate('right');
+    shell.navigate('confirm');
+    const second = ANIMAL_LOOKS[1]!;
+    expect(cursorOf(elements.menu)?.dataset['nav']).toBe('animal-0');
+    // 先頭から上へ回ると、いちばん下の「はじめる」。
+    shell.navigate('up');
+    expect(cursorOf(elements.menu)?.dataset['action']).toBe('start');
+    shell.navigate('confirm');
+    const start = sent.find((message) => message.t === 'start');
+    expect(start?.t === 'start' ? start.config.match.animals[0] : undefined).toBe(second.key);
+  });
+
+  it('ロビーでは、戻るを押しても抜けない。ゲストは何を押しても何も起きない', () => {
+    // ぬけるとページを開き直すので、押し間違えると試合ごと抜けてしまう。
+    const host = lobby(0);
+    host.shell.navigate('back');
+    host.shell.navigate('back');
+    expect(host.left.count).toBe(0);
+    expect(screenOf(host.elements)).toBe('lobby');
+
+    document.body.replaceChildren();
+    const guest = lobby(1);
+    for (const command of ['down', 'confirm', 'confirm', 'back'] as const) guest.shell.navigate(command);
+    expect(guest.left.count).toBe(0);
+    expect(cursorOf(guest.elements.menu)).toBeNull();
+    expect(guest.sent.filter((message) => message.t === 'start')).toHaveLength(0);
+  });
 });

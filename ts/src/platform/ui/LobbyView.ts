@@ -25,6 +25,9 @@ export interface LobbyHooks {
  * ホスト（1P）は4つの枠それぞれの動物・体力・CPU の強さと、ルールを決める。
  * ゲストはホストが決めるのを待つ。決めた内容は、試合が始まるときに全員へ配られる
  * （始まる前のゲストの画面には出ない。出すには中継に新しい種類のメッセージが要る）。
+ *
+ * キーボードとパッドでも動かせる（選択肢の行と「はじめる」に `data-nav`。選択肢の行は `chipRow` が付ける）。
+ * 枠ごとの行は、その枠の動物・体力・CPU の強さの順に並ぶ（原型と同じ）。ゲストには動かすものが無い。
  */
 export class LobbyView {
   readonly #root: HTMLElement;
@@ -117,7 +120,7 @@ export class LobbyView {
         this.#row('サドンデス', 'sudden', [true, false], setup.suddenDeath, (on) => (on ? 'ON' : 'OFF'), (on) =>
           this.#choices.setSuddenDeath(on)),
       ]),
-      pointerButton('はじめる', () => this.#hooks.start(this.#choices.setup), { className: 'go', data: { action: 'start' } }),
+      pointerButton('はじめる', () => this.#hooks.start(this.#choices.setup), { className: 'go', data: { action: 'start', nav: 'go' } }),
     ];
   }
 }

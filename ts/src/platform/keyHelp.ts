@@ -40,6 +40,9 @@ export function menuHelp(): string {
   return `${moves} で選び、${names(navKeysOf('confirm'))} で決める。${names(navKeysOf('back'))} で1つ前の画面へ（マウスでも押せる）`;
 }
 
+/** ゲームパッドでメニューを動かすときの説明（`GamepadInput.ts` の `PadMenuInput` と同じ）。 */
+export const PAD_MENU_HELP = '🎮 十字キーか左スティックで選び、A で決める。B で1つ前の画面へ';
+
 /** ゲームパッドの割り当ての説明（`GamepadInput.ts` の割り当てと同じ）。 */
 export const GAMEPAD_HELP: readonly string[] = [
   '🎮 十字キーか左スティックでうごく',

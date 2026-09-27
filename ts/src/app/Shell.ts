@@ -4,7 +4,7 @@ import type { IntentSource } from '../domain/intent/IntentSource.js';
 import type { PlayerId } from '../domain/state/PlayerState.js';
 import { CombinedIntentSource } from '../platform/CombinedIntentSource.js';
 import { GameSpeed } from '../platform/FrameLoop.js';
-import { GamepadIntentSource, type PadSnapshot } from '../platform/GamepadInput.js';
+import { GamepadIntentSource, PadMenuInput, type PadSnapshot } from '../platform/GamepadInput.js';
 import { GAMEPAD_HELP, keyHelpFor, type KeyHelp } from '../platform/keyHelp.js';
 import {
   KeyboardIntentSource,
@@ -124,12 +124,14 @@ export class Shell {
   #lastSetup: LocalSetup | null = null;
   /** ゲームの速さ。試合をまたいで持つ（もういっかいで等倍に戻さない。原型と同じ）。 */
   readonly #speed = new GameSpeed();
-  /** キーボードでメニューと優勝の幕を動かすカーソル。 */
+  /** キーボードとパッドで、メニュー・ロビー・優勝の幕を動かすカーソル。 */
   readonly #nav = new MenuNavigator();
+  readonly #padMenu: PadMenuInput;
 
   constructor(elements: ShellElements, tools: ShellTools) {
     this.#elements = elements;
     this.#tools = tools;
+    this.#padMenu = new PadMenuInput(tools.gamepads);
     this.#flow = new MenuFlow(undefined, tools.sound);
     this.#bannerView = new BannerOverlay(elements.banner);
     this.#toasts = new Toasts(elements.toasts);
@@ -200,15 +202,16 @@ export class Shell {
   }
 
   /**
-   * キーボードやパッドの操作で、メニューか優勝の幕のカーソルを動かす。
+   * キーボードやパッドの操作で、メニュー・ロビー・優勝の幕のカーソルを動かす。
    *
    * 試合の最中は何もしない（幕にボタンが無いので、カーソルの並びが空になる）。
+   * ⚠️ ロビーでは戻る（Escape・B）で何もしない。ぬけるとページを開き直すので、押し間違えると
+   * 試合ごと抜けてしまう。ぬけるときは「← ぬける」をマウスで押す。
    */
   navigate(command: NavCommand): void {
     const root = this.#navRoot();
-    if (root === null) return;
     const result = this.#nav.handle(root, command);
-    if (result.kind === 'back' && root === this.#elements.menu) {
+    if (result.kind === 'back' && this.#match === null) {
       this.#menu.back();
       this.#nav.paint(root);
     }
@@ -216,8 +219,7 @@ export class Shell {
 
   /** カーソルの枠を消す（マウスを動かしたとき）。 */
   hideCursor(): void {
-    const root = this.#navRoot();
-    if (root !== null) this.#nav.hide(root);
+    this.#nav.hide(this.#navRoot());
   }
 
   /**
@@ -254,6 +256,9 @@ export class Shell {
 
   /** 画面のループから、1枚描くごとに呼ばれる。 */
   draw(alpha: number): void {
+    // パッドは押したことを知らせてくれないので、描くたびに読む。決めた項目が画面を替えることがあるので、
+    // 試合の部品を読むより前に済ませる。
+    for (const command of this.#padMenu.poll()) this.navigate(command);
     const match = this.#match;
     const music = this.#tools.music;
     if (match === null) {
@@ -309,21 +314,18 @@ export class Shell {
   }
 
   /**
-   * カーソルで動かす画面。試合が無ければメニュー、盤面があればラウンドの間の幕。
-   *
-   * 通信対戦のロビー（盤面がまだ無い間）は、いまは動かさない。
+   * カーソルで動かす画面。試合の前はメニュー、通信対戦で盤面がまだ無い間はロビー
+   * （同じ場所に出す）、盤面があればラウンドの間の幕。
    */
-  #navRoot(): HTMLElement | null {
+  #navRoot(): HTMLElement {
     const match = this.#match;
-    if (match === null) return this.#elements.menu;
-    return match.runner.world === null ? null : this.#elements.banner;
+    if (match === null || match.runner.world === null) return this.#elements.menu;
+    return this.#elements.banner;
   }
 
   /** 画面が組み直されても印が残るよう、枠を出している間は描くたびに付け直す。 */
   #paintCursor(): void {
-    if (!this.#nav.shown) return;
-    const root = this.#navRoot();
-    if (root !== null) this.#nav.paint(root);
+    if (this.#nav.shown) this.#nav.paint(this.#navRoot());
   }
 
   /** 通信対戦の、この端末の人のキー配置の説明。 */

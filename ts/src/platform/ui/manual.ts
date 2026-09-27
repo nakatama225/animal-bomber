@@ -2,7 +2,7 @@ import { ANIMAL_LOOKS } from '../../content/animals.js';
 import { abilityOf } from '../../domain/abilities/registry.js';
 import { TICKS_PER_SECOND } from '../../domain/core/Tick.js';
 import { ITEM_DEFINITIONS } from '../../domain/rules/items.js';
-import { GAMEPAD_HELP, keyHelpFor, menuHelp } from '../keyHelp.js';
+import { GAMEPAD_HELP, keyHelpFor, menuHelp, PAD_MENU_HELP } from '../keyHelp.js';
 import { PLAYER1_KEYS, PLAYER2_KEYS, SOLO_KEYS } from '../Keyboard.js';
 
 /** 遊び方の説明の1節。 */
@@ -33,7 +33,7 @@ export function describeManual(): ManualSection[] {
     },
     {
       title: 'メニュー',
-      lines: [menuHelp()],
+      lines: [menuHelp(), PAD_MENU_HELP, '通信対戦のロビーでは、戻るは効かない（ぬけるときは「← ぬける」を押す）'],
     },
     {
       title: '技ととくぎ',

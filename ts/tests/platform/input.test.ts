@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   GamepadIntentSource,
+  PadMenuInput,
   type PadSnapshot,
 } from '../../src/platform/GamepadInput.js';
 import {
@@ -118,5 +119,44 @@ describe('ゲームパッド', () => {
     expect(source.next().right).toBe(true);
     axes = [0.3, 0, 0, 0];
     expect(source.next().right).toBe(false);
+  });
+});
+
+describe('ゲームパッドでメニューを動かす', () => {
+  /** 読むたびに、いま渡されているパッドを返す。 */
+  function reader(): { read: () => readonly (PadSnapshot | null)[]; set: (next: PadSnapshot | null) => void } {
+    let current: PadSnapshot | null = null;
+    return { read: () => [current], set: (next) => (current = next) };
+  }
+
+  it('十字キーを押した瞬間だけ、1回ずつ操作になる', () => {
+    const { read, set } = reader();
+    const input = new PadMenuInput(read);
+    set(pad({ buttons: [13] }));
+    expect(input.poll()).toEqual(['down']);
+    // 押したままでは続けて動かない。
+    expect(input.poll()).toEqual([]);
+    set(pad({}));
+    expect(input.poll()).toEqual([]);
+    set(pad({ buttons: [13] }));
+    expect(input.poll()).toEqual(['down']);
+  });
+
+  it('A で決め、B で戻る。スティックは傾きの大きい軸の向きだけを採る', () => {
+    const { read, set } = reader();
+    const input = new PadMenuInput(read);
+    set(pad({ buttons: [0] }));
+    expect(input.poll()).toEqual(['confirm']);
+    set(pad({ buttons: [1] }));
+    expect(input.poll()).toEqual(['back']);
+    set(pad({ axes: [0.9, 0.6, 0, 0] }));
+    expect(input.poll()).toEqual(['right']);
+  });
+
+  it('標準の並びでないパッドは使わない', () => {
+    const { read, set } = reader();
+    const input = new PadMenuInput(read);
+    set(pad({ mapping: '', buttons: [0, 13] }));
+    expect(input.poll()).toEqual([]);
   });
 });

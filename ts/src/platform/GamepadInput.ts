@@ -2,6 +2,7 @@ import type { IntentSource } from '../domain/intent/IntentSource.js';
 import type { PlayerIntent } from '../domain/intent/PlayerIntent.js';
 import { IDLE_INTENT } from '../domain/intent/PlayerIntent.js';
 import type { PlayerId } from '../domain/state/PlayerState.js';
+import type { NavCommand } from '../presentation/menu/MenuCursor.js';
 
 /**
  * ゲームパッドの入力。
@@ -64,41 +65,18 @@ export type PadSnapshot = {
 };
 
 /**
- * パッドの入力を意思に変える窓口。
+ * つかむパッドの選び方と、スティックの読み方。試合の操作とメニューの操作が同じ規則で読む。
  *
- * ⚠️ 読み取りに使う関数を引数で受け取るのは、ブラウザの
- * `navigator.getGamepads` に直接触らずにテストできるようにするため。
- * Node には `navigator` が存在するが `getGamepads` は無いので、
- * 素直に書くと実行時に落ちる。
+ * スティックの向きには前回の状態（戻りのしきい値）があるので、読む側ごとに1つずつ持つ。
  */
-export class GamepadIntentSource implements IntentSource {
-  /** 一度つかんだパッドの番号。試合中に別のパッドへ移らないようにする。 */
+class PadReader {
+  /** 一度つかんだパッドの番号。途中で別のパッドへ移らないようにする。 */
   #index: number | null = null;
 
   /** 前回スティックが倒れていた向き。戻りのしきい値に使う。 */
   #stick = { x: 0, y: 0 };
 
-  constructor(
-    readonly playerId: PlayerId,
-    private readonly read: () => readonly (PadSnapshot | null)[],
-  ) {}
-
-  next(): PlayerIntent {
-    const pad = this.#pick();
-    if (pad === null) return IDLE_INTENT;
-
-    const held = (index: number): boolean => pad.buttons[index]?.pressed === true;
-    const stick = this.#readStick(pad);
-
-    return {
-      up: held(BUTTON.up) || stick.y < 0,
-      down: held(BUTTON.down) || stick.y > 0,
-      left: held(BUTTON.left) || stick.x < 0,
-      right: held(BUTTON.right) || stick.x > 0,
-      bomb: held(BUTTON.a) || held(BUTTON.r1),
-      action: held(BUTTON.b) || held(BUTTON.x) || held(BUTTON.y) || held(BUTTON.l1),
-    };
-  }
+  constructor(private readonly read: () => readonly (PadSnapshot | null)[]) {}
 
   /**
    * 使うパッドを選ぶ。
@@ -106,7 +84,7 @@ export class GamepadIntentSource implements IntentSource {
    * ⚠️ 先頭が繋がっているとは限らない。実機では2番目に入っていた。
    * `mapping` が標準のものを探し、一度見つけたらその番号を覚える。
    */
-  #pick(): PadSnapshot | null {
+  pick(): PadSnapshot | null {
     const pads = this.read();
     if (this.#index !== null) {
       const remembered = pads.find((pad) => pad?.index === this.#index);
@@ -120,6 +98,17 @@ export class GamepadIntentSource implements IntentSource {
       return pad;
     }
     return null;
+  }
+
+  /** 押している向き。十字キーとスティックの OR。 */
+  directions(pad: PadSnapshot): { up: boolean; down: boolean; left: boolean; right: boolean } {
+    const stick = this.#readStick(pad);
+    return {
+      up: held(pad, BUTTON.up) || stick.y < 0,
+      down: held(pad, BUTTON.down) || stick.y > 0,
+      left: held(pad, BUTTON.left) || stick.x < 0,
+      right: held(pad, BUTTON.right) || stick.x > 0,
+    };
   }
 
   /**
@@ -147,6 +136,74 @@ export class GamepadIntentSource implements IntentSource {
       ? { x: Math.sign(value), y: 0 }
       : { x: 0, y: Math.sign(value) };
     return this.#stick;
+  }
+}
+
+function held(pad: PadSnapshot, index: number): boolean {
+  return pad.buttons[index]?.pressed === true;
+}
+
+/**
+ * パッドの入力を意思に変える窓口。
+ *
+ * ⚠️ 読み取りに使う関数を引数で受け取るのは、ブラウザの
+ * `navigator.getGamepads` に直接触らずにテストできるようにするため。
+ * Node には `navigator` が存在するが `getGamepads` は無いので、
+ * 素直に書くと実行時に落ちる。
+ */
+export class GamepadIntentSource implements IntentSource {
+  readonly #reader: PadReader;
+
+  constructor(
+    readonly playerId: PlayerId,
+    read: () => readonly (PadSnapshot | null)[],
+  ) {
+    this.#reader = new PadReader(read);
+  }
+
+  next(): PlayerIntent {
+    const pad = this.#reader.pick();
+    if (pad === null) return IDLE_INTENT;
+    return {
+      ...this.#reader.directions(pad),
+      bomb: held(pad, BUTTON.a) || held(pad, BUTTON.r1),
+      action: held(pad, BUTTON.b) || held(pad, BUTTON.x) || held(pad, BUTTON.y) || held(pad, BUTTON.l1),
+    };
+  }
+}
+
+/**
+ * ゲームパッドでメニューを動かす。十字キーかスティックで動かし、A で決め、B で戻る（原型と同じ）。
+ *
+ * 押した瞬間は、前回読んだときの状態との差分だけで作る。
+ *
+ * ⚠️ 前回の状態を、画面が替わったときに消さない。消すと、A で「つぎへ」を押して次の画面へ
+ * 移ったとき、押したままの A が新しい押下に見えて、次の画面の項目まで押してしまう。原型も
+ * 同じ理由で前回の状態を消さないことを決まりにしていた（`legacy/test/README.md` の 11 と同じ形の事故）。
+ */
+export class PadMenuInput {
+  readonly #reader: PadReader;
+  #previous: ReadonlySet<NavCommand> = new Set();
+
+  constructor(read: () => readonly (PadSnapshot | null)[]) {
+    this.#reader = new PadReader(read);
+  }
+
+  /** パッドを読み、この回に押し始めた操作を返す。描くたびに1回呼ぶ。 */
+  poll(): NavCommand[] {
+    const pad = this.#reader.pick();
+    const now = new Set<NavCommand>();
+    if (pad !== null) {
+      const directions = this.#reader.directions(pad);
+      for (const direction of ['up', 'down', 'left', 'right'] as const) {
+        if (directions[direction]) now.add(direction);
+      }
+      if (held(pad, BUTTON.a)) now.add('confirm');
+      if (held(pad, BUTTON.b)) now.add('back');
+    }
+    const started = [...now].filter((command) => !this.#previous.has(command));
+    this.#previous = now;
+    return started;
   }
 }
 
