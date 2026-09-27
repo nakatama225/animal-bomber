@@ -17,7 +17,7 @@ import { FakeRelay, hooksWith, Peer } from './fakeRelay.js';
 const ANIMALS = ['rabbit', 'elephant', 'fox', 'frog'];
 
 function settings(overrides: Partial<LanSettings['match']> = {}): LanSettings {
-  return { match: { ...defaultMatchConfig(20260927, ANIMALS), ...overrides }, cpu: 'normal' };
+  return { match: { ...defaultMatchConfig(20260927, ANIMALS), ...overrides }, cpu: ANIMALS.map(() => 'normal') };
 }
 
 /** プレイヤーごとに違う動きをする台本。爆弾も置く。 */

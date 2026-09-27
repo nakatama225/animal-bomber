@@ -5,7 +5,7 @@ import { Rng } from '../core/Rng.js';
 import { StateHasher } from '../core/StateHash.js';
 import { secondsToTicks, tick, type Tick } from '../core/Tick.js';
 import { IDLE_INTENT, packIntent } from '../intent/PlayerIntent.js';
-import { ROUND_SECONDS, SPAWN_CELLS } from '../rules/tuning.js';
+import { ROUND_SECONDS, SPAWN_CELLS, STARTING_HP } from '../rules/tuning.js';
 import type { Blast, Bomb } from './Bomb.js';
 import { EffectBag } from './EffectBag.js';
 import type { Item } from './Item.js';
@@ -68,6 +68,11 @@ export interface WorldSeed {
   /** 1ラウンドの制限時間。省略した場合は既定の長さ。 */
   readonly roundLimit?: Tick;
   /**
+   * プレイヤーごとの初期体力（半分の単位）。動物ごとの上乗せを足す前の値。
+   * 省略した場合は全員が既定の値で始まる。
+   */
+  readonly startingHp?: readonly number[];
+  /**
    * 動物ごとの初期値の上乗せ。
    *
    * ⚠️ ここで能力の表を引かず、呼び出し側から受け取る。引いてしまうと
@@ -94,6 +99,10 @@ const NO_BONUS: StartingBonus = { hp: 0, power: 0, bombs: 0 };
  * 逆にすると乱数を引く回数が変わり、同じ種でも別の盤面になる。
  */
 export function createWorld(config: WorldSeed): WorldState {
+  const startingHp = config.startingHp;
+  if (startingHp !== undefined && startingHp.length !== config.animals.length) {
+    throw new Error(`初期体力の数（${startingHp.length}）が動物の数（${config.animals.length}）と合わない`);
+  }
   const rng = new Rng(config.seed);
   const board = buildBoard(rng, SPAWN_CELLS);
 
@@ -110,7 +119,7 @@ export function createWorld(config: WorldSeed): WorldState {
       position: centerOf(spawn),
       facing: index < 2 ? 'down' : 'up',
       life: ALIVE,
-      hp: 6 + bonus.hp,
+      hp: (startingHp?.[index] ?? STARTING_HP) + bonus.hp,
       shoes: 0,
       power: 1 + bonus.power,
       maxBombs: 1 + bonus.bombs,

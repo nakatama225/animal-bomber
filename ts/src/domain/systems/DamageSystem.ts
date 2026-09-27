@@ -5,9 +5,7 @@ import { cellsTouchedBy } from '../query/Hitbox.js';
 import type { PlayerId, PlayerState } from '../state/PlayerState.js';
 import { isAlive, isInvulnerable } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
-
-/** 爆風1回あたりに減る体力（半分の単位。2 で1個ぶん）。 */
-const BLAST_DAMAGE = 2;
+import { BLAST_DAMAGE } from '../rules/tuning.js';
 
 /**
  * 爆風に当たったかを見て、体力を減らす。

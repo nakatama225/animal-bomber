@@ -72,6 +72,11 @@ export class CpuIntentSource implements IntentSource {
     this.#memory = freshMemory(this.#rng);
   }
 
+  /** この CPU の強さ。通信対戦で、プレイヤーごとの強さが届いたかを確かめるのに使う。 */
+  get level(): CpuLevel {
+    return this.#level;
+  }
+
   /** いまの記憶。テストで判断の中身を確かめるために公開している。 */
   get memory(): Readonly<CpuMemory> {
     return this.#memory;

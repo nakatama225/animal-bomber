@@ -60,11 +60,27 @@ export const REPORT_FIELDS = ['seat', 'hash', 'rngCalls'] as const;
 /**
  * 試合の設定として、ホストが全員へ配るもの。
  *
- * 中継はこれを読まずに流す。人間が操作しないプレイヤーは全員この強さの CPU になる。
+ * 中継はこれを読まずに流す。
  */
 export interface LanSettings {
   readonly match: MatchConfig;
-  readonly cpu: CpuLevelKey;
+  /**
+   * CPU の強さ。プレイヤー番号の順に、全員ぶん。
+   *
+   * 人間が操作するプレイヤーの値も持つ。その人が抜けて CPU に替わったときに使う。
+   */
+  readonly cpu: readonly CpuLevelKey[];
+}
+
+/**
+ * そのプレイヤーを受け持つ CPU の強さ。
+ *
+ * @throws ProtocolError 設定にそのプレイヤーの値が無いとき（`parseLanSettings` を通った設定では起きない）
+ */
+export function cpuLevelOf(settings: LanSettings, playerId: PlayerId): CpuLevelKey {
+  const level = settings.cpu[playerId];
+  if (level === undefined) throw new ProtocolError(`プレイヤー ${playerId} の CPU の強さが無い`);
+  return level;
 }
 
 /** 状態の要約の、1人ぶんの報告。 */
@@ -201,10 +217,6 @@ function unhandled(kind: never): never {
  */
 export function parseLanSettings(raw: unknown): LanSettings {
   if (!isRecord(raw)) throw new ProtocolError('試合の設定が辞書ではない');
-  const cpu = raw['cpu'];
-  if (typeof cpu !== 'string' || !(CPU_LEVEL_KEYS as readonly string[]).includes(cpu)) {
-    throw new ProtocolError(`CPU の強さが読めない: ${String(cpu)}`);
-  }
   const match = raw['match'];
   if (!isRecord(match)) throw new ProtocolError('試合の設定に match が無い');
   const read = new FieldReader(match, 'match');
@@ -224,14 +236,25 @@ export function parseLanSettings(raw: unknown): LanSettings {
   if (typeof suddenDeath !== 'boolean') {
     throw new ProtocolError('延長戦の有無が真偽値ではない');
   }
+  // 1人ぶんずつ持つ値は、動物と同じ数だけ無いと止める。足りない人を既定値で埋めると、
+  // その人の体力や CPU の強さが端末ごとに違ってもおかしくない書き方になる。
+  const startingHp = read.ints('startingHp', 1, animals.length);
+  const cpu = raw['cpu'];
+  if (
+    !Array.isArray(cpu) ||
+    cpu.length !== animals.length ||
+    cpu.some((level) => typeof level !== 'string' || !(CPU_LEVEL_KEYS as readonly string[]).includes(level))
+  ) {
+    throw new ProtocolError(`CPU の強さが動物の数だけ並んでいない: ${JSON.stringify(cpu)}`);
+  }
 
   return {
-    cpu: cpu as CpuLevelKey,
+    cpu: cpu as CpuLevelKey[],
     match: {
       roundLimit: tick(read.int('roundLimit', 1)),
       winsToTake: read.int('winsToTake', 1),
       suddenDeath,
-      startingHp: read.int('startingHp', 1),
+      startingHp,
       seed: read.int('seed', 0),
       animals: animals as string[],
     },
@@ -270,6 +293,21 @@ class FieldReader {
       throw new ProtocolError(`${this.kind} の ${name} が ${min} 以上の整数ではない: ${String(value)}`);
     }
     return value;
+  }
+
+  /** `min` 以上の整数が、ちょうど `length` 個並んだ配列。 */
+  ints(name: string, min: number, length: number): number[] {
+    const value = this.raw(name);
+    if (
+      !Array.isArray(value) ||
+      value.length !== length ||
+      value.some((n) => typeof n !== 'number' || !Number.isInteger(n) || n < min)
+    ) {
+      throw new ProtocolError(
+        `${this.kind} の ${name} が ${min} 以上の整数 ${length} 個の配列ではない: ${JSON.stringify(value)}`,
+      );
+    }
+    return value as number[];
   }
 
   text(name: string): string {

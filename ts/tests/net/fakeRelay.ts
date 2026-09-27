@@ -1,5 +1,3 @@
-import { CPU_LEVELS } from '../../src/ai/CpuLevel.js';
-import { CpuIntentSource, cpuSeed } from '../../src/ai/CpuIntentSource.js';
 import { GameSession } from '../../src/app/GameSession.js';
 import type { IntentSource } from '../../src/domain/intent/IntentSource.js';
 import type { PlayerIntent } from '../../src/domain/intent/PlayerIntent.js';
@@ -7,6 +5,7 @@ import type { PlayerId } from '../../src/domain/state/PlayerState.js';
 import { hashWorld } from '../../src/domain/state/WorldState.js';
 import { LockstepClient, type LanHooks, type LanPhase } from '../../src/net/LockstepClient.js';
 import type { LockstepDriver } from '../../src/net/LockstepDriver.js';
+import { lanCpuSource } from '../../src/net/lanCpu.js';
 import { encodePeerMessage, type LanSettings, type PeerMessage } from '../../src/net/protocol.js';
 
 /**
@@ -206,7 +205,6 @@ export function hooksWith(script: (playerId: PlayerId, call: number) => PlayerIn
   return {
     createSession: (settings: LanSettings) => new GameSession(settings.match),
     localSource: (playerId) => new ScriptedLocal(playerId, (call) => script(playerId, call)),
-    cpuSource: (playerId, settings) =>
-      new CpuIntentSource(playerId, CPU_LEVELS[settings.cpu], cpuSeed(settings.match.seed, playerId)),
+    cpuSource: lanCpuSource,
   };
 }

@@ -8,7 +8,7 @@ import { hooksWith } from './fakeRelay.js';
 
 const SETTINGS: LanSettings = {
   match: defaultMatchConfig(7, ['rabbit', 'elephant', 'fox', 'frog']),
-  cpu: 'easy',
+  cpu: ['easy', 'easy', 'easy', 'easy'],
 };
 
 function client(): { client: LockstepClient; sent: PeerMessage[] } {
@@ -92,7 +92,10 @@ describe('止めるとき', () => {
   it('動物の数より多い人数で始まったら止める', () => {
     const { client: c } = client();
     c.receive(text({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
-    const twoAnimals = { ...SETTINGS, match: { ...SETTINGS.match, animals: ['rabbit', 'fox'] } };
+    const twoAnimals = {
+      match: { ...SETTINGS.match, animals: ['rabbit', 'fox'], startingHp: [6, 6] },
+      cpu: ['easy', 'easy'],
+    };
 
     c.receive(text({ t: 'start', seats: [0, 1, 2], config: twoAnimals }));
 

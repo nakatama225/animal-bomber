@@ -1,8 +1,7 @@
-import { CPU_LEVELS } from '../ai/CpuLevel.js';
-import { CpuIntentSource, cpuSeed } from '../ai/CpuIntentSource.js';
 import type { SimEvent } from '../domain/events/SimEvent.js';
 import type { WorldState } from '../domain/state/WorldState.js';
 import { LockstepClient } from '../net/LockstepClient.js';
+import { lanCpuSource } from '../net/lanCpu.js';
 import { REFUSED_CLOSE_CODE, type LanSettings } from '../net/protocol.js';
 import { KeyboardIntentSource, SOLO_KEYS, type KeyStateReader } from '../platform/Keyboard.js';
 import { lockstepUrl, WebSocketLink } from '../platform/WebSocketLink.js';
@@ -54,9 +53,8 @@ export class LanMatch implements MatchRunner {
       createSession: (settings) => new GameSession(settings.match),
       // 1台に1人なので、キーボード全体（WASD と矢印の両方）を1人が使う。
       localSource: (playerId) => new KeyboardIntentSource(playerId, options.keyboard, SOLO_KEYS),
-      // 種は試合の設定から作る。全員の端末で同じ CPU が同じ手を指す。
-      cpuSource: (playerId, settings) =>
-        new CpuIntentSource(playerId, CPU_LEVELS[settings.cpu], cpuSeed(settings.match.seed, playerId)),
+      // 強さと種は、ホストが配った設定から引く。全員の端末で同じ CPU が同じ手を指す。
+      cpuSource: lanCpuSource,
     });
     this.#status = options.status;
     this.#startButton = options.startButton;

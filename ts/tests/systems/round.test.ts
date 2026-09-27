@@ -132,3 +132,29 @@ describe('ラウンドの進行', () => {
     expect(hashWorld(first.world)).toBe(hashWorld(second.world));
   });
 });
+
+describe('プレイヤーごとの体力', () => {
+  // うさぎには体力の上乗せが無く、ぞうには爆風1回ぶん（2）ある。
+  const ELEPHANT_BONUS = 2;
+
+  it('設定した体力で始まり、動物ごとの上乗せはその上に足す', () => {
+    const game = session({ startingHp: [2, 10] });
+    expect(game.world.players.map((p) => p.hp)).toEqual([2, 10 + ELEPHANT_BONUS]);
+  });
+
+  it('次のラウンドも、設定した体力で始まる', () => {
+    // 1ラウンド目だけ正しいと、2ラウンド目から全員が既定の体力に戻る。
+    // 原型では、体力を1人ずつ変えられるようにしたときに、この形の誤りを避けた。
+    const game = session({ startingHp: [2, 10] });
+    game.world.players[1]!.life = OUT;
+    game.tick();
+    skipIntermission(game);
+    expect(game.match.round).toBe(2);
+    expect(game.world.players.map((p) => p.hp)).toEqual([2, 10 + ELEPHANT_BONUS]);
+  });
+
+  it('体力の数が動物の数と合わなければ、試合を作らない', () => {
+    // 足りない人を既定値で埋めると、設定の画面の並びがずれたことに気づけない。
+    expect(() => session({ startingHp: [6] })).toThrow('初期体力の数');
+  });
+});

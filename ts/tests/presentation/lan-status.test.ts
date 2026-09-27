@@ -10,7 +10,7 @@ import { hooksWith } from '../net/fakeRelay.js';
 
 const SETTINGS: LanSettings = {
   match: defaultMatchConfig(3, ['rabbit', 'elephant', 'fox', 'frog']),
-  cpu: 'normal',
+  cpu: ['normal', 'normal', 'normal', 'normal'],
 };
 
 function client(): LockstepClient {

@@ -1,5 +1,5 @@
 import { secondsToTicks, type Tick } from '../core/Tick.js';
-import { ROUND_SECONDS, WINS_TO_TAKE_MATCH } from './tuning.js';
+import { ROUND_SECONDS, STARTING_HP, WINS_TO_TAKE_MATCH } from './tuning.js';
 
 /** 1試合ぶんの設定。ロビーで決めて、始まったら変えない。 */
 export interface MatchConfig {
@@ -9,8 +9,13 @@ export interface MatchConfig {
   readonly winsToTake: number;
   /** 決着がつかないとき、1回だけ延長戦（サドンデス）に入るか。切ると引き分けにする。 */
   readonly suddenDeath: boolean;
-  /** 各プレイヤーの初期体力（半分の単位。6 で3個ぶん）。 */
-  readonly startingHp: number;
+  /**
+   * 各プレイヤーの初期体力（半分の単位）。プレイヤー番号の順に、全員ぶん。
+   *
+   * 1人ずつ持つのは、ハンデをつけるため（例：1P だけ多くする）。
+   * 動物ごとの上乗せは、この値に足す。
+   */
+  readonly startingHp: readonly number[];
   /**
    * 盤面と抽選に使う種。
    *
@@ -28,7 +33,7 @@ export function defaultMatchConfig(seed: number, animals: readonly string[]): Ma
     roundLimit: secondsToTicks(ROUND_SECONDS),
     winsToTake: WINS_TO_TAKE_MATCH,
     suddenDeath: true,
-    startingHp: 6,
+    startingHp: animals.map(() => STARTING_HP),
     seed,
     animals,
   };

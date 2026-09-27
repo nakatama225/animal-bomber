@@ -106,7 +106,7 @@ function main(): void {
       ? localMatch(config, keyboard)
       : new LanMatch({
           address,
-          settings: { match: config, cpu: 'normal' },
+          settings: { match: config, cpu: config.animals.map(() => 'normal') },
           keyboard,
           status: findElement('lan-status', HTMLElement),
           startButton: findElement('lan-start', HTMLButtonElement),

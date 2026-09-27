@@ -69,6 +69,7 @@ export class GameSession {
       seed: seedForRound(this.#config, this.#match.round),
       animals: this.#config.animals,
       roundLimit: this.#config.roundLimit,
+      startingHp: this.#config.startingHp,
       bonusOf: startingBonusOf,
     });
   }

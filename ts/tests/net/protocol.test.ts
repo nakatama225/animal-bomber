@@ -1,7 +1,9 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 
 import { defaultMatchConfig } from '../../src/domain/rules/MatchConfig.js';
+import type { PlayerId } from '../../src/domain/state/PlayerState.js';
 import {
+  cpuLevelOf,
   parseLanSettings,
   parseRelayMessage,
   ProtocolError,
@@ -18,8 +20,12 @@ import {
 type FieldsOf<U extends { t: string }, K extends U['t']> = Exclude<keyof Extract<U, { t: K }>, 't'>;
 
 const SETTINGS: LanSettings = {
-  match: defaultMatchConfig(42, ['rabbit', 'elephant', 'fox', 'frog']),
-  cpu: 'hard',
+  match: {
+    ...defaultMatchConfig(42, ['rabbit', 'elephant', 'fox', 'frog']),
+    // 1人ずつ違う値にしておく。並びが入れ替わって届いても気づけるように。
+    startingHp: [2, 4, 6, 12],
+  },
+  cpu: ['easy', 'normal', 'hard', 'oni'],
 };
 
 describe('約束の表と型', () => {
@@ -94,19 +100,45 @@ describe('中継から届いたメッセージを読む', () => {
 });
 
 describe('試合の設定を読む', () => {
+  it('CPU の強さはプレイヤーごとに引く', () => {
+    expect([0, 1, 2, 3].map((id) => cpuLevelOf(SETTINGS, id as PlayerId))).toEqual(['easy', 'normal', 'hard', 'oni']);
+    expect(() => cpuLevelOf({ ...SETTINGS, cpu: ['easy'] }, 3)).toThrow(ProtocolError);
+  });
+
   it('送ったとおりに戻る', () => {
     expect(parseLanSettings(JSON.parse(JSON.stringify(SETTINGS)))).toEqual(SETTINGS);
   });
 
+  // 動物を2匹にするときは、1人ぶんずつ持つ値（体力・CPU の強さ）も2人ぶんにそろえる。
+  // そろえないと、動物名の確かめより先に数の確かめで止まり、動物名の確かめが見えなくなる。
+  const twoAnimals = (animals: string[]): unknown => ({
+    match: { ...SETTINGS.match, animals, startingHp: [6, 6] },
+    cpu: ['easy', 'easy'],
+  });
+
   it.each([
-    ['CPU の強さが無い', { match: SETTINGS.match }],
-    ['CPU の強さが知らない値', { ...SETTINGS, cpu: 'god' }],
-    ['知らない動物', { ...SETTINGS, match: { ...SETTINGS.match, animals: ['rabbit', 'dragon'] } }],
-    ['延長戦の有無が文字列', { ...SETTINGS, match: { ...SETTINGS.match, suddenDeath: 'yes' } }],
-    ['制限時間が 0', { ...SETTINGS, match: { ...SETTINGS.match, roundLimit: 0 } }],
-    ['種が無い', { ...SETTINGS, match: { ...SETTINGS.match, seed: undefined } }],
-  ])('読めない設定は既定値で埋めずに止める: %s', (_label, raw) => {
+    ['CPU の強さが無い', { match: SETTINGS.match }, /CPU の強さ/],
+    ['CPU の強さが知らない値', { ...SETTINGS, cpu: ['easy', 'normal', 'hard', 'god'] }, /CPU の強さ/],
+    ['CPU の強さが1つだけ（前の形）', { ...SETTINGS, cpu: 'hard' }, /CPU の強さ/],
+    ['CPU の強さが動物より少ない', { ...SETTINGS, cpu: ['easy', 'normal', 'hard'] }, /CPU の強さ/],
+    ['体力が1つだけ（前の形）', { ...SETTINGS, match: { ...SETTINGS.match, startingHp: 6 } }, /startingHp/],
+    ['体力が動物より多い', { ...SETTINGS, match: { ...SETTINGS.match, startingHp: [6, 6, 6, 6, 6] } }, /startingHp/],
+    ['体力に 0 がある', { ...SETTINGS, match: { ...SETTINGS.match, startingHp: [6, 0, 6, 6] } }, /startingHp/],
+    ['体力に小数がある', { ...SETTINGS, match: { ...SETTINGS.match, startingHp: [6, 6, 6.5, 6] } }, /startingHp/],
+    ['知らない動物', twoAnimals(['rabbit', 'dragon']), /知らない動物: dragon/],
+    ['延長戦の有無が文字列', { ...SETTINGS, match: { ...SETTINGS.match, suddenDeath: 'yes' } }, /延長戦/],
+    ['制限時間が 0', { ...SETTINGS, match: { ...SETTINGS.match, roundLimit: 0 } }, /roundLimit/],
+    ['種が無い', { ...SETTINGS, match: { ...SETTINGS.match, seed: undefined } }, /seed/],
+  ])('読めない設定は既定値で埋めずに止める: %s', (_label, raw, reason) => {
     // 埋めると、その端末だけ別の設定で試合を作ってずれる。
-    expect(() => parseLanSettings(JSON.parse(JSON.stringify(raw)))).toThrow(ProtocolError);
+    // 止めた理由まで比べる。確かめが並んでいるので、別の確かめが先に止めても通ってしまう。
+    const read = (): unknown => parseLanSettings(JSON.parse(JSON.stringify(raw)));
+    expect(read).toThrow(ProtocolError);
+    expect(read).toThrow(reason);
+  });
+
+  it('2匹の設定でも、そろっていれば読める', () => {
+    // 上の「知らない動物」の行が、動物名の確かめまで届いていることの対照。
+    expect(() => parseLanSettings(twoAnimals(['rabbit', 'fox']))).not.toThrow();
   });
 });
