@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
+import { CpuIntentSource, cpuSeed } from '../../src/ai/CpuIntentSource.js';
+import { CPU_LEVELS } from '../../src/ai/CpuLevel.js';
+import { GameSession } from '../../src/app/GameSession.js';
 import { IntentGatherer } from '../../src/domain/intent/IntentSource.js';
 import type { PlayerIntent } from '../../src/domain/intent/PlayerIntent.js';
-import { tick } from '../../src/domain/core/Tick.js';
+import { secondsToTicks, tick } from '../../src/domain/core/Tick.js';
+import { defaultMatchConfig } from '../../src/domain/rules/MatchConfig.js';
 import { ALIVE, OUT } from '../../src/domain/state/Life.js';
 import type { PlayerId } from '../../src/domain/state/PlayerState.js';
 import { createWorld, hashWorld, type WorldState } from '../../src/domain/state/WorldState.js';
@@ -40,25 +44,27 @@ function scriptFor(playerId: PlayerId): (tickValue: number) => PlayerIntent {
 function runScripted(ticks: number): { world: WorldState; log: InputLog } {
   const world = createWorld({ seed: SEED, animals: ANIMALS });
   const log = new InputLog();
+  const clock = { elapsed: 0 };
   const gatherer = new IntentGatherer();
   for (const player of world.players) {
     gatherer.add(
-      new RecordingIntentSource(new ScriptedSource(player.id, scriptFor(player.id)), log),
+      new RecordingIntentSource(new ScriptedSource(player.id, scriptFor(player.id)), log, clock),
     );
   }
   const sim = new Simulation();
-  for (let i = 0; i < ticks; i += 1) sim.step(world, gatherer.gather(world));
+  for (; clock.elapsed < ticks; clock.elapsed += 1) sim.step(world, gatherer.gather(world));
   return { world, log };
 }
 
 function runFromLog(log: InputLog, ticks: number): WorldState {
   const world = createWorld({ seed: SEED, animals: ANIMALS });
+  const clock = { elapsed: 0 };
   const gatherer = new IntentGatherer();
   for (const player of world.players) {
-    gatherer.add(new ReplayIntentSource(player.id, log));
+    gatherer.add(new ReplayIntentSource(player.id, log, clock));
   }
   const sim = new Simulation();
-  for (let i = 0; i < ticks; i += 1) sim.step(world, gatherer.gather(world));
+  for (; clock.elapsed < ticks; clock.elapsed += 1) sim.step(world, gatherer.gather(world));
   return world;
 }
 
@@ -112,6 +118,44 @@ describe('リプレイ', () => {
     log.record(10, 0, press({ right: true }));
     expect(() => log.record(5, 0, press({ left: true }))).toThrow();
   });
+});
+
+describe('ラウンドをまたぐ記録の再生', () => {
+  it('ラウンドをまたいでも、記録を流し直すと同じ試合になる', () => {
+    // 盤面の時刻（world.now）はラウンドごとに 0 へ戻るので、同じ時刻が試合の中で何度も現れる。
+    // 記録の時刻にそれを使うと、2ラウンド目の再生で1ラウンド目の操作を引いてしまう。
+    const config = {
+      ...defaultMatchConfig(SEED, ['rabbit', 'elephant', 'fox', 'frog']),
+      winsToTake: 2,
+      roundLimit: secondsToTicks(60),
+    };
+    const log = new InputLog();
+    const original = new GameSession(config);
+    for (const player of original.world.players) {
+      const cpu = new CpuIntentSource(player.id, CPU_LEVELS.hard, cpuSeed(config.seed, player.id));
+      original.attach(new RecordingIntentSource(cpu, log, original));
+    }
+    let ticks = 0;
+    let roundsEnded = 0;
+    while (!original.match.finished && ticks < 60_000) {
+      roundsEnded += original.tick().filter((event) => event.type === 'roundEnded').length;
+      ticks += 1;
+    }
+    // 前提：試合が終わり、ラウンドが2つ以上あった。1ラウンドだけだと、盤面の時刻と
+    // 試合通算の時刻が同じ値になり、このテストは違いを見分けない。
+    expect(original.match.finished).toBe(true);
+    expect(roundsEnded).toBeGreaterThanOrEqual(2);
+
+    const replay = new GameSession(config);
+    for (const player of replay.world.players) {
+      replay.attach(new ReplayIntentSource(player.id, log, replay));
+    }
+    for (let i = 0; i < ticks; i += 1) replay.tick();
+
+    expect(replay.match.finished).toBe(true);
+    expect([...replay.match.wins]).toEqual([...original.match.wins]);
+    expect(hashWorld(replay.world)).toBe(hashWorld(original.world));
+  }, 60_000);
 });
 
 describe('状態の要約', () => {

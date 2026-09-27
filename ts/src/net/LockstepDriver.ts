@@ -3,8 +3,8 @@ import type { SimEvent } from '../domain/events/SimEvent.js';
 import { IDLE_INTENT, packIntent, unpackIntent, type PlayerIntent } from '../domain/intent/PlayerIntent.js';
 import type { PlayerId } from '../domain/state/PlayerState.js';
 import { hashWorld, type WorldState } from '../domain/state/WorldState.js';
-import { ConfirmedInputs, NetworkIntentSource, type MatchClock } from './ConfirmedInputs.js';
-import type { InputLog } from './InputLog.js';
+import { ConfirmedInputs, NetworkIntentSource } from './ConfirmedInputs.js';
+import type { InputLog, MatchClock } from './InputLog.js';
 import type { HashReport, PeerLink, RelayMessage } from './protocol.js';
 
 /**

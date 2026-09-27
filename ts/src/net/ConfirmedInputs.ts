@@ -1,7 +1,7 @@
 import type { IntentSource } from '../domain/intent/IntentSource.js';
 import type { PlayerIntent } from '../domain/intent/PlayerIntent.js';
 import type { PlayerId } from '../domain/state/PlayerState.js';
-import { InputLog } from './InputLog.js';
+import { InputLog, type MatchClock } from './InputLog.js';
 
 /**
  * 通信で届いた、tick ごとの意思。
@@ -61,18 +61,12 @@ export class ConfirmedInputs {
   /**
    * 届いた入力の記録。
    *
-   * ⚠️ 時刻は試合通算の tick（`GameSession.elapsed`）。ラウンドごとに 0 へ戻る
-   * `world.now` で引く `ReplayIntentSource` にはそのまま渡せない。
+   * 時刻は試合通算の tick（`MatchClock.elapsed`）。`ReplayIntentSource` も同じ時刻で引くので、
+   * 通信対戦の記録をそのまま1台で流し直せる。
    */
   get log(): InputLog {
     return this.#log;
   }
-}
-
-/** いま何番目の tick を進めているかを答えるもの。`LockstepDriver` と `GameSession` がこの形を持つ。 */
-export interface MatchClock {
-  /** 試合が始まってから進め終えた tick の数。進めている最中は、その tick の番号。 */
-  readonly elapsed: number;
 }
 
 /**

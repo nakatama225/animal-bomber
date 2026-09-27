@@ -9,6 +9,8 @@ import { OUT } from '../../src/domain/state/Life.js';
 import type { PlayerId } from '../../src/domain/state/PlayerState.js';
 import { hashWorld } from '../../src/domain/state/WorldState.js';
 import { ConfirmedInputs, NetworkIntentSource } from '../../src/net/ConfirmedInputs.js';
+import { ReplayIntentSource } from '../../src/net/InputLog.js';
+import { lanCpuSource } from '../../src/net/lanCpu.js';
 import { HASH_INTERVAL, INPUT_DELAY, LockstepDriver } from '../../src/net/LockstepDriver.js';
 import type { LanSettings, PeerMessage } from '../../src/net/protocol.js';
 import { press } from '../helpers.js';
@@ -181,6 +183,27 @@ describe('ロックステップ', () => {
 
     // 1ラウンド目は world.now と通算の tick が一致するので、取り違えは2ラウンド目以降でしか見えない。
     expect(laterRounds).toBeGreaterThan(100);
+  });
+
+  it('通信対戦の記録を1台で流し直すと、同じ試合になる（ラウンドをまたいでも）', () => {
+    // 届いた入力の記録と、記録を流す窓口は、どちらも試合通算の tick で引く。
+    const config = settings({ roundLimit: tick(240), suddenDeath: false });
+    const { relay, peers } = startMatch(2, config);
+    const [host] = peers as [Peer, Peer];
+    runTogether(relay, peers, 1500);
+    // 前提：ラウンドが入れ替わっている。1ラウンドだけだと、盤面の時刻と通算の tick が同じ値になる。
+    expect(host.session.match.round).toBeGreaterThanOrEqual(3);
+
+    const replay = new GameSession(config.match);
+    for (const id of [0, 1] as const) {
+      replay.attach(new ReplayIntentSource(id, host.driver.log, replay));
+    }
+    for (const id of [2, 3] as const) replay.attach(lanCpuSource(id, config));
+    while (replay.elapsed < host.session.elapsed) replay.tick();
+
+    expect(replay.match.round).toBe(host.session.match.round);
+    expect([...replay.match.wins]).toEqual([...host.session.match.wins]);
+    expect(hashWorld(replay.world)).toBe(hashWorld(host.session.world));
   });
 
   it('ラウンドをまたいでも（決着のあとの待ちを含めて）同じ試合が続く', () => {

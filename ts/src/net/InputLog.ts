@@ -9,6 +9,18 @@ import type { PlayerId } from '../domain/state/PlayerState.js';
 import type { WorldState } from '../domain/state/WorldState.js';
 
 /**
+ * いま何番目の tick を進めているかを答えるもの。`GameSession` と `LockstepDriver` がこの形を持つ。
+ *
+ * ⚠️ 記録と通信の時刻にはこちらを使い、盤面の時刻（`world.now`）は使わない。
+ * `world.now` はラウンドごとに 0 へ戻り、決着のあとの待ちの間は止まるので、
+ * 同じ値が試合の中で何度も現れる。
+ */
+export interface MatchClock {
+  /** 試合が始まってから進め終えた tick の数。進めている最中は、その tick の番号。 */
+  readonly elapsed: number;
+}
+
+/**
  * 操作の記録。
  *
  * 試合を再現するのに必要なのは「種」と「誰がいつ何をしたか」だけで、
@@ -24,6 +36,12 @@ import type { WorldState } from '../domain/state/WorldState.js';
  * 押しっぱなしの間は同じ値が続くので、値が変わった tick だけを記録する。
  * 3分の試合を 60Hz で全部持つと 1 万件を超えるが、実際に変化するのは
  * その数十分の1しかない。
+ *
+ * ## 時刻は試合通算の tick
+ *
+ * 記録の時刻は `MatchClock.elapsed`（試合が始まってからの tick）で持つ。
+ * 通信対戦で届いた入力の記録（`ConfirmedInputs.log`）も同じ時刻なので、
+ * そのまま `ReplayIntentSource` で流し直せる。
  */
 export class InputLog {
   /** プレイヤーごとの、変化した時点の一覧。tick の昇順で並ぶ。 */
@@ -135,10 +153,11 @@ export class ReplayIntentSource implements IntentSource {
   constructor(
     readonly playerId: PlayerId,
     private readonly log: InputLog,
+    private readonly clock: MatchClock,
   ) {}
 
-  next(world: Readonly<WorldState>): PlayerIntent {
-    return this.log.at(world.now, this.playerId);
+  next(): PlayerIntent {
+    return this.log.at(this.clock.elapsed, this.playerId);
   }
 }
 
@@ -152,6 +171,7 @@ export class RecordingIntentSource implements IntentSource {
   constructor(
     private readonly inner: IntentSource,
     private readonly log: InputLog,
+    private readonly clock: MatchClock,
   ) {}
 
   get playerId(): PlayerId {
@@ -160,7 +180,7 @@ export class RecordingIntentSource implements IntentSource {
 
   next(world: Readonly<WorldState>): PlayerIntent {
     const intent = this.inner.next(world);
-    this.log.record(world.now, this.inner.playerId, intent);
+    this.log.record(this.clock.elapsed, this.inner.playerId, intent);
     return intent;
   }
 }

@@ -28,16 +28,16 @@ function makeLog(): InputLog {
  */
 function runWithPacing(log: InputLog, ticksPerFrame: number): number {
   const world = createWorld({ seed: SEED, animals: ANIMALS });
+  const clock = { elapsed: 0 };
   const gatherer = new IntentGatherer();
-  for (const player of world.players) gatherer.add(new ReplayIntentSource(player.id, log));
+  for (const player of world.players) gatherer.add(new ReplayIntentSource(player.id, log, clock));
 
   const sim = new Simulation();
-  let done = 0;
-  while (done < TOTAL_TICKS) {
-    const batch = Math.min(ticksPerFrame, TOTAL_TICKS - done);
+  while (clock.elapsed < TOTAL_TICKS) {
+    const batch = Math.min(ticksPerFrame, TOTAL_TICKS - clock.elapsed);
     for (let i = 0; i < batch; i += 1) {
       sim.step(world, gatherer.gather(world));
-      done += 1;
+      clock.elapsed += 1;
     }
     // ここに描画が入る。状態には触れない。
   }
@@ -67,10 +67,11 @@ describe('時間の刻み方', () => {
     // 前の確認が「何をしても同じ値」で通ってしまわないための対照。
     const log = makeLog();
     const world = createWorld({ seed: SEED, animals: ANIMALS });
+    const clock = { elapsed: 0 };
     const gatherer = new IntentGatherer();
-    for (const player of world.players) gatherer.add(new ReplayIntentSource(player.id, log));
+    for (const player of world.players) gatherer.add(new ReplayIntentSource(player.id, log, clock));
     const sim = new Simulation();
-    for (let i = 0; i < 100; i += 1) sim.step(world, gatherer.gather(world));
+    for (; clock.elapsed < 100; clock.elapsed += 1) sim.step(world, gatherer.gather(world));
     expect(hashWorld(world)).not.toBe(runWithPacing(log, 1));
   });
 });
