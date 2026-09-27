@@ -174,6 +174,20 @@ describe('ゲームの速さ', () => {
     expect(half.progress(0)).toBe(0);
   });
 
+  it('1倍より速いときは、進み具合を 1 で止める（1つ前の tick の位置からしか埋められない）', () => {
+    // 1回で2 tick 以上進んでも、描く側は1つ前の tick の位置しか覚えていない。1 を超えて渡すと、
+    // いまの位置を通り越した先に描き、次の tick で止まった人が戻って見える。
+    const triple = new GameSpeed();
+    triple.set(3);
+    triple.take();
+    expect(triple.progress(0.9)).toBe(1);
+    const double = new GameSpeed();
+    double.set(2);
+    double.take();
+    expect(double.progress(0.25)).toBe(0.5);
+    expect(double.progress(0.75)).toBe(1);
+  });
+
   it('範囲の外と、刻みに乗らない値にはできない', () => {
     const speed = new GameSpeed();
     for (const rate of [0.25, 3.25, 1.1, Number.NaN]) {

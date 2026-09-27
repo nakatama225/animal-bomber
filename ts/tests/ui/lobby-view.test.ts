@@ -47,6 +47,14 @@ describe('通信対戦のロビー', () => {
     expect(setup.winsToTake).toBe(7);
   });
 
+  it('枠ごとの行は、動物・CPU の強さ・体力の順に並ぶ（原型と同じ）', () => {
+    // カーソルは画面の並びの順に集めるので、この順が上下で辿る順にもなる。
+    const { root, view } = mount();
+    view.show({ kind: 'lobby', seat: 0, present: [0] });
+    const rows = [...root.querySelectorAll<HTMLElement>('[data-slot="1"] [data-nav]')].map((row) => row.dataset['nav']);
+    expect([...new Set(rows)]).toEqual(['animal-1', 'cpu-1', 'hits-1']);
+  });
+
   it('様子が前と同じなら組み直さない（毎フレーム呼ばれても、押そうとしたボタンが消えない）', () => {
     const { root, view } = mount();
     view.show({ kind: 'lobby', seat: 0, present: [0] });

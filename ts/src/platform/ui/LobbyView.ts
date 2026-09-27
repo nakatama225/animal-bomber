@@ -27,7 +27,10 @@ export interface LobbyHooks {
  * （始まる前のゲストの画面には出ない。出すには中継に新しい種類のメッセージが要る）。
  *
  * キーボードとパッドでも動かせる（選択肢の行と「はじめる」に `data-nav`。選択肢の行は `chipRow` が付ける）。
- * 枠ごとの行は、その枠の動物・体力・CPU の強さの順に並ぶ（原型と同じ）。ゲストには動かすものが無い。
+ * 枠ごとの行は、その枠の動物・CPU の強さ・体力の順に並ぶ（原型と同じ。原型は体力を「その枠のキャラ・
+ * CPU 強さの直下」に置いていた）。カーソルは画面の並びの順に集めるので、上下で辿る順もこの順になる。
+ * 原型は CPU の枠にだけ CPU の強さを出したが、この版は人間の枠にも出す（抜けたときに CPU が受け持つ強さ）。
+ * ゲストには動かすものが無い。
  */
 export class LobbyView {
   readonly #root: HTMLElement;
@@ -99,8 +102,6 @@ export class LobbyView {
         el('div', { className: 'slot-head', text: `${lookOf(setup.animals[slot]).emoji} ${who}` }),
         this.#row('どうぶつ', `animal-${slot}`, ANIMAL_LOOKS.map((look) => look.key), setup.animals[slot], (key) =>
           `${lookOf(key).emoji}${lookOf(key).name}`, (key) => this.#choices.setAnimal(slot, key)),
-        this.#row('倒れるまでの爆風の回数', `hits-${slot}`, HIT_CHOICES, setup.hits[slot], (n) => `${n}回`, (n) =>
-          this.#choices.setHits(slot, n)),
         this.#row(
           slot === 0 ? 'CPU の強さ（抜けたとき）' : 'CPU の強さ（空いているとき・抜けたとき）',
           `cpu-${slot}`,
@@ -109,6 +110,8 @@ export class LobbyView {
           (key) => CPU_LEVELS[key].label,
           (key) => this.#choices.setCpuLevel(slot, key),
         ),
+        this.#row('倒れるまでの爆風の回数', `hits-${slot}`, HIT_CHOICES, setup.hits[slot], (n) => `${n}回`, (n) =>
+          this.#choices.setHits(slot, n)),
       ]);
     });
     return [

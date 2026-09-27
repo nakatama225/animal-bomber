@@ -31,6 +31,7 @@ TypeScript 版は `ts/` で `npm run build` した出力（`ts/dist`）を、`/t
 
 from __future__ import annotations
 
+from http import HTTPStatus
 from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import unquote, urlsplit
@@ -66,7 +67,9 @@ def make_process_request(html_path: Path, ts_dir: Path | None = None):
     Args:
         html_path: 配信する HTML ファイルの場所。
         ts_dir: TypeScript 版のビルドの出力の場所（`ts/dist`）。`/ts/` の下で配る。
-            None か、まだビルドしていなければ、`/ts/` の下はビルドの仕方を案内する。
+            まだビルドしていなければ、`/ts/` の下はビルドの仕方を案内する。
+            None なら、この中継には TypeScript 版を入れていないと案内する
+            （固めたデスクトップアプリ。ビルドの仕方を案内しても、アプリはそれを読まない）。
 
     Returns:
         `process_request` として使える関数。WebSocket への昇格要求は
@@ -114,7 +117,14 @@ def _serve_ts(ts_dir: Path | None, relative: str) -> Response:
 
     ファイルは頼まれるたびに読む（ビルドし直したら、中継を立て直さずに新しいものが届く）。
     """
-    if ts_dir is None or not ts_dir.is_dir():
+    if ts_dir is None:
+        return _text_response(
+            404,
+            "この中継には TypeScript 版を入れていない"
+            "（デスクトップアプリには入っていない。"
+            "リポジトリから中継を立てると /ts/ の下で配る）",
+        )
+    if not ts_dir.is_dir():
         return _text_response(
             404,
             "TypeScript 版はまだビルドされていない（ts/ で npm run build を実行する）",
@@ -156,8 +166,13 @@ def _is_websocket_upgrade(request: Request) -> bool:
 
 
 def _text_response(status: int, text: str) -> Response:
+    """文だけの応答。文は本文に入れ、状態行の理由の句には決まった英語の句を入れる。
+
+    ⚠️ 理由の句に `text` を入れない。状態行は ISO-8859-1 で書くので、日本語を入れると
+    送る時点で例外になり、何も返らないまま接続が閉じる（ブラウザには空の応答に見える）。
+    """
     headers = Headers()
     headers["Content-Type"] = "text/plain; charset=utf-8"
     body = text.encode("utf-8")
     headers["Content-Length"] = str(len(body))
-    return Response(status, text, headers, body)
+    return Response(status, HTTPStatus(status).phrase, headers, body)

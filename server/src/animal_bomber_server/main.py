@@ -50,17 +50,19 @@ def _default_html_path() -> Path:
     return candidates[0]
 
 
-def _default_ts_dir() -> Path:
+def _default_ts_dir() -> Path | None:
     """TypeScript 版のビルドの出力（`ts/dist`）の在り処。`/ts/` の下で配る。
 
     ソースから動かす場合は、リポジトリの `ts/` で `npm run build` した出力。
     ⚠️ PyInstaller で固めた `.app` には、いまは入れていない（spec を変えていない）。
-    `.app` から動かすと `/ts/` はビルドの仕方を案内するだけになる。入れるには spec の
-    `datas` に足して作り直し、実機で確かめる必要がある。
+    入っていなければ None を返し、`/ts/` は「この中継には入れていない」と案内する
+    （ビルドの仕方を案内しても、`.app` はリポジトリのビルドの出力を読まない）。
+    入れるには spec の `datas` に足して作り直し、実機で確かめる必要がある。
     """
     bundle_dir = getattr(sys, "_MEIPASS", None)
     if bundle_dir:
-        return Path(bundle_dir) / "ts"
+        bundled = Path(bundle_dir) / "ts"
+        return bundled if bundled.is_dir() else None
     return Path(__file__).resolve().parents[3] / "ts" / "dist"
 
 
@@ -225,7 +227,7 @@ async def serve_lockstep(lockstep: LockstepRoom, ws: ServerConnection) -> None:
 async def run(
     port: int = DEFAULT_PORT,
     html_path: Path = DEFAULT_HTML,
-    ts_dir: Path = DEFAULT_TS_DIR,
+    ts_dir: Path | None = DEFAULT_TS_DIR,
 ) -> None:
     """サーバを起動して、Ctrl-C や上位からの取り消しまで動かし続ける。
 
@@ -249,7 +251,9 @@ async def run(
         for url in urls or [f"http://<このMacのIP>:{port}"]:
             print(f"  {url}")
         print(f"TypeScript 版は、上のどちらかの末尾に {TS_PREFIX} を付けて開く")
-        if not ts_dir.is_dir():
+        if ts_dir is None:
+            print("  （この中継には TypeScript 版を入れていない）")
+        elif not ts_dir.is_dir():
             print("  （まだビルドしていない。ts/ で npm run build を実行する）")
             print(f"  （置き場所：{ts_dir}）")
         await server.serve_forever()
@@ -260,7 +264,7 @@ async def _serve_until_stopped(
     html_path: Path,
     loop_box: dict,
     stop_event_box: dict,
-    ts_dir: Path = DEFAULT_TS_DIR,
+    ts_dir: Path | None = DEFAULT_TS_DIR,
 ) -> None:
     """GUI 経路のサーバ本体。`asyncio.Event` が立つまで動き続ける。
 

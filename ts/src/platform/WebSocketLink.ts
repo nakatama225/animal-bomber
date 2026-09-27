@@ -53,6 +53,30 @@ export function lockstepUrl(address: string): string {
   return `ws://${address}${LOCKSTEP_PATH}`;
 }
 
+/** 中継サーバの既定のポート。`server/` の `DEFAULT_PORT` と同じ値。 */
+const DEFAULT_RELAY_PORT = 8777;
+
+/**
+ * `?relay` の値を省いたときにつなぐ中継の「ホスト名:ポート」。このページを配っている端末の中継を指す。
+ *
+ * - 中継が `/ts/` の下で配ったページ：ページと同じポート。中継は `--port` で別のポートに立てられ、
+ *   そのときはページもそのポートから届く。8777 番に決め打ちすると、そこにいない中継（または別の中継）へ
+ *   つなぎにいく
+ * - それ以外（開発サーバから開いたページなど）：8777 番（中継の既定のポート）
+ * - ポートの無い URL（80 番）で配られたページも 8777 番。中継を 80 番で立てることは想定しない。
+ *   `ws://…:80` は既定のポートとして省かれ、`parseRelayAddress` が「ポートが無い」として受け付けない
+ *
+ * @param location いまのページの場所（`window.location` の一部。テストで差し替えられるよう受け取る）
+ */
+export function defaultRelayAddress(location: {
+  readonly pathname: string;
+  readonly hostname: string;
+  readonly port: string;
+}): string {
+  const servedByRelay = location.pathname.startsWith('/ts/') && location.port !== '';
+  return `${location.hostname}:${servedByRelay ? location.port : DEFAULT_RELAY_PORT}`;
+}
+
 /**
  * URL の `?relay=` に書かれた値から、中継サーバの「ホスト名:ポート」を取り出す。
  *

@@ -4,7 +4,7 @@ import type { IntentSource } from '../domain/intent/IntentSource.js';
 import type { PlayerId } from '../domain/state/PlayerState.js';
 import { CombinedIntentSource } from '../platform/CombinedIntentSource.js';
 import { GameSpeed } from '../platform/FrameLoop.js';
-import { GamepadIntentSource, PadMenuInput, type PadSnapshot } from '../platform/GamepadInput.js';
+import { GamepadIntentSource, PadChoice, PadMenuInput, type PadSnapshot } from '../platform/GamepadInput.js';
 import { GAMEPAD_HELP, keyHelpFor, type KeyHelp } from '../platform/keyHelp.js';
 import {
   KeyboardIntentSource,
@@ -98,6 +98,13 @@ interface ActiveMatch {
   readonly finalActions: readonly HTMLElement[];
   /** ゲームの速さの倍率を効かせるか。1台で遊ぶときだけ。通信対戦は全員が同じ速さで進める。 */
   readonly paced: boolean;
+  /**
+   * 試合が決まった幕を、パッドで動かせるか。1人で遊ぶときと通信対戦のとき（原型と同じ）。
+   *
+   * 1台で2人のときは、パッドを試合に繋がない（`#sourceFor`）。幕でも受け付けないのは、机に置いた
+   * パッドに肘が当たっただけで次の試合が始まらないようにするため（原型の注意書き）。キーボードは効く。
+   */
+  readonly padOnBanner: boolean;
 }
 
 const KEY_LAYOUTS: Readonly<Record<'solo' | 'left' | 'right', KeyBinding>> = {
@@ -126,12 +133,15 @@ export class Shell {
   readonly #speed = new GameSpeed();
   /** キーボードとパッドで、メニュー・ロビー・優勝の幕を動かすカーソル。 */
   readonly #nav = new MenuNavigator();
+  /** つかんでいるパッド。メニュー・ロビー・試合で1つを分け合う（`PadChoice` の説明を参照）。 */
+  readonly #pads: PadChoice;
   readonly #padMenu: PadMenuInput;
 
   constructor(elements: ShellElements, tools: ShellTools) {
     this.#elements = elements;
     this.#tools = tools;
-    this.#padMenu = new PadMenuInput(tools.gamepads);
+    this.#pads = new PadChoice(tools.gamepads);
+    this.#padMenu = new PadMenuInput(this.#pads);
     this.#flow = new MenuFlow(undefined, tools.sound);
     this.#bannerView = new BannerOverlay(elements.banner);
     this.#toasts = new Toasts(elements.toasts);
@@ -166,7 +176,7 @@ export class Shell {
     this.#begin(runner, () => help, [
       pointerButton('もういっかい', () => this.restart(), { data: { action: 'again', nav: 'final' } }),
       pointerButton('タイトルへ', () => this.showMenu(), { data: { action: 'title', nav: 'final' } }),
-    ], true);
+    ], { paced: true, padOnBanner: setup.mode === 'solo' });
     this.#setToolbar([
       speedControl(this.#speed.rate, (rate) => this.#setSpeed(rate)),
       pointerButton('⏸ ポーズ', () => this.togglePause(), { data: { action: 'pause' } }),
@@ -179,7 +189,7 @@ export class Shell {
     const runner = new LanMatch({
       address,
       keyboard: this.#tools.keyboard,
-      gamepads: this.#tools.gamepads,
+      pads: this.#pads,
       lobby: this.#elements.menu,
       status: this.#elements.lanStatus,
       newSeed: this.#tools.newSeed,
@@ -187,7 +197,7 @@ export class Shell {
       ...(this.#tools.connect === undefined ? {} : { connect: this.#tools.connect }),
     });
     // 自分のプレイヤー番号は、つないで受け取るまで分からない。名札の「あなた」から選ぶ。
-    this.#begin(runner, (source) => this.#localHelp(source), [], false);
+    this.#begin(runner, (source) => this.#localHelp(source), [], { paced: false, padOnBanner: true });
     // 通信対戦は等倍で進めるので、曲も等倍に戻す。盤面は同じ速さなのに曲だけ速いと、
     // 速さが変わったように見える。つまみの倍率（`#speed`）は、1台の試合に戻ったときのために残す。
     this.#tools.music.setSpeed(1);
@@ -267,7 +277,10 @@ export class Shell {
   draw(alpha: number): void {
     // パッドは押したことを知らせてくれないので、描くたびに読む。決めた項目が画面を替えることがあるので、
     // 試合の部品を読むより前に済ませる。
-    for (const command of this.#padMenu.poll()) this.navigate(command);
+    // ⚠️ 読むのは毎回。受け付けないときも、前回の状態を更新し続ける（押したままのボタンを、あとで
+    // 新しい押下と取り違えないため。原型も同じ）。
+    const commands = this.#padMenu.poll();
+    if (this.#padAccepted()) for (const command of commands) this.navigate(command);
     const match = this.#match;
     const music = this.#tools.music;
     if (match === null) {
@@ -291,7 +304,12 @@ export class Shell {
     else music.stop();
   }
 
-  #begin(runner: MatchRunner, help: KeyHelpFor, finalActions: readonly HTMLElement[], paced: boolean): void {
+  #begin(
+    runner: MatchRunner,
+    help: KeyHelpFor,
+    finalActions: readonly HTMLElement[],
+    { paced, padOnBanner }: Pick<ActiveMatch, 'paced' | 'padOnBanner'>,
+  ): void {
     this.#endMatch();
     const presenter = new Presenter(this.#tools.sounds, this.#toasts, (id, world) => {
       const roster = runner.hud?.roster;
@@ -307,6 +325,7 @@ export class Shell {
       side: new SidePanel(this.#elements.side, help),
       finalActions,
       paced,
+      padOnBanner,
     };
     this.#showBoard(runner.world !== null);
   }
@@ -320,6 +339,12 @@ export class Shell {
     this.#elements.menu.hidden = board;
     this.#elements.play.hidden = !board;
     this.#tools.captureKeys(board ? 'play' : 'menu');
+  }
+
+  /** いまパッドでカーソルを動かしてよいか。メニューとロビーはいつでも、幕は `padOnBanner` のときだけ。 */
+  #padAccepted(): boolean {
+    const match = this.#match;
+    return this.#navRoot() !== this.#elements.banner || match === null || match.padOnBanner;
   }
 
   /**
@@ -375,7 +400,7 @@ export class Shell {
     // ゲームパッドは1人で遊ぶときだけ繋ぐ（1台に1人ぶん）。2人のときに繋ぐと、
     // どちらのプレイヤーのパッドか決められない。
     if (controller.layout !== 'solo') return keyboard;
-    return new CombinedIntentSource([keyboard, new GamepadIntentSource(id, this.#tools.gamepads)]);
+    return new CombinedIntentSource([keyboard, new GamepadIntentSource(id, this.#pads)]);
   }
 
   #helpFor(id: PlayerId, layout: 'solo' | 'left' | 'right'): KeyHelp {

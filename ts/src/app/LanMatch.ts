@@ -4,7 +4,7 @@ import { LockstepClient, type LanPhase, type PlayingPhase } from '../net/Lockste
 import { lanCpuSource } from '../net/lanCpu.js';
 import { cpuLevelOf, REFUSED_CLOSE_CODE, type PeerLink } from '../net/protocol.js';
 import { CombinedIntentSource } from '../platform/CombinedIntentSource.js';
-import { GamepadIntentSource, type PadSnapshot } from '../platform/GamepadInput.js';
+import { GamepadIntentSource, type PadChoice } from '../platform/GamepadInput.js';
 import { KeyboardIntentSource, SOLO_KEYS, type KeyStateReader } from '../platform/Keyboard.js';
 import { LobbyView, type LobbyState } from '../platform/ui/LobbyView.js';
 import { lockstepUrl, WebSocketLink, type WebSocketLinkHandlers } from '../platform/WebSocketLink.js';
@@ -24,7 +24,8 @@ export interface LanMatchOptions {
   /** 中継サーバの「ホスト名:ポート」（`parseRelayAddress` で確かめたもの）。 */
   readonly address: string;
   readonly keyboard: KeyStateReader;
-  readonly gamepads: () => readonly (PadSnapshot | null)[];
+  /** つかむパッド。ロビーを動かすパッドの操作（`Shell` の `PadMenuInput`）と同じものを渡す。 */
+  readonly pads: PadChoice;
   /** 試合が始まる前（ロビー）の画面を出す場所。 */
   readonly lobby: HTMLElement;
   /** 試合中の、接続の様子を出す場所。 */
@@ -86,7 +87,7 @@ export class LanMatch implements MatchRunner {
       localSource: (playerId) =>
         new CombinedIntentSource([
           new KeyboardIntentSource(playerId, options.keyboard, SOLO_KEYS),
-          new GamepadIntentSource(playerId, options.gamepads),
+          new GamepadIntentSource(playerId, options.pads),
         ]),
       // 強さと種は、ホストが配った設定から引く。全員の端末で同じ CPU が同じ手を指す。
       cpuSource: lanCpuSource,

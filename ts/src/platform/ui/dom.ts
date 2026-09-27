@@ -62,7 +62,7 @@ export function pointerButton(label: string, handler: () => void, options: Eleme
  * `pointerButton` の `handler` を呼ぶ。メニューのカーソルで決めたときに使う。
  *
  * ⚠️ クリックを偽って流さない（`detail: 1` のクリックを流せば同じことが起きるが、
- * キーボードで起きたクリックを捨てる守りを、わざとすり抜ける形になる）。
+ * キーボードで起きたクリックを捨てる仕組みを、わざとすり抜ける形になる）。
  *
  * @returns 呼べたか。`pointerButton` で作った要素でなければ false
  */

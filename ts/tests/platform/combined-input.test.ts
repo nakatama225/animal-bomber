@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { IDLE_INTENT, type PlayerIntent } from '../../src/domain/intent/PlayerIntent.js';
 import type { PlayerId } from '../../src/domain/state/PlayerState.js';
 import { CombinedIntentSource } from '../../src/platform/CombinedIntentSource.js';
-import { GamepadIntentSource, type PadSnapshot } from '../../src/platform/GamepadInput.js';
+import { GamepadIntentSource, PadChoice, type PadSnapshot } from '../../src/platform/GamepadInput.js';
 import { KeyboardIntentSource, SOLO_KEYS } from '../../src/platform/Keyboard.js';
 import { makeWorld } from '../helpers.js';
 
@@ -47,7 +47,7 @@ describe('キーボードとゲームパッドをまとめる', () => {
       axes: [0, 0, 0, 0],
     };
     const keyboard = new KeyboardIntentSource(0, { anyOf: (codes) => codes.includes('KeyD') }, SOLO_KEYS);
-    const gamepad = new GamepadIntentSource(0, () => [pad]);
+    const gamepad = new GamepadIntentSource(0, new PadChoice(() => [pad]));
     const intent = new CombinedIntentSource([keyboard, gamepad]).next(makeWorld());
     expect(intent).toMatchObject({ right: true, bomb: true, up: false });
   });

@@ -160,3 +160,24 @@ class TestTS版の配信:
 
         assert response.status_code == 404
         assert "npm run build" in response.body.decode()
+        # ⚠️ 送れる形まで作る。状態行（理由の句）は ISO-8859-1 で書くので、日本語を入れると
+        # 送る時点で例外になり、何も返らないまま接続が閉じる。
+        assert response.serialize().startswith(b"HTTP/1.1 404 Not Found\r\n")
+
+    def test_置き場所を渡されていなければ_この中継には入っていないと案内する(self):
+        # 固めたデスクトップアプリには TypeScript 版を入れていない。ビルドの仕方を案内しても、
+        # アプリはリポジトリのビルドの出力を読まない。
+        response = get(make_process_request(self.html_path), "/ts/")
+
+        assert response.status_code == 404
+        assert "入れていない" in response.body.decode()
+        assert response.serialize().startswith(b"HTTP/1.1 404 Not Found\r\n")
+
+    def test_どの応答も_送れる形まで作れる(self):
+        # 理由の句に英語の決まった句（HTTPStatus の phrase）以外を入れていないことの確認。
+        responses = [
+            get(self.process_request, path) for path in ("/ts/", "/ts", "/ts/none.js", "/ts/index.html%00.js")
+        ]
+        responses.append(self.process_request(None, make_request(method="POST")))
+        for response in responses:
+            assert response.serialize().startswith(b"HTTP/1.1 "), response.status_code

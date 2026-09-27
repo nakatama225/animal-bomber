@@ -2,7 +2,7 @@ import { FrameLoop } from '../platform/FrameLoop.js';
 import { readBrowserGamepads } from '../platform/GamepadInput.js';
 import { GAME_KEYS, KeyboardWatcher, MENU_KEYS, navCommandOf } from '../platform/Keyboard.js';
 import { loadSound, saveSound } from '../platform/preferences.js';
-import { parseRelayAddress } from '../platform/WebSocketLink.js';
+import { defaultRelayAddress, parseRelayAddress } from '../platform/WebSocketLink.js';
 import { Music } from '../presentation/audio/Music.js';
 import { Synth } from '../presentation/audio/Synth.js';
 import { WebAudioSoundBank } from '../presentation/audio/WebAudioSoundBank.js';
@@ -20,12 +20,10 @@ import { Shell } from './Shell.js';
  * 3. 実時間のループを tick に換えて回す
  *
  * 通信対戦にするには、URL に `?relay` を付ける（タイトルの「通信対戦」も同じことをする）。
- * このページを配っている端末の 8777 番の中継サーバにつなぐ。別の場所の中継なら
+ * このページを配っている端末の中継サーバにつなぐ（中継から `/ts/` の下で配られたページなら同じポート、
+ * 開発サーバから開いたページなら 8777 番。`defaultRelayAddress`）。別の場所の中継なら
  * `?relay=端末名.local:8777` と書く。
  */
-
-/** 中継サーバの既定のポート。`server/` の `DEFAULT_PORT` と同じ値。 */
-const DEFAULT_RELAY_PORT = 8777;
 
 /** 止める・再開するキー。どのプレイヤーの操作にも使っていないキーにする。 */
 const PAUSE_KEY = 'KeyP';
@@ -46,7 +44,7 @@ function findElement<T extends HTMLElement>(id: string, type: new () => T): T {
 function relayParameter(): string | null {
   const value = new URLSearchParams(window.location.search).get('relay');
   if (value === null) return null;
-  return value === '' ? `${window.location.hostname}:${DEFAULT_RELAY_PORT}` : value;
+  return value === '' ? defaultRelayAddress(window.location) : value;
 }
 
 function main(): void {

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { LanMatch } from '../../src/app/LanMatch.js';
 import type { PeerMessage } from '../../src/net/protocol.js';
+import { PadChoice } from '../../src/platform/GamepadInput.js';
 import type { WebSocketLinkHandlers } from '../../src/platform/WebSocketLink.js';
 
 /**
@@ -36,7 +37,7 @@ function mount(): {
   const match = new LanMatch({
     address: 'relay.local:8777',
     keyboard: { anyOf: () => false },
-    gamepads: () => [],
+    pads: new PadChoice(() => []),
     lobby,
     status,
     newSeed: () => 42,

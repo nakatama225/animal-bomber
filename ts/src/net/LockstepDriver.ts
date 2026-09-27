@@ -146,7 +146,7 @@ export class LockstepDriver implements MatchClock {
    * ⚠️ 埋める値を何もしない意思にしない。tick 0 に「離した」が届いて、ラウンドの始まりの
    * 「押していた扱い」（`WorldState` の `HELD_AT_ROUND_START`・`actionHeld` の -1）が外れ、
    * tick 3 に押していた内容が「押した瞬間」として届く。ホストが Enter で「はじめる」を押し、
-   * その Enter がまだ押されている、という普通の始め方で、全員が開始位置に爆弾を置く。
+   * その Enter がまだ押されている、という普通の始め方で、押したまま始まった人（ホスト）が開始位置に爆弾を置く。
    * 手元の入力は1回だけ読み、同じ値を3 tick ぶん送る（押したままのボタンは3 tick とも押している）。
    */
   start(): void {

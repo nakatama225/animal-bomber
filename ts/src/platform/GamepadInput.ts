@@ -65,16 +65,15 @@ export type PadSnapshot = {
 };
 
 /**
- * つかむパッドの選び方と、スティックの読み方。試合の操作とメニューの操作が同じ規則で読む。
+ * どのパッドをつかんでいるか。メニューの操作と試合の操作が、1つを分け合う。
  *
- * スティックの向きには前回の状態（戻りのしきい値）があるので、読む側ごとに1つずつ持つ。
+ * ⚠️ 読む側ごとに持たない。メニューで1番をつかんだあと、試合の側が先頭から探し直すと、
+ * あとから点いた0番（家族が電源を入れた、寝ていたパッドが起きた）をつかみ、手元の1番では
+ * 操作できなくなる。原型も、つかんだ番号を1つだけ持っていた。
  */
-class PadReader {
+export class PadChoice {
   /** 一度つかんだパッドの番号。途中で別のパッドへ移らないようにする。 */
   #index: number | null = null;
-
-  /** 前回スティックが倒れていた向き。戻りのしきい値に使う。 */
-  #stick = { x: 0, y: 0 };
 
   constructor(private readonly read: () => readonly (PadSnapshot | null)[]) {}
 
@@ -98,6 +97,24 @@ class PadReader {
       return pad;
     }
     return null;
+  }
+}
+
+/**
+ * スティックの読み方。試合の操作とメニューの操作が同じ規則で読む。
+ *
+ * スティックの向きには前回の状態（戻りのしきい値）があるので、読む側ごとに1つずつ持つ。
+ * どのパッドを読むかは、分け合う `PadChoice` が決める。
+ */
+class PadReader {
+  /** 前回スティックが倒れていた向き。戻りのしきい値に使う。 */
+  #stick = { x: 0, y: 0 };
+
+  constructor(private readonly choice: PadChoice) {}
+
+  /** 使うパッド。`PadChoice.pick` を参照。 */
+  pick(): PadSnapshot | null {
+    return this.choice.pick();
   }
 
   /** 押している向き。十字キーとスティックの OR。 */
@@ -146,19 +163,21 @@ function held(pad: PadSnapshot, index: number): boolean {
 /**
  * パッドの入力を意思に変える窓口。
  *
- * ⚠️ 読み取りに使う関数を引数で受け取るのは、ブラウザの
+ * ⚠️ 読み取りに使う関数を（`PadChoice` を通して）引数で受け取るのは、ブラウザの
  * `navigator.getGamepads` に直接触らずにテストできるようにするため。
  * Node には `navigator` が存在するが `getGamepads` は無いので、
- * 素直に書くと実行時に落ちる。
+ * 素直に書くと実行時に例外になる。
+ *
+ * @param choice つかむパッド。メニューの操作（`PadMenuInput`）と同じものを渡す
  */
 export class GamepadIntentSource implements IntentSource {
   readonly #reader: PadReader;
 
   constructor(
     readonly playerId: PlayerId,
-    read: () => readonly (PadSnapshot | null)[],
+    choice: PadChoice,
   ) {
-    this.#reader = new PadReader(read);
+    this.#reader = new PadReader(choice);
   }
 
   next(): PlayerIntent {
@@ -185,8 +204,9 @@ export class PadMenuInput {
   readonly #reader: PadReader;
   #previous: ReadonlySet<NavCommand> = new Set();
 
-  constructor(read: () => readonly (PadSnapshot | null)[]) {
-    this.#reader = new PadReader(read);
+  /** @param choice つかむパッド。試合の操作（`GamepadIntentSource`）と同じものを渡す */
+  constructor(choice: PadChoice) {
+    this.#reader = new PadReader(choice);
   }
 
   /** パッドを読み、この回に押し始めた操作を返す。描くたびに1回呼ぶ。 */
@@ -212,11 +232,21 @@ export class PadMenuInput {
  *
  * ⚠️ `navigator` の有無だけで判定しない。Node にも `navigator` は
  * 存在し、`getGamepads` だけが無い。関数があるかまで確かめる。
+ *
+ * ⚠️ 読み取りの例外は握りつぶし、パッドは無いものとして扱う。gamepad を許していない別オリジンの
+ * iframe などでは `getGamepads` が SecurityError を投げる。描くたびに読むので、投げたままにすると
+ * 描画のループが最初の1枚で止まり、どの画面も動かなくなる（原型も握りつぶしていた）。
  */
 export function readBrowserGamepads(): readonly (PadSnapshot | null)[] {
   const nav = globalThis.navigator as { getGamepads?: () => readonly (Gamepad | null)[] };
   if (typeof nav?.getGamepads !== 'function') return [];
-  return nav.getGamepads().map((pad) =>
+  let pads: readonly (Gamepad | null)[];
+  try {
+    pads = nav.getGamepads();
+  } catch {
+    return [];
+  }
+  return pads.map((pad) =>
     pad === null
       ? null
       : {

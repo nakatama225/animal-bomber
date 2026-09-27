@@ -63,7 +63,8 @@ export class Renderer {
   /**
    * 1枚描く。
    *
-   * @param alpha 前の tick から次の tick までの進み具合（0 以上 1 未満）
+   * @param alpha 前の tick から次の tick までの進み具合（0 以上 1 以下）。1 になるのは、倍率を掛けた
+   *   1台の試合で、次の tick の位置まで埋め終えたとき（`GameSpeed.progress`）
    */
   draw(world: Readonly<WorldState>, alpha: number): void {
     const g = this.#g;

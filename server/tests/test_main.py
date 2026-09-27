@@ -49,11 +49,24 @@ class Testhtmlパス解決:
 class TestTS版の置き場所:
     def test_MEIPASSが無いときはリポジトリのts_distを指す(self, monkeypatch):
         monkeypatch.delattr("sys._MEIPASS", raising=False)
-        assert _default_ts_dir().parts[-2:] == ("ts", "dist")
+        ts_dir = _default_ts_dir()
+        assert ts_dir is not None
+        assert ts_dir.parts[-2:] == ("ts", "dist")
+        # 末尾の2つだけでは、別の場所の ts/dist（server/ts/dist など）を指していても通る。
+        # 根がリポジトリであることを、そこにあるはずのものから確かめる。
+        root = ts_dir.parents[1]
+        assert (root / "server" / "pyproject.toml").is_file()
+        assert (root / "legacy" / "animal-bomber.html").is_file()
 
-    def test_MEIPASSがあるときはそちらを指す(self, monkeypatch, tmp_path):
+    def test_MEIPASSがあってTS版が入っていればそちらを指す(self, monkeypatch, tmp_path):
+        (tmp_path / "ts").mkdir()
         monkeypatch.setattr("sys._MEIPASS", str(tmp_path), raising=False)
         assert _default_ts_dir() == tmp_path / "ts"
+
+    def test_MEIPASSがあってもTS版が入っていなければ_置き場所を持たない(self, monkeypatch, tmp_path):
+        # 固めたアプリには、いまは入れていない。置き場所を持たないと、/ts/ は「入れていない」と案内する。
+        monkeypatch.setattr("sys._MEIPASS", str(tmp_path), raising=False)
+        assert _default_ts_dir() is None
 
 
 @pytest.fixture
@@ -214,13 +227,12 @@ def test_パッケージ名で起動できる():
     assert "--port" in result.stdout
 
 
-async def test_渡したTS版の置き場所を_ts_の下で配る(html_path, tmp_path):
-    # `_serve_until_stopped` が置き場所を配信の関数まで渡していることの確認（配線）。
-    (tmp_path / "index.html").write_text("<html>TS 版</html>", encoding="utf-8")
+async def _get_ts_through_socket(html_path: Path, ts_dir: Path) -> tuple[bytes, bytes]:
+    """GUI 経路のサーバを立て、実際のソケットで `GET /ts/` を送って、応答の頭と本文を返す。"""
     loop_box: dict = {}
     stop_event_box: dict = {}
     task = asyncio.create_task(
-        _serve_until_stopped(0, html_path, loop_box, stop_event_box, tmp_path)
+        _serve_until_stopped(0, html_path, loop_box, stop_event_box, ts_dir)
     )
     for _ in range(50):
         if "port" in stop_event_box:
@@ -229,16 +241,39 @@ async def test_渡したTS版の置き場所を_ts_の下で配る(html_path, tm
     else:
         pytest.fail("ポートが書き込まれなかった")
 
-    reader, writer = await asyncio.wait_for(
-        asyncio.open_connection("127.0.0.1", stop_event_box["port"]), timeout=2
-    )
-    writer.write(b"GET /ts/ HTTP/1.1\r\nHost: localhost\r\n\r\n")
-    await writer.drain()
-    head = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=2)
-    body = await asyncio.wait_for(reader.read(len("<html>TS 版</html>".encode())), timeout=2)
-    writer.close()
+    try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection("127.0.0.1", stop_event_box["port"]), timeout=2
+        )
+        writer.write(b"GET /ts/ HTTP/1.1\r\nHost: localhost\r\n\r\n")
+        await writer.drain()
+        head = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=2)
+        length = next(
+            int(line.split(b":", 1)[1])
+            for line in head.split(b"\r\n")
+            if line.lower().startswith(b"content-length:")
+        )
+        body = await asyncio.wait_for(reader.readexactly(length), timeout=2)
+        writer.close()
+    finally:
+        stop_event_box["event"].set()
+        await asyncio.wait_for(task, timeout=2)
+    return head, body
 
-    stop_event_box["event"].set()
-    await asyncio.wait_for(task, timeout=2)
+
+async def test_渡したTS版の置き場所を_ts_の下で配る(html_path, tmp_path):
+    # `_serve_until_stopped` が置き場所を配信の関数まで渡していることの確認（配線）。
+    (tmp_path / "index.html").write_text("<html>TS 版</html>", encoding="utf-8")
+
+    head, body = await _get_ts_through_socket(html_path, tmp_path)
+
     assert head.startswith(b"HTTP/1.1 200")
     assert body == "<html>TS 版</html>".encode()
+
+
+async def test_TS版が無いときも_ソケットまで案内が届く(html_path, tmp_path):
+    # 応答を作るだけのテストでは、送る時点（状態行を書くとき）の例外が見えない。実際に送って確かめる。
+    head, body = await _get_ts_through_socket(html_path, tmp_path / "none")
+
+    assert head.startswith(b"HTTP/1.1 404 Not Found\r\n")
+    assert "npm run build" in body.decode("utf-8")

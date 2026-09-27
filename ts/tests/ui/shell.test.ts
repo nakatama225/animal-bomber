@@ -652,6 +652,103 @@ describe('ゲームパッドとロビーでメニューを動かす', () => {
     shell.draw(0);
   }
 
+  /** マウスで、その遊び方・1ラウンド 60 秒の試合を始め、優勝の幕が出るまで進める。 */
+  function playToChampionByMouse(shell: Shell, elements: ShellElements, mode: 'solo' | 'duo'): void {
+    shell.showMenu();
+    press(elements.menu, `[data-choice="${mode}"]`);
+    press(elements.menu, '[data-action="next"]');
+    press(elements.menu, '[data-field="time"] [data-value="60"]');
+    press(elements.menu, '[data-action="start"]');
+    shell.draw(0);
+    let ticks = 0;
+    while (elements.banner.hidden || !elements.banner.textContent?.includes('優勝')) {
+      shell.tick();
+      if (ticks % 30 === 0) shell.draw(0);
+      ticks += 1;
+      if (ticks > 200_000) throw new Error('試合が決まらない');
+    }
+    shell.draw(0);
+  }
+
+  it('2人で遊ぶ試合の優勝の幕では、パッドを効かせない（原型と同じ）', () => {
+    // 2人で遊ぶときはパッドを試合に繋がない。机に置いたパッドに肘が当たっただけで次の試合が
+    // 始まらないよう、原型も2人のときは幕でパッドを受け付けなかった（1人と通信対戦のときだけ）。
+    const pad = fakePad();
+    const { shell, elements } = mount('both', () => [], pad.read);
+    playToChampionByMouse(shell, elements, 'duo');
+    tap(shell, pad, A);
+    expect(elements.banner.hidden).toBe(false);
+    expect(elements.menu.hidden).toBe(true);
+    // キーボードの決定は効く（原型もキーボードでは人数によらず次へ進めた）。
+    shell.navigate('confirm');
+    shell.draw(0);
+    expect(elements.banner.hidden).toBe(true);
+  }, 120_000);
+
+  it('2人の試合の幕でパッドを受け付けない間も、パッドは読み続ける（押したままの A を、タイトルで押し直しと取り違えない）', () => {
+    // 受け付けない間に読むのを止めると、前回の状態が古いまま残る。幕で A を押したままキーボードで
+    // 「タイトルへ」を選ぶと、タイトルで A が新しい押下に見え、先頭の項目を押してしまう。
+    const pad = fakePad();
+    const { shell, elements } = mount('both', () => [], pad.read);
+    playToChampionByMouse(shell, elements, 'duo');
+    pad.hold(A);
+    shell.draw(0);
+    shell.navigate('right');
+    shell.navigate('confirm');
+    expect(screenOf(elements)).toBe('title');
+    for (let i = 0; i < 3; i += 1) shell.draw(0);
+    expect(screenOf(elements)).toBe('title');
+  }, 120_000);
+
+  it('1人で遊ぶ試合の優勝の幕は、パッドの A で次の試合になる', () => {
+    const pad = fakePad();
+    const { shell, elements } = mount('both', () => [], pad.read);
+    playToChampionByMouse(shell, elements, 'solo');
+    tap(shell, pad, A);
+    expect(elements.banner.hidden).toBe(true);
+    expect(elements.side.querySelector('.time')?.textContent).toBe('1:00');
+  }, 120_000);
+
+  it('メニューでつかんだパッドを試合でもそのまま使い、あとから別のパッドが点いても移らない', () => {
+    // 読む側ごとにパッドの番号を覚えると、試合の側が先頭から探し直して、あとから点いた0番をつかむ。
+    // 手元の1番では爆弾が置けなくなる（原型も番号を1つだけ持っていた）。
+    let awake = false;
+    let held = new Set<number>();
+    const snapshot = (index: number, pressed: ReadonlySet<number>): PadSnapshot => ({
+      mapping: 'standard',
+      connected: true,
+      index,
+      buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: pressed.has(i) })),
+      axes: [0, 0, 0, 0],
+    });
+    const read = (): readonly (PadSnapshot | null)[] => [awake ? snapshot(0, new Set()) : null, snapshot(1, held)];
+    const hold = (...buttons: number[]): void => {
+      held = new Set(buttons);
+    };
+    const { shell, elements, played } = mount('both', () => [], read);
+    const tapOne = (button: number): void => {
+      hold(button);
+      shell.draw(0);
+      hold();
+      shell.draw(0);
+    };
+    shell.showMenu();
+    tapOne(A);
+    tapOne(A);
+    tapOne(UP);
+    tapOne(A);
+    expect(screenOf(elements)).toBe('rules');
+    // 家族が別のパッドの電源を入れる。
+    awake = true;
+    tapOne(UP);
+    tapOne(A);
+    expect(elements.menu.hidden).toBe(true);
+    for (let i = 0; i < 10; i += 1) shell.tick();
+    hold(A);
+    for (let i = 0; i < 3; i += 1) shell.tick();
+    expect(played.filter((name) => name === 'place')).toHaveLength(1);
+  });
+
   it('パッドだけで、遊び方を選んで次の画面へ進める', () => {
     const pad = fakePad();
     const { shell, elements } = mount('both', () => [], pad.read);
