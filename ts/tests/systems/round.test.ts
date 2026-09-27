@@ -6,8 +6,10 @@ import { defaultMatchConfig, seedForRound } from '../../src/domain/rules/MatchCo
 import { OUT } from '../../src/domain/state/Life.js';
 import { winsOf } from '../../src/domain/state/MatchState.js';
 import { isAlive } from '../../src/domain/state/PlayerState.js';
-import { hashWorld } from '../../src/domain/state/WorldState.js';
+import { createWorld, hashWorld, type WorldState } from '../../src/domain/state/WorldState.js';
+import { centerOf } from '../../src/domain/core/Coord.js';
 import { secondsToTicks } from '../../src/domain/core/Tick.js';
+import { SPAWN_CELLS } from '../../src/domain/rules/tuning.js';
 
 /** 決着のあとの待ちを飛ばして、次のラウンドの盤面まで進める。 */
 function skipIntermission(game: GameSession): void {
@@ -130,6 +132,42 @@ describe('ラウンドの進行', () => {
       skipIntermission(game);
     }
     expect(hashWorld(first.world)).toBe(hashWorld(second.world));
+  });
+});
+
+describe('開始位置', () => {
+  const positionsOf = (world: WorldState) => world.players.map((p) => p.position);
+  const facingsOf = (world: WorldState) => world.players.map((p) => p.facing);
+
+  it('2人の試合は、左上と右下の対角から始まり、盤面の内側を向く', () => {
+    const world = createWorld({ seed: 5, animals: ['rabbit', 'frog'] });
+    expect(positionsOf(world)).toEqual([centerOf(SPAWN_CELLS[0]), centerOf(SPAWN_CELLS[3])]);
+    expect(facingsOf(world)).toEqual(['down', 'up']);
+  });
+
+  it('3人と4人の試合は、プレイヤー番号の順に4隅から始まる', () => {
+    const four = createWorld({ seed: 5, animals: ['rabbit', 'frog', 'fox', 'mole'] });
+    expect(positionsOf(four)).toEqual(SPAWN_CELLS.map(centerOf));
+    expect(facingsOf(four)).toEqual(['down', 'down', 'up', 'up']);
+    const three = createWorld({ seed: 5, animals: ['rabbit', 'frog', 'fox'] });
+    expect(positionsOf(three)).toEqual(SPAWN_CELLS.slice(0, 3).map(centerOf));
+  });
+
+  it('盤面は人数によらず同じ（4隅とも空けて作る）', () => {
+    // 人数で盤面の作り方を変えると、同じ種でも2人と4人で別の盤面になり、
+    // 右下の隅が空いているかも人数しだいになる。
+    const two = createWorld({ seed: 5, animals: ['rabbit', 'frog'] });
+    const four = createWorld({ seed: 5, animals: ['rabbit', 'frog', 'fox', 'mole'] });
+    expect(two.board.encode()).toBe(four.board.encode());
+  });
+
+  it('次のラウンドも、2人の試合は対角から始まる', () => {
+    const game = session();
+    game.world.players[1]!.life = OUT;
+    game.tick();
+    skipIntermission(game);
+    expect(game.match.round).toBe(2);
+    expect(positionsOf(game.world)).toEqual([centerOf(SPAWN_CELLS[0]), centerOf(SPAWN_CELLS[3])]);
   });
 });
 

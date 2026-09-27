@@ -59,7 +59,7 @@ function play(seed: number, animals: string[], levels: CpuLevelKey[], rounds: nu
  */
 describe('CPU の強さ', () => {
   it('おには、よわいより3倍以上多く勝つ', () => {
-    // 同じ動物どうしで、開始位置の有利不利が混ざらないよう左右を入れ替えて回す。
+    // 同じ動物どうしで、開始位置の有利不利が混ざらないよう開始位置を入れ替えて回す。
     let oni = 0;
     let easy = 0;
     for (let s = 0; s < 4; s += 1) {

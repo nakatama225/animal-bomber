@@ -5,7 +5,7 @@ import { Rng } from '../core/Rng.js';
 import { StateHasher } from '../core/StateHash.js';
 import { secondsToTicks, tick, type Tick } from '../core/Tick.js';
 import { IDLE_INTENT, packIntent } from '../intent/PlayerIntent.js';
-import { ROUND_SECONDS, SPAWN_CELLS, STARTING_HP } from '../rules/tuning.js';
+import { DUEL_SPAWN_CELLS, ROUND_SECONDS, ROWS, SPAWN_CELLS, STARTING_HP } from '../rules/tuning.js';
 import type { Blast, Bomb } from './Bomb.js';
 import { EffectBag } from './EffectBag.js';
 import type { Item } from './Item.js';
@@ -104,11 +104,13 @@ export function createWorld(config: WorldSeed): WorldState {
     throw new Error(`初期体力の数（${startingHp.length}）が動物の数（${config.animals.length}）と合わない`);
   }
   const rng = new Rng(config.seed);
+  // 盤面は人数によらず4隅を空けて作る。人数で変えると、同じ種でも2人と4人で別の盤面になる。
   const board = buildBoard(rng, SPAWN_CELLS);
+  const spawns = config.animals.length === 2 ? DUEL_SPAWN_CELLS : SPAWN_CELLS;
 
   const players: PlayerState[] = config.animals.map((animal, index) => {
     // プレイヤーは最大4人。開始位置（SPAWN_CELLS）と同じ数に揃えてある。
-    const spawn = SPAWN_CELLS[index];
+    const spawn = spawns[index];
     if (spawn === undefined) {
       throw new Error(`開始位置が足りない: ${index}`);
     }
@@ -117,7 +119,8 @@ export function createWorld(config: WorldSeed): WorldState {
       id: index as PlayerId,
       animal,
       position: centerOf(spawn),
-      facing: index < 2 ? 'down' : 'up',
+      // 上の隅からは下を、下の隅からは上を向いて始まる（盤面の内側を向く）。
+      facing: spawn.row < ROWS / 2 ? 'down' : 'up',
       life: ALIVE,
       hp: (startingHp?.[index] ?? STARTING_HP) + bonus.hp,
       shoes: 0,
