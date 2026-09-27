@@ -1,6 +1,7 @@
 import type { IntentSource } from '../domain/intent/IntentSource.js';
 import type { PlayerIntent } from '../domain/intent/PlayerIntent.js';
 import type { PlayerId } from '../domain/state/PlayerState.js';
+import type { NavCommand } from '../presentation/menu/MenuCursor.js';
 
 /**
  * どのキーがどの操作に当たるか。
@@ -68,6 +69,52 @@ export const GAME_KEYS: readonly string[] = [
 ];
 
 /**
+ * メニューを動かすキーと、その操作（原型と同じ）。
+ *
+ * 決定は Enter と Space。どちらも爆弾のキーなので、決定で「はじめる」を押すと、押したまま
+ * 試合が始まる。ルールの層が、ラウンドの始まりに押していた爆弾のボタンを離すまで効かなくして
+ * いるので、開始位置に爆弾は置かれない（`WorldState.ts` の `HELD_AT_ROUND_START`）。
+ */
+const NAV_COMMANDS: Readonly<Record<string, NavCommand>> = {
+  ArrowUp: 'up',
+  ArrowDown: 'down',
+  ArrowLeft: 'left',
+  ArrowRight: 'right',
+  Enter: 'confirm',
+  Space: 'confirm',
+  Escape: 'back',
+  Backspace: 'back',
+};
+
+/** その操作に当たるキー（表の順）。遊び方の説明に使う。 */
+export function navKeysOf(command: NavCommand): string[] {
+  return Object.entries(NAV_COMMANDS)
+    .filter(([, bound]) => bound === command)
+    .map(([code]) => code);
+}
+
+/**
+ * メニューの画面の間、ブラウザの既定の動きを止めるキー。
+ *
+ * 矢印と Space は、画面が縦に収まらないときにページを動かす。メニューでは、動かす代わりに
+ * カーソルの項目が見える所までだけ動かす。Escape は止めない（全画面の解除などに使う）。
+ */
+export const MENU_KEYS: readonly string[] = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter'];
+
+/**
+ * キーを押したことを、メニューの操作に翻訳する。メニューの操作に使わないキーなら null。
+ *
+ * 押し続けたときの繰り返し（`repeat`）は数えない。Command・Ctrl・Option と一緒のときも数えない
+ * （ブラウザの操作に使う）。
+ */
+export function navCommandOf(
+  event: Pick<KeyboardEvent, 'code' | 'repeat' | 'metaKey' | 'ctrlKey' | 'altKey'>,
+): NavCommand | null {
+  if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return null;
+  return NAV_COMMANDS[event.code] ?? null;
+}
+
+/**
  * 押されているキーを答えるもの。
  *
  * `KeyboardIntentSource` がこの形だけに依存するので、テストでは
@@ -131,7 +178,7 @@ export class KeyboardWatcher implements KeyStateReader {
    * このキーの、ブラウザの既定の動きを止める（止めるキーを差し替える）。
    *
    * 矢印と Space は、画面が縦に収まらないときにページを動かす。試合の最中に盤面が
-   * ずれて見えなくなるので、試合の画面の間は `GAME_KEYS` を渡して止める。
+   * ずれて見えなくなるので、試合の画面の間は `GAME_KEYS` を、メニューの間は `MENU_KEYS` を渡して止める。
    * 押されたことは、止めても止めなくても数える。
    */
   capture(codes: readonly string[]): void {

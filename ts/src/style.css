@@ -371,6 +371,18 @@ button {
 
 /* ------------------------------------------------------------ メニューの画面 */
 
+/*
+ * メニューのカーソル（キーボード・パッドで動かしたときだけ出す。src/platform/ui/MenuNavigator.ts）。
+ * ⚠️ border-color と box-shadow は使わない。「いま選ばれている」表示（.animal.on・.chip.on）が
+ *    その2つで描かれているので、上書きすると、どれを選んだかが見えなくなる。outline は空いている
+ * ⚠️ outline-offset を大きくしない。.chips の間は 8px なので、5px 以上にすると枠が隣に触る
+ * （どちらも原型の注意書き）
+ */
+.navcur {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}
+
 .menu-card {
   max-width: 860px;
   margin: 0 auto;

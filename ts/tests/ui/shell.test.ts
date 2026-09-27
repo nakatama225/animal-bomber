@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { Shell, type ShellElements, type ShellTools } from '../../src/app/Shell.js';
+import { ANIMAL_LOOKS } from '../../src/content/animals.js';
 import type { PeerMessage } from '../../src/net/protocol.js';
 import type { WebSocketLinkHandlers } from '../../src/platform/WebSocketLink.js';
 import type { SoundName } from '../../src/presentation/audio/SoundBank.js';
@@ -21,12 +22,17 @@ function press(root: ParentNode, selector: string): void {
   target.dispatchEvent(new MouseEvent('click', { detail: 1, bubbles: true }));
 }
 
-function mount(sound: SoundSetting = 'both'): {
+/**
+ * 画面を組み立てる。
+ *
+ * @param held いま押しているキー（`KeyboardEvent.code`）。呼ばれるたびに読むので、途中で変えられる
+ */
+function mount(sound: SoundSetting = 'both', held: () => readonly string[] = () => []): {
   shell: Shell;
   elements: ShellElements;
   played: SoundName[];
   music: { started: number; stopped: number; speeds: number[] };
-  captured: boolean[];
+  captured: ('play' | 'menu')[];
   relay: () => WebSocketLinkHandlers;
   sent: PeerMessage[];
 } {
@@ -53,11 +59,11 @@ function mount(sound: SoundSetting = 'both'): {
   const played: SoundName[] = [];
   const music = { started: 0, stopped: 0, speeds: [] as number[] };
   const sent: PeerMessage[] = [];
-  const captured: boolean[] = [];
+  const captured: ('play' | 'menu')[] = [];
   let relay: WebSocketLinkHandlers | null = null;
   const tools: ShellTools = {
     context: fakeCanvas({ keepLog: false }).context,
-    keyboard: { anyOf: () => false },
+    keyboard: { anyOf: (codes) => codes.some((code) => held().includes(code)) },
     gamepads: () => [],
     sounds: { play: (name) => played.push(name) },
     music: {
@@ -67,7 +73,7 @@ function mount(sound: SoundSetting = 'both'): {
     },
     sound,
     setSound: () => undefined,
-    captureKeys: (on) => captured.push(on),
+    captureKeys: (screen) => captured.push(screen),
     newSeed: () => 7,
     openLan: () => undefined,
     leaveLan: () => undefined,
@@ -127,16 +133,16 @@ describe('画面の切り替え', () => {
     expect(elements.toasts.childElementCount).toBe(0);
   }, 120_000);
 
-  it('試合の画面の間だけ、操作のキーのブラウザの動きを止める', () => {
+  it('試合の画面の間は試合の操作のキーを、メニューの間はメニューのキーを止める', () => {
     const { shell, elements, captured } = mount();
     shell.showMenu();
     press(elements.menu, '[data-choice="solo"]');
     press(elements.menu, '[data-action="next"]');
     press(elements.menu, '[data-action="start"]');
     shell.draw(0);
-    expect(captured.at(-1)).toBe(true);
+    expect(captured.at(-1)).toBe('play');
     press(elements.toolbar, '[data-action="quit"]');
-    expect(captured.at(-1)).toBe(false);
+    expect(captured.at(-1)).toBe('menu');
   });
 
   it('通信対戦では、番号を受け取ってから自分のキー配置を出す', () => {
@@ -304,4 +310,147 @@ describe('ゲームの速さ', () => {
     // 1 tick 進めるごとに、自分の入力を1通送る。
     expect(inputs() - before).toBe(1);
   });
+});
+
+describe('キーボードでメニューを動かす', () => {
+  /** 枠の付いている項目。 */
+  const cursorOf = (root: HTMLElement): HTMLElement | null => root.querySelector('.navcur');
+  const screenOf = (elements: ShellElements): string | undefined =>
+    elements.menu.querySelector<HTMLElement>('[data-screen]')?.dataset['screen'];
+
+  it('キーボードだけで、遊び方・動物・ルールを選んで試合を始められる', () => {
+    const { shell, elements } = mount();
+    shell.showMenu();
+    // 最初の「下」は、枠を出したうえで1つ下（2人 vs CPU×2）へ移る。
+    shell.navigate('down');
+    expect(cursorOf(elements.menu)?.dataset['choice']).toBe('duo');
+    shell.navigate('confirm');
+    expect(screenOf(elements)).toBe('pick');
+
+    // 画面が替わると、カーソルは先頭（1P の動物の1つ目）へ戻る。
+    expect(cursorOf(elements.menu)?.dataset['nav']).toBe('pick-0');
+    shell.navigate('right');
+    shell.navigate('confirm');
+    const second = ANIMAL_LOOKS[1]!;
+    const third = ANIMAL_LOOKS[2]!;
+    // 選び直しても、カーソルはその行に残る。
+    expect(cursorOf(elements.menu)?.dataset['animal']).toBe(second.key);
+    shell.navigate('down');
+    shell.navigate('right');
+    shell.navigate('confirm');
+    expect(cursorOf(elements.menu)?.dataset['animal']).toBe(third.key);
+    shell.navigate('down');
+    shell.navigate('confirm');
+    expect(screenOf(elements)).toBe('rules');
+
+    // 先頭から上へ回ると、いちばん下の「はじめる」。
+    shell.navigate('up');
+    expect(cursorOf(elements.menu)?.dataset['action']).toBe('start');
+    shell.navigate('confirm');
+    shell.draw(0);
+    expect(elements.play.hidden).toBe(false);
+    const names = [...elements.side.querySelectorAll('.card .name')].map((name) => name.textContent);
+    expect(names.slice(0, 2)).toEqual([`${second.name} 1P`, `${third.name} 2P`]);
+  });
+
+  it('枠が出ていないときの Enter は、枠を出すだけで押さない', () => {
+    const { shell, elements } = mount();
+    shell.showMenu();
+    expect(cursorOf(elements.menu)).toBeNull();
+    shell.navigate('confirm');
+    expect(screenOf(elements)).toBe('title');
+    expect(cursorOf(elements.menu)?.dataset['choice']).toBe('solo');
+    shell.navigate('confirm');
+    expect(screenOf(elements)).toBe('pick');
+  });
+
+  it('マウスを動かすと枠が消え、次の Enter はまた枠を出すだけになる', () => {
+    const { shell, elements } = mount();
+    shell.showMenu();
+    shell.navigate('down');
+    shell.hideCursor();
+    expect(cursorOf(elements.menu)).toBeNull();
+    shell.navigate('confirm');
+    expect(screenOf(elements)).toBe('title');
+    expect(cursorOf(elements.menu)?.dataset['choice']).toBe('duo');
+  });
+
+  it('Escape で1つ前の画面へ戻り、タイトルでは何もしない。「← もどる」にはカーソルが乗らない', () => {
+    const { shell, elements } = mount();
+    shell.showMenu();
+    shell.navigate('confirm');
+    shell.navigate('confirm');
+    expect(screenOf(elements)).toBe('pick');
+    expect(elements.menu.querySelector('[data-action="back"]')?.hasAttribute('data-nav')).toBe(false);
+    shell.navigate('back');
+    expect(screenOf(elements)).toBe('title');
+    shell.navigate('back');
+    expect(screenOf(elements)).toBe('title');
+  });
+
+  it('試合の最中は、矢印や Enter や Escape を押しても何も起きない', () => {
+    const { shell, elements } = mount();
+    shell.showMenu();
+    press(elements.menu, '[data-choice="solo"]');
+    press(elements.menu, '[data-action="next"]');
+    press(elements.menu, '[data-action="start"]');
+    for (let i = 0; i < 60; i += 1) shell.tick();
+    shell.draw(0);
+    for (const command of ['down', 'confirm', 'confirm', 'back', 'confirm'] as const) shell.navigate(command);
+    shell.draw(0);
+    expect(elements.play.hidden).toBe(false);
+    expect(elements.menu.hidden).toBe(true);
+    expect(document.querySelector('.navcur')).toBeNull();
+    // 試合は作り直されていない（作り直すと時計が 3:00 に戻る）。
+    expect(elements.side.querySelector('.time')?.textContent).toBe('2:59');
+  });
+
+  it('Enter を押したまま「はじめる」を決めても、開始位置に爆弾を置かない。離して押し直すと置く', () => {
+    // Enter は決定のキーで、1人で遊ぶときの爆弾のキーでもある。
+    let held: readonly string[] = [];
+    const { shell, elements, played } = mount('both', () => held);
+    shell.showMenu();
+    shell.navigate('confirm');
+    shell.navigate('confirm');
+    shell.navigate('up');
+    shell.navigate('confirm');
+    expect(screenOf(elements)).toBe('rules');
+    shell.navigate('up');
+    held = ['Enter'];
+    shell.navigate('confirm');
+    expect(elements.menu.hidden).toBe(true);
+    for (let i = 0; i < 30; i += 1) shell.tick();
+    expect(played.filter((name) => name === 'place')).toHaveLength(0);
+    // 対照：離して押し直せば置く（押しても置かれない、で上が通ってしまわないように）。
+    held = [];
+    shell.tick();
+    held = ['Enter'];
+    shell.tick();
+    expect(played.filter((name) => name === 'place')).toHaveLength(1);
+  });
+
+  it('優勝の幕では、キーボードで「タイトルへ」を選べる', () => {
+    const { shell, elements } = mount();
+    shell.showMenu();
+    press(elements.menu, '[data-choice="solo"]');
+    press(elements.menu, '[data-action="next"]');
+    press(elements.menu, '[data-field="time"] [data-value="60"]');
+    press(elements.menu, '[data-action="start"]');
+    shell.draw(0);
+    let ticks = 0;
+    while (elements.banner.hidden || !elements.banner.textContent?.includes('優勝')) {
+      shell.tick();
+      if (ticks % 30 === 0) shell.draw(0);
+      ticks += 1;
+      if (ticks > 200_000) throw new Error('試合が決まらない');
+    }
+    shell.navigate('confirm');
+    // 最初の1押しは枠を出すだけ。先頭は「もういっかい」。
+    expect(cursorOf(elements.banner)?.dataset['action']).toBe('again');
+    shell.navigate('right');
+    expect(cursorOf(elements.banner)?.dataset['action']).toBe('title');
+    shell.navigate('confirm');
+    expect(elements.menu.hidden).toBe(false);
+    expect(screenOf(elements)).toBe('title');
+  }, 120_000);
 });

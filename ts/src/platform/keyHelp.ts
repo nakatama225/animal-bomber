@@ -1,4 +1,4 @@
-import type { KeyBinding } from './Keyboard.js';
+import { navKeysOf, type KeyBinding } from './Keyboard.js';
 
 /**
  * キー配置の説明。試合の横の板に出す。
@@ -31,6 +31,13 @@ export function keyName(code: string): string {
   if (named !== undefined) return named;
   if (code.startsWith('Key') || code.startsWith('Digit')) return code.replace(/^(Key|Digit)/, '');
   return code;
+}
+
+/** メニューの動かし方の説明。キーはメニューの操作の表（`Keyboard.ts` の `navKeysOf`）から作る。 */
+export function menuHelp(): string {
+  const names = (keys: readonly string[]): string => keys.map(keyName).join('・');
+  const moves = (['up', 'left', 'down', 'right'] as const).flatMap(navKeysOf).map(keyName).join(' ');
+  return `${moves} で選び、${names(navKeysOf('confirm'))} で決める。${names(navKeysOf('back'))} で1つ前の画面へ（マウスでも押せる）`;
 }
 
 /** ゲームパッドの割り当ての説明（`GamepadInput.ts` の割り当てと同じ）。 */

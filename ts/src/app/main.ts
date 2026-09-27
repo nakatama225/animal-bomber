@@ -1,6 +1,6 @@
 import { FrameLoop } from '../platform/FrameLoop.js';
 import { readBrowserGamepads } from '../platform/GamepadInput.js';
-import { GAME_KEYS, KeyboardWatcher } from '../platform/Keyboard.js';
+import { GAME_KEYS, KeyboardWatcher, MENU_KEYS, navCommandOf } from '../platform/Keyboard.js';
 import { loadSound, saveSound } from '../platform/preferences.js';
 import { parseRelayAddress } from '../platform/WebSocketLink.js';
 import { Music } from '../presentation/audio/Music.js';
@@ -91,7 +91,7 @@ function main(): void {
         applySound(chosen);
         saveSound(chosen);
       },
-      captureKeys: (on) => keyboard.capture(on ? GAME_KEYS : []),
+      captureKeys: (screen) => keyboard.capture(screen === 'play' ? GAME_KEYS : MENU_KEYS),
       // 種は試合ごとに変えたいが、ルールの層で乱数や時刻に触れない。
       // 実時間を読むのはブラウザに近いこの層の役目なので、ここで作る。
       // 通信対戦では、ホストの種が全員に配られる。
@@ -113,7 +113,11 @@ function main(): void {
   window.addEventListener('pointerdown', unlockAudio);
   window.addEventListener('keydown', (event: KeyboardEvent) => {
     if (event.code === PAUSE_KEY && !event.repeat) shell.togglePause();
+    const command = navCommandOf(event);
+    if (command !== null) shell.navigate(command);
   });
+  // マウスを動かしたら、メニューのカーソルの枠を消す（枠はキーやパッドを触ったときだけ出す。原型と同じ）。
+  window.addEventListener('mousemove', () => shell.hideCursor());
 
   const relay = relayParameter();
   if (relay === null) {

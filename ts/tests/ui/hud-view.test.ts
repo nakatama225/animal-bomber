@@ -8,7 +8,7 @@ import { defaultMatchConfig } from '../../src/domain/rules/MatchConfig.js';
 import { keyHelpFor } from '../../src/platform/keyHelp.js';
 import { SOLO_KEYS } from '../../src/platform/Keyboard.js';
 import { BannerOverlay } from '../../src/platform/ui/BannerOverlay.js';
-import { pointerButton } from '../../src/platform/ui/dom.js';
+import { activate, pointerButton } from '../../src/platform/ui/dom.js';
 import { SidePanel } from '../../src/platform/ui/SidePanel.js';
 import { Toasts } from '../../src/platform/ui/Toasts.js';
 import type { Roster } from '../../src/presentation/hud/roster.js';
@@ -141,6 +141,16 @@ describe('ボタン', () => {
     button.dispatchEvent(new MouseEvent('click', { detail: 1 }));
     expect(pressed).toBe(1);
     expect(button.tabIndex).toBe(-1);
+  });
+
+  it('メニューのカーソルで決めたときは、クリックを通さずに同じ中身を呼ぶ', () => {
+    let pressed = 0;
+    const button = pointerButton('はじめる', () => (pressed += 1));
+    expect(activate(button)).toBe(true);
+    expect(pressed).toBe(1);
+    // pointerButton で作っていない要素は押せない（黙って何もしない）。
+    expect(activate(document.createElement('button'))).toBe(false);
+    expect(pressed).toBe(1);
   });
 });
 

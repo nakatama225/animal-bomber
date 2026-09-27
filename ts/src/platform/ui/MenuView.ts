@@ -43,7 +43,9 @@ const SOUNDS: readonly { readonly value: SoundSetting; readonly label: string }[
  * `MenuFlow` を呼んで写し直すだけ。
  *
  * ⚠️ ボタンは全部 `pointerButton`（キーボードで起きたクリックを捨てる）で作る。
- * 「はじめる」を Enter や Space で押すと、爆弾のキーを押したまま試合が始まる。
+ * キーボードやパッドで動かすときは、メニューのカーソル（`MenuNavigator`）が同じ中身を呼ぶ。
+ * カーソルに載せる項目には `data-nav`（グループの名前）を付ける。縦に並ぶものは1つずつ別の名前に、
+ * 横に並ぶもの（動物の一覧・選択肢の1行）は同じ名前にする。
  */
 export class MenuView {
   readonly #root: HTMLElement;
@@ -68,6 +70,12 @@ export class MenuView {
     this.#root.replaceChildren(el('div', { className: 'menu-card', data: { screen } }, body));
   }
 
+  /** 1つ前の画面へ戻る（Escape・B）。タイトルでは何もしない。 */
+  back(): void {
+    this.#flow.back();
+    this.render();
+  }
+
   /** 押されたら `change` を呼んで、画面を写し直す。 */
   #act(change: () => void): () => void {
     return () => {
@@ -78,7 +86,8 @@ export class MenuView {
 
   #title(): HTMLElement[] {
     const item = (icon: string, title: string, detail: string, onPress: () => void, id: string): HTMLElement => {
-      const button = pointerButton('', onPress, { className: 'menu-button', data: { choice: id } });
+      // 縦に並ぶので、1つずつ別のグループにする（上下で選ぶ）。
+      const button = pointerButton('', onPress, { className: 'menu-button', data: { choice: id, nav: `choice-${id}` } });
       button.append(
         el('span', { className: 'icon', text: icon }),
         el('span', {}, [el('span', { className: 'title', text: title }), el('span', { className: 'detail', text: detail })]),
@@ -121,7 +130,7 @@ export class MenuView {
           ANIMAL_LOOKS.map((look) => {
             const card = pointerButton('', this.#act(() => this.#flow.pick(human, look.key)), {
               className: `animal${look.key === chosen ? ' on' : ''}`,
-              data: { animal: look.key },
+              data: { animal: look.key, nav: `pick-${human}` },
             });
             card.append(
               el('span', { className: 'emoji', text: look.emoji }),
@@ -138,7 +147,7 @@ export class MenuView {
     return [
       this.#head('キャラをえらぶ', 'STEP 1 / 2'),
       ...sections,
-      pointerButton('つぎへ ▶', this.#act(() => this.#flow.next()), { className: 'go', data: { action: 'next' } }),
+      pointerButton('つぎへ ▶', this.#act(() => this.#flow.next()), { className: 'go', data: { action: 'next', nav: 'go' } }),
     ];
   }
 
@@ -181,7 +190,7 @@ export class MenuView {
       this.#chips('サドンデス（同時に倒れた・時間切れ）', 'sudden', [true, false], setup.suddenDeath, (on) => (on ? 'ON' : 'OFF'), (on) =>
         this.#flow.setSuddenDeath(on),
       ),
-      pointerButton('はじめる', () => this.#hooks.start(this.#flow.setup), { className: 'go', data: { action: 'start' } }),
+      pointerButton('はじめる', () => this.#hooks.start(this.#flow.setup), { className: 'go', data: { action: 'start', nav: 'go' } }),
     ];
   }
 

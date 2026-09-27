@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { keyHelpFor, keyName } from '../../src/platform/keyHelp.js';
+import { keyHelpFor, keyName, menuHelp } from '../../src/platform/keyHelp.js';
 import { PLAYER1_KEYS, PLAYER2_KEYS, SOLO_KEYS } from '../../src/platform/Keyboard.js';
 import { describeManual } from '../../src/platform/ui/manual.js';
 
@@ -48,5 +48,13 @@ describe('遊び方の説明', () => {
     expect(lineOf('ぞう')).toContain('1.5 秒');
     expect(lineOf('ぞう')).toContain('通常技は無い');
     expect(lineOf('もぐら')).toContain('通常技は無い');
+  });
+});
+
+describe('メニューの動かし方の説明', () => {
+  it('メニューの操作の表から作り、遊び方の説明にも出す', () => {
+    const line = '↑ ← ↓ → で選び、Enter・Space で決める。Escape・Backspace で1つ前の画面へ（マウスでも押せる）';
+    expect(menuHelp()).toBe(line);
+    expect(describeManual().find((section) => section.title === 'メニュー')?.lines).toEqual([line]);
   });
 });

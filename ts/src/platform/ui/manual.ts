@@ -2,7 +2,7 @@ import { ANIMAL_LOOKS } from '../../content/animals.js';
 import { abilityOf } from '../../domain/abilities/registry.js';
 import { TICKS_PER_SECOND } from '../../domain/core/Tick.js';
 import { ITEM_DEFINITIONS } from '../../domain/rules/items.js';
-import { GAMEPAD_HELP, keyHelpFor } from '../keyHelp.js';
+import { GAMEPAD_HELP, keyHelpFor, menuHelp } from '../keyHelp.js';
 import { PLAYER1_KEYS, PLAYER2_KEYS, SOLO_KEYS } from '../Keyboard.js';
 
 /** 遊び方の説明の1節。 */
@@ -30,6 +30,10 @@ export function describeManual(): ManualSection[] {
         ...keyHelpFor('', PLAYER2_KEYS).lines.map((line) => `2P ${line}`),
         'ゲームパッドは1人で遊ぶときだけ使える（1台に1人ぶん）',
       ],
+    },
+    {
+      title: 'メニュー',
+      lines: [menuHelp()],
     },
     {
       title: '技ととくぎ',

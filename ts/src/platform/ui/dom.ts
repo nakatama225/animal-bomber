@@ -33,13 +33,18 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   return element;
 }
 
+/** `pointerButton` で作ったボタンと、押されたときに呼ぶもの。メニューのカーソルで決めたときも同じものを呼ぶ。 */
+const HANDLERS = new WeakMap<HTMLElement, () => void>();
+
 /**
  * マウスやタッチで押されたときだけ `handler` を呼ぶボタンを作る。
  *
- * ⚠️ キーボード（Enter・Space）で起きたクリックは捨てる。どちらも爆弾のキーなので、
- * 試合を始めるボタンをキーボードで押すと、押したまま試合が始まって最初の tick で
- * 開始位置に爆弾を置く。キーボードで起きたクリックは `detail` が 0 になる。
- * Tab でフォーカスさせないのも同じ理由（`tabIndex = -1`）。
+ * ⚠️ キーボード（Enter・Space）で起きたクリックは捨てる。マウスで押したボタンには
+ * フォーカスが残ることがあり、そのあと試合中に Space や Enter（どちらも爆弾のキー）を
+ * 押すと、ブラウザがそのボタンをもう一度押す（ポーズ・もういっかい、など）。
+ * キーボードで起きたクリックは `detail` が 0 になる。Tab でフォーカスさせないのも
+ * 同じ理由（`tabIndex = -1`）。キーボードでメニューを動かすときは、ブラウザのクリックを通さず、
+ * カーソルが `activate` で同じ `handler` を呼ぶ。
  */
 export function pointerButton(label: string, handler: () => void, options: ElementOptions = {}): HTMLButtonElement {
   const button = el('button', { ...options, text: label });
@@ -49,7 +54,23 @@ export function pointerButton(label: string, handler: () => void, options: Eleme
     if (event.detail === 0) return;
     handler();
   });
+  HANDLERS.set(button, handler);
   return button;
+}
+
+/**
+ * `pointerButton` の `handler` を呼ぶ。メニューのカーソルで決めたときに使う。
+ *
+ * ⚠️ クリックを偽って流さない（`detail: 1` のクリックを流せば同じことが起きるが、
+ * キーボードで起きたクリックを捨てる守りを、わざとすり抜ける形になる）。
+ *
+ * @returns 呼べたか。`pointerButton` で作った要素でなければ false
+ */
+export function activate(element: HTMLElement): boolean {
+  const handler = HANDLERS.get(element);
+  if (handler === undefined) return false;
+  handler();
+  return true;
 }
 
 /**
@@ -74,7 +95,8 @@ export function chipRow<T>(
       choices.map((value) =>
         pointerButton(text(value), () => choose(value), {
           className: `chip${value === current ? ' on' : ''}`,
-          data: { value: String(value) },
+          // 1行を、メニューのカーソルの1グループにする（左右で選ぶ）。
+          data: { value: String(value), nav: id },
         }),
       ),
     ),

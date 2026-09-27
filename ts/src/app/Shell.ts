@@ -16,6 +16,7 @@ import {
 } from '../platform/Keyboard.js';
 import { BannerOverlay } from '../platform/ui/BannerOverlay.js';
 import { pointerButton } from '../platform/ui/dom.js';
+import { MenuNavigator } from '../platform/ui/MenuNavigator.js';
 import { MenuView } from '../platform/ui/MenuView.js';
 import { SidePanel, type KeyHelpEntry, type KeyHelpFor } from '../platform/ui/SidePanel.js';
 import { speedControl } from '../platform/ui/SpeedControl.js';
@@ -26,6 +27,7 @@ import { displayName } from '../presentation/hud/roster.js';
 import type { HudSource } from '../presentation/hud/scoreboard.js';
 import { RoundBanner } from '../presentation/hud/RoundBanner.js';
 import { planLocalMatch, type LocalController, type LocalSetup } from '../presentation/menu/localSetup.js';
+import type { NavCommand } from '../presentation/menu/MenuCursor.js';
 import { MenuFlow, type SoundSetting } from '../presentation/menu/MenuFlow.js';
 import { Presenter } from '../presentation/Presenter.js';
 import { Renderer } from '../presentation/render/Renderer.js';
@@ -70,10 +72,10 @@ export interface ShellTools {
   /** 音の設定を変える。 */
   readonly setSound: (sound: SoundSetting) => void;
   /**
-   * 操作に使うキーの、ブラウザの既定の動き（矢印と Space でページが動く、など）を止めるか。
-   * 試合の画面の間だけ止める。
+   * 操作に使うキーの、ブラウザの既定の動き（矢印と Space でページが動く、など）を止める。
+   * 試合の画面の間は試合の操作のキーを、メニューの間はメニューを動かすキーを止める。
    */
-  readonly captureKeys: (on: boolean) => void;
+  readonly captureKeys: (screen: 'play' | 'menu') => void;
   /** 試合の種を作る。実時間を読むのは起動の入口の役目なので、外から受け取る。 */
   readonly newSeed: () => number;
   /** 通信対戦の画面へ移る（URL に `?relay` を付けて開き直す）。 */
@@ -122,6 +124,8 @@ export class Shell {
   #lastSetup: LocalSetup | null = null;
   /** ゲームの速さ。試合をまたいで持つ（もういっかいで等倍に戻さない。原型と同じ）。 */
   readonly #speed = new GameSpeed();
+  /** キーボードでメニューと優勝の幕を動かすカーソル。 */
+  readonly #nav = new MenuNavigator();
 
   constructor(elements: ShellElements, tools: ShellTools) {
     this.#elements = elements;
@@ -156,9 +160,10 @@ export class Shell {
       if (controller.kind === 'keys') help.push({ playerId: id, help: this.#helpFor(id, controller.layout) });
     });
     const runner = new LocalMatch(session, plan.roster);
+    // 優勝の幕のボタンは横に並ぶので、カーソルの1グループにする。
     this.#begin(runner, () => help, [
-      pointerButton('もういっかい', () => this.restart(), { data: { action: 'again' } }),
-      pointerButton('タイトルへ', () => this.showMenu(), { data: { action: 'title' } }),
+      pointerButton('もういっかい', () => this.restart(), { data: { action: 'again', nav: 'final' } }),
+      pointerButton('タイトルへ', () => this.showMenu(), { data: { action: 'title', nav: 'final' } }),
     ], true);
     this.#setToolbar([
       speedControl(this.#speed.rate, (rate) => this.#setSpeed(rate)),
@@ -192,6 +197,27 @@ export class Shell {
   /** 止める・再開する（1台で遊ぶときだけ効く）。 */
   togglePause(): void {
     this.#match?.runner.togglePause();
+  }
+
+  /**
+   * キーボードやパッドの操作で、メニューか優勝の幕のカーソルを動かす。
+   *
+   * 試合の最中は何もしない（幕にボタンが無いので、カーソルの並びが空になる）。
+   */
+  navigate(command: NavCommand): void {
+    const root = this.#navRoot();
+    if (root === null) return;
+    const result = this.#nav.handle(root, command);
+    if (result.kind === 'back' && root === this.#elements.menu) {
+      this.#menu.back();
+      this.#nav.paint(root);
+    }
+  }
+
+  /** カーソルの枠を消す（マウスを動かしたとき）。 */
+  hideCursor(): void {
+    const root = this.#navRoot();
+    if (root !== null) this.#nav.hide(root);
   }
 
   /**
@@ -232,6 +258,7 @@ export class Shell {
     const music = this.#tools.music;
     if (match === null) {
       music.stop();
+      this.#paintCursor();
       return;
     }
     const { runner } = match;
@@ -243,6 +270,7 @@ export class Shell {
     this.#bannerView.show(world === null ? null : match.banner.current(world), match.finalActions);
     this.#elements.pause.hidden = !runner.paused;
     runner.afterDraw();
+    this.#paintCursor();
     // 試合が終わったとき・止めたとき・通信対戦が止まったとき（ずれ・切断）は曲を止める。
     // tick が進まない間も判断できるよう、描く側で毎回見る。鳴っていれば start は何もしない。
     if (runner.inProgress) music.start();
@@ -277,7 +305,25 @@ export class Shell {
   #showBoard(board: boolean): void {
     this.#elements.menu.hidden = board;
     this.#elements.play.hidden = !board;
-    this.#tools.captureKeys(board);
+    this.#tools.captureKeys(board ? 'play' : 'menu');
+  }
+
+  /**
+   * カーソルで動かす画面。試合が無ければメニュー、盤面があればラウンドの間の幕。
+   *
+   * 通信対戦のロビー（盤面がまだ無い間）は、いまは動かさない。
+   */
+  #navRoot(): HTMLElement | null {
+    const match = this.#match;
+    if (match === null) return this.#elements.menu;
+    return match.runner.world === null ? null : this.#elements.banner;
+  }
+
+  /** 画面が組み直されても印が残るよう、枠を出している間は描くたびに付け直す。 */
+  #paintCursor(): void {
+    if (!this.#nav.shown) return;
+    const root = this.#navRoot();
+    if (root !== null) this.#nav.paint(root);
   }
 
   /** 通信対戦の、この端末の人のキー配置の説明。 */
