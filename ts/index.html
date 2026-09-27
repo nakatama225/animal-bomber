@@ -6,6 +6,11 @@
     <title>どうぶつボンバー</title>
   </head>
   <body>
+    <!-- 通信対戦（URL に ?relay を付けたとき）だけ使う。接続の様子と、ホストが試合を始めるボタン -->
+    <!-- 案内の行は高さを固定する。文が出たり消えたりするたびに盤面が上下に動かないように -->
+    <p id="lan-status" hidden style="min-height: 1.5em"></p>
+    <!-- Tab でフォーカスさせない。フォーカスしたまま Enter（爆弾のキー）で押すのを避ける -->
+    <button id="lan-start" type="button" tabindex="-1" hidden>はじめる</button>
     <canvas id="stage" width="920" height="680"></canvas>
     <script type="module" src="/src/app/main.ts"></script>
   </body>

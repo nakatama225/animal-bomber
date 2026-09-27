@@ -22,7 +22,7 @@ from websockets.exceptions import ConnectionClosed
 from animal_bomber_server.http import make_process_request
 from animal_bomber_server.lockstep import LockstepRoom
 from animal_bomber_server.netinfo import candidate_urls
-from animal_bomber_server.protocol import LOCKSTEP_PATH
+from animal_bomber_server.protocol import LOCKSTEP_PATH, REFUSED_CLOSE_CODE
 from animal_bomber_server.relay import Room, RoomFullError
 
 
@@ -181,7 +181,7 @@ async def serve_lockstep(lockstep: LockstepRoom, ws: ServerConnection) -> None:
     except RoomFullError:
         # 試合中に入ろうとした場合（MatchInProgressError）もここに来る
         logger.info("定員いっぱいか試合中のため接続を拒否した")
-        await ws.close(code=1013, reason="room full")
+        await ws.close(code=REFUSED_CLOSE_CODE, reason="room full")
         return
 
     logger.info("プレイヤー %d がロックステップの部屋に接続した", seat)

@@ -110,9 +110,13 @@ export class LockstepClient {
     return true;
   }
 
-  /** 中継との接続が切れた。 */
-  disconnected(): void {
-    if (this.#phase.kind !== 'failed') this.#fail('中継との接続が切れた');
+  /**
+   * 中継との接続が切れた。
+   *
+   * @param reason 画面に出す理由。中継に断られた場合など、ただ切れたのでないときに渡す
+   */
+  disconnected(reason = '中継との接続が切れた'): void {
+    if (this.#phase.kind !== 'failed') this.#fail(reason);
   }
 
   /** 次の tick を進められるか。 */

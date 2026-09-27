@@ -30,6 +30,13 @@ import type { PlayerId } from '../domain/state/PlayerState.js';
 /** ロックステップの中継につなぐときの WebSocket のパス。 */
 export const LOCKSTEP_PATH = '/lockstep';
 
+/**
+ * 中継が、入れない接続（定員いっぱい・試合中）を閉じるときの番号。
+ *
+ * ただ切れた場合と見分けて、「前の試合が続いている」と案内するために使う。
+ */
+export const REFUSED_CLOSE_CODE = 1013;
+
 /** 端末から中継へ送るメッセージの種類と、`t` 以外の項目。 */
 export const FROM_PEER = {
   start: ['config'],

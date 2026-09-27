@@ -25,6 +25,7 @@ from animal_bomber_server.protocol import (
     FROM_PEER,
     FROM_RELAY,
     LOCKSTEP_PATH,
+    REFUSED_CLOSE_CODE,
     REPORT_FIELDS,
 )
 from animal_bomber_server.relay import HOST_SEAT
@@ -73,6 +74,13 @@ class Test表の突き合わせ:
         )
         assert match
         assert tuple(re.findall(r"'(\w+)'", match.group(1))) == REPORT_FIELDS
+
+    def test_入れない接続を閉じる番号(self):
+        match = re.search(
+            r"^export const REFUSED_CLOSE_CODE = (\d+);$", ts_source(), re.M
+        )
+        assert match
+        assert int(match.group(1)) == REFUSED_CLOSE_CODE
 
     def test_中継のパス(self):
         match = re.search(

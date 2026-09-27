@@ -186,3 +186,18 @@ class Testサーバ持ち判定:
     def test_アドレスが取れないときは特別扱いしない(self):
         assert from_same_machine(self._Conn(None, None)) is False
         assert from_same_machine(object()) is False
+
+
+def test_パッケージ名で起動できる():
+    """`python -m animal_bomber_server` が動くこと（README と遊び方の手順どおり）。"""
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "-m", "animal_bomber_server", "--help"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--port" in result.stdout
