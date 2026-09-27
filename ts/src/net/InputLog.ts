@@ -41,7 +41,8 @@ export interface MatchClock {
  *
  * 記録の時刻は `MatchClock.elapsed`（試合が始まってからの tick）で持つ。
  * 通信対戦で届いた入力の記録（`ConfirmedInputs.log`）も同じ時刻なので、
- * そのまま `ReplayIntentSource` で流し直せる。
+ * `ReplayIntentSource` で流し直せる。ただし CPU の枠は設定から作り直す必要があり、
+ * 途中で抜けた人がいた試合は流し直せない（`ConfirmedInputs.log` の説明と docs/05）。
  */
 export class InputLog {
   /** プレイヤーごとの、変化した時点の一覧。tick の昇順で並ぶ。 */

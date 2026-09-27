@@ -81,15 +81,6 @@ export default tseslint.config(
   },
 
   {
-    // ブラウザの Web Audio を写した型だけはメソッドの形のまま。ここは実物の
-    // AudioContext を受け取る側で、実物のメソッドは引数に DOM の型（AudioNode）を
-    // 取る。引数の向きを検査すると、写した型（AudioNodeLike）が AudioNode に
-    // 足りないので、実物がこの型に入らなくなる。
-    files: ['src/presentation/audio/webAudioTypes.ts'],
-    rules: { '@typescript-eslint/method-signature-style': 'off' },
-  },
-
-  {
     files: ['src/domain/**/*.ts', 'src/ai/**/*.ts'],
     rules: {
       'no-restricted-properties': ['error', ...FORBIDDEN_IN_DOMAIN],

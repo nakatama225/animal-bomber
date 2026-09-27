@@ -109,7 +109,7 @@ export function createWorld(config: WorldSeed): WorldState {
   const spawns = config.animals.length === 2 ? DUEL_SPAWN_CELLS : SPAWN_CELLS;
 
   const players: PlayerState[] = config.animals.map((animal, index) => {
-    // プレイヤーは最大4人。開始位置（SPAWN_CELLS）と同じ数に揃えてある。
+    // プレイヤーは最大4人。開始位置の表（SPAWN_CELLS）の数と揃えてある。2人の試合は対角の2隅を使う。
     const spawn = spawns[index];
     if (spawn === undefined) {
       throw new Error(`開始位置が足りない: ${index}`);
@@ -120,6 +120,8 @@ export function createWorld(config: WorldSeed): WorldState {
       animal,
       position: centerOf(spawn),
       // 上の隅からは下を、下の隅からは上を向いて始まる（盤面の内側を向く）。
+      // 原型は全員が下を向いて始まる。この版は段階1から、下の隅の人が上を向いて始まる。
+      // 下の隅から下を向くと、動く前に出した技が外周の壁へ向かうので、そのままにしている。
       facing: spawn.row < ROWS / 2 ? 'down' : 'up',
       life: ALIVE,
       hp: (startingHp?.[index] ?? STARTING_HP) + bonus.hp,

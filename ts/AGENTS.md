@@ -29,7 +29,8 @@ DOM の型定義を外してあるので、ブラウザ API を書くと型エ�
 interface の関数は `next: (world: …) => …` の形で書いてください。`next(world: …): …`（メソッドの形）だと、
 TypeScript は引数の型の向きを検査せず、引数を狭めた実装を渡しても型エラーになりません。
 lint（`method-signature-style`）が強制し、`tests/boundary/variance.test.ts` が型エラーになることを確かめています。
-例外はブラウザの Web Audio を写した型（`src/presentation/audio/webAudioTypes.ts`）だけです。
+例外は、ブラウザの Web Audio を写した型の `AudioNodeLike.connect`（`src/presentation/audio/webAudioTypes.ts`）だけです。
+実物の connect は引数に DOM の型を取るので、向きを検査すると実物が入りません。その行に理由を書いて lint を外してあります。
 
 ## 動物の能力を追加するとき
 

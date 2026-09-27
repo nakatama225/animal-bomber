@@ -62,7 +62,10 @@ export class ConfirmedInputs {
    * 届いた入力の記録。
    *
    * 時刻は試合通算の tick（`MatchClock.elapsed`）。`ReplayIntentSource` も同じ時刻で引くので、
-   * 通信対戦の記録をそのまま1台で流し直せる。
+   * 1台の試合で流し直せる。CPU の枠の操作は入っていないので、同じ設定から作り直す。
+   *
+   * ⚠️ 途中で抜けた人がいた試合は流し直せない。抜けた人を CPU に替えた tick（`lastTick` の次）が
+   * ここには残らず、`InputLog.at()` はその人の最後の意思を返し続けるので、黙って別の試合になる。
    */
   get log(): InputLog {
     return this.#log;

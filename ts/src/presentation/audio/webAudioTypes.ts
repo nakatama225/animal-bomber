@@ -9,12 +9,16 @@
 /** 時刻を指定して値を変えられる音の設定値（周波数・音量など）。 */
 export interface AudioParamLike {
   value: number;
-  setValueAtTime(value: number, time: number): unknown;
-  exponentialRampToValueAtTime(value: number, time: number): unknown;
+  readonly setValueAtTime: (value: number, time: number) => unknown;
+  readonly exponentialRampToValueAtTime: (value: number, time: number) => unknown;
 }
 
 /** 音の通り道の1段。 */
 export interface AudioNodeLike {
+  // ⚠️ これだけはメソッドの形のまま。実物の connect は引数に DOM の型（AudioNode）を取る。
+  // 引数の向きを検査すると、この型（AudioNodeLike）が AudioNode に足りないので、実物の
+  // AudioContext がこの型に入らなくなる。
+  // eslint-disable-next-line @typescript-eslint/method-signature-style -- 上の理由で、実物の connect を受け取るため
   connect(destination: AudioNodeLike): unknown;
 }
 
@@ -25,8 +29,8 @@ export interface GainNodeLike extends AudioNodeLike {
 
 /** 決まった時刻に鳴り始めて止まる音源。 */
 export interface ScheduledSourceLike extends AudioNodeLike {
-  start(when: number): void;
-  stop(when: number): void;
+  readonly start: (when: number) => void;
+  readonly stop: (when: number) => void;
 }
 
 /** 波形を出す音源。 */
@@ -50,7 +54,7 @@ export interface BiquadFilterNodeLike extends AudioNodeLike {
 
 /** 波形の入れ物。 */
 export interface AudioBufferLike {
-  getChannelData(channel: number): Float32Array;
+  readonly getChannelData: (channel: number) => Float32Array;
 }
 
 /** 音を鳴らす仕組み（AudioContext）。上に並べた部品を作る。 */
@@ -59,10 +63,10 @@ export interface AudioContextLike {
   readonly sampleRate: number;
   readonly state: string;
   readonly destination: AudioNodeLike;
-  resume(): Promise<void>;
-  createGain(): GainNodeLike;
-  createOscillator(): OscillatorNodeLike;
-  createBufferSource(): BufferSourceNodeLike;
-  createBiquadFilter(): BiquadFilterNodeLike;
-  createBuffer(channels: number, length: number, sampleRate: number): AudioBufferLike;
+  readonly resume: () => Promise<void>;
+  readonly createGain: () => GainNodeLike;
+  readonly createOscillator: () => OscillatorNodeLike;
+  readonly createBufferSource: () => BufferSourceNodeLike;
+  readonly createBiquadFilter: () => BiquadFilterNodeLike;
+  readonly createBuffer: (channels: number, length: number, sampleRate: number) => AudioBufferLike;
 }

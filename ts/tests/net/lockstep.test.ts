@@ -198,12 +198,24 @@ describe('ロックステップ', () => {
     for (const id of [0, 1] as const) {
       replay.attach(new ReplayIntentSource(id, host.driver.log, replay));
     }
+    // CPU の枠の操作は記録に無い。本物の端末と同じ設定から作り直す。
     for (const id of [2, 3] as const) replay.attach(lanCpuSource(id, config));
-    while (replay.elapsed < host.session.elapsed) replay.tick();
 
-    expect(replay.match.round).toBe(host.session.match.round);
-    expect([...replay.match.wins]).toEqual([...host.session.match.wins]);
-    expect(hashWorld(replay.world)).toBe(hashWorld(host.session.world));
+    // 最後の盤面だけを比べると、最後のラウンドしか見ないことになる（この設定では、
+    // 途中のラウンドは時間切れの引き分けで、勝ち数にも差が出ない）。tick ごとに比べる。
+    const mismatched: number[] = [];
+    let compared = 0;
+    // 再生の側の試合が先に終わると elapsed が進まなくなるので、回数に上限を置く。
+    for (let guard = 0; replay.elapsed < host.session.elapsed && guard < 10_000; guard += 1) {
+      const t = replay.elapsed;
+      replay.tick();
+      const expected = host.hashes.get(t);
+      if (expected === undefined) continue;
+      compared += 1;
+      if (hashWorld(replay.world) !== expected) mismatched.push(t);
+    }
+    expect(compared).toBeGreaterThan(1400);
+    expect(mismatched).toEqual([]);
   });
 
   it('ラウンドをまたいでも（決着のあとの待ちを含めて）同じ試合が続く', () => {
