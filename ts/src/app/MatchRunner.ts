@@ -23,13 +23,13 @@ export interface MatchRunner {
   /** 止めているか。 */
   readonly paused: boolean;
   /** 止める・再開する。止められない試合（通信対戦）では何もしない。 */
-  togglePause(): void;
+  readonly togglePause: () => void;
   /** 1 tick 進める。`ready` のときだけ呼ぶ。 */
-  step(): SimEvent[];
+  readonly step: () => SimEvent[];
   /** 1枚描いたあとに呼ぶ。盤面の外に出す案内を書き換える。 */
-  afterDraw(): void;
+  readonly afterDraw: () => void;
   /** 試合を抜ける。接続などの後始末をする。 */
-  close(): void;
+  readonly close: () => void;
 }
 
 /** 1台で遊ぶ試合。止めていなければ、いつでも次の tick を進めてよい。 */

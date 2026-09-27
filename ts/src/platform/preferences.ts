@@ -7,8 +7,8 @@ const SOUNDS: readonly SoundSetting[] = ['both', 'sfx', 'off'];
 
 /** 設定を残しておく場所。ブラウザの `localStorage` と同じ形。 */
 export interface PreferenceStore {
-  getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
+  readonly getItem: (key: string) => string | null;
+  readonly setItem: (key: string, value: string) => void;
 }
 
 /**

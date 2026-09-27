@@ -69,11 +69,24 @@ export default tseslint.config(
     },
     rules: {
       '@typescript-eslint/consistent-type-imports': 'error',
+      // interface の関数は `next: (world) => …` の形で書く。`next(world): …` の形
+      // （メソッドの形）だと、TS は引数の型の向きを検査しない。引数を狭めた実装
+      // （特定の状態しか受け取れない CPU の判断など）を渡しても型エラーにならない。
+      '@typescript-eslint/method-signature-style': ['error', 'property'],
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
     },
+  },
+
+  {
+    // ブラウザの Web Audio を写した型だけはメソッドの形のまま。ここは実物の
+    // AudioContext を受け取る側で、実物のメソッドは引数に DOM の型（AudioNode）を
+    // 取る。引数の向きを検査すると、写した型（AudioNodeLike）が AudioNode に
+    // 足りないので、実物がこの型に入らなくなる。
+    files: ['src/presentation/audio/webAudioTypes.ts'],
+    rules: { '@typescript-eslint/method-signature-style': 'off' },
   },
 
   {

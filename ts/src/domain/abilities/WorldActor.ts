@@ -23,8 +23,8 @@ export interface WorldActor {
    *
    * @returns 起きたイベントと、役目を終えたかどうか
    */
-  tick(world: WorldState): { events: SimEvent[]; done: boolean };
+  readonly tick: (world: WorldState) => { events: SimEvent[]; done: boolean };
 
   /** 状態の要約に混ぜる値。位置や残り時間など、結果を左右するもの。 */
-  encode(): string;
+  readonly encode: () => string;
 }

@@ -56,7 +56,7 @@ export interface ActiveAction {
    *
    * @returns 起きたイベントと、終わったかどうか
    */
-  tick(world: WorldState, player: PlayerState): { events: SimEvent[]; done: boolean };
+  readonly tick: (world: WorldState, player: PlayerState) => { events: SimEvent[]; done: boolean };
 
   /**
    * 終わるときの後始末。
@@ -64,5 +64,5 @@ export interface ActiveAction {
    * 途中で打ち切られた場合も呼ばれる。抱えているものを置く、
    * といった処理をここに書く。
    */
-  finish?(world: WorldState, player: PlayerState): SimEvent[];
+  readonly finish?: (world: WorldState, player: PlayerState) => SimEvent[];
 }

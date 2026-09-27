@@ -9,7 +9,7 @@ import { effectText } from './hud/effectLabels.js';
 
 /** 画面に短く出す通知。 */
 export interface NoticeSink {
-  show(message: string): void;
+  readonly show: (message: string) => void;
 }
 
 /**

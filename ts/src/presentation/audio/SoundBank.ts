@@ -73,7 +73,7 @@ export interface SoundBank {
   /**
    * @param intensity 大きさの手がかり（連鎖数など）。使うかどうかは実装しだい
    */
-  play(name: SoundName, intensity?: number): void;
+  readonly play: (name: SoundName, intensity?: number) => void;
 }
 
 /**

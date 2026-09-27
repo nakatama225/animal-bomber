@@ -74,7 +74,7 @@ export const GAME_KEYS: readonly string[] = [
  * ブラウザのイベントを起こさずに好きな状態を渡せる。
  */
 export interface KeyStateReader {
-  anyOf(codes: readonly string[]): boolean;
+  readonly anyOf: (codes: readonly string[]) => boolean;
 }
 
 /**

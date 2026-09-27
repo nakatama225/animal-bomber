@@ -88,6 +88,17 @@ describe('境界を守る仕組み', () => {
     expect(result.output).toContain('no-restricted-properties');
   }, 60_000);
 
+  it('interface の関数をメソッドの形で書くと lint が落ちる', () => {
+    // メソッドの形だと、引数を狭めた実装を渡しても型エラーにならない（variance.test.ts）。
+    writeFileSync(
+      VIOLATION,
+      'export interface Probe {\n  run(value: number): void;\n}\n',
+    );
+    const result = run('npx', ['eslint', VIOLATION]);
+    expect(result.failed).toBe(true);
+    expect(result.output).toContain('method-signature-style');
+  }, 60_000);
+
   it('CPU の思考の層でブラウザ API を使うと型検査が落ちる', () => {
     writeFileSync(AI_VIOLATION, 'export const width = window.innerWidth;\n');
     const result = run('npx', ['tsc', '-p', 'tsconfig.domain.json']);

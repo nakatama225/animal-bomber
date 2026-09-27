@@ -55,17 +55,17 @@ export interface Ability {
    *
    * 書かなければ、通り抜けの特例なし。
    */
-  passesThrough?(world: Readonly<WorldState>, cell: Cell, player: PlayerState): boolean;
+  readonly passesThrough?: (world: Readonly<WorldState>, cell: Cell, player: PlayerState) => boolean;
 
   /**
    * 技のボタンを押し下げた瞬間。通常技。
    *
    * @returns 始まった振る舞い（無ければ null）と、起きたイベント
    */
-  onTap?(
+  readonly onTap?: (
     world: WorldState,
     player: PlayerState,
-  ): { action: ActiveAction | null; events: SimEvent[] };
+  ) => { action: ActiveAction | null; events: SimEvent[] };
 
   /**
    * 技のボタンを長押しし切った瞬間。とくぎ。
@@ -73,10 +73,10 @@ export interface Ability {
    * とくぎはチキンを拾って溜めた回数ぶんだけ使える。回数の管理は
    * 呼び出し側が行うので、ここでは効果だけを書く。
    */
-  onHold?(
+  readonly onHold?: (
     world: WorldState,
     player: PlayerState,
-  ): { action: ActiveAction | null; events: SimEvent[] };
+  ) => { action: ActiveAction | null; events: SimEvent[] };
 }
 
 /**

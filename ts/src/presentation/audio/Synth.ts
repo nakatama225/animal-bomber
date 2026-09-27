@@ -60,8 +60,8 @@ export interface NoiseOptions {
 
 /** 音の作り方の表が使う2つの部品。 */
 export interface Voice {
-  tone(options: ToneOptions): void;
-  noiseBurst(options: NoiseOptions): void;
+  readonly tone: (options: ToneOptions) => void;
+  readonly noiseBurst: (options: NoiseOptions) => void;
 }
 
 // 指数で変化させる先に 0 以下を渡すとブラウザが例外を投げる。

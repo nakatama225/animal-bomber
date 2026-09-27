@@ -37,17 +37,17 @@ export interface AnimalTactic {
    *
    * 共通の判断は先頭から順に「逃げ切れるか」を試し、最初に通ったものを使う。
    */
-  bombOptions?(ctx: CpuContext): BombOption[];
+  readonly bombOptions?: (ctx: CpuContext) => BombOption[];
 
   /** ブロックを壊しに行くとき、そのマスに立てば壊せるか。 */
-  isBreakSpot?(ctx: CpuContext, cell: Cell): boolean;
+  readonly isBreakSpot?: (ctx: CpuContext, cell: Cell) => boolean;
 
   /**
    * 判断の周期とは別に、毎 tick 技を使う機会を見る。
    *
    * 使うならボタンの押し方を返す。ボタン操作の途中では呼ばれない。
    */
-  reflex?(ctx: CpuContext): ButtonMacro | null;
+  readonly reflex?: (ctx: CpuContext) => ButtonMacro | null;
 }
 
 /** 戦術を書いていない動物に使う、省略時の戦い方。 */

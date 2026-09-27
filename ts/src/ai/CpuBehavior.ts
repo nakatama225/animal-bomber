@@ -27,7 +27,7 @@ export interface CpuBehavior {
   /** 記録と説明のための名前。 */
   readonly name: string;
   /** 自分の出番なら計画を返す。出番でなければ null。 */
-  decide(ctx: CpuContext): CpuPlan | null;
+  readonly decide: (ctx: CpuContext) => CpuPlan | null;
 }
 
 /** 規則を先頭から試し、最初に返ってきた計画を採る。どれも返さなければ留まる。 */

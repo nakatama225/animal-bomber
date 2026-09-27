@@ -35,7 +35,7 @@ export interface IntentSource {
    * ⚠️ `world` は読むだけ。ここで書き換えると、意思を返す前に
    * 状態が変わることになり、リプレイと通信対戦の前提が崩れる。
    */
-  next(world: Readonly<WorldState>): PlayerIntent;
+  readonly next: (world: Readonly<WorldState>) => PlayerIntent;
 }
 
 /**

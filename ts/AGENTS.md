@@ -24,6 +24,13 @@ DOM の型定義を外してあるので、ブラウザ API を書くと型エ�
 通信対戦では各端末が同じ CPU を動かします。CPU は自分専用の乱数（`Rng`）を持ち、
 試合の乱数（`world.rng`）には触れません。
 
+## interface の関数の書き方
+
+interface の関数は `next: (world: …) => …` の形で書いてください。`next(world: …): …`（メソッドの形）だと、
+TypeScript は引数の型の向きを検査せず、引数を狭めた実装を渡しても型エラーになりません。
+lint（`method-signature-style`）が強制し、`tests/boundary/variance.test.ts` が型エラーになることを確かめています。
+例外はブラウザの Web Audio を写した型（`src/presentation/audio/webAudioTypes.ts`）だけです。
+
 ## 動物の能力を追加するとき
 
 共通の interface を実装し、登録の1行を足すだけで済む形になっています。

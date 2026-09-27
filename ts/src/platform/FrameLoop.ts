@@ -55,14 +55,14 @@ export class TickAccumulator {
 
 export interface FrameLoopHandlers {
   /** 1 tick 進める。 */
-  onTick(): void;
+  readonly onTick: () => void;
   /**
    * 画面を描く。
    *
    * @param alpha 次の tick までの進み具合（0 以上 1 未満）。
    *   位置を滑らかに見せるための補間にだけ使う
    */
-  onDraw(alpha: number): void;
+  readonly onDraw: (alpha: number) => void;
 }
 
 /**
