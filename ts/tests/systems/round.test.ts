@@ -92,6 +92,28 @@ describe('ラウンドの進行', () => {
     expect(game.betweenRounds).toBe(false);
   });
 
+  it('試合通算の tick は、決着のあとの待ちの間も進む', () => {
+    // 通信対戦の時刻に使う。world.now は待ちの間は止まり、ラウンドごとに 0 へ戻る。
+    const game = session({ winsToTake: 3 });
+    game.world.players[1]!.life = OUT;
+    game.tick();
+    const nowAtDecision = game.world.now;
+    skipIntermission(game);
+
+    expect(game.elapsed).toBe(1 + ROUND_INTERMISSION);
+    expect(game.world.now).toBeLessThan(nowAtDecision + ROUND_INTERMISSION);
+  });
+
+  it('試合が終わったら、試合通算の tick も進まない', () => {
+    const game = session({ winsToTake: 1 });
+    game.world.players[1]!.life = OUT;
+    game.tick();
+    expect(game.match.finished).toBe(true);
+
+    game.tick();
+    expect(game.elapsed).toBe(1);
+  });
+
   it('ラウンドごとに違う盤面になる', () => {
     const config = defaultMatchConfig(777, ['rabbit', 'elephant']);
     expect(seedForRound(config, 1)).not.toBe(seedForRound(config, 2));

@@ -49,6 +49,8 @@ export class GameSession {
   #match: MatchState;
   /** 次の盤面を作るまでの残り。0 ならラウンドの最中。 */
   #intermission = 0;
+  /** 試合が始まってから進め終えた tick の数。 */
+  #elapsed = 0;
 
   constructor(config: MatchConfig) {
     this.#config = config;
@@ -89,6 +91,17 @@ export class GameSession {
   }
 
   /**
+   * 試合が始まってから進め終えた tick の数。`tick()` の中では、いま進めている tick の番号になる。
+   *
+   * ⚠️ 通信対戦と記録の時刻にはこちらを使い、`world.now` は使わない。
+   * `world.now` はラウンドごとに 0 へ戻り、決着のあとの待ち（`ROUND_INTERMISSION`）の間は
+   * 盤面を止めているので進まない。同じ `world.now` が試合の中で何度も現れる。
+   */
+  get elapsed(): number {
+    return this.#elapsed;
+  }
+
+  /**
    * 操作の出どころを登録する。
    *
    * キーボードでも CPU でも記録の再生でも、同じ形で受け取る。
@@ -106,7 +119,12 @@ export class GameSession {
    */
   tick(): SimEvent[] {
     if (this.#match.finished) return [];
+    const events = this.#advance();
+    this.#elapsed += 1;
+    return events;
+  }
 
+  #advance(): SimEvent[] {
     // 決着のあとは盤面を止めて待つ。操作は集めない（押しても何も起きない）。
     if (this.#intermission > 0) {
       this.#intermission -= 1;
