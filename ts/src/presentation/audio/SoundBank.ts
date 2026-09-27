@@ -19,6 +19,7 @@ export type SoundName =
   | 'roundEnd'
   | 'draw'
   | 'sudden'
+  | 'tick'
   | 'fanfare'
   | 'hop'
   | 'lineBombs'
@@ -50,6 +51,7 @@ export const SOUND_NAMES: readonly SoundName[] = [
   'roundEnd',
   'draw',
   'sudden',
+  'tick',
   'fanfare',
   'hop',
   'lineBombs',

@@ -35,7 +35,7 @@ import { Simulation } from '../domain/systems/Simulation.js';
  *
  * ⚠️ 決まった tick のうちに盤面を作り直すと、決着をつけた爆発も、倒れる瞬間も
  * 画面に1度も描かれない（描く前に次の盤面へ切り替わる）。決着の場面を見せる
- * ために、前の盤面を止めたまま少し待つ。ラウンドの間に出す画面（段階10）は、
+ * ために、前の盤面を止めたまま少し待つ。ラウンドの間の幕（`presentation/hud/RoundBanner.ts`）は、
  * この待ちの間に重ねる。
  */
 export const ROUND_INTERMISSION: Tick = secondsToTicks(2);

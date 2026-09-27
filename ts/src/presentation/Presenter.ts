@@ -1,14 +1,26 @@
 import type { SimEvent } from '../domain/events/SimEvent.js';
 import { assertNever } from '../domain/events/SimEvent.js';
 import { SUDDEN_DEATH_SECONDS } from '../domain/rules/suddenDeath.js';
+import type { PlayerId } from '../domain/state/PlayerState.js';
 import type { WorldState } from '../domain/state/WorldState.js';
 import { NullSoundBank, type SoundBank, type SoundName } from './audio/SoundBank.js';
 import { techniqueSound } from './audio/techniqueSounds.js';
+import { effectText } from './hud/effectLabels.js';
 
 /** 画面に短く出す通知。 */
 export interface NoticeSink {
   show(message: string): void;
 }
+
+/**
+ * 通知に出すプレイヤーの呼び方。
+ *
+ * 誰が人間で誰が CPU かはルールの層に無いので、呼び出し側から受け取る。
+ */
+export type PlayerNamer = (id: PlayerId, world: Readonly<WorldState>) => string;
+
+/** 番号だけの呼び方（「1P」）。 */
+export const numberedName: PlayerNamer = (id) => `${id + 1}P`;
 
 /** どこにも出さない通知。 */
 export class NullNoticeSink implements NoticeSink {
@@ -41,11 +53,16 @@ export class NullNoticeSink implements NoticeSink {
  * イベントを1種類足すと、そこへ到達しうるようになり
  * 「`never` に代入できない」というコンパイルエラーになる。
  * 足した本人が、音を当てるかどうかを必ず1度は考えることになる。
+ *
+ * ## ラウンドと試合の決着は通知に出さない
+ *
+ * 盤面に重ねる幕（`hud/RoundBanner.ts`）が出す。両方に出すと、同じ文が2か所に並ぶ。
  */
 export class Presenter {
   constructor(
     private readonly sounds: SoundBank = new NullSoundBank(),
     private readonly notices: NoticeSink = new NullNoticeSink(),
+    private readonly nameOf: PlayerNamer = numberedName,
   ) {}
 
   /**
@@ -56,18 +73,9 @@ export class Presenter {
     // 2つの曲を重ねると聞き取れないので、優勝のファンファーレだけを鳴らす。
     const matchOver = events.some((event) => event.type === 'matchEnded');
     for (const event of events) {
-      if (matchOver && event.type === 'roundEnded') {
-        this.#announceRound(event.round, event.winner);
-        continue;
-      }
+      if (matchOver && event.type === 'roundEnded') continue;
       this.#handle(event, world);
     }
-  }
-
-  #announceRound(round: number, winner: number | null): void {
-    this.notices.show(
-      winner === null ? `ラウンド ${round} は引き分け` : `ラウンド ${round} は ${winner + 1}P の勝ち`,
-    );
   }
 
   #handle(event: SimEvent, world: Readonly<WorldState>): void {
@@ -94,7 +102,7 @@ export class Presenter {
         return;
       case 'effectApplied':
         this.sounds.play(effectSound(event.effect));
-        this.notices.show(`${event.effect} がかかった`);
+        this.notices.show(`${this.nameOf(event.target, world)}：${effectText(event.effect)}`);
         return;
       case 'playerHurt':
         this.sounds.play('hurt');
@@ -117,7 +125,9 @@ export class Presenter {
         return;
       case 'revived':
         this.sounds.play('leekHit');
-        this.notices.show(`${event.player + 1}P が復活！ ${event.replaced + 1}P が葱ボンへ`);
+        this.notices.show(
+          `${this.nameOf(event.player, world)} が復活！ ${this.nameOf(event.replaced, world)} が葱ボンへ`,
+        );
         return;
       case 'lanesClosed':
         this.sounds.play('lanesClosed');
@@ -132,13 +142,9 @@ export class Presenter {
         return;
       case 'roundEnded':
         this.sounds.play(event.winner === null ? 'draw' : 'roundEnd');
-        this.#announceRound(event.round, event.winner);
         return;
       case 'matchEnded':
         this.sounds.play('fanfare');
-        this.notices.show(
-          event.champion === null ? '引き分け' : `${event.champion + 1}P の優勝`,
-        );
         return;
       default:
         // ここに到達する型が残っていれば、コンパイルが通らない。

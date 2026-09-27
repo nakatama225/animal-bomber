@@ -53,6 +53,20 @@ export const PLAYER2_KEYS: KeyBinding = {
   action: ['Period', 'Comma', 'ShiftRight'],
 };
 
+/** どの配置かにかかわらず、試合の操作に使うキー。 */
+export const GAME_KEYS: readonly string[] = [
+  ...new Set(
+    [SOLO_KEYS, PLAYER1_KEYS, PLAYER2_KEYS].flatMap((binding) => [
+      ...binding.up,
+      ...binding.down,
+      ...binding.left,
+      ...binding.right,
+      ...binding.bomb,
+      ...binding.action,
+    ]),
+  ),
+];
+
 /**
  * 押されているキーを答えるもの。
  *
@@ -72,9 +86,11 @@ export interface KeyStateReader {
 export class KeyboardWatcher implements KeyStateReader {
   readonly #pressed = new Set<string>();
   #attached = false;
+  #captured: ReadonlySet<string> = new Set();
 
   readonly #onDown = (event: KeyboardEvent): void => {
     this.#pressed.add(event.code);
+    if (this.#captured.has(event.code)) event.preventDefault();
   };
 
   readonly #onUp = (event: KeyboardEvent): void => {
@@ -106,6 +122,17 @@ export class KeyboardWatcher implements KeyStateReader {
     target.removeEventListener('blur', this.#onBlur);
     this.#pressed.clear();
     this.#attached = false;
+  }
+
+  /**
+   * このキーの、ブラウザの既定の動きを止める（止めるキーを差し替える）。
+   *
+   * 矢印と Space は、画面が縦に収まらないときにページを動かす。試合の最中に盤面が
+   * ずれて見えなくなるので、試合の画面の間は `GAME_KEYS` を渡して止める。
+   * 押されたことは、止めても止めなくても数える。
+   */
+  capture(codes: readonly string[]): void {
+    this.#captured = new Set(codes);
   }
 
   /** そのキーのどれかが押されているか。 */

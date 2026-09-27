@@ -131,6 +131,11 @@ export const SOUND_RECIPES: Readonly<Record<SoundName, Recipe>> = {
     v.tone({ f0: 80, f1: 40, type: 'sine', dur: 0.9, vol: 0.35, delay: 0.1 });
   },
 
+  tick(v) {
+    // 残り10秒からの秒読み。短く高い音にして、ほかの音に埋もれないようにする。
+    v.tone({ f0: 1200, type: 'square', dur: 0.05, vol: 0.14 });
+  },
+
   fanfare(v) {
     // 優勝ファンファーレ。[半音, 鳴らす時刻] の組を、1オクターブ下と重ねて鳴らす。
     const notes: readonly (readonly [number, number])[] = [

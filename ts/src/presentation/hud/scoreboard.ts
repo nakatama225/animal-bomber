@@ -1,0 +1,151 @@
+import { lookOf } from '../../content/animals.js';
+import { abilityOf } from '../../domain/abilities/registry.js';
+import { TICKS_PER_SECOND } from '../../domain/core/Tick.js';
+import type { MatchConfig } from '../../domain/rules/MatchConfig.js';
+import { winsOf, type MatchState } from '../../domain/state/MatchState.js';
+import { powerOf, type PlayerId, type PlayerState } from '../../domain/state/PlayerState.js';
+import type { WorldState } from '../../domain/state/WorldState.js';
+import { effectText } from './effectLabels.js';
+import { tagOf, type Roster } from './roster.js';
+
+/**
+ * 試合の横に出す板（時計と、プレイヤーごとの名札）の中身。
+ *
+ * **文と値を返すだけで、画面に書かない。** どこにどう並べるかは `platform/ui/` が決める。
+ * 分けてあるので、中身はブラウザ無しで確かめられる。
+ */
+
+/** 板を作るのに要るもの。盤面だけでは足りない（勝ち数・設定・誰が操作しているかは盤面に無い）。 */
+export interface HudSource {
+  readonly world: Readonly<WorldState>;
+  readonly match: Readonly<MatchState>;
+  readonly config: MatchConfig;
+  readonly roster: Roster;
+  /** ラウンドが決まり、次の盤面を待っている最中か。 */
+  readonly betweenRounds: boolean;
+}
+
+/** 残り時間がこれ以下になったら、時計を目立たせる（秒）。 */
+const WARN_SECONDS = 30;
+
+export interface ClockView {
+  /** いま戦っている（決着のあとの待ちの間は、決まったばかりの）ラウンド。 */
+  readonly round: number;
+  readonly winsToTake: number;
+  /** 残り時間（「2:59」）。 */
+  readonly time: string;
+  /** 残りが少ないか。 */
+  readonly warn: boolean;
+  /** 延長戦の最中か。 */
+  readonly suddenDeath: boolean;
+}
+
+export function describeClock(source: HudSource): ClockView {
+  const { world, match, config } = source;
+  const left = remainingSeconds(world);
+  return {
+    // ⚠️ ラウンドが決まった tick に、試合の側はもう次のラウンドの番号へ進めている。
+    // 待ちの間の盤面は前のラウンドのものなので、番号もそちらに合わせる。
+    // 優勝が決まったときは進めていないので、そのまま。
+    round: source.betweenRounds ? match.round - 1 : match.round,
+    winsToTake: config.winsToTake,
+    time: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`,
+    warn: left <= WARN_SECONDS,
+    suddenDeath: world.suddenDeath,
+  };
+}
+
+/** 残り時間（秒）。端数は切り上げる（0.2 秒残っていれば「0:01」）。 */
+export function remainingSeconds(world: Readonly<WorldState>): number {
+  return Math.max(0, Math.ceil((world.endsAt - world.now) / TICKS_PER_SECOND));
+}
+
+/** プレイヤー1人ぶんの名札。 */
+export interface PlayerCardView {
+  readonly id: PlayerId;
+  readonly emoji: string;
+  /** 動物の名前。 */
+  readonly name: string;
+  /** 誰が操作しているか（「1P」「CPU・ふつう」）。 */
+  readonly tag: string;
+  /** 取った勝ち星と、優勝までの残り（「★☆☆」）。 */
+  readonly stars: string;
+  readonly state: PlayerState['life']['kind'];
+  /** 体力のハート、または盤面にいないわけ。 */
+  readonly condition: string;
+  /** 爆弾・火力・靴。 */
+  readonly stats: string;
+  /** かかっている状態と、使えるとくぎ。 */
+  readonly effects: readonly string[];
+}
+
+export function describePlayers(source: HudSource): PlayerCardView[] {
+  return source.world.players.map((player) => describePlayer(source, player));
+}
+
+function describePlayer(source: HudSource, player: Readonly<PlayerState>): PlayerCardView {
+  const { match, config, roster } = source;
+  const look = lookOf(player.animal);
+  const wins = winsOf(match, player.id);
+  return {
+    id: player.id,
+    emoji: look.emoji,
+    name: look.name,
+    tag: tagOf(roster, player.id),
+    stars: '★'.repeat(wins) + '☆'.repeat(Math.max(0, config.winsToTake - wins)),
+    state: player.life.kind,
+    condition: conditionOf(player, maxHpOf(config, player)),
+    stats: `💣${player.maxBombs} 🔥${powerOf(player)} 👟${player.shoes}`,
+    effects: effectsOf(player, look.special),
+  };
+}
+
+/** そのラウンドの始まりの体力（半分の単位）。減ったぶんを黒いハートで見せるのに使う。 */
+function maxHpOf(config: MatchConfig, player: Readonly<PlayerState>): number {
+  const base = config.startingHp[player.id] ?? player.hp;
+  return base + abilityOf(player.animal).hpBonus;
+}
+
+function conditionOf(player: Readonly<PlayerState>, maxHp: number): string {
+  switch (player.life.kind) {
+    case 'negibon':
+      return '🌿 葱ボン（外周）';
+    case 'out':
+      return '💀 退場';
+    case 'alive':
+      return hearts(player.hp, maxHp);
+  }
+}
+
+/**
+ * 体力をハートで表す。体力は半分の単位なので、2 で1個。
+ *
+ * 減ったぶんは黒いハートで残す。いくつ残っているかより、あといくつで倒れるかが
+ * 一目で分かるように。
+ */
+export function hearts(hp: number, maxHp: number): string {
+  const full = Math.floor(hp / 2);
+  const half = hp % 2;
+  const lost = Math.max(0, Math.ceil(maxHp / 2) - full - half);
+  return '❤️'.repeat(full) + '💔'.repeat(half) + '🖤'.repeat(lost);
+}
+
+/**
+ * かかっている状態と、使えるとくぎ。盤面にいる人だけ。
+ *
+ * ⚠️ 盤面にいない人は出さない。残り1分を切ってから倒れた人は退場するだけで、
+ * とくぎの回数やかかっていた状態は試合の側で消されずに残る（もう使われない）。
+ */
+function effectsOf(
+  player: Readonly<PlayerState>,
+  special: { readonly name: string; readonly emoji: string },
+): string[] {
+  if (player.life.kind !== 'alive') return [];
+  const effects: string[] = [];
+  if (player.specialCharges > 0) {
+    const times = player.specialCharges > 1 ? `×${player.specialCharges}` : '';
+    effects.push(`${special.emoji}${special.name}${times}`);
+  }
+  for (const kind of player.effects.active()) effects.push(effectText(kind));
+  return effects;
+}
