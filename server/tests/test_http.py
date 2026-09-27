@@ -77,3 +77,86 @@ class Test静的配信:
         response = process_request(None, make_request("POST"))
 
         assert response.status_code == 405
+
+
+def get(process_request, path: str):
+    return process_request(None, Request(path=path, headers=Headers(), method="GET"))
+
+
+class TestTS版の配信:
+    """`/ts/` の下では、TypeScript 版のビルドの出力（`ts/dist`）を配る。
+
+    `/` とそれ以外の道は、これまでどおり原型の HTML を返す。
+    """
+
+    def setup_method(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        base = Path(self.tmp.name)
+        self.html_path = base / "legacy.html"
+        self.html_path.write_text("<html>原型</html>", encoding="utf-8")
+        self.dist = base / "dist"
+        (self.dist / "assets").mkdir(parents=True)
+        (self.dist / "index.html").write_text("<html>TS 版</html>", encoding="utf-8")
+        (self.dist / "assets" / "app.js").write_text("console.log(1)", encoding="utf-8")
+        (self.dist / "assets" / "app.css").write_text("body{}", encoding="utf-8")
+        # 配る場所の外に置いた、配ってはいけないファイル。
+        (base / "secret.txt").write_text("外のファイル", encoding="utf-8")
+        self.process_request = make_process_request(self.html_path, self.dist)
+
+    def teardown_method(self):
+        self.tmp.cleanup()
+
+    def test_ts_の下では_ビルドの出力を配る(self):
+        index = get(self.process_request, "/ts/")
+        script = get(self.process_request, "/ts/assets/app.js")
+        style = get(self.process_request, "/ts/assets/app.css")
+
+        assert (index.status_code, index.body) == (200, "<html>TS 版</html>".encode())
+        assert index.headers["Content-Type"].startswith("text/html")
+        # モジュールのスクリプトは、JavaScript の種類で返さないとブラウザが読まない。
+        assert (script.status_code, script.headers["Content-Type"]) == (200, "text/javascript; charset=utf-8")
+        assert style.headers["Content-Type"] == "text/css; charset=utf-8"
+        assert index.headers["Cache-Control"] == "no-store"
+
+    def test_問い合わせの部分は_ファイルを探すときに使わない(self):
+        # 通信対戦は `/ts/?relay` で開く。
+        response = get(self.process_request, "/ts/?relay")
+
+        assert (response.status_code, response.body) == (200, "<html>TS 版</html>".encode())
+
+    def test_末尾の斜線が無ければ_付けた場所へ案内する(self):
+        # `/ts` のまま index.html を返すと、中の `./assets/…` が `/assets/…` を指してしまう。
+        response = get(self.process_request, "/ts?relay")
+
+        assert response.status_code == 301
+        assert response.headers["Location"] == "/ts/?relay"
+
+    def test_配る場所の外へは出られない(self):
+        for path in (
+            "/ts/../secret.txt",
+            "/ts/%2e%2e/secret.txt",
+            "/ts/assets/..%2f..%2fsecret.txt",
+            f"/ts/{self.tmp.name}/secret.txt",
+            "/ts//etc/hosts",
+            "/ts/index.html%00.js",
+        ):
+            response = get(self.process_request, path)
+            assert response.status_code == 404, path
+            assert "外のファイル".encode() not in response.body, path
+
+    def test_無いファイルは404(self):
+        assert get(self.process_request, "/ts/assets/none.js").status_code == 404
+        assert get(self.process_request, "/ts/assets").status_code == 404
+
+    def test_ts_の外の道は_これまでどおり原型のHTMLを返す(self):
+        for path in ("/", "/tsx", "/index.html", "/assets/app.js"):
+            response = get(self.process_request, path)
+            assert (response.status_code, response.body) == (200, "<html>原型</html>".encode()), path
+
+    def test_まだビルドしていなければ_そう案内する(self):
+        process_request = make_process_request(self.html_path, Path(self.tmp.name) / "none")
+
+        response = get(process_request, "/ts/")
+
+        assert response.status_code == 404
+        assert "npm run build" in response.body.decode()

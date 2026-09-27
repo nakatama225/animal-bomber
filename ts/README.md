@@ -74,15 +74,15 @@ npm install
 npm run dev      # 開発サーバ（Vite）
 npm run verify   # 型検査 + 層の依存検査 + lint + テスト（Vitest）
 npm run graph    # docs/layers.svg に層の図を出す（Graphviz が要る）
-npm run build    # 静的ファイルの出力
+npm run build    # 静的ファイルの出力（ts/dist。中継サーバが /ts/ の下で配る）
 ```
 
 開くとタイトルが出ます。1人で CPU 3体と遊ぶ・2人で CPU 2体と遊ぶ・2人だけで遊ぶ、から選び、
 動物とルールを決めて始めます。
 
-LAN の通信対戦は、中継サーバ（[server/](../server/)）と開発サーバを1台の Mac で立て、
-タイトルの「通信対戦」を選びます（URL に `?relay` を付けて開くのと同じ）。手順は
-[docs/05-通信対戦](docs/05-通信対戦.md) にあります。
+LAN の通信対戦は、`npm run build` してから中継サーバ（[server/](../server/)）を1台の Mac で立て、
+`http://<その Mac の名前>.local:8777/ts/` を開いてタイトルの「通信対戦」を選びます（URL に `?relay` を
+付けて開くのと同じ）。手順は [docs/05-通信対戦](docs/05-通信対戦.md) にあります。
 
 `verify` は5つを順に走らせます。
 

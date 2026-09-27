@@ -19,7 +19,7 @@ from urllib.parse import urlsplit
 from websockets.asyncio.server import ServerConnection, serve
 from websockets.exceptions import ConnectionClosed
 
-from animal_bomber_server.http import make_process_request
+from animal_bomber_server.http import TS_PREFIX, make_process_request
 from animal_bomber_server.lockstep import LockstepRoom
 from animal_bomber_server.netinfo import candidate_urls
 from animal_bomber_server.protocol import LOCKSTEP_PATH, REFUSED_CLOSE_CODE
@@ -50,8 +50,23 @@ def _default_html_path() -> Path:
     return candidates[0]
 
 
+def _default_ts_dir() -> Path:
+    """TypeScript 版のビルドの出力（`ts/dist`）の在り処。`/ts/` の下で配る。
+
+    ソースから動かす場合は、リポジトリの `ts/` で `npm run build` した出力。
+    ⚠️ PyInstaller で固めた `.app` には、いまは入れていない（spec を変えていない）。
+    `.app` から動かすと `/ts/` はビルドの仕方を案内するだけになる。入れるには spec の
+    `datas` に足して作り直し、実機で確かめる必要がある。
+    """
+    bundle_dir = getattr(sys, "_MEIPASS", None)
+    if bundle_dir:
+        return Path(bundle_dir) / "ts"
+    return Path(__file__).resolve().parents[3] / "ts" / "dist"
+
+
 DEFAULT_PORT = 8777
 DEFAULT_HTML = _default_html_path()
+DEFAULT_TS_DIR = _default_ts_dir()
 MAX_SEATS = 4  # ホスト1 + ゲスト3。Phase 4 のロビーが扱える上限に合わせる
 
 logger = logging.getLogger("animal_bomber_server")
@@ -207,7 +222,11 @@ async def serve_lockstep(lockstep: LockstepRoom, ws: ServerConnection) -> None:
         logger.info("プレイヤー %d がロックステップの部屋から切断した", seat)
 
 
-async def run(port: int = DEFAULT_PORT, html_path: Path = DEFAULT_HTML) -> None:
+async def run(
+    port: int = DEFAULT_PORT,
+    html_path: Path = DEFAULT_HTML,
+    ts_dir: Path = DEFAULT_TS_DIR,
+) -> None:
     """サーバを起動して、Ctrl-C や上位からの取り消しまで動かし続ける。
 
     コンソールから直接動かす経路（`main()`）専用。GUI 経路は
@@ -216,7 +235,7 @@ async def run(port: int = DEFAULT_PORT, html_path: Path = DEFAULT_HTML) -> None:
     """
     room = Room(max_seats=MAX_SEATS, reserve_host_seat=True)
     lockstep = LockstepRoom(max_seats=MAX_SEATS, reserve_host_seat=True)
-    process_request = make_process_request(html_path)
+    process_request = make_process_request(html_path, ts_dir)
 
     async with serve(
         make_handler(room, lockstep),
@@ -229,6 +248,10 @@ async def run(port: int = DEFAULT_PORT, html_path: Path = DEFAULT_HTML) -> None:
         print("ゲストは次のどちらかをブラウザで開いてください:")
         for url in urls or [f"http://<このMacのIP>:{port}"]:
             print(f"  {url}")
+        print(f"TypeScript 版は、上のどちらかの末尾に {TS_PREFIX} を付けて開く")
+        if not ts_dir.is_dir():
+            print("  （まだビルドしていない。ts/ で npm run build を実行する）")
+            print(f"  （置き場所：{ts_dir}）")
         await server.serve_forever()
 
 
@@ -237,6 +260,7 @@ async def _serve_until_stopped(
     html_path: Path,
     loop_box: dict,
     stop_event_box: dict,
+    ts_dir: Path = DEFAULT_TS_DIR,
 ) -> None:
     """GUI 経路のサーバ本体。`asyncio.Event` が立つまで動き続ける。
 
@@ -263,7 +287,7 @@ async def _serve_until_stopped(
         make_handler(room, lockstep),
         host="0.0.0.0",
         port=port,
-        process_request=make_process_request(html_path),
+        process_request=make_process_request(html_path, ts_dir),
     ) as server:
         stop_event_box["port"] = server.sockets[0].getsockname()[1]
         await stop_event.wait()
@@ -274,11 +298,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--html", type=Path, default=DEFAULT_HTML)
+    parser.add_argument("--ts-dir", type=Path, default=DEFAULT_TS_DIR)
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     with contextlib.suppress(KeyboardInterrupt):
-        asyncio.run(run(port=args.port, html_path=args.html))
+        asyncio.run(run(port=args.port, html_path=args.html, ts_dir=args.ts_dir))
 
 
 def gui_main(port: int = DEFAULT_PORT, html_path: Path = DEFAULT_HTML) -> None:

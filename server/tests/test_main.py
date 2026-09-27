@@ -18,6 +18,7 @@ import websockets
 from animal_bomber_server.main import (
     MAX_SEATS,
     _default_html_path,
+    _default_ts_dir,
     _serve_until_stopped,
     from_same_machine,
 )
@@ -43,6 +44,16 @@ class Testhtmlパス解決:
         monkeypatch.setattr("sys._MEIPASS", str(tmp_path), raising=False)
         path = _default_html_path()
         assert path == tmp_path / "animal-bomber.html"
+
+
+class TestTS版の置き場所:
+    def test_MEIPASSが無いときはリポジトリのts_distを指す(self, monkeypatch):
+        monkeypatch.delattr("sys._MEIPASS", raising=False)
+        assert _default_ts_dir().parts[-2:] == ("ts", "dist")
+
+    def test_MEIPASSがあるときはそちらを指す(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("sys._MEIPASS", str(tmp_path), raising=False)
+        assert _default_ts_dir() == tmp_path / "ts"
 
 
 @pytest.fixture
@@ -201,3 +212,33 @@ def test_パッケージ名で起動できる():
     )
     assert result.returncode == 0, result.stderr
     assert "--port" in result.stdout
+
+
+async def test_渡したTS版の置き場所を_ts_の下で配る(html_path, tmp_path):
+    # `_serve_until_stopped` が置き場所を配信の関数まで渡していることの確認（配線）。
+    (tmp_path / "index.html").write_text("<html>TS 版</html>", encoding="utf-8")
+    loop_box: dict = {}
+    stop_event_box: dict = {}
+    task = asyncio.create_task(
+        _serve_until_stopped(0, html_path, loop_box, stop_event_box, tmp_path)
+    )
+    for _ in range(50):
+        if "port" in stop_event_box:
+            break
+        await asyncio.sleep(0.01)
+    else:
+        pytest.fail("ポートが書き込まれなかった")
+
+    reader, writer = await asyncio.wait_for(
+        asyncio.open_connection("127.0.0.1", stop_event_box["port"]), timeout=2
+    )
+    writer.write(b"GET /ts/ HTTP/1.1\r\nHost: localhost\r\n\r\n")
+    await writer.drain()
+    head = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=2)
+    body = await asyncio.wait_for(reader.read(len("<html>TS 版</html>".encode())), timeout=2)
+    writer.close()
+
+    stop_event_box["event"].set()
+    await asyncio.wait_for(task, timeout=2)
+    assert head.startswith(b"HTTP/1.1 200")
+    assert body == "<html>TS 版</html>".encode()

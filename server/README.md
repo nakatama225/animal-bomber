@@ -12,6 +12,9 @@
 | `/` | `relay.Room` | HTML 版 | ホスト権威。ホストだけが試合を進め、盤面を全員へ配る |
 | `/lockstep` | `lockstep.LockstepRoom` | TypeScript 版 | ロックステップ。全員が試合を進め、1 tick ぶんの操作だけを全員へ配る |
 
+ページも同じポートで配ります。`/ts/` の下では TypeScript 版のビルドの出力（`ts/dist`）を、それ以外の道では
+HTML 版を返します（`http.py`）。
+
 ---
 
 ## Design Choice — この実装で決めたこと
@@ -99,8 +102,13 @@ SEND_TIMEOUT = 0.1  # 1つの接続への送信をあきらめるまでの秒数
 ```sh
 uv sync
 uv run python -m animal_bomber_server          # 既定のポート 8777 で起動
-uv run python -m animal_bomber_server --help   # ポートと HTML の指定
+uv run python -m animal_bomber_server --help   # ポート・HTML・TypeScript 版の置き場所の指定
 ```
+
+TypeScript 版は、先に `ts/` で `npm run build` しておくと、`/ts/` の下で配ります
+（`http://<端末名>.local:8777/ts/`）。ビルドしていなければ、`/ts/` はビルドの仕方を案内します。
+⚠️ デスクトップアプリ（下）には、TypeScript 版をまだ入れていません。入れるには spec の `datas` に
+足して作り直し、実機で確かめる必要があります。
 
 起動すると接続用の URL が2種類表示されます。
 
@@ -117,7 +125,7 @@ VPN・アクセスポイントの端末間通信の遮断・ネットワーク�
 ### テスト
 
 ```sh
-uv run pytest       # 124 件
+uv run pytest       # 134 件
 uv run ruff check .
 ```
 
