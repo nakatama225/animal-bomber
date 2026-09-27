@@ -30,6 +30,9 @@ export interface LanHooks {
   readonly cpuSource: (playerId: PlayerId, settings: LanSettings) => IntentSource;
 }
 
+/** 試合中の段階。 */
+export type PlayingPhase = Extract<LanPhase, { kind: 'playing' }>;
+
 /** 通信対戦の、いまの段階。 */
 export type LanPhase =
   | { readonly kind: 'connecting' }
@@ -42,6 +45,8 @@ export type LanPhase =
   | {
       readonly kind: 'playing';
       readonly seat: PlayerId;
+      /** ホストが配った設定。全員が同じものを持つ。 */
+      readonly settings: LanSettings;
       readonly session: LockstepSession;
       readonly driver: LockstepDriver;
     }
@@ -50,6 +55,12 @@ export type LanPhase =
       readonly reason: string;
       /** 止めるきっかけになった例外。原因を調べるときのために残す。 */
       readonly cause?: unknown;
+      /**
+       * 試合の最中に止まったときの、止まる直前の段階。始まる前に止まったときは無い。
+       *
+       * 止まった試合の盤面と名札を、画面に残したまま理由を出すのに使う。
+       */
+      readonly played?: PlayingPhase;
     };
 
 /**
@@ -71,7 +82,7 @@ export type LanPhase =
  * 抜けた人を CPU に替えて進み続け、ずれが見つからなくなる。
  *
  * 次の試合は、ページを読み込み直して始める。全員が抜けると中継の部屋が戻る。
- * 接続を保ったまま再戦する流れは、ロビーの画面（段階10）で決める。
+ * 接続を保ったまま再戦する流れは、まだ無い。中継に「試合を終えて部屋を戻す」約束を足す必要がある。
  */
 export class LockstepClient {
   readonly #link: PeerLink;
@@ -183,11 +194,17 @@ export class LockstepClient {
       replacement: (id) => this.#hooks.cpuSource(id, settings),
     });
     driver.start();
-    this.#phase = { kind: 'playing', seat, session, driver };
+    this.#phase = { kind: 'playing', seat, settings, session, driver };
   }
 
   #fail(reason: string, cause?: unknown): void {
-    this.#phase = cause === undefined ? { kind: 'failed', reason } : { kind: 'failed', reason, cause };
+    const before = this.#phase;
+    this.#phase = {
+      kind: 'failed',
+      reason,
+      ...(cause === undefined ? {} : { cause }),
+      ...(before.kind === 'playing' ? { played: before } : {}),
+    };
   }
 }
 

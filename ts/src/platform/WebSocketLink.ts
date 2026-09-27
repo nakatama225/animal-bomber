@@ -37,6 +37,11 @@ export class WebSocketLink implements PeerLink {
   readonly send = (message: PeerMessage): void => {
     if (this.#socket.readyState === WebSocket.OPEN) this.#socket.send(encodePeerMessage(message));
   };
+
+  /** 閉じる。中継は、この人が抜けたものとして扱う。 */
+  close(): void {
+    this.#socket.close(1000, 'left');
+  }
 }
 
 /**

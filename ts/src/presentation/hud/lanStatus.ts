@@ -8,36 +8,63 @@ import type { LanPhase } from '../../net/LockstepClient.js';
  * 新しい接続を断る（途中から入った人の入力を、誰の試合にも入れられないため）。
  * 全員が閉じてからでないと、次の試合に入れない。
  */
-const START_OVER = 'もう一度遊ぶときは、全員がページを閉じてから開き直す';
+export const START_OVER = 'もう一度遊ぶときは、全員がページを閉じてから開き直す';
 
 /**
  * 通信対戦の、いまの様子を1行の文にする。画面の上に出す。
  *
  * 画面の組み立て（どこに出すか）とは分けてある。文だけならブラウザ無しで確かめられる。
- * タイトルやロビーの画面（段階10）ができるまでの、最小の案内。
  *
+ * @param waiting 「操作を待っている」と出す人。省くと、いま待っている人全員。
+ *   一瞬の待ちまで出すと文がちらつくので、画面では `WaitingNotice` を通した値を渡す
  * @returns 出す文。何も出さなくてよいときは空文字
  */
-export function describeLanPhase(phase: LanPhase): string {
+export function describeLanPhase(
+  phase: LanPhase,
+  waiting: readonly PlayerId[] = phase.kind === 'playing' ? phase.driver.waitingFor() : [],
+): string {
   switch (phase.kind) {
     case 'connecting':
-      return '中継サーバにつないでいる…';
-    case 'lobby': {
-      const present = `つながっている人：${phase.present.map(label).join('・')}`;
-      const next = phase.seat === 0 ? '全員そろったら「はじめる」を押す' : '1P が始めるのを待っている';
-      return `あなたは ${label(phase.seat)}。${present}。${next}`;
-    }
+    case 'lobby':
+      // 始まる前は、ロビーの画面（`platform/ui/LobbyView.ts`）が様子を出す。
+      return '';
     case 'playing': {
       const desync = phase.driver.desync;
       if (desync !== null) {
         return `端末どうしで試合がずれたので止めた（tick ${desync.tick}）。${START_OVER}`;
       }
-      const waiting = phase.driver.waitingFor();
       if (waiting.length > 0) return `${waiting.map(label).join('・')} の操作を待っている`;
       return phase.session.match.finished ? `試合が終わった。${START_OVER}` : '';
     }
     case 'failed':
       return `${phase.reason}。${START_OVER}`;
+  }
+}
+
+/**
+ * 待ちの案内を出すまでに、待ちが続いたフレーム数。1秒に60回描く画面で約0.5秒。
+ *
+ * 入力は数 tick 先の分まで送り合っているので、ふだんは待たない。回線が一瞬詰まっただけの
+ * 待ちまで出すと、文が出たり消えたりする。続いたときだけ出す。
+ */
+const WAIT_NOTICE_FRAMES = 30;
+
+/**
+ * 「操作を待っている」の案内を、待ちがしばらく続いたときだけ出すための数え役。
+ *
+ * 描くたびに、いま待っている人を渡す。
+ */
+export class WaitingNotice {
+  #frames = 0;
+
+  /** @returns 案内に出す人。まだ出さないときは空 */
+  observe(waiting: readonly PlayerId[]): readonly PlayerId[] {
+    if (waiting.length === 0) {
+      this.#frames = 0;
+      return [];
+    }
+    this.#frames += 1;
+    return this.#frames >= WAIT_NOTICE_FRAMES ? waiting : [];
   }
 }
 

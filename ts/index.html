@@ -4,14 +4,32 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>どうぶつボンバー</title>
+    <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <!-- 通信対戦（URL に ?relay を付けたとき）だけ使う。接続の様子と、ホストが試合を始めるボタン -->
-    <!-- 案内の行は高さを固定する。文が出たり消えたりするたびに盤面が上下に動かないように -->
-    <p id="lan-status" hidden style="min-height: 1.5em"></p>
-    <!-- Tab でフォーカスさせない。フォーカスしたまま Enter（爆弾のキー）で押すのを避ける -->
-    <button id="lan-start" type="button" tabindex="-1" hidden>はじめる</button>
-    <canvas id="stage" width="920" height="680"></canvas>
+    <div id="app">
+      <!-- 試合の前の画面（タイトル・動物を選ぶ・ルール・遊び方）と、通信対戦のロビー。中身はスクリプトが組み立てる -->
+      <section id="menu"></section>
+
+      <!-- 試合の画面 -->
+      <section id="play" hidden>
+        <div class="stage">
+          <div class="board">
+            <canvas id="stage" width="920" height="680"></canvas>
+            <!-- 盤面に重ねるもの。ラウンドの間の幕・短い通知・ポーズの表示 -->
+            <div id="banner" class="banner" hidden></div>
+            <div id="toasts" class="toasts"></div>
+            <div id="pause" class="pause" hidden>ポーズ中（P で再開）</div>
+          </div>
+          <aside class="side">
+            <div id="side-panel"></div>
+            <!-- 通信対戦の、接続の様子。高さを固定して、文が出たり消えたりしても板が上下に動かないようにする -->
+            <p id="lan-status" class="lan-status" hidden></p>
+            <div id="toolbar" class="toolbar"></div>
+          </aside>
+        </div>
+      </section>
+    </div>
     <script type="module" src="/src/app/main.ts"></script>
   </body>
 </html>

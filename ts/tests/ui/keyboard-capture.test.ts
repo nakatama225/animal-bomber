@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { GAME_KEYS, KeyboardWatcher, SOLO_KEYS } from '../../src/platform/Keyboard.js';
 
-function keydown(code: string): KeyboardEvent {
-  const event = new KeyboardEvent('keydown', { code, cancelable: true });
+function keydown(code: string, modifiers: KeyboardEventInit = {}): KeyboardEvent {
+  const event = new KeyboardEvent('keydown', { code, cancelable: true, ...modifiers });
   window.dispatchEvent(event);
   return event;
 }
@@ -23,6 +23,16 @@ describe('試合の画面のキー', () => {
 
     watcher.capture([]);
     expect(keydown('ArrowDown').defaultPrevented).toBe(false);
+  });
+
+  it('Command・Ctrl・Option と一緒のときは止めない（ブラウザの操作に使う）', () => {
+    watcher.attach();
+    watcher.capture(GAME_KEYS);
+    expect(keydown('KeyD', { metaKey: true }).defaultPrevented).toBe(false);
+    expect(keydown('KeyS', { ctrlKey: true }).defaultPrevented).toBe(false);
+    expect(keydown('ArrowLeft', { altKey: true }).defaultPrevented).toBe(false);
+    // Shift は技のキーなので、矢印と一緒でも止める。
+    expect(keydown('ArrowLeft', { shiftKey: true }).defaultPrevented).toBe(true);
   });
 
   it('止めても、押されたことは数える', () => {

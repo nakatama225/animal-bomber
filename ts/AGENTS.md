@@ -84,3 +84,21 @@ MEASURE=1 npx vitest run tests/ai/balance.test.ts
   テストは node で走るので、読み込んだ時点で落ちます
 - 描画のテストで使う偽の canvas（`tests/presentation/fakeCanvas.ts`）は、ブラウザが例外を出す
   呼び方（負の半径など）で同じく例外を出します。**この検査を緩めないでください**
+
+## 画面（`src/presentation/hud/`・`src/presentation/menu/`・`src/platform/ui/`）
+
+- 試合の状態から計算して出すもの（名札・時計・幕・通知・秒読み）と、画面の流れ・選んだものは
+  `presentation/` に、純粋な関数とクラスで書いてください。試合の状態を読む判断を `platform/ui/` に
+  足さないでください
+- `platform/ui/` に書いてよいのは、画面の固定の文言（ボタンの名前・注記）と、どの行を並べるか
+  （遊び方の人数で行を出し分ける、など）です。キー配置を使う説明（`platform/keyHelp.ts`・
+  `platform/ui/manual.ts`）も、キー配置の表が `platform/` にあるのでここに置きます
+- 画面のボタンは `pointerButton`（`platform/ui/dom.ts`）で作ってください。キーボードで起きたクリックを
+  捨てます。Space と Enter は爆弾のキーなので、「はじめる」をキーボードで押せると、押したまま試合が
+  始まって開始位置に爆弾を置きます
+- 文は `textContent` で入れてください。`innerHTML` に文字列をつないで入れないでください
+- 写す側のテストは、ファイルの先頭に `// @vitest-environment happy-dom` と書くと代わりの DOM の上で
+  走ります。ほかのテストは node のままです
+- ラウンドの間の幕をボタンで送る形にしないでください。通信対戦で「誰の操作で次へ進むか」を
+  揃える必要が出てきます。待ちの長さは試合の側（`ROUND_INTERMISSION`）が tick で数えています
+- `main.ts` が探す要素の名前を変えたら、`index.html` も直してください（`tests/ui/index-html.test.ts` が突き合わせます）

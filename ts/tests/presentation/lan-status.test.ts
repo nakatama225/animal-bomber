@@ -20,23 +20,11 @@ function client(): LockstepClient {
 const text = (message: object): string => JSON.stringify(message);
 
 describe('通信対戦の案内', () => {
-  it('つないでいる間', () => {
-    expect(describeLanPhase(client().phase)).toBe('中継サーバにつないでいる…');
-  });
-
-  it('待っている間は、自分の番号とつながっている人を出し、ホストには始め方を出す', () => {
-    const host = client();
-    host.receive(text({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
-    host.receive(text({ t: 'peer_joined', seat: 2 }));
-    const guest = client();
-    guest.receive(text({ t: 'welcome', seat: 2, role: 'guest', seats: [0] }));
-
-    expect(describeLanPhase(host.phase)).toBe(
-      'あなたは 1P。つながっている人：1P・3P。全員そろったら「はじめる」を押す',
-    );
-    expect(describeLanPhase(guest.phase)).toBe(
-      'あなたは 3P。つながっている人：1P・3P。1P が始めるのを待っている',
-    );
+  it('始まる前は出さない（ロビーの画面が出す）', () => {
+    const c = client();
+    expect(describeLanPhase(c.phase)).toBe('');
+    c.receive(text({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
+    expect(describeLanPhase(c.phase)).toBe('');
   });
 
   it('試合中は、操作を待っている人がいるときだけ出す', () => {

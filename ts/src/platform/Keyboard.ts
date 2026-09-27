@@ -90,7 +90,10 @@ export class KeyboardWatcher implements KeyStateReader {
 
   readonly #onDown = (event: KeyboardEvent): void => {
     this.#pressed.add(event.code);
-    if (this.#captured.has(event.code)) event.preventDefault();
+    // Command・Ctrl・Option と一緒のときは止めない（ブックマークや保存など、ブラウザの操作に使う）。
+    // Shift は技のキーなので、一緒でも止める。
+    const withModifier = event.metaKey || event.ctrlKey || event.altKey;
+    if (this.#captured.has(event.code) && !withModifier) event.preventDefault();
   };
 
   readonly #onUp = (event: KeyboardEvent): void => {

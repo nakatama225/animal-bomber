@@ -199,6 +199,16 @@ export class LockstepDriver implements MatchClock {
     );
   }
 
+  /**
+   * いま人間が操作しているプレイヤー。抜けて CPU に替わった人は含めない。
+   *
+   * 替わったと数えるのは、実際に CPU の窓口へ繋ぎ替えた tick から。抜けた知らせが届いた
+   * 時点ではまだ届いていた入力で進めているので、画面の名札もそれに合わせる。
+   */
+  humanPlayers(): PlayerId[] {
+    return this.#options.humans.filter((playerId) => !this.#replaced.has(playerId));
+  }
+
   /** 中継が知らせてきたずれ。無ければ null。 */
   get desync(): Desync | null {
     return this.#desync;
