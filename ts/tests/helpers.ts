@@ -4,9 +4,18 @@ import { createWorld, type WorldState } from '../src/domain/state/WorldState.js'
 import { startingBonusOf } from '../src/app/GameSession.js';
 import { Simulation } from '../src/domain/systems/Simulation.js';
 
-/** テスト用の世界を作る。種を変えなければ何度でも同じ盤面になる。 */
+/**
+ * テスト用の世界を作る。種を変えなければ何度でも同じ盤面になる。
+ *
+ * ラウンドの途中の盤面として作る（前の tick には誰も何も押していない）。ラウンドの始まりは、
+ * 爆弾と技のボタンを押していた扱いになっていて、最初の tick に押しても「押した瞬間」にならない。
+ * そのままだと、押した瞬間を見るテストがどれも1 tick 待つ形になる。ラウンドの始まりの扱いは
+ * `tests/systems/round.test.ts` で `createWorld` から確かめる。
+ */
 export function makeWorld(seed = 1234, animals: string[] = ['rabbit', 'elephant']): WorldState {
-  return createWorld({ seed, animals, bonusOf: startingBonusOf });
+  const world = createWorld({ seed, animals, bonusOf: startingBonusOf });
+  for (const player of world.players) player.previousIntent = IDLE_INTENT;
+  return world;
 }
 
 /** 指定した向きだけを押している意思。 */

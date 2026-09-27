@@ -4,7 +4,7 @@ import { IdSource } from '../core/EntityId.js';
 import { Rng } from '../core/Rng.js';
 import { StateHasher } from '../core/StateHash.js';
 import { secondsToTicks, tick, type Tick } from '../core/Tick.js';
-import { IDLE_INTENT, packIntent } from '../intent/PlayerIntent.js';
+import { IDLE_INTENT, packIntent, type PlayerIntent } from '../intent/PlayerIntent.js';
 import { DUEL_SPAWN_CELLS, ROUND_SECONDS, ROWS, SPAWN_CELLS, STARTING_HP } from '../rules/tuning.js';
 import type { Blast, Bomb } from './Bomb.js';
 import { EffectBag } from './EffectBag.js';
@@ -93,6 +93,17 @@ export interface StartingBonus {
 const NO_BONUS: StartingBonus = { hp: 0, power: 0, bombs: 0 };
 
 /**
+ * ラウンドの始まりの「前の tick に押していた内容」。爆弾と技のボタンを押していた扱いにする。
+ *
+ * ⚠️ 何も押していない扱い（`IDLE_INTENT`）にすると、爆弾のボタンを押したままラウンドが
+ * 始まったとき、最初の tick が「押した瞬間」になり、全員が開始位置に爆弾を置く。
+ * 原型でも、決着の幕を Space で送った押下が次のラウンドの最初に届いて、同じことが起きた
+ * （`legacy/test/README.md` の 11）。押したまま始まったボタンは、一度離して押し直すと効く。
+ * 技のボタンは `actionHeld` のロックでも同じ扱いにしている。
+ */
+const HELD_AT_ROUND_START: PlayerIntent = Object.freeze({ ...IDLE_INTENT, bomb: true, action: true });
+
+/**
  * 試合の初期状態を作る。
  *
  * ⚠️ 作る順序が結果を決める。盤面を先に作り、そのあとプレイヤーを置く。
@@ -131,7 +142,7 @@ export function createWorld(config: WorldSeed): WorldState {
       activeBombs: 0,
       invulnerableUntil: tick(0),
       walked: 0,
-      previousIntent: IDLE_INTENT,
+      previousIntent: HELD_AT_ROUND_START,
       effects: new EffectBag(),
       specialCharges: 0,
       action: null,

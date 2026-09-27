@@ -10,6 +10,10 @@ import { createWorld, hashWorld, type WorldState } from '../../src/domain/state/
 import { centerOf } from '../../src/domain/core/Coord.js';
 import { secondsToTicks } from '../../src/domain/core/Tick.js';
 import { SPAWN_CELLS } from '../../src/domain/rules/tuning.js';
+import type { SimEvent } from '../../src/domain/events/SimEvent.js';
+import { IDLE_INTENT, type PlayerIntent } from '../../src/domain/intent/PlayerIntent.js';
+import { Simulation } from '../../src/domain/systems/Simulation.js';
+import { onlyFor, press } from '../helpers.js';
 
 /** 決着のあとの待ちを飛ばして、次のラウンドの盤面まで進める。 */
 function skipIntermission(game: GameSession): void {
@@ -168,6 +172,38 @@ describe('開始位置', () => {
     skipIntermission(game);
     expect(game.match.round).toBe(2);
     expect(positionsOf(game.world)).toEqual([centerOf(SPAWN_CELLS[0]), centerOf(SPAWN_CELLS[3])]);
+  });
+});
+
+describe('ラウンドの始まりに押していたボタン', () => {
+  const holdBomb = press({ bomb: true });
+
+  it('爆弾のボタンを押したまま始まっても置かず、離して押し直すと置く', () => {
+    const world = createWorld({ seed: 5, animals: ['rabbit', 'frog'] });
+    const sim = new Simulation();
+    const placed = (intent: PlayerIntent): number =>
+      sim.step(world, onlyFor(world, 0, intent)).filter((e) => e.type === 'bombPlaced').length;
+    expect(placed(holdBomb)).toBe(0);
+    expect(placed(holdBomb)).toBe(0);
+    expect(placed(IDLE_INTENT)).toBe(0);
+    expect(placed(holdBomb)).toBe(1);
+  });
+
+  it('押したまま次のラウンドに入っても、開始位置に爆弾を置かない', () => {
+    // 決着のあとの待ちの間も押し続けていた場合。原型でも、決着の幕を送った押下が
+    // 次のラウンドの最初に届いて、開始位置に爆弾を置いた。
+    const game = new GameSession(defaultMatchConfig(3, ['rabbit', 'frog']));
+    for (const player of game.world.players) game.attach({ playerId: player.id, next: () => holdBomb });
+    const bombsOf = (events: readonly SimEvent[]) => events.filter((e) => e.type === 'bombPlaced').length;
+    expect(bombsOf(game.tick())).toBe(0);
+    game.world.players[1]!.life = OUT;
+    game.tick();
+    skipIntermission(game);
+    // 前提：2ラウンド目の最初の tick にいる。
+    expect(game.match.round).toBe(2);
+    expect(game.world.now).toBe(0);
+    expect(bombsOf(game.tick())).toBe(0);
+    expect(game.world.bombs).toHaveLength(0);
   });
 });
 
