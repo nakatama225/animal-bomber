@@ -146,8 +146,9 @@ export class FakeRelay {
 /**
  * 台本どおりに操作する、この端末の入力。人間がキーボードを押す代わり。
  *
- * 台本には「何回目に読まれたか」を渡す。読まれるのは tick を進めるときだけなので、
- * n 回目に読まれた意思は、tick n を進めるときに送られ、tick n + 3 に効く。
+ * 台本には「何回目に読まれたか」を渡す。0 回目は試合が始まったとき（`LockstepDriver.start`）に
+ * 読まれ、tick 0〜2 に効く。そのあとは tick を進めるときだけ読まれるので、n 回目（n ≥ 1）に
+ * 読まれた意思は、tick n − 1 を進めるときに送られ、tick n + 2 に効く。
  */
 export class ScriptedLocal implements IntentSource {
   #calls = 0;

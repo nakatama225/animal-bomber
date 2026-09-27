@@ -36,7 +36,12 @@ export class BannerOverlay {
       el('div', { className: 'banner-emoji', text: view.emoji }),
       el('div', { className: 'banner-title', text: view.title }),
       ...view.lines.map((line) => el('div', { className: 'banner-line', text: line })),
-      ...(view.final && actions.length > 0 ? [el('div', { className: 'banner-actions' }, actions)] : []),
+      // 試合が決まった幕のボタンの並びは、メニューのカーソルから見て1つの画面にする（`data-screen`）。
+      // ラウンドの間の幕（ボタンが無い）から替わったところで、カーソルが先頭（もういっかい）へ戻る。
+      // 原型も、試合が決まるたびにカーソルを先頭へ戻していた。
+      ...(view.final && actions.length > 0
+        ? [el('div', { className: 'banner-actions', data: { screen: 'final' } }, actions)]
+        : []),
     );
   }
 }

@@ -188,6 +188,9 @@ export class Shell {
     });
     // 自分のプレイヤー番号は、つないで受け取るまで分からない。名札の「あなた」から選ぶ。
     this.#begin(runner, (source) => this.#localHelp(source), [], false);
+    // 通信対戦は等倍で進めるので、曲も等倍に戻す。盤面は同じ速さなのに曲だけ速いと、
+    // 速さが変わったように見える。つまみの倍率（`#speed`）は、1台の試合に戻ったときのために残す。
+    this.#tools.music.setSpeed(1);
     this.#setToolbar([pointerButton('ぬける', () => this.#tools.leaveLan(), { data: { action: 'leave' } })]);
   }
 
@@ -210,7 +213,8 @@ export class Shell {
    */
   navigate(command: NavCommand): void {
     const root = this.#navRoot();
-    const result = this.#nav.handle(root, command);
+    // 優勝の幕だけは、枠が出ていなくても最初の決定を効かせる（原型と同じ。`MenuCursor` の説明を参照）。
+    const result = this.#nav.handle(root, command, root === this.#elements.banner ? 'activate' : 'show');
     if (result.kind === 'back' && this.#match === null) {
       this.#menu.back();
       this.#nav.paint(root);
@@ -254,7 +258,12 @@ export class Shell {
     if (after !== null) match.countdown.observe(after);
   }
 
-  /** 画面のループから、1枚描くごとに呼ばれる。 */
+  /**
+   * 画面のループから、1枚描くごとに呼ばれる。
+   *
+   * @param alpha 実時間での、次に `tick()` が呼ばれるまでの進み具合。1台で遊ぶときは、
+   *   描く側へ渡す前に、ゲームの速さの倍率を掛けた試合の時間の進み具合に換える（`GameSpeed.progress`）
+   */
   draw(alpha: number): void {
     // パッドは押したことを知らせてくれないので、描くたびに読む。決めた項目が画面を替えることがあるので、
     // 試合の部品を読むより前に済ませる。
@@ -269,7 +278,7 @@ export class Shell {
     const { runner } = match;
     const world = runner.world;
     this.#showBoard(world !== null);
-    if (world !== null) match.renderer.draw(world, alpha);
+    if (world !== null) match.renderer.draw(world, match.paced ? this.#speed.progress(alpha) : alpha);
     const hud = runner.hud;
     match.side.update(hud);
     this.#bannerView.show(world === null ? null : match.banner.current(world), match.finalActions);
@@ -323,9 +332,14 @@ export class Shell {
     return this.#elements.banner;
   }
 
-  /** 画面が組み直されても印が残るよう、枠を出している間は描くたびに付け直す。 */
+  /**
+   * 画面が組み直されても印が残るよう、描くたびに付け直す。
+   *
+   * ⚠️ 枠が消えている間も呼ぶ（印は付かない）。画面が替わったことに気づくのはここなので、
+   * 枠を出している間だけにすると、マウスで行って戻ってきた画面で、カーソルが前にいた番号から動き出す。
+   */
   #paintCursor(): void {
-    if (this.#nav.shown) this.#nav.paint(this.#navRoot());
+    this.#nav.paint(this.#navRoot());
   }
 
   /** 通信対戦の、この端末の人のキー配置の説明。 */

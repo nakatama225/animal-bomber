@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Shell, type ShellElements, type ShellTools } from '../../src/app/Shell.js';
 import { ANIMAL_LOOKS } from '../../src/content/animals.js';
@@ -8,7 +8,26 @@ import type { PadSnapshot } from '../../src/platform/GamepadInput.js';
 import type { WebSocketLinkHandlers } from '../../src/platform/WebSocketLink.js';
 import type { SoundName } from '../../src/presentation/audio/SoundBank.js';
 import type { SoundSetting } from '../../src/presentation/menu/MenuFlow.js';
+import type * as PlayersModule from '../../src/presentation/render/players.js';
 import { fakeCanvas } from '../presentation/fakeCanvas.js';
+
+/**
+ * 描いたプレイヤーの位置の控え。描く関数は本物をそのまま呼び、渡された位置だけを控える。
+ *
+ * 補間（前の tick の位置からいまの位置までの間を埋める）が正しいかは、描いた位置の並びでしか
+ * 見えない。偽の canvas の命令の列から位置を拾うと、絵の描き方を変えただけで壊れる。
+ */
+const drawn = vi.hoisted(() => [] as { id: number; x: number }[]);
+vi.mock('../../src/presentation/render/players.js', async (importOriginal) => {
+  const real = await importOriginal<typeof PlayersModule>();
+  return {
+    ...real,
+    drawPlayer: (...args: Parameters<typeof real.drawPlayer>): void => {
+      drawn.push({ id: args[1].player.id, x: args[1].x });
+      real.drawPlayer(...args);
+    },
+  };
+});
 
 /**
  * 画面の切り替えの通し。タイトルから試合を始め、決着の幕のボタンでタイトルへ戻るまで。
@@ -294,9 +313,29 @@ describe('ゲームの速さ', () => {
     expect(clock(elements)).toBe('2:58');
   });
 
+  it('0.5倍でも、描く位置は前へ戻らない（補間に渡す進み具合を試合の時間に換える）', () => {
+    // 画面は 120Hz（1 tick ぶんの時間に2枚描く）とする。FrameLoop の alpha は実時間の端数なので、
+    // そのまま渡すと、tick を進めなかった回に、位置が1つ前の tick の側へ戻る。
+    const { shell, elements } = mount('both', () => ['KeyD']);
+    startSolo(shell, elements);
+    slide(elements, 0.5);
+    drawn.length = 0;
+    for (let i = 0; i < 20; i += 1) {
+      shell.draw(0.5);
+      shell.tick();
+      shell.draw(0);
+    }
+    const xs = drawn.filter((view) => view.id === 0).map((view) => view.x);
+    expect(xs).toHaveLength(40);
+    const backward = xs.flatMap((x, i) => (i > 0 && x < xs[i - 1]! ? [i] : []));
+    expect(backward).toEqual([]);
+    // 右へ歩いている（止まったままで「戻らない」になっていない）。
+    expect(xs.at(-1)! - xs[0]!).toBeGreaterThan(0.2);
+  });
+
   it('通信対戦にはつまみを出さず、前の試合で速くしていても1回の呼び出しで 1 tick だけ進める', () => {
     // 全員の端末が同じ速さで進める必要がある。1台だけ速くしても、ほかの人の入力を待って止まる。
-    const { shell, elements, relay, sent } = mount();
+    const { shell, elements, relay, sent, music } = mount();
     startSolo(shell, elements);
     slide(elements, 3);
 
@@ -311,6 +350,8 @@ describe('ゲームの速さ', () => {
     for (let t = 0; t < 10; t += 1) relay().onMessage(JSON.stringify({ t: 'input', seat: 0, tick: t, bits: 0 }));
     shell.draw(0);
     expect(elements.toolbar.querySelector('[data-field="speed"]')).toBeNull();
+    // 曲も等倍に戻す。盤面は同じ速さなのに曲だけ速いと、速さが変わったように見える。
+    expect(music.speeds).toEqual([3, 1]);
 
     const inputs = (): number => sent.filter((message) => message.t === 'input').length;
     const before = inputs();
@@ -383,6 +424,50 @@ describe('キーボードでメニューを動かす', () => {
     expect(cursorOf(elements.menu)?.dataset['choice']).toBe('duo');
   });
 
+  it('枠が消えている間にマウスで画面を移っても、画面が替わればカーソルは先頭へ戻る', () => {
+    // 画面が替わったことに気づくのが、キーを押したときと枠を出している間だけだと、
+    // マウスで行って戻ってきた画面で、前にいた番号からカーソルが動き出す。
+    const { shell, elements } = mount();
+    shell.showMenu();
+    shell.navigate('down');
+    shell.navigate('down');
+    expect(cursorOf(elements.menu)?.dataset['choice']).toBe('versus');
+    shell.hideCursor();
+    press(elements.menu, '[data-choice="solo"]');
+    shell.draw(0);
+    press(elements.menu, '[data-action="back"]');
+    shell.draw(0);
+    expect(screenOf(elements)).toBe('title');
+    // 先頭（1人）から1つ下へ移る。
+    shell.navigate('down');
+    expect(cursorOf(elements.menu)?.dataset['choice']).toBe('duo');
+  });
+
+  it('遊び方の画面で↑↓を押しても、指す項目が替わらなければページを動かさない', () => {
+    // 遊び方の画面でカーソルに載るのは、上の音の設定の1行だけ。↑↓は同じ行へ回るだけなので、
+    // そのたびに見える所まで動かすと、下の説明を読んでいる途中でページが上へ引き戻される。
+    const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView');
+    try {
+      const { shell, elements } = mount();
+      shell.showMenu();
+      press(elements.menu, '[data-choice="manual"]');
+      shell.draw(0);
+      expect(screenOf(elements)).toBe('manual');
+      // 最初の1押しは枠を出す。出した所へは動かす。
+      shell.navigate('down');
+      const shown = scrolled.mock.calls.length;
+      expect(shown).toBe(1);
+      shell.navigate('down');
+      shell.navigate('up');
+      expect(scrolled.mock.calls.length).toBe(shown);
+      // 行の中を移ったときは、見える所まで動かす。
+      shell.navigate('right');
+      expect(scrolled.mock.calls.length).toBe(shown + 1);
+    } finally {
+      scrolled.mockRestore();
+    }
+  });
+
   it('Escape で1つ前の画面へ戻り、タイトルでは何もしない。「← もどる」にはカーソルが乗らない', () => {
     const { shell, elements } = mount();
     shell.showMenu();
@@ -437,14 +522,18 @@ describe('キーボードでメニューを動かす', () => {
     expect(played.filter((name) => name === 'place')).toHaveLength(1);
   });
 
-  it('優勝の幕では、キーボードで「タイトルへ」を選べる', () => {
-    const { shell, elements } = mount();
+  /** マウスで、1人・1ラウンド 60 秒の試合を始める。枠は出さない。 */
+  function startByMouse(shell: Shell, elements: ShellElements): void {
     shell.showMenu();
     press(elements.menu, '[data-choice="solo"]');
     press(elements.menu, '[data-action="next"]');
     press(elements.menu, '[data-field="time"] [data-value="60"]');
     press(elements.menu, '[data-action="start"]');
     shell.draw(0);
+  }
+
+  /** 優勝の幕が出るまで進め、1枚描く。人間は操作しない（CPU どうしで決まる）。 */
+  function playUntilChampion(shell: Shell, elements: ShellElements): void {
     let ticks = 0;
     while (elements.banner.hidden || !elements.banner.textContent?.includes('優勝')) {
       shell.tick();
@@ -452,14 +541,82 @@ describe('キーボードでメニューを動かす', () => {
       ticks += 1;
       if (ticks > 200_000) throw new Error('試合が決まらない');
     }
+    shell.draw(0);
+  }
+
+  /** 次の試合が始まったか（幕が消え、時計が最初に戻った）。 */
+  const restarted = (elements: ShellElements): boolean =>
+    elements.banner.hidden && elements.menu.hidden && elements.side.querySelector('.time')?.textContent === '1:00';
+
+  it('キーボードで始めた試合の優勝の幕では、キーを押す前から「もういっかい」に枠が付き、1回目の決定で次の試合になる', () => {
+    const { shell, elements } = mount();
+    shell.showMenu();
     shell.navigate('confirm');
-    // 最初の1押しは枠を出すだけ。先頭は「もういっかい」。
+    shell.navigate('confirm');
+    expect(screenOf(elements)).toBe('pick');
+    shell.navigate('up');
+    shell.navigate('confirm');
+    expect(screenOf(elements)).toBe('rules');
+    // マウスで押しても枠は消えない（消すのはマウスを動かしたとき）。
+    press(elements.menu, '[data-field="time"] [data-value="60"]');
+    shell.navigate('up');
+    shell.navigate('confirm');
+    expect(elements.play.hidden).toBe(false);
+
+    playUntilChampion(shell, elements);
+    // 枠は試合の間も出たまま。幕が出たら、描いたときに「もういっかい」へ付け直す。
     expect(cursorOf(elements.banner)?.dataset['action']).toBe('again');
+    shell.navigate('confirm');
+    shell.draw(0);
+    expect(restarted(elements)).toBe(true);
+  }, 120_000);
+
+  it('マウスで始めた試合でも、優勝の幕の1回目の決定で「もういっかい」になる（原型と同じ）', () => {
+    // ほかの画面では、枠が出ていないときの1回目の決定は枠を出すだけ。優勝の幕だけは例外にする。
+    // 原型もキーボードの Space・Enter でそのまま次へ進め、パッドの A も1回目を飲み込まなかった。
+    const { shell, elements } = mount();
+    startByMouse(shell, elements);
+    playUntilChampion(shell, elements);
+    expect(cursorOf(elements.banner)).toBeNull();
+    shell.navigate('confirm');
+    shell.draw(0);
+    expect(restarted(elements)).toBe(true);
+  }, 120_000);
+
+  it('優勝の幕から「タイトルへ」をキーボードで選ぶと、タイトルの先頭に枠が付き、次の Enter で進む', () => {
+    const { shell, elements } = mount();
+    startByMouse(shell, elements);
+    playUntilChampion(shell, elements);
+    // 移動は、枠を出したうえで効く。先頭は「もういっかい」。
     shell.navigate('right');
     expect(cursorOf(elements.banner)?.dataset['action']).toBe('title');
     shell.navigate('confirm');
     expect(elements.menu.hidden).toBe(false);
     expect(screenOf(elements)).toBe('title');
+    // 画面が替わったので、描いたときに新しい画面の先頭へ付け直す。見えないまま決まることはない。
+    shell.draw(0);
+    expect(cursorOf(elements.menu)?.dataset['choice']).toBe('solo');
+    shell.navigate('confirm');
+    expect(screenOf(elements)).toBe('pick');
+  }, 120_000);
+
+  it('優勝の幕が出るたびに、カーソルは「もういっかい」へ戻る', () => {
+    // 戻さないと、前の幕で「タイトルへ」を指したままマウスを動かしていた場合に、次の幕の1回目の
+    // 決定で、見えないまま「タイトルへ」が効く。原型も、試合が決まるたびにカーソルを先頭へ戻した。
+    const { shell, elements } = mount();
+    startByMouse(shell, elements);
+    playUntilChampion(shell, elements);
+    shell.navigate('right');
+    expect(cursorOf(elements.banner)?.dataset['action']).toBe('title');
+    shell.hideCursor();
+    press(elements.banner, '[data-action="again"]');
+    shell.draw(0);
+    expect(restarted(elements)).toBe(true);
+
+    playUntilChampion(shell, elements);
+    shell.navigate('confirm');
+    shell.draw(0);
+    expect(restarted(elements)).toBe(true);
   }, 120_000);
 });
 

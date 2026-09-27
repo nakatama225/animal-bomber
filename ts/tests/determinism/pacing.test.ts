@@ -143,6 +143,37 @@ describe('ゲームの速さ', () => {
     expect(total).toBe(105_000);
   });
 
+  it('描く位置の補間に渡す進み具合は、どの倍率でも試合の時間を戻さない', () => {
+    // 画面が 120Hz なら、1 tick ぶんの時間に2枚描く（実時間の alpha は 0.5 と 0）。
+    // 「進めた tick の数 + 進み具合」が描いた時点の試合の時間で、これが前の1枚より戻ると、
+    // 位置も絵の揺れも前へ戻って見える。
+    for (const rate of [0.5, 0.75, 1, 1.25, 2, 3]) {
+      const speed = new GameSpeed();
+      speed.set(rate);
+      let taken = 0;
+      const times: number[] = [];
+      for (let i = 0; i < 40; i += 1) {
+        times.push(taken + speed.progress(0.5));
+        taken += speed.take();
+        times.push(taken + speed.progress(0));
+      }
+      const backward = times.flatMap((time, i) => (i > 0 && time < times[i - 1]! ? [i] : []));
+      expect(backward, `${rate}倍`).toEqual([]);
+    }
+  });
+
+  it('1倍より遅いときは、tick を進めない回も進み具合が進む', () => {
+    // 0.5倍では、進める回と進めない回が交互に来る。進めない回に進み具合を 0 に戻すと、
+    // 1 tick ぶんの動きを2回に分けて見せられず、止まる・進むを繰り返して見える。
+    const half = new GameSpeed();
+    half.set(0.5);
+    expect(half.take()).toBe(0);
+    expect(half.progress(0)).toBe(0.5);
+    expect(half.progress(0.5)).toBe(0.75);
+    expect(half.take()).toBe(1);
+    expect(half.progress(0)).toBe(0);
+  });
+
   it('範囲の外と、刻みに乗らない値にはできない', () => {
     const speed = new GameSpeed();
     for (const rate of [0.25, 3.25, 1.1, Number.NaN]) {

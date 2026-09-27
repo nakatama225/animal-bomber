@@ -4,11 +4,14 @@ import { TICKS_PER_SECOND } from '../domain/core/Tick.js';
 const MS_PER_TICK = 1000 / TICKS_PER_SECOND;
 
 /**
- * 1回の描画で何 tick 進めるかの上限。
+ * 1回の描画で `onTick` を呼ぶ回数の上限。
  *
  * タブを裏に回して戻したときなど、経過時間が数秒に達することがある。
  * そのぶんを全部まとめて進めると、処理が終わらないまま次の描画が来て
  * さらに遅れが積み上がる。上限を設けて、遅れたぶんは捨てる。
+ *
+ * 1台で遊ぶときは、呼ばれた側（`Shell.tick`）がゲームの速さの倍率を掛けるので、
+ * 試合が進む tick の数は最大でこの 3 倍（45 tick）になる。
  *
  * 通信対戦では捨てた時間のぶんだけ相手とずれるが、そもそも数秒止まった
  * 時点で追いつけないため、ここで粘っても得るものがない。
@@ -64,7 +67,7 @@ export const SPEED_RANGE = { min: 0.5, max: 3, step: 0.25 } as const;
 /**
  * ゲームの速さ（倍率）を、進める tick の数に換える。
  *
- * 倍速は経過時間を伸ばさず、進める tick の数を変えて表す（`FrameLoop` の説明を参照）。
+ * 倍速は経過時間を伸ばさず、進める tick の数を変えて表す（理由は `FrameLoop` の説明を参照）。
  * 1 tick ぶんの時間が経つたびに `take()` を呼ぶと、0.5 倍なら2回に1回だけ 1 を、
  * 1.5 倍なら 1 と 2 を交互に返す。端数は次の呼び出しへ持ち越す。
  *
@@ -100,16 +103,38 @@ export class GameSpeed {
     this.#carry -= ticks;
     return ticks;
   }
+
+  /**
+   * 描く位置の補間に渡す、試合の時間での次の tick までの進み具合（0 以上 1 以下）。
+   *
+   * `FrameLoop` の alpha は実時間の端数で、倍率を掛けると試合の時間の端数と合わなくなる。
+   * 0.5 倍では `take()` が 0 と 1 を交互に返すので、0 を返した回（試合は tick の半ばにいる）に
+   * 実時間の alpha をそのまま渡すと、描く位置が1つ前の tick の側へ戻る。
+   *
+   * ⚠️ 上限を 1 にする。1 倍より速いと1回で2 tick 以上進むが、描く側は1つ前の tick の位置しか
+   * 覚えていない（`PositionHistory`）ので、その間しか埋められない。埋め終えたら、いまの位置で待つ。
+   * 1.5 倍のように1回に進む tick の数が変わる倍率では、動きの幅がそろわないまま残る。
+   *
+   * @param alpha 実時間での、次に `take()` を呼ぶまでの進み具合（`FrameLoop` の alpha）
+   */
+  progress(alpha: number): number {
+    return Math.min(1, this.#carry + alpha * this.#rate);
+  }
 }
 
 export interface FrameLoopHandlers {
-  /** 1 tick 進める。 */
+  /**
+   * 1 tick ぶんの時間が経つたびに呼ぶ。
+   *
+   * 試合を何 tick 進めるかは、呼ばれた側がゲームの速さの倍率で決める（`GameSpeed`）。
+   */
   readonly onTick: () => void;
   /**
    * 画面を描く。
    *
-   * @param alpha 次の tick までの進み具合（0 以上 1 未満）。
-   *   位置を滑らかに見せるための補間にだけ使う
+   * @param alpha 次に `onTick` を呼ぶまでの、実時間での進み具合（0 以上 1 未満）。
+   *   位置を滑らかに見せるための補間にだけ使う。倍率を掛けた試合では、試合の時間の
+   *   進み具合と一致しないので、描く側へ渡す前に換える（`GameSpeed.progress`）
    */
   readonly onDraw: (alpha: number) => void;
 }
@@ -120,8 +145,9 @@ export interface FrameLoopHandlers {
  * ゲームのルールは経過時間を受け取らない。ここで tick の回数に換えてから
  * 渡すので、`Simulation.step()` の側には実時間が一切現れない。
  *
- * 倍速はこの外側で `onTick` を呼ぶ回数を変えて表す。経過時間を
- * 引き伸ばす形にはしない。引き伸ばすと、速さによって内部処理の
+ * 倍速は、ここでは扱わない。`onTick` は倍率によらず 1 tick ぶんの時間ごとに呼び、
+ * 呼ばれた側が、その回に試合を何 tick 進めるかを倍率で決める（`GameSpeed`）。
+ * 経過時間を引き伸ばす形にはしない。引き伸ばすと、速さによって内部処理の
  * 刻みが変わり、同じ操作が別の結果になる。
  */
 export class FrameLoop {

@@ -93,15 +93,19 @@ export interface StartingBonus {
 const NO_BONUS: StartingBonus = { hp: 0, power: 0, bombs: 0 };
 
 /**
- * ラウンドの始まりの「前の tick に押していた内容」。爆弾と技のボタンを押していた扱いにする。
+ * ラウンドの始まりの「前の tick に押していた内容」。爆弾のボタンを押していた扱いにする。
  *
  * ⚠️ 何も押していない扱い（`IDLE_INTENT`）にすると、爆弾のボタンを押したままラウンドが
  * 始まったとき、最初の tick が「押した瞬間」になり、全員が開始位置に爆弾を置く。
  * 原型でも、決着の幕を Space で送った押下が次のラウンドの最初に届いて、同じことが起きた
  * （`legacy/test/README.md` の 11）。押したまま始まったボタンは、一度離して押し直すと効く。
- * 技のボタンは `actionHeld` のロックでも同じ扱いにしている。
+ *
+ * 技のボタンはここでは扱わない。技を出すかどうかは前の tick の入力ではなく、押し続けた
+ * 長さ（`actionHeld`）で決まるので、下の `actionHeld` の -1 が同じ役目をする。
+ * ここで技のボタンも押していた扱いにしても、変わるのは外周の葱ボンが撃つ判定だけで、
+ * ラウンドの始まりに葱ボンはいない。
  */
-const HELD_AT_ROUND_START: PlayerIntent = Object.freeze({ ...IDLE_INTENT, bomb: true, action: true });
+const HELD_AT_ROUND_START: PlayerIntent = Object.freeze({ ...IDLE_INTENT, bomb: true });
 
 /**
  * 試合の初期状態を作る。

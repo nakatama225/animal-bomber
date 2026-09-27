@@ -1,4 +1,4 @@
-import { MenuCursor, type NavCommand, type NavResult } from '../../presentation/menu/MenuCursor.js';
+import { MenuCursor, type HiddenConfirm, type NavCommand, type NavResult } from '../../presentation/menu/MenuCursor.js';
 import { activate } from './dom.js';
 
 /** カーソルが指している項目に付ける印。 */
@@ -19,6 +19,8 @@ const CURSOR_CLASS = 'navcur';
  *
  * 画面が替わったら（`data-screen` が変わったら）カーソルを先頭へ戻す。
  * 同じ画面の中で選び直しただけなら、カーソルはそのまま。
+ * 替わったことに気づくのは `handle` と `paint` を呼んだとき。枠が消えている間にマウスで画面を
+ * 移ったときも気づけるよう、呼ぶ側は描くたびに `paint` を呼ぶ（枠が消えていれば印は付けない）。
  */
 export class MenuNavigator {
   readonly #cursor = new MenuCursor();
@@ -34,18 +36,25 @@ export class MenuNavigator {
    * 操作を1つ受ける。決定なら、その項目を押す。
    *
    * @param root いま操作できる画面の要素（メニュー・ラウンドの間の幕）
+   * @param hiddenConfirm 枠が出ていないときの決定をどう扱うか（`MenuCursor` の説明を参照）
    * @returns 何をしたか。`back` のときに戻るのは呼ぶ側の役目（どこへ戻るかは画面ごとに違う）
    */
-  handle(root: HTMLElement, command: NavCommand): NavResult {
+  handle(root: HTMLElement, command: NavCommand, hiddenConfirm: HiddenConfirm = 'show'): NavResult {
     this.#noticeScreen(root);
+    // 枠が消えていたら、どこも指していない扱いにする（枠を出した所へは、見える所まで動かす）。
+    const before = this.#cursor.shown ? this.#current(root) : undefined;
     const groups = groupsIn(root);
-    const result = this.#cursor.handle(command, groups.map((group) => group.length));
+    const result = this.#cursor.handle(command, groups.map((group) => group.length), hiddenConfirm);
     if (result.kind === 'activate') {
       const target = groups[result.group]?.[result.item];
       if (target !== undefined) activate(target);
     }
     this.paint(root);
-    if (result.kind === 'moved') this.#current(root)?.scrollIntoView?.({ block: 'nearest' });
+    // ⚠️ 指す項目が替わったときだけ、見える所まで動かす。遊び方の画面でカーソルに載るのは上の
+    // 音の設定の1行だけで、↑↓は同じ行へ回るだけになる。そのたびに動かすと、下の説明を読んで
+    // いる途中でページが上へ引き戻される。
+    const after = this.#current(root);
+    if (result.kind === 'moved' && after !== before) after?.scrollIntoView?.({ block: 'nearest' });
     return result;
   }
 

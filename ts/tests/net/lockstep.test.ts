@@ -105,8 +105,8 @@ describe('ロックステップ', () => {
   });
 
   it('押した操作は、3 tick 遅れて効く', () => {
-    // 20 回目に読まれた（= tick 20 を進めたときの）操作だけ爆弾を押す。
-    const script = (_id: PlayerId, call: number): PlayerIntent => press({ bomb: call === 20 });
+    // 21 回目に読まれた（= tick 20 を進めたときの）操作だけ爆弾を押す。0 回目は始まったときに読まれる。
+    const script = (_id: PlayerId, call: number): PlayerIntent => press({ bomb: call === 21 });
     const { relay, peers } = startMatch(2, settings(), script);
     const [host] = peers as [Peer];
 
@@ -118,6 +118,30 @@ describe('ロックステップ', () => {
     expect(log.at(20 + INPUT_DELAY - 1, 0).bomb).toBe(false);
     expect(log.at(20 + INPUT_DELAY, 0).bomb).toBe(true);
     expect(log.at(20 + INPUT_DELAY + 1, 0).bomb).toBe(false);
+  });
+
+  it('押したまま始まった爆弾と技のボタンは、1ラウンド目でも離すまで効かない', () => {
+    // ⚠️ 最初の INPUT_DELAY tick を何もしない意思で埋めると、tick 0 に「離した」が届き、
+    // tick 3 に押していた内容が「押した瞬間」として届いて、全員が開始位置に爆弾を置く。
+    // ホストが Enter で「はじめる」を押し、その Enter がまだ押されている、という普通の始め方で起きる。
+    const held = press({ bomb: true, action: true });
+    // 0〜9 回目は押したまま、10・11 回目で離し、12 回目から押し直す。
+    const script = (_id: PlayerId, call: number): PlayerIntent =>
+      call < 10 ? held : call < 12 ? IDLE_INTENT : press({ bomb: true });
+    const { relay, peers } = startMatch(2, settings(), script);
+    const [host] = peers as [Peer];
+    const bombsOfHumans = (): number => host.session.world.bombs.filter((bomb) => bomb.owner <= 1).length;
+
+    for (let t = 0; t < 12; t += 1) {
+      runTogether(relay, peers, 1);
+      expect(bombsOfHumans(), `tick ${t}`).toBe(0);
+      for (const id of [0, 1] as const) {
+        expect(host.session.world.players[id]!.actionHeld, `tick ${t} のプレイヤー ${id}`).toBe(-1);
+      }
+    }
+    // 離して押し直せば置ける（入力を殺していないことの確認）。
+    runTogether(relay, peers, 8);
+    expect(bombsOfHumans()).toBe(2);
   });
 
   it('相手の入力が届くまでは進めずに待つ', () => {

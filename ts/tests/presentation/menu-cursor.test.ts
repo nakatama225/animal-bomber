@@ -14,6 +14,12 @@ describe('メニューのカーソル', () => {
     expect(cursor.handle('confirm', SIZES)).toEqual({ kind: 'activate', group: 0, item: 0 });
   });
 
+  it('優勝の幕の扱い（activate）では、枠が出ていないときの決定も、枠を出してそのまま押す', () => {
+    const cursor = new MenuCursor();
+    expect(cursor.handle('confirm', SIZES, 'activate')).toEqual({ kind: 'activate', group: 0, item: 0 });
+    expect(cursor.shown).toBe(true);
+  });
+
   it('枠が出ていないときの移動と戻るは、枠を出したうえで効く', () => {
     // 移動まで飲み込むと、マウスに触れたあとの最初の1押しが毎回効かない。
     const moving = new MenuCursor();

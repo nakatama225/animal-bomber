@@ -17,6 +17,14 @@ export type NavResult =
   /** 1つ前の画面へ戻る。 */
   | { readonly kind: 'back' };
 
+/**
+ * 枠が出ていないときの決定をどう扱うか。
+ *
+ * - `show`：枠を出すだけで、押さない（ふつうの画面）
+ * - `activate`：枠を出し、そのまま押す（優勝の幕）
+ */
+export type HiddenConfirm = 'show' | 'activate';
+
 const NONE: NavResult = { kind: 'none' };
 const MOVED: NavResult = { kind: 'moved' };
 
@@ -38,6 +46,11 @@ const MOVED: NavResult = { kind: 'moved' };
  * ⚠️ そのとき飲み込むのは決定だけ。移動と戻るまで飲み込むと、マウスに触れたあとの
  * 最初の1押しが毎回効かず、「たまに効かない」に見える。危ないのは、どこを指しているか
  * 見えないまま決定することだけ（原型の注意書き）。
+ *
+ * ⚠️ 優勝の幕だけは、最初の決定をそのまま効かせる（`HiddenConfirm` の `activate`）。
+ * 幕でする操作はほぼ「もういっかい」だけで、カーソルも幕が出るたびに「もういっかい」へ戻す。
+ * 1回目を飲み込むと「決定が効かない」としか見えない。原型もキーボードの Space・Enter は
+ * そのまま次へ進め、パッドの A も1回目を飲み込まなかった。
  */
 export class MenuCursor {
   #group = 0;
@@ -72,13 +85,14 @@ export class MenuCursor {
    * 操作を1つ受ける。
    *
    * @param sizes いまの画面の、グループごとの項目の数（上から順）。空のグループは含めない
+   * @param hiddenConfirm 枠が出ていないときの決定をどう扱うか
    */
-  handle(command: NavCommand, sizes: readonly number[]): NavResult {
+  handle(command: NavCommand, sizes: readonly number[], hiddenConfirm: HiddenConfirm = 'show'): NavResult {
     if (sizes.length === 0) return NONE;
     this.fit(sizes);
     if (!this.#shown) {
       this.#shown = true;
-      if (command === 'confirm') return MOVED;
+      if (command === 'confirm' && hiddenConfirm === 'show') return MOVED;
     }
     switch (command) {
       case 'back':
