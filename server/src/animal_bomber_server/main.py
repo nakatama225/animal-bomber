@@ -14,11 +14,15 @@ import contextlib
 import logging
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from websockets.asyncio.server import ServerConnection, serve
+from websockets.exceptions import ConnectionClosed
 
 from animal_bomber_server.http import make_process_request
+from animal_bomber_server.lockstep import LockstepRoom
 from animal_bomber_server.netinfo import candidate_urls
+from animal_bomber_server.protocol import LOCKSTEP_PATH
 from animal_bomber_server.relay import Room, RoomFullError
 
 
@@ -70,8 +74,22 @@ def from_same_machine(ws: ServerConnection) -> bool:
     return local[0] == remote[0]
 
 
-def make_handler(room: Room):
+def path_of(ws: ServerConnection) -> str:
+    """接続を求めてきたときのパス（`?` から後ろは除く）。取れなければ `/`。"""
+    request = getattr(ws, "request", None)
+    path = getattr(request, "path", None)
+    if not isinstance(path, str):
+        return "/"
+    return urlsplit(path).path
+
+
+def make_handler(room: Room, lockstep: LockstepRoom | None = None):
     """WebSocket 接続1本ぶんの一生を扱う関数を作る。
+
+    つないできたパスで、どちらの中継に入れるかを決める。
+    `LOCKSTEP_PATH` なら TypeScript 版のロックステップの中継（`lockstep`）、
+    それ以外は原型（ホスト権威）の中継（`room`）。2つは別の部屋で、
+    互いのメッセージは混ざらない。
 
     やることは3つだけ: プレイヤー番号を割り当てる・届いたメッセージを右から左へ流す・
     切れたらその番号を空ける。ゲームのルールはここにも一切出てこない。
@@ -88,6 +106,9 @@ def make_handler(room: Room):
     """
 
     async def handler(ws: ServerConnection) -> None:
+        if lockstep is not None and path_of(ws) == LOCKSTEP_PATH:
+            await serve_lockstep(lockstep, ws)
+            return
         try:
             seat = await room.join(ws, prefer_host=from_same_machine(ws))
         except RoomFullError:
@@ -106,6 +127,86 @@ def make_handler(room: Room):
     return handler
 
 
+LIVENESS_INTERVAL = 1.0
+"""ロックステップの接続が応答するかを確かめる間隔（秒）。"""
+
+LIVENESS_TIMEOUT = 2.0
+"""応答を待つ秒数。これを過ぎたら、その接続は回線が切れたものとして切る。
+
+同じ LAN の往復は 1〜3ms なので、2秒は桁で余る。見張りの間隔と合わせて、
+回線が切れてから3秒ほどで残りの人に `peer_left` が届く。
+"""
+
+
+async def watch_liveness(
+    ws: ServerConnection,
+    interval: float = LIVENESS_INTERVAL,
+    timeout: float = LIVENESS_TIMEOUT,
+) -> None:
+    """応答しなくなった接続を切る。ロックステップの部屋の接続にだけ使う。
+
+    ⛔ ロックステップでは、原型の中継が頼っている「送れなければ外す」
+    （`relay.SEND_TIMEOUT`）が効かない。回線が切れた人の入力が止まると、
+    残りの人も入力を待って止まり、何も送らなくなる。切れた人へ送るのは小さな入力が
+    数通だけなので、送信の待ち行列が埋まらず、送る処理は時間切れにならない。
+    そのままだと `websockets` の既定の keepalive（20秒ごとに確かめ、20秒待つ）が
+    切るまで、**全員の画面が30〜50秒止まる**。
+
+    原型の部屋では使わない。原型はホストが毎フレーム盤面を送るので、
+    送れないことが先に分かる。こちらに合わせて間隔を縮めると、原型の振る舞いまで変わる。
+    """
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            pong = await asyncio.wait_for(ws.ping(), timeout)
+            await asyncio.wait_for(pong, timeout)
+        except TimeoutError:
+            # 閉じる手順（相手に閉じると伝えて返事を待つ）は、応答しない相手には
+            # 終わらない。手順を踏まずに切る。
+            ws.transport.abort()
+            return
+        except ConnectionClosed:
+            return
+
+
+async def serve_lockstep(lockstep: LockstepRoom, ws: ServerConnection) -> None:
+    """ロックステップの部屋に入った接続1本ぶんの一生を扱う。
+
+    原型の部屋との違いは3つ。応答しない接続を見張って切る（`watch_liveness`）。
+    送れずに外した接続が、あとで同じ番号に入った人を巻き込まないようにする。
+    切れた接続を例外として記録しない。
+    """
+    try:
+        seat = await lockstep.join(ws, prefer_host=from_same_machine(ws))
+    except RoomFullError:
+        # 試合中に入ろうとした場合（MatchInProgressError）もここに来る
+        logger.info("定員いっぱいか試合中のため接続を拒否した")
+        await ws.close(code=1013, reason="room full")
+        return
+
+    logger.info("プレイヤー %d がロックステップの部屋に接続した", seat)
+    # 間隔はここで読む（テストで短くできるように、呼ぶたびに今の値を使う）
+    watcher = asyncio.create_task(
+        watch_liveness(ws, LIVENESS_INTERVAL, LIVENESS_TIMEOUT)
+    )
+    try:
+        async for message in ws:
+            if lockstep.seats.get(seat) is not ws:
+                # 送れずに外した接続。部屋が戻ったあと、同じ番号に別の人が
+                # 入っていることがある
+                break
+            await lockstep.route(seat, message)
+    except ConnectionClosed:
+        # 見張りが切った接続。切れたことは下で扱う
+        pass
+    finally:
+        watcher.cancel()
+        # ⚠️ 番号だけで外さない。この接続のものでなくなっていれば、外すと別の人を追い出す
+        if lockstep.seats.get(seat) is ws:
+            await lockstep.leave(seat)
+        logger.info("プレイヤー %d がロックステップの部屋から切断した", seat)
+
+
 async def run(port: int = DEFAULT_PORT, html_path: Path = DEFAULT_HTML) -> None:
     """サーバを起動して、Ctrl-C や上位からの取り消しまで動かし続ける。
 
@@ -114,10 +215,11 @@ async def run(port: int = DEFAULT_PORT, html_path: Path = DEFAULT_HTML) -> None:
     Ctrl-C 前提のこの関数とは終了のさせ方が違う）。
     """
     room = Room(max_seats=MAX_SEATS, reserve_host_seat=True)
+    lockstep = LockstepRoom(max_seats=MAX_SEATS, reserve_host_seat=True)
     process_request = make_process_request(html_path)
 
     async with serve(
-        make_handler(room),
+        make_handler(room, lockstep),
         host="0.0.0.0",
         port=port,
         process_request=process_request,
@@ -156,8 +258,9 @@ async def _serve_until_stopped(
     stop_event_box["event"] = stop_event
 
     room = Room(max_seats=MAX_SEATS, reserve_host_seat=True)
+    lockstep = LockstepRoom(max_seats=MAX_SEATS, reserve_host_seat=True)
     async with serve(
-        make_handler(room),
+        make_handler(room, lockstep),
         host="0.0.0.0",
         port=port,
         process_request=make_process_request(html_path),

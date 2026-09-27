@@ -21,8 +21,11 @@ import pytest
 import websockets
 from websockets.asyncio.server import serve
 
+from animal_bomber_server import main as main_module
 from animal_bomber_server.http import make_process_request
+from animal_bomber_server.lockstep import LockstepRoom
 from animal_bomber_server.main import make_handler
+from animal_bomber_server.protocol import LOCKSTEP_PATH
 from animal_bomber_server.relay import Room
 
 
@@ -173,3 +176,162 @@ async def test_ホストが切断するとゲストの接続も閉じられる(r
         assert notice == {"t": "peer_left", "seat": 0, "host": True}
         with pytest.raises(websockets.exceptions.ConnectionClosed):
             await guest_ws.recv()
+
+
+@pytest.fixture
+async def running_both():
+    """原型の中継とロックステップの中継を、同じサーバに載せて起動する。"""
+    with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as f:
+        f.write(b"<html><body>animal bomber</body></html>")
+        html_path = Path(f.name)
+
+    async with serve(
+        make_handler(Room(max_seats=2), LockstepRoom(max_seats=4)),
+        host="127.0.0.1",
+        port=0,
+        process_request=make_process_request(html_path),
+    ) as server:
+        yield server.sockets[0].getsockname()[1]
+    html_path.unlink()
+
+
+async def recv(ws) -> str:
+    """受け取る。届かなければ待ち続けずに落とす（届かない不具合でテストが止まらないように）。"""
+    return await asyncio.wait_for(ws.recv(), timeout=2.0)
+
+
+async def test_ロックステップのパスでは全員の入力が全員へ届く(running_both):
+    """パスで中継を選ぶ配線（main.make_handler）と、実ソケットでの往復を見る。"""
+    url = f"ws://127.0.0.1:{running_both}{LOCKSTEP_PATH}"
+    async with (
+        websockets.connect(url) as host_ws,
+        websockets.connect(url) as guest_ws,
+    ):
+        assert json.loads(await recv(host_ws))["t"] == "welcome"
+        assert json.loads(await recv(guest_ws))["seat"] == 1
+        await recv(host_ws)  # guest 参加時の peer_joined
+
+        await host_ws.send(json.dumps({"t": "start", "config": {"seed": 7}}))
+        for ws in (host_ws, guest_ws):
+            assert json.loads(await recv(ws)) == {
+                "t": "start",
+                "seats": [0, 1],
+                "config": {"seed": 7},
+            }
+
+        # ゲストの入力がホストへ、ホストの入力がゲストへ。向きで扱いを変えない
+        await guest_ws.send(json.dumps({"t": "input", "tick": 0, "bits": 4}))
+        await host_ws.send(json.dumps({"t": "input", "tick": 0, "bits": 1}))
+        assert json.loads(await recv(host_ws)) == {
+            "t": "input",
+            "seat": 1,
+            "tick": 0,
+            "bits": 4,
+        }
+        assert json.loads(await recv(guest_ws))["seat"] == 0
+
+
+async def test_パスが違えば原型の中継に入り_2つの部屋は混ざらない(running_both):
+    lockstep_url = f"ws://127.0.0.1:{running_both}{LOCKSTEP_PATH}"
+    legacy_url = f"ws://127.0.0.1:{running_both}/"
+    async with (
+        websockets.connect(lockstep_url) as lockstep_ws,
+        websockets.connect(legacy_url) as legacy_ws,
+    ):
+        # どちらも自分の部屋の最初の1人なので、ホストの0番を受け取る
+        assert json.loads(await recv(lockstep_ws))["seat"] == 0
+        assert json.loads(await recv(legacy_ws))["seat"] == 0
+
+
+async def test_ロックステップで切れた人の知らせが_残った人に届く(running_both):
+    """配線（main.serve_lockstep）の後始末が、ロックステップの部屋から外していること。
+
+    原型の部屋から外していると、残った人は切れた人の入力を待ち続けて止まる。
+    """
+    url = f"ws://127.0.0.1:{running_both}{LOCKSTEP_PATH}"
+    async with websockets.connect(url) as host_ws:
+        await recv(host_ws)  # welcome
+        guest_ws = await websockets.connect(url)
+        await recv(guest_ws)
+        await recv(host_ws)  # peer_joined
+        await host_ws.send(json.dumps({"t": "start", "config": None}))
+        await recv(host_ws)
+        await recv(guest_ws)
+        await guest_ws.send(json.dumps({"t": "input", "tick": 0, "bits": 0}))
+        assert json.loads(await recv(host_ws))["t"] == "input"
+
+        await guest_ws.close()
+
+        assert json.loads(await recv(host_ws)) == {
+            "t": "peer_left",
+            "seat": 1,
+            "lastTick": 0,
+        }
+
+
+async def test_ロックステップの0番が切れても_原型の部屋の0番は残る(running_both):
+    lockstep_ws = await websockets.connect(
+        f"ws://127.0.0.1:{running_both}{LOCKSTEP_PATH}"
+    )
+    await recv(lockstep_ws)
+    legacy_url = f"ws://127.0.0.1:{running_both}/"
+    async with (
+        websockets.connect(legacy_url) as host_ws,
+        websockets.connect(legacy_url) as guest_ws,
+    ):
+        await recv(host_ws)
+        await recv(guest_ws)
+        await recv(host_ws)  # peer_joined
+
+        await lockstep_ws.close()
+        # ⚠️ サーバ側の後始末が終わるのを待つ。待たないと、後始末を誤っていても
+        # その前に転送が届いて通ってしまう
+        await asyncio.sleep(0.2)
+
+        await host_ws.send('{"t":"snap"}')
+        assert await recv(guest_ws) == '{"t":"snap"}'
+
+
+async def test_応答しなくなった接続は数秒で切り_残った人に知らせる(
+    running_both, monkeypatch
+):
+    """回線が切れた人がいると、残りの人は入力を待って止まる。
+
+    ロックステップでは送る量が少なく、送る処理が時間切れにならないので、
+    接続の見張り（`watch_liveness`）が切る。見張りが無いと、既定の keepalive が
+    切るまで30〜50秒、全員が止まる。
+    """
+    monkeypatch.setattr(main_module, "LIVENESS_INTERVAL", 0.2)
+    monkeypatch.setattr(main_module, "LIVENESS_TIMEOUT", 0.3)
+    url = f"ws://127.0.0.1:{running_both}{LOCKSTEP_PATH}"
+    async with (
+        websockets.connect(url) as host_ws,
+        websockets.connect(url) as guest_ws,
+        # 受け取るのをやめた接続は、閉じる手順の返事も読めない。待ち時間を縮めておく
+        websockets.connect(url, close_timeout=0.1) as silent_ws,
+    ):
+        for ws in (host_ws, guest_ws, silent_ws):
+            assert json.loads(await recv(ws))["t"] == "welcome"
+        await host_ws.send(json.dumps({"t": "start", "config": None}))
+        for ws in (host_ws, guest_ws):
+            while json.loads(await recv(ws))["t"] != "start":
+                pass
+        await silent_ws.send(json.dumps({"t": "input", "tick": 0, "bits": 0}))
+        # 回線が切れた端末の代わり：受け取るのをやめる（ping に応えなくなる）
+        silent_ws.transport.pause_reading()
+
+        started = asyncio.get_running_loop().time()
+        while True:
+            message = json.loads(await recv(host_ws))
+            if message["t"] == "peer_left":
+                break
+        assert message == {"t": "peer_left", "seat": 2, "lastTick": 0}
+        assert asyncio.get_running_loop().time() - started < 2.0
+
+        # 応答している人は切られていない
+        await guest_ws.send(json.dumps({"t": "input", "tick": 0, "bits": 5}))
+        while True:
+            message = json.loads(await recv(host_ws))
+            if message["t"] == "input" and message["seat"] == 1:
+                break
+        assert message["bits"] == 5
