@@ -248,6 +248,9 @@ export function parseLanSettings(raw: unknown): LanSettings {
     throw new ProtocolError(`CPU の強さが動物の数だけ並んでいない: ${JSON.stringify(cpu)}`);
   }
 
+  // ⚠️ 開始位置の並び（spawnOrder）は読まない。通信対戦は、原型（setupPlayersLan）と同じくプレイヤー番号の順に
+  // 4隅から始める。ホストも含めて全員が、中継から届いた同じ1通をここで読んで試合を作るので、送り手が並びを
+  // 付けていても全員が同じく読まず、試合はずれない。読むようにするときは、ロビーで並びを決める画面と一緒に足す。
   return {
     cpu: cpu as CpuLevelKey[],
     match: {

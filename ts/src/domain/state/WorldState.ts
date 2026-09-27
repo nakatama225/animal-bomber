@@ -5,7 +5,7 @@ import { Rng } from '../core/Rng.js';
 import { StateHasher } from '../core/StateHash.js';
 import { secondsToTicks, tick, type Tick } from '../core/Tick.js';
 import { IDLE_INTENT, packIntent, type PlayerIntent } from '../intent/PlayerIntent.js';
-import { DUEL_SPAWN_CELLS, ROUND_SECONDS, ROWS, SPAWN_CELLS, STARTING_HP } from '../rules/tuning.js';
+import { DUEL_SPAWN_ORDER, ROUND_SECONDS, ROWS, SPAWN_CELLS, STARTING_HP } from '../rules/tuning.js';
 import type { Blast, Bomb } from './Bomb.js';
 import { EffectBag } from './EffectBag.js';
 import type { Item } from './Item.js';
@@ -80,6 +80,11 @@ export interface WorldSeed {
    * 省略した場合は全員が素の値で始まる。
    */
   readonly bonusOf?: (animal: string) => StartingBonus;
+  /**
+   * 各プレイヤーが始まる隅（`SPAWN_CELLS` の番号）。プレイヤー番号の順に、全員ぶん。
+   * 省いた場合は、2人なら対角、それ以外は番号の順（`MatchConfig` の同じ名前の項目を参照）。
+   */
+  readonly spawnOrder?: readonly number[];
 }
 
 /** 動物ごとの、始まりの上乗せ。 */
@@ -108,6 +113,31 @@ const NO_BONUS: StartingBonus = { hp: 0, power: 0, bombs: 0 };
 const HELD_AT_ROUND_START: PlayerIntent = Object.freeze({ ...IDLE_INTENT, bomb: true });
 
 /**
+ * 各プレイヤーが始まる隅の番号。プレイヤー番号の順。
+ *
+ * 並びを渡されたときは、人数と同じ長さで、隅の番号（0〜3）が重ならずに並んでいるかを確かめる。
+ * ⚠️ 合わないときに番号の順へ黙って戻さない。1台だけ並びを取り違えても試合が始まり、気づけない。
+ *
+ * @throws Error 並びが人数と合わない・隅の番号でない・重なるとき
+ */
+function spawnOrderOf(config: WorldSeed): readonly number[] {
+  const count = config.animals.length;
+  const order = config.spawnOrder;
+  if (order === undefined) {
+    return count === 2 ? DUEL_SPAWN_ORDER : config.animals.map((_, index) => index);
+  }
+  const corners = new Set(order);
+  const valid =
+    order.length === count &&
+    corners.size === count &&
+    order.every((corner) => Number.isInteger(corner) && corner >= 0 && corner < SPAWN_CELLS.length);
+  if (!valid) {
+    throw new Error(`開始位置の並びが人数（${count}人）と合わない: ${JSON.stringify(order)}`);
+  }
+  return order;
+}
+
+/**
  * 試合の初期状態を作る。
  *
  * ⚠️ 作る順序が結果を決める。盤面を先に作り、そのあとプレイヤーを置く。
@@ -121,11 +151,11 @@ export function createWorld(config: WorldSeed): WorldState {
   const rng = new Rng(config.seed);
   // 盤面は人数によらず4隅を空けて作る。人数で変えると、同じ種でも2人と4人で別の盤面になる。
   const board = buildBoard(rng, SPAWN_CELLS);
-  const spawns = config.animals.length === 2 ? DUEL_SPAWN_CELLS : SPAWN_CELLS;
+  const corners = spawnOrderOf(config);
 
   const players: PlayerState[] = config.animals.map((animal, index) => {
-    // プレイヤーは最大4人。開始位置の表（SPAWN_CELLS）の数と揃えてある。2人の試合は対角の2隅を使う。
-    const spawn = spawns[index];
+    // プレイヤーは最大4人。開始位置の表（SPAWN_CELLS）の数と揃えてある。
+    const spawn = SPAWN_CELLS[corners[index] ?? -1];
     if (spawn === undefined) {
       throw new Error(`開始位置が足りない: ${index}`);
     }

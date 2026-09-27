@@ -3,7 +3,7 @@ import { ANIMAL_LOOKS } from '../../content/animals.js';
 import { Rng } from '../../domain/core/Rng.js';
 import { secondsToTicks } from '../../domain/core/Tick.js';
 import type { MatchConfig } from '../../domain/rules/MatchConfig.js';
-import { ROUND_SECONDS, STARTING_HP, WINS_TO_TAKE_MATCH } from '../../domain/rules/tuning.js';
+import { DUEL_SPAWN_ORDER, ROUND_SECONDS, STARTING_HP, WINS_TO_TAKE_MATCH } from '../../domain/rules/tuning.js';
 import type { Roster } from '../hud/roster.js';
 import { hitsForHp, hpForHits } from './choices.js';
 
@@ -23,6 +23,23 @@ export const MODE_SIZES: Readonly<Record<PlayMode, { readonly humans: number; re
   solo: { humans: 1, cpus: 3 },
   duo: { humans: 2, cpus: 2 },
   versus: { humans: 2, cpus: 0 },
+};
+
+/**
+ * 遊び方ごとの、プレイヤーが始まる隅（`SPAWN_CELLS` の番号。人間が先、CPU があと）。原型の `setupPlayers` と同じ。
+ *
+ * - 1P は左上（0）
+ * - 人間が2人のときの 2P は右下（3）。対角から始める
+ * - CPU は、残りの隅を右上（1）・左下（2）・右下（3）の順に使う
+ *
+ * 1人と2人だけの試合は、試合の設定を省いたときの並び（番号の順・2人なら対角）と同じ。違うのは
+ * 2人＋CPU2体だけで、番号の順だと 2P が右上から始まる。3つとも書くのは、誰がどこから始まるかを
+ * ここだけで読めるようにするため。
+ */
+const LOCAL_SPAWN_ORDER: Readonly<Record<PlayMode, readonly number[]>> = {
+  solo: [0, 1, 2, 3],
+  duo: [0, 3, 1, 2],
+  versus: DUEL_SPAWN_ORDER,
 };
 
 /**
@@ -102,6 +119,7 @@ export function planLocalMatch(setup: LocalSetup, seed: number): LocalPlan {
       startingHp: [...humanHits, ...cpuLevels.map(() => setup.hits.cpu)].map(hpForHits),
       seed,
       animals: [...humanAnimals, ...cpuAnimals],
+      spawnOrder: LOCAL_SPAWN_ORDER[setup.mode],
     },
     controllers: [
       ...layouts.map((layout): LocalController => ({ kind: 'keys', layout })),

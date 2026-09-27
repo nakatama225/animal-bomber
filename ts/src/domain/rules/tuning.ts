@@ -40,13 +40,14 @@ export const SPAWN_CELLS = [
 ] as const;
 
 /**
- * 2人の試合の開始位置。左上と右下の対角（原型と同じ）。
+ * 2人の試合の開始位置の並び（`SPAWN_CELLS` の番号）。左上と右下の対角（原型と同じ）。
  *
  * 上の2隅だと、2人が同じ辺に並ぶ（横に20マス）。対角なら縦横あわせて34マス離れる。
  * 盤面を広げたのと同じ理由で、開始直後に相手と出会わないようにする。
+ * 1台で2人＋CPU2体のときも、2人はこの対角から始まる（`localSetup.ts` の `LOCAL_SPAWN_ORDER`）。
  * ⚠️ 延長戦で戻る位置は、人数によらず `SPAWN_CELLS` の順（原型と同じ）。
  */
-export const DUEL_SPAWN_CELLS = [SPAWN_CELLS[0], SPAWN_CELLS[3]] as const;
+export const DUEL_SPAWN_ORDER: readonly number[] = [0, 3];
 
 /* ------------------------------------------------------------------ 移動 */
 

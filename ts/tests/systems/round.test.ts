@@ -157,6 +157,31 @@ describe('開始位置', () => {
     expect(positionsOf(three)).toEqual(SPAWN_CELLS.slice(0, 3).map(centerOf));
   });
 
+  it('開始位置の並びを渡すと、プレイヤーごとにその隅から始まる（2人＋CPU2体で 2P を右下へ）', () => {
+    const world = createWorld({ seed: 5, animals: ['rabbit', 'frog', 'fox', 'mole'], spawnOrder: [0, 3, 1, 2] });
+    expect(positionsOf(world)).toEqual([0, 3, 1, 2].map((corner) => centerOf(SPAWN_CELLS[corner]!)));
+    expect(facingsOf(world)).toEqual(['down', 'up', 'down', 'up']);
+  });
+
+  it('開始位置の並びが人数と合わない・隅の番号でない・重なるときは、盤面を作らない', () => {
+    // 黙って番号の順に戻すと、1台だけ並びを取り違えても試合が始まり、気づけない。
+    const animals = ['rabbit', 'frog', 'fox', 'mole'];
+    for (const spawnOrder of [[0, 3, 1], [0, 3, 1, 4], [0, 3, 1, 1], [0, 3, 1, 1.5], [0, 3, 1, -1]]) {
+      expect(() => createWorld({ seed: 5, animals, spawnOrder }), JSON.stringify(spawnOrder)).toThrow('開始位置の並び');
+    }
+  });
+
+  it('次のラウンドも、渡した並びの隅から始まる', () => {
+    const animals = ['rabbit', 'frog', 'fox', 'mole'];
+    const game = new GameSession({ ...defaultMatchConfig(777, animals), spawnOrder: [0, 3, 1, 2] });
+    for (const player of game.world.players) game.attach(new IdleIntentSource(player.id));
+    for (const id of [1, 2, 3]) game.world.players[id]!.life = OUT;
+    game.tick();
+    skipIntermission(game);
+    expect(game.match.round).toBe(2);
+    expect(positionsOf(game.world)).toEqual([0, 3, 1, 2].map((corner) => centerOf(SPAWN_CELLS[corner]!)));
+  });
+
   it('盤面は人数によらず同じ（4隅とも空けて作る）', () => {
     // 人数で盤面の作り方を変えると、同じ種でも2人と4人で別の盤面になり、
     // 右下の隅が空いているかも人数しだいになる。

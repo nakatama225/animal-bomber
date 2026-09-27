@@ -71,6 +71,8 @@ export class GameSession {
       roundLimit: this.#config.roundLimit,
       startingHp: this.#config.startingHp,
       bonusOf: startingBonusOf,
+      // ラウンドごとに同じ並びの隅から始める（原型も、ラウンドの始まりのたびに同じ隅へ戻す）。
+      ...(this.#config.spawnOrder === undefined ? {} : { spawnOrder: this.#config.spawnOrder }),
     });
   }
 

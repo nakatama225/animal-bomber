@@ -4,9 +4,11 @@ import { CpuIntentSource, cpuSeed } from '../../src/ai/CpuIntentSource.js';
 import { CPU_LEVELS } from '../../src/ai/CpuLevel.js';
 import { GameSession } from '../../src/app/GameSession.js';
 import { ANIMAL_LOOKS } from '../../src/content/animals.js';
+import { centerOf } from '../../src/domain/core/Coord.js';
 import { secondsToTicks } from '../../src/domain/core/Tick.js';
 import type { PlayerId } from '../../src/domain/state/PlayerState.js';
 import { POOP_EFFECTS } from '../../src/domain/rules/items.js';
+import { SPAWN_CELLS } from '../../src/domain/rules/tuning.js';
 import { EFFECT_LABELS } from '../../src/presentation/hud/effectLabels.js';
 import { tagOf } from '../../src/presentation/hud/roster.js';
 import { hitsForHp, hpForHits } from '../../src/presentation/menu/choices.js';
@@ -85,6 +87,23 @@ describe('選んだものから試合を作る', () => {
       { kind: 'cpu', level: 'oni' },
       { kind: 'cpu', level: 'easy' },
     ]);
+  });
+
+  it('開始位置は原型と同じ。2人＋CPU2体では、2P が右下、CPU が右上と左下から始まる', () => {
+    // 原型の setupPlayers：1P は左上。2人のときの 2P は右下（対角）。CPU は残りの隅を右上・左下・右下の順に使う。
+    // 画面で選んだものから本物の試合を作り、プレイヤーが立っている隅の番号を読む。
+    const cornersOf = (mode: LocalSetup['mode']): number[] => {
+      const game = new GameSession(planLocalMatch({ ...DEFAULT_SETUP, mode }, 11).config);
+      return game.world.players.map((player) =>
+        SPAWN_CELLS.findIndex((cell) => {
+          const center = centerOf(cell);
+          return center.x === player.position.x && center.y === player.position.y;
+        }),
+      );
+    };
+    expect(cornersOf('solo')).toEqual([0, 1, 2, 3]);
+    expect(cornersOf('duo')).toEqual([0, 3, 1, 2]);
+    expect(cornersOf('versus')).toEqual([0, 3]);
   });
 
   it('作った設定で、試合が最後まで進む（2人のタイマンも）', () => {

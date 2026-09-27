@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { GameSession } from '../../src/app/GameSession.js';
+import { centerOf } from '../../src/domain/core/Coord.js';
 import { tick } from '../../src/domain/core/Tick.js';
 import { IdleIntentSource } from '../../src/domain/intent/IntentSource.js';
 import { IDLE_INTENT, packIntent, type PlayerIntent } from '../../src/domain/intent/PlayerIntent.js';
 import { defaultMatchConfig } from '../../src/domain/rules/MatchConfig.js';
+import { SPAWN_CELLS } from '../../src/domain/rules/tuning.js';
 import { OUT } from '../../src/domain/state/Life.js';
 import type { PlayerId } from '../../src/domain/state/PlayerState.js';
 import { hashWorld } from '../../src/domain/state/WorldState.js';
@@ -102,6 +104,17 @@ describe('ロックステップ', () => {
     const now = [2, 3].map((id) => host.session.world.players[id]!.position);
     expect(now[0]).not.toEqual(spawns[0]);
     expect(now[1]).not.toEqual(spawns[1]);
+  });
+
+  it('設定に開始位置の並びがあっても読まず、全員がプレイヤー番号の順に4隅から始まる', () => {
+    // 原型の通信対戦（setupPlayersLan）は番号の順。並びを読むかどうかが端末ごとに違うと試合がずれる。
+    // 読み取り（parseLanSettings）で読まず、ホストも含めて全員が、中継から届いた同じ1通から試合を作る。
+    const config = settings();
+    const withOrder = { ...config, match: { ...config.match, spawnOrder: [0, 3, 1, 2] } };
+    const { peers } = startMatch(2, withOrder);
+    for (const peer of peers) {
+      expect(peer.session.world.players.map((player) => player.position)).toEqual(SPAWN_CELLS.map(centerOf));
+    }
   });
 
   it('押した操作は、3 tick 遅れて効く', () => {
