@@ -14,7 +14,7 @@ describe('メニューのカーソル', () => {
     expect(cursor.handle('confirm', SIZES)).toEqual({ kind: 'activate', group: 0, item: 0 });
   });
 
-  it('優勝の幕の扱い（activate）では、枠が出ていないときの決定も、枠を出してそのまま押す', () => {
+  it('試合が決まった幕の扱い（activate）では、枠が出ていないときの決定も、枠を出してそのまま押す', () => {
     const cursor = new MenuCursor();
     expect(cursor.handle('confirm', SIZES, 'activate')).toEqual({ kind: 'activate', group: 0, item: 0 });
     expect(cursor.shown).toBe(true);

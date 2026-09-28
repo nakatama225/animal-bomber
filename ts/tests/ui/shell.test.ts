@@ -532,7 +532,7 @@ describe('キーボードでメニューを動かす', () => {
     shell.draw(0);
   }
 
-  /** 優勝の幕が出るまで進め、1枚描く。人間は操作しない（CPU どうしで決まる）。 */
+  /** 誰かが優勝して試合が決まった幕が出るまで進め、1枚描く。人間は操作しない（CPU どうしで決まる）。 */
   function playUntilChampion(shell: Shell, elements: ShellElements): void {
     let ticks = 0;
     while (elements.banner.hidden || !elements.banner.textContent?.includes('優勝')) {
@@ -548,7 +548,7 @@ describe('キーボードでメニューを動かす', () => {
   const restarted = (elements: ShellElements): boolean =>
     elements.banner.hidden && elements.menu.hidden && elements.side.querySelector('.time')?.textContent === '1:00';
 
-  it('キーボードで始めた試合の優勝の幕では、キーを押す前から「もういっかい」に枠が付き、1回目の決定で次の試合になる', () => {
+  it('キーボードで試合を始めたとき、試合が決まった幕では、キーを押す前から「もういっかい」に枠が付き、1回目の決定で次の試合になる', () => {
     const { shell, elements } = mount();
     shell.showMenu();
     shell.navigate('confirm');
@@ -571,8 +571,8 @@ describe('キーボードでメニューを動かす', () => {
     expect(restarted(elements)).toBe(true);
   }, 120_000);
 
-  it('マウスで始めた試合でも、優勝の幕の1回目の決定で「もういっかい」になる（原型と同じ）', () => {
-    // ほかの画面では、枠が出ていないときの1回目の決定は枠を出すだけ。優勝の幕だけは例外にする。
+  it('マウスで始めた試合でも、試合が決まった幕の1回目の決定で「もういっかい」になる（原型と同じ）', () => {
+    // ほかの画面では、枠が出ていないときの1回目の決定は枠を出すだけ。試合が決まった幕だけは例外にする。
     // 原型もキーボードの Space・Enter でそのまま次へ進め、パッドの A も1回目を飲み込まなかった。
     const { shell, elements } = mount();
     startByMouse(shell, elements);
@@ -583,7 +583,7 @@ describe('キーボードでメニューを動かす', () => {
     expect(restarted(elements)).toBe(true);
   }, 120_000);
 
-  it('優勝の幕から「タイトルへ」をキーボードで選ぶと、タイトルの先頭に枠が付き、次の Enter で進む', () => {
+  it('試合が決まった幕から「タイトルへ」をキーボードで選ぶと、タイトルの先頭に枠が付き、次の Enter で進む', () => {
     const { shell, elements } = mount();
     startByMouse(shell, elements);
     playUntilChampion(shell, elements);
@@ -600,7 +600,7 @@ describe('キーボードでメニューを動かす', () => {
     expect(screenOf(elements)).toBe('pick');
   }, 120_000);
 
-  it('優勝の幕が出るたびに、カーソルは「もういっかい」へ戻る', () => {
+  it('試合が決まった幕が出るたびに、カーソルは「もういっかい」へ戻る', () => {
     // 戻さないと、前の幕で「タイトルへ」を指したままマウスを動かしていた場合に、次の幕の1回目の
     // 決定で、見えないまま「タイトルへ」が効く。原型も、試合が決まるたびにカーソルを先頭へ戻した。
     const { shell, elements } = mount();
@@ -652,7 +652,7 @@ describe('ゲームパッドとロビーでメニューを動かす', () => {
     shell.draw(0);
   }
 
-  /** マウスで、その遊び方・1ラウンド 60 秒の試合を始め、優勝の幕が出るまで進める。 */
+  /** マウスで、その遊び方・1ラウンド 60 秒の試合を始め、誰かが優勝して試合が決まった幕が出るまで進める。 */
   function playToChampionByMouse(shell: Shell, elements: ShellElements, mode: 'solo' | 'duo'): void {
     shell.showMenu();
     press(elements.menu, `[data-choice="${mode}"]`);
@@ -670,7 +670,7 @@ describe('ゲームパッドとロビーでメニューを動かす', () => {
     shell.draw(0);
   }
 
-  it('2人で遊ぶ試合の優勝の幕では、パッドを効かせない（原型と同じ）', () => {
+  it('2人で遊ぶとき、試合が決まった幕ではパッドを効かせない（原型と同じ）', () => {
     // 2人で遊ぶときはパッドを試合に繋がない。机に置いたパッドに肘が当たっただけで次の試合が
     // 始まらないよう、原型も2人のときは幕でパッドを受け付けなかった（1人と通信対戦のときだけ）。
     const pad = fakePad();
@@ -700,7 +700,7 @@ describe('ゲームパッドとロビーでメニューを動かす', () => {
     expect(screenOf(elements)).toBe('title');
   }, 120_000);
 
-  it('1人で遊ぶ試合の優勝の幕は、パッドの A で次の試合になる', () => {
+  it('1人で遊ぶとき、試合が決まった幕はパッドの A で次の試合になる', () => {
     const pad = fakePad();
     const { shell, elements } = mount('both', () => [], pad.read);
     playToChampionByMouse(shell, elements, 'solo');
@@ -747,6 +747,47 @@ describe('ゲームパッドとロビーでメニューを動かす', () => {
     hold(A);
     for (let i = 0; i < 3; i += 1) shell.tick();
     expect(played.filter((name) => name === 'place')).toHaveLength(1);
+  });
+
+  it('通信対戦でも、ロビーでつかんだパッドを試合でそのまま使う', () => {
+    // 通信対戦の試合（LanMatch）も、メニューと同じ PadChoice を読む。試合の側が自分で探すと、
+    // ロビーのあとに点いた0番をつかみ、手元の1番の操作が送られない。
+    let awake = false;
+    let held = new Set<number>();
+    const snapshot = (index: number, pressed: ReadonlySet<number>): PadSnapshot => ({
+      mapping: 'standard',
+      connected: true,
+      index,
+      buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: pressed.has(i) })),
+      axes: [0, 0, 0, 0],
+    });
+    const read = (): readonly (PadSnapshot | null)[] => [awake ? snapshot(0, new Set()) : null, snapshot(1, held)];
+    const { shell, relay, sent } = mount('both', () => [], read);
+    shell.startLan('relay.local:8777');
+    relay().onMessage(JSON.stringify({ t: 'welcome', seat: 1, role: 'guest', seats: [0] }));
+    // ロビーを描くと、メニューの側が1番をつかむ。
+    shell.draw(0);
+    // 試合が始まる前に、家族が別のパッドの電源を入れる。
+    awake = true;
+    const config = {
+      match: { roundLimit: 600, winsToTake: 3, suddenDeath: true, startingHp: [6, 6, 6, 6], seed: 1, animals: ['rabbit', 'fox', 'frog', 'mole'] },
+      cpu: ['easy', 'easy', 'easy', 'easy'],
+    };
+    relay().onMessage(JSON.stringify({ t: 'start', seats: [0, 1], config }));
+    for (let t = 0; t < 40; t += 1) relay().onMessage(JSON.stringify({ t: 'input', seat: 0, tick: t, bits: 0 }));
+    shell.draw(0);
+    const lastBits = (): number | undefined => {
+      const inputs = sent.filter((message) => message.t === 'input');
+      const last = inputs.at(-1);
+      return last?.t === 'input' ? last.bits : undefined;
+    };
+    for (let i = 0; i < 5; i += 1) shell.tick();
+    // 前提：操作は送っていて、押す前に送った操作はどれも何もしない。
+    expect(lastBits()).toBe(0);
+    expect(sent.filter((message) => message.t === 'input' && message.bits !== 0)).toEqual([]);
+    held = new Set([A]);
+    for (let i = 0; i < 3; i += 1) shell.tick();
+    expect(lastBits()).toBeGreaterThan(0);
   });
 
   it('パッドだけで、遊び方を選んで次の画面へ進める', () => {

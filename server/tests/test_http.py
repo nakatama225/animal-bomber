@@ -175,9 +175,13 @@ class TestTS版の配信:
 
     def test_どの応答も_送れる形まで作れる(self):
         # 理由の句に英語の決まった句（HTTPStatus の phrase）以外を入れていないことの確認。
+        # 日本語の案内を返す応答（ビルドの出力が無い・置き場所が無い）も入れる。英語の文だけの応答では、
+        # 理由の句に本文の文を入れても送れる形が変わらず、区別できない。
         responses = [
             get(self.process_request, path) for path in ("/ts/", "/ts", "/ts/none.js", "/ts/index.html%00.js")
         ]
         responses.append(self.process_request(None, make_request(method="POST")))
+        responses.append(get(make_process_request(self.html_path, Path(self.tmp.name) / "none"), "/ts/"))
+        responses.append(get(make_process_request(self.html_path), "/ts/"))
         for response in responses:
             assert response.serialize().startswith(b"HTTP/1.1 "), response.status_code

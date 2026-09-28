@@ -167,7 +167,7 @@ describe('ラウンドの間の幕', () => {
     });
   });
 
-  it('延長戦で決まったら、ラウンドの幕にも優勝の幕にもそう添える', () => {
+  it('延長戦で決まったら、ラウンドの幕にも試合が決まった幕にもそう添える', () => {
     const session = game({ winsToTake: 1 });
     session.world.suddenDeath = true;
     session.world.players[1]!.life = OUT;
@@ -192,7 +192,7 @@ describe('ラウンドの間の幕', () => {
     expect(banner.current(session.world)).not.toBeNull();
   });
 
-  it('優勝の幕は消えない', () => {
+  it('試合が決まった幕は消えない', () => {
     const session = game({ winsToTake: 1 });
     const banner = new RoundBanner();
     session.world.players[0]!.life = OUT;

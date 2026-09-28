@@ -99,9 +99,10 @@ interface ActiveMatch {
   /** ゲームの速さの倍率を効かせるか。1台で遊ぶときだけ。通信対戦は全員が同じ速さで進める。 */
   readonly paced: boolean;
   /**
-   * 試合が決まった幕を、パッドで動かせるか。1人で遊ぶときと通信対戦のとき（原型と同じ）。
+   * 試合が決まった幕を、パッドで動かせるか。パッドを試合に繋いだとき（1人で遊ぶとき。`drivesPad`）と
+   * 通信対戦のとき（原型と同じ）。
    *
-   * 1台で2人のときは、パッドを試合に繋がない（`#sourceFor`）。幕でも受け付けないのは、机に置いた
+   * 1台で2人のときは（CPU の有無によらず）、パッドを試合に繋がない。幕でも受け付けないのは、机に置いた
    * パッドに肘が当たっただけで次の試合が始まらないようにするため（原型の注意書き）。キーボードは効く。
    */
   readonly padOnBanner: boolean;
@@ -112,6 +113,15 @@ const KEY_LAYOUTS: Readonly<Record<'solo' | 'left' | 'right', KeyBinding>> = {
   left: PLAYER1_KEYS,
   right: PLAYER2_KEYS,
 };
+
+/**
+ * ゲームパッドを繋ぐ操作か。1人で遊ぶときのキーボードの操作だけ（1台に1人ぶん）。
+ * 2人のときに繋ぐと、どちらのプレイヤーのパッドか決められない。
+ *
+ * 試合に繋ぐか（`#sourceFor`）と、試合が決まった幕でパッドを受け付けるか（`padOnBanner`）を、
+ * この1つで決める。別々に書くと、遊び方を足したときに片方だけが変わる。
+ */
+const drivesPad = (controller: LocalController): boolean => controller.kind === 'keys' && controller.layout === 'solo';
 
 /**
  * 画面の切り替え（試合の前の画面 ⇄ 試合）と、試合ごとの部品の組み立て。
@@ -131,7 +141,7 @@ export class Shell {
   #lastSetup: LocalSetup | null = null;
   /** ゲームの速さ。試合をまたいで持つ（もういっかいで等倍に戻さない。原型と同じ）。 */
   readonly #speed = new GameSpeed();
-  /** キーボードとパッドで、メニュー・ロビー・優勝の幕を動かすカーソル。 */
+  /** キーボードとパッドで、メニュー・ロビー・試合が決まった幕を動かすカーソル。 */
   readonly #nav = new MenuNavigator();
   /** つかんでいるパッド。メニュー・ロビー・試合で1つを分け合う（`PadChoice` の説明を参照）。 */
   readonly #pads: PadChoice;
@@ -172,11 +182,11 @@ export class Shell {
       if (controller.kind === 'keys') help.push({ playerId: id, help: this.#helpFor(id, controller.layout) });
     });
     const runner = new LocalMatch(session, plan.roster);
-    // 優勝の幕のボタンは横に並ぶので、カーソルの1グループにする。
+    // 試合が決まった幕のボタンは横に並ぶので、カーソルの1グループにする。
     this.#begin(runner, () => help, [
       pointerButton('もういっかい', () => this.restart(), { data: { action: 'again', nav: 'final' } }),
       pointerButton('タイトルへ', () => this.showMenu(), { data: { action: 'title', nav: 'final' } }),
-    ], { paced: true, padOnBanner: setup.mode === 'solo' });
+    ], { paced: true, padOnBanner: plan.controllers.some(drivesPad) });
     this.#setToolbar([
       speedControl(this.#speed.rate, (rate) => this.#setSpeed(rate)),
       pointerButton('⏸ ポーズ', () => this.togglePause(), { data: { action: 'pause' } }),
@@ -215,7 +225,7 @@ export class Shell {
   }
 
   /**
-   * キーボードやパッドの操作で、メニュー・ロビー・優勝の幕のカーソルを動かす。
+   * キーボードやパッドの操作で、メニュー・ロビー・試合が決まった幕のカーソルを動かす。
    *
    * 試合の最中は何もしない（幕にボタンが無いので、カーソルの並びが空になる）。
    * ⚠️ ロビーでは戻る（Escape・B）で何もしない。ぬけるとページを開き直すので、押し間違えると
@@ -223,7 +233,7 @@ export class Shell {
    */
   navigate(command: NavCommand): void {
     const root = this.#navRoot();
-    // 優勝の幕だけは、枠が出ていなくても最初の決定を効かせる（原型と同じ。`MenuCursor` の説明を参照）。
+    // 試合が決まった幕だけは、枠が出ていなくても最初の決定を効かせる（原型と同じ。`MenuCursor` の説明を参照）。
     const result = this.#nav.handle(root, command, root === this.#elements.banner ? 'activate' : 'show');
     if (result.kind === 'back' && this.#match === null) {
       this.#menu.back();
@@ -397,9 +407,7 @@ export class Shell {
   #sourceFor(id: PlayerId, controller: LocalController, seed: number): IntentSource {
     if (controller.kind === 'cpu') return new CpuIntentSource(id, CPU_LEVELS[controller.level], cpuSeed(seed, id));
     const keyboard = new KeyboardIntentSource(id, this.#tools.keyboard, KEY_LAYOUTS[controller.layout]);
-    // ゲームパッドは1人で遊ぶときだけ繋ぐ（1台に1人ぶん）。2人のときに繋ぐと、
-    // どちらのプレイヤーのパッドか決められない。
-    if (controller.layout !== 'solo') return keyboard;
+    if (!drivesPad(controller)) return keyboard;
     return new CombinedIntentSource([keyboard, new GamepadIntentSource(id, this.#pads)]);
   }
 

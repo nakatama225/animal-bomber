@@ -166,7 +166,7 @@ describe('延長戦の準備', () => {
     expect(player.invulnerableUntil).toBe(500 + SUDDEN_DEATH_INVULNERABLE);
     expect(player.specialCharges).toBe(0);
     expect(player.effects.active()).toEqual([]);
-    // 技の途中でも外す。外さないと、技の続きが移った先の隅で走る。
+    // 技の途中でも外す。外さないと、技の続きが開始位置で走る。
     expect(player.action).toBeNull();
   });
 

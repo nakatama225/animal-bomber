@@ -41,7 +41,12 @@ describe('選んだものから試合を作る', () => {
 
     const versus = planLocalMatch({ ...DEFAULT_SETUP, mode: 'versus', picks: ['mole', 'mole'] }, 11);
     expect(versus.config.animals).toEqual(['mole', 'mole']);
-    expect(versus.controllers.every((c) => c.kind === 'keys')).toBe(true);
+    // タイマンも左右に分ける。1人ぶんの操作（solo）にすると、パッドまで試合に繋がり、
+    // 試合が決まった幕でもパッドを受け付ける（Shell の drivesPad）。
+    expect(versus.controllers).toEqual([
+      { kind: 'keys', layout: 'left' },
+      { kind: 'keys', layout: 'right' },
+    ]);
   });
 
   it('CPU の動物は、人間が選ばなかった動物から重ならずに選ぶ', () => {
