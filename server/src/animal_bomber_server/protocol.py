@@ -13,7 +13,8 @@ TypeScript 版の `ts/src/net/protocol.ts` と**同じ約束を、もう一方�
 中継は `input` の `tick` と、`hash` の `tick` `hash` `rngCalls` を読む。
 どれも「数を比べる・最後に配った tick を覚える」ためだけで、その数が試合の中で
 何を意味するかは知らない。意思のビット（`bits`）も、試合の設定（`config`）も、
-中身を見ずにそのまま流す。
+中身を見ずにそのまま流す。始まる前の設定（`settings`）も同じで、見るのは送り主が
+ホストか・試合が始まる前か、だけ。
 
 ## 項目名の書き方
 
@@ -42,6 +43,9 @@ FROM_PEER: dict[str, tuple[str, ...]] = {
     "input": ("tick", "bits"),
     # ある tick を進めたあとの状態の要約と、試合の乱数を引いた回数
     "hash": ("tick", "hash", "rngCalls"),
+    # 始まる前に、ホストがロビーで選んでいる設定。ゲストの画面に出すだけで、
+    # 試合は start から作る
+    "settings": ("config",),
 }
 """端末から中継へ送るメッセージの種類と、`t` 以外の項目。"""
 
@@ -57,6 +61,8 @@ FROM_RELAY: dict[str, tuple[str, ...]] = {
     "input": ("seat", "tick", "bits"),
     # 同じ tick の要約が食い違った。reports は全員ぶんの報告
     "desync": ("tick", "reports"),
+    # ホストの settings を、始まる前だけ、ホスト以外の全員へそのまま流したもの
+    "settings": ("config",),
 }
 """中継から端末へ届くメッセージの種類と、`t` 以外の項目。"""
 

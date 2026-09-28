@@ -79,6 +79,66 @@ describe('つないでから始まるまで', () => {
   });
 });
 
+describe('始まる前の設定', () => {
+  /** SETTINGS と、動物・種・CPU の強さが違う設定。 */
+  const OTHER: LanSettings = {
+    match: defaultMatchConfig(99, ['mole', 'frog', 'rabbit', 'elephant']),
+    cpu: ['oni', 'oni', 'oni', 'oni'],
+  };
+
+  it('ホストは、選んでいる設定をつながったときと選び直すたびに配り、人が入ってきたら配り直す', () => {
+    // 中継は設定を覚えない。あとから入った人には、ホストが配り直した分が届く。
+    const { client: c, sent } = client();
+    const shared = (): PeerMessage[] => sent.filter((m) => m.t === 'settings');
+    // 番号を受け取る前は、ホストかどうかが分からないので送らない。
+    c.shareSettings(SETTINGS);
+    expect(shared()).toEqual([]);
+    // 先にゲストが居る部屋にホストが入ることがある（サーバの Mac のブラウザは、あとから開いても 0 番）。
+    c.receive(text({ t: 'welcome', seat: 0, role: 'host', seats: [1] }));
+    expect(shared()).toEqual([{ t: 'settings', config: SETTINGS }]);
+    c.shareSettings(OTHER);
+    c.receive(text({ t: 'peer_joined', seat: 2 }));
+    expect(shared()).toEqual([
+      { t: 'settings', config: SETTINGS },
+      { t: 'settings', config: OTHER },
+      { t: 'settings', config: OTHER },
+    ]);
+  });
+
+  it('ゲストは設定を配らず、届いたホストの設定を、待っている間の段階に持つ', () => {
+    const { client: c, sent } = client();
+    c.receive(text({ t: 'welcome', seat: 1, role: 'guest', seats: [0] }));
+    c.shareSettings(SETTINGS);
+    expect(sent).toEqual([]);
+
+    c.receive(text({ t: 'settings', config: OTHER }));
+
+    expect(c.phase).toEqual({ kind: 'lobby', seat: 1, present: [0, 1], hostSettings: OTHER });
+  });
+
+  it('試合は start の設定だけから作る。始まる前に届いた設定は使わない', () => {
+    // 始まる前の設定は画面に出すためのもの。ホストは「はじめる」を押した時点の設定を start で配り直し、
+    // 全員がその1通から試合を作る。前に届いた設定を使うと、選び直しと入れ違った端末だけ別の試合になる。
+    const { client: c } = client();
+    c.receive(text({ t: 'welcome', seat: 1, role: 'guest', seats: [0] }));
+    c.receive(text({ t: 'settings', config: OTHER }));
+    c.receive(text({ t: 'start', seats: [0, 1], config: SETTINGS }));
+
+    if (c.phase.kind !== 'playing') throw new Error('始まっていない');
+    expect(c.phase.settings).toEqual(SETTINGS);
+    expect(c.phase.session.world.players.map((p) => p.animal)).toEqual(SETTINGS.match.animals);
+  });
+
+  it('始まったあとは、ホストも設定を配らない', () => {
+    const { client: c, sent } = client();
+    c.receive(text({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
+    c.receive(text({ t: 'start', seats: [0], config: SETTINGS }));
+    const before = sent.length;
+    c.shareSettings(OTHER);
+    expect(sent.slice(before).filter((m) => m.t === 'settings')).toEqual([]);
+  });
+});
+
 describe('止めるとき', () => {
   it('始まった試合の参加者に自分がいなければ止める', () => {
     const { client: c } = client();

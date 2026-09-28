@@ -132,6 +132,8 @@ class LockstepRoom(Room):
             await self._forward_input(sender_seat, data)
         elif kind == "hash":
             await self._check_hash(sender_seat, data)
+        elif kind == "settings":
+            await self._forward_settings(sender_seat, data)
 
     async def drop(self, seats: list[int]) -> None:
         """抜けた人を外し、残った人へ `peer_left` を配る。
@@ -182,6 +184,21 @@ class LockstepRoom(Room):
             {"t": "start", "seats": list(self.members), "config": data.get("config")}
         )
         targets = [(s, ws) for s, ws in self.seats.items() if s in self.members]
+        await self._send_all(targets, message)
+
+    async def _forward_settings(
+        self, sender_seat: int, data: dict[str, object]
+    ) -> None:
+        """ホストがロビーで選んでいる設定を、始まる前だけ、ホスト以外の全員へ流す。
+
+        ゲストの画面に出すためだけのもの。試合は `start` の設定から作るので、中継は
+        設定を覚えない。あとから入った人には、`peer_joined` を受けたホストが配り直す。
+        中身（`config`）は読まずにそのまま流す。
+        """
+        if sender_seat != HOST_SEAT or self.started:
+            return
+        message = json.dumps({"t": "settings", "config": data.get("config")})
+        targets = [(s, ws) for s, ws in self.seats.items() if s != sender_seat]
         await self._send_all(targets, message)
 
     async def _forward_input(self, sender_seat: int, data: dict[str, object]) -> None:

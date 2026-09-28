@@ -1,6 +1,6 @@
 import { CPU_LEVEL_KEYS, type CpuLevelKey } from '../../ai/CpuLevel.js';
 import { ANIMAL_LOOKS } from '../../content/animals.js';
-import { secondsToTicks } from '../../domain/core/Tick.js';
+import { secondsToTicks, ticksToSeconds } from '../../domain/core/Tick.js';
 import type { PlayerId } from '../../domain/state/PlayerState.js';
 import { ROUND_SECONDS, STARTING_HP, WINS_TO_TAKE_MATCH } from '../../domain/rules/tuning.js';
 import type { LanSettings } from '../../net/protocol.js';
@@ -51,6 +51,29 @@ export function lanSettingsFrom(setup: LanSetup, seed: number): LanSettings {
       animals: [...setup.animals],
     },
     cpu: [...setup.cpuLevels],
+  };
+}
+
+/**
+ * 配られた設定を、ロビーで選ぶものの形に戻す。始まる前のゲストの画面に出すために使う。
+ *
+ * 枠が4つでないときは null（ホストはいつも4つ配る。それ以外は、画面に出す形が無い）。
+ */
+export function lanSetupFrom(settings: LanSettings): LanSetup | null {
+  const { match, cpu } = settings;
+  const four = <T>(items: readonly T[]): Four<T> | null =>
+    items.length === LAN_SLOTS ? [items[0]!, items[1]!, items[2]!, items[3]!] : null;
+  const animals = four(match.animals);
+  const hits = four(match.startingHp.map(hitsForHp));
+  const cpuLevels = four(cpu);
+  if (animals === null || hits === null || cpuLevels === null) return null;
+  return {
+    animals,
+    hits,
+    cpuLevels,
+    winsToTake: match.winsToTake,
+    roundSeconds: ticksToSeconds(match.roundLimit),
+    suddenDeath: match.suddenDeath,
   };
 }
 

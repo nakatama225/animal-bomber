@@ -127,7 +127,7 @@ VPN・アクセスポイントの端末間通信の遮断・ネットワーク�
 ### テスト
 
 ```sh
-uv run pytest       # 138 件
+uv run pytest       # 141 件
 uv run ruff check .
 ```
 

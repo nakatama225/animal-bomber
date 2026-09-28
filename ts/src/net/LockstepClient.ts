@@ -41,6 +41,12 @@ export type LanPhase =
       readonly seat: PlayerId;
       /** つながっている人。自分を含む。番号の順。 */
       readonly present: readonly PlayerId[];
+      /**
+       * ホストがロビーで選んでいる設定（ゲストの画面に出す）。まだ届いていなければ無い。ホスト自身は持たない。
+       *
+       * ⚠️ 試合はこれから作らない。`start` の設定から作る。
+       */
+      readonly hostSettings?: LanSettings;
     }
   | {
       readonly kind: 'playing';
@@ -67,7 +73,8 @@ export type LanPhase =
  * 中継につないでから試合が終わるまでの流れ。
  *
  * 1. `welcome` で自分のプレイヤー番号を受け取る
- * 2. 待っている間に、ほかの人が入ったり抜けたりする
+ * 2. 待っている間に、ほかの人が入ったり抜けたりする。ホストはロビーで選んでいる設定を
+ *    `settings` で配り、ゲストの画面に出す（`shareSettings`）
  * 3. ホスト（0番）が合図を送ると、中継が人間の一覧を添えて全員へ `start` を配る。
  *    全員が同じ1通から、同じ試合を作る
  * 4. あとは `LockstepDriver` が進める
@@ -88,6 +95,8 @@ export class LockstepClient {
   readonly #link: PeerLink;
   readonly #hooks: LanHooks;
   #phase: LanPhase = { kind: 'connecting' };
+  /** ホストとして配る設定。自分がホストと分かる前にも控えておく。 */
+  #shared: LanSettings | null = null;
 
   constructor(link: PeerLink, hooks: LanHooks) {
     this.#link = link;
@@ -122,6 +131,17 @@ export class LockstepClient {
   }
 
   /**
+   * ロビーで選んでいる設定を、始まる前のゲストの画面へ配る。選び直すたびに呼ぶ。
+   *
+   * ホストが待っている間だけ送る。中継は設定を覚えないので、つながったとき（先に居た人がいる場合）と、
+   * 人が入ってきたとき（`peer_joined`）にも、控えた設定を配り直す。
+   */
+  shareSettings(settings: LanSettings): void {
+    this.#shared = settings;
+    this.#sendShared();
+  }
+
+  /**
    * 中継との接続が切れた。
    *
    * @param reason 画面に出す理由。中継に断られた場合など、ただ切れたのでないときに渡す
@@ -150,11 +170,16 @@ export class LockstepClient {
       case 'connecting':
         if (message.t === 'welcome') {
           this.#phase = { kind: 'lobby', seat: message.seat, present: sorted([...message.seats, message.seat]) };
+          this.#sendShared();
         }
         return;
       case 'lobby':
         if (message.t === 'peer_joined') {
           this.#phase = { ...phase, present: sorted([...phase.present, message.seat]) };
+          this.#sendShared();
+        } else if (message.t === 'settings') {
+          // 中継はホストの設定しか流さない。ホスト自身には返さない。
+          if (phase.seat !== 0) this.#phase = { ...phase, hostSettings: message.config };
         } else if (message.t === 'peer_left') {
           this.#phase = { ...phase, present: phase.present.filter((s) => s !== message.seat) };
         } else if (message.t === 'start') {
@@ -195,6 +220,12 @@ export class LockstepClient {
     });
     driver.start();
     this.#phase = { kind: 'playing', seat, settings, session, driver };
+  }
+
+  /** 控えた設定を、ホストが待っている間だけ送る。 */
+  #sendShared(): void {
+    if (this.#shared === null || this.#phase.kind !== 'lobby' || this.#phase.seat !== 0) return;
+    this.#link.send({ t: 'settings', config: this.#shared });
   }
 
   #fail(reason: string, cause?: unknown): void {

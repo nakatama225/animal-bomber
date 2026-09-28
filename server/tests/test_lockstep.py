@@ -128,6 +128,48 @@ class Test始める:
         assert messages(host, "input") == []
 
 
+class Test始まる前の設定:
+    """ホストがロビーで選んでいる設定を、始まる前のゲストの画面に出すための知らせ。"""
+
+    async def test_ホストの設定は_ホスト以外の全員へそのまま届く(self):
+        room = LockstepRoom(max_seats=4)
+        peers = [FakeConnection() for _ in range(3)]
+        for ws in peers:
+            await room.join(ws)
+
+        # 中継は中身を読まない。試合の設定として読めない値でも、そのまま流す
+        config = {"match": {"seed": 0}, "note": [1, 2]}
+        await room.route(HOST_SEAT, json.dumps({"t": "settings", "config": config}))
+
+        for ws in peers[1:]:
+            assert messages(ws, "settings") == [{"t": "settings", "config": config}]
+        # 送った本人には返さない（原型も、ホストは自分の送った設定を無視していた）
+        assert messages(peers[0], "settings") == []
+        # 設定を配っても、試合は始まらない
+        assert not room.started
+
+    async def test_ゲストの設定は配らない(self):
+        # 試合の設定を決めるのはホストだけ。ゲストの画面にゲストの選んだものが出ると、
+        # 選んだものが試合に使われないのに、使われるように見える
+        room = LockstepRoom(max_seats=4)
+        peers = [FakeConnection() for _ in range(3)]
+        for ws in peers:
+            await room.join(ws)
+
+        await room.route(1, json.dumps({"t": "settings", "config": {}}))
+
+        for ws in peers:
+            assert messages(ws, "settings") == []
+
+    async def test_始まったあとの設定は配らない(self):
+        # 始まったあとの試合は start の1通から作ったもの。あとから届く設定は、どの試合にも関係しない
+        room, peers = await started_room(2)
+
+        await room.route(HOST_SEAT, json.dumps({"t": "settings", "config": {}}))
+
+        assert messages(peers[1], "settings") == []
+
+
 class Test入力を配る:
     async def test_送り主以外の全員へ_送り主の番号を書き足して届く(self):
         room, peers = await started_room(3)

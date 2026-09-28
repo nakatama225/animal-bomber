@@ -92,6 +92,31 @@ describe('通信対戦の配線', () => {
     expect(match.inProgress).toBe(true);
   });
 
+  it('ホストがロビーで選んだものは、始まる前にゲストの画面へ届く', () => {
+    const host = mount();
+    // 先にゲストが居る部屋に入ったホストは、選び直す前の設定もすぐ配る。
+    deliver(host.relay, { t: 'welcome', seat: 0, role: 'host', seats: [1] });
+    const first = host.sent.find((message) => message.t === 'settings');
+    expect(first?.t === 'settings' ? first.config.match.animals : undefined).toEqual(['rabbit', 'frog', 'fox', 'elephant']);
+    host.match.afterDraw();
+    press(host.lobby, '[data-field="animal-1"] [data-value="mole"]');
+    press(host.lobby, '[data-field="wins"] [data-value="7"]');
+    const shared = host.sent.filter((message) => message.t === 'settings');
+    const last = shared.at(-1);
+    if (last?.t !== 'settings') throw new Error('設定を配っていない');
+    expect(last.config.match.animals[1]).toBe('mole');
+    expect(last.config.match.winsToTake).toBe(7);
+
+    document.body.replaceChildren();
+    // 中継が流した同じ1通を、ゲストが受け取る。
+    const guest = mount();
+    deliver(guest.relay, { t: 'welcome', seat: 1, role: 'guest', seats: [0] });
+    deliver(guest.relay, JSON.parse(JSON.stringify(last)));
+    guest.match.afterDraw();
+    expect(guest.lobby.querySelector('[data-shared-field="animal-1"]')?.textContent).toContain('もぐら');
+    expect(guest.lobby.querySelector('[data-shared-field="wins"]')?.textContent).toContain('7勝');
+  });
+
   it('抜けた人は、CPU に替わった tick から名札も CPU にする', () => {
     const { match, relay, sent } = mount();
     deliver(relay, { t: 'welcome', seat: 0, role: 'host', seats: [1] });

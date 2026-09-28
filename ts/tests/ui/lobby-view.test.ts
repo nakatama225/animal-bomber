@@ -11,16 +11,18 @@ function press(root: HTMLElement, selector: string): void {
   target.dispatchEvent(new MouseEvent('click', { detail: 1, bubbles: true }));
 }
 
-function mount(): { root: HTMLElement; view: LobbyView; started: LanSetup[]; left: number[] } {
+function mount(): { root: HTMLElement; view: LobbyView; started: LanSetup[]; changed: LanSetup[]; left: number[] } {
   const root = document.createElement('div');
   document.body.append(root);
   const started: LanSetup[] = [];
+  const changed: LanSetup[] = [];
   const left: number[] = [];
   const view = new LobbyView(root, new LobbyChoices(), {
     start: (setup) => started.push(setup),
+    changed: (setup) => changed.push(setup),
     leave: () => left.push(1),
   });
-  return { root, view, started, left };
+  return { root, view, started, changed, left };
 }
 
 afterEach(() => document.body.replaceChildren());
@@ -65,12 +67,52 @@ describe('通信対戦のロビー', () => {
     expect(root.querySelector('[data-action="start"]')).not.toBe(start);
   });
 
+  it('ホストが選び直すたびに知らせる（始まる前のゲストの画面へ配るため）', () => {
+    const { root, view, changed } = mount();
+    view.show({ kind: 'lobby', seat: 0, present: [0, 1] });
+    press(root, '[data-field="animal-2"] [data-value="mole"]');
+    press(root, '[data-field="sudden"] [data-value="false"]');
+    expect(changed.map((setup) => [setup.animals[2], setup.suddenDeath])).toEqual([
+      ['mole', true],
+      ['mole', false],
+    ]);
+  });
+
   it('ゲストには選ぶ行を出さず、待っていることだけを出す', () => {
     const { root, view } = mount();
     view.show({ kind: 'lobby', seat: 2, present: [0, 2] });
     expect(root.querySelector('[data-slot]')).toBeNull();
     expect(root.querySelector('[data-action="start"]')).toBeNull();
     expect(root.textContent).toContain('あなたは 3P');
+    // ホストの設定がまだ届いていない。
+    expect(root.textContent).toContain('1P（ホスト）の設定を待っている');
+  });
+
+  it('ゲストには、ホストが選んでいる設定を読むだけの表で出す', () => {
+    const { root, view } = mount();
+    const choices = new LobbyChoices();
+    choices.setAnimal(2, 'mole');
+    choices.setCpuLevel(1, 'oni');
+    choices.setHits(3, 1);
+    choices.setWinsToTake(7);
+    choices.setSuddenDeath(false);
+    view.show({ kind: 'lobby', seat: 2, present: [0, 2], hostSettings: choices.setup });
+
+    const field = (id: string): string => root.querySelector(`[data-shared-field="${id}"] span:last-child`)?.textContent ?? '';
+    expect(root.querySelectorAll('[data-shared-slot]')).toHaveLength(4);
+    expect(root.querySelector('[data-shared-slot="2"] .slot-head')?.textContent).toContain('3P（あなた）');
+    expect(field('animal-2')).toBe('🦫もぐら');
+    expect(field('animal-0')).toBe('🐰うさぎ');
+    expect(field('cpu-1')).toBe('おに');
+    expect(field('cpu-0')).toBe('ふつう');
+    expect(field('hits-3')).toBe('1回');
+    expect(field('wins')).toBe('7勝');
+    expect(field('sudden')).toBe('OFF');
+    expect(root.querySelector('[data-shared-rules] [data-shared-field="wins"]')).not.toBeNull();
+    // 読むだけ。カーソルにも載せず、選ぶボタンも出さない（ゲストが押しても試合には使われない）。
+    expect(root.querySelector('[data-nav]')).toBeNull();
+    expect(root.querySelector('button[data-value]')).toBeNull();
+    expect(root.textContent).not.toContain('1P（ホスト）の設定を待っている');
   });
 
   it('断られたときは理由と、やり直し方を出す', () => {

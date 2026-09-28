@@ -11,7 +11,7 @@ import { lockstepUrl, WebSocketLink, type WebSocketLinkHandlers } from '../platf
 import { describeLanPhase, WaitingNotice } from '../presentation/hud/lanStatus.js';
 import { lanRoster } from '../presentation/hud/roster.js';
 import type { HudSource } from '../presentation/hud/scoreboard.js';
-import { lanSettingsFrom, LobbyChoices } from '../presentation/menu/lanSetup.js';
+import { lanSettingsFrom, lanSetupFrom, LobbyChoices } from '../presentation/menu/lanSetup.js';
 import { GameSession } from './GameSession.js';
 import type { MatchRunner } from './MatchRunner.js';
 
@@ -41,6 +41,12 @@ export interface LanMatchOptions {
    */
   readonly connect?: (url: string, handlers: WebSocketLinkHandlers) => LanLink;
 }
+
+/**
+ * 始まる前にゲストの画面へ配る設定の種。種は試合を始めるときに決める（`newSeed`）ので、
+ * 見せるための設定では意味を持たない。
+ */
+const PREVIEW_SEED = 0;
 
 function connectWebSocket(url: string, handlers: WebSocketLinkHandlers): LanLink {
   return new WebSocketLink(url, handlers);
@@ -92,10 +98,14 @@ export class LanMatch implements MatchRunner {
       // 強さと種は、ホストが配った設定から引く。全員の端末で同じ CPU が同じ手を指す。
       cpuSource: lanCpuSource,
     });
-    this.#lobby = new LobbyView(options.lobby, new LobbyChoices(), {
+    const choices = new LobbyChoices();
+    this.#lobby = new LobbyView(options.lobby, choices, {
       start: (setup) => this.#client.requestStart(lanSettingsFrom(setup, options.newSeed())),
+      changed: (setup) => this.#client.shareSettings(lanSettingsFrom(setup, PREVIEW_SEED)),
       leave: options.leave,
     });
+    // 選び直す前の設定も控えておく。ホストと分かったとき・人が入ってきたときに配る。
+    this.#client.shareSettings(lanSettingsFrom(choices.setup, PREVIEW_SEED));
     this.#status = options.status;
     // 文が無いときも隠さない（高さを保って、文が出るたびに横の板が動かないように）。
     this.#status.hidden = false;
@@ -182,8 +192,10 @@ function lobbyStateOf(phase: LanPhase): LobbyState | null {
   switch (phase.kind) {
     case 'connecting':
       return { kind: 'connecting' };
-    case 'lobby':
-      return { kind: 'lobby', seat: phase.seat, present: phase.present };
+    case 'lobby': {
+      const shared = phase.hostSettings === undefined ? null : lanSetupFrom(phase.hostSettings);
+      return { kind: 'lobby', seat: phase.seat, present: phase.present, ...(shared === null ? {} : { hostSettings: shared }) };
+    }
     case 'playing':
       return null;
     case 'failed':

@@ -141,6 +141,7 @@ class Test中継が実際に扱うもの:
         peers = [FakeConnection() for _ in range(3)]
         for ws in peers:
             await room.join(ws)  # welcome と peer_joined
+        await room.route(HOST_SEAT, peer_message("settings", {}))  # 始まる前の設定
         await room.route(HOST_SEAT, peer_message("start", {}))
         await room.route(1, peer_message("input", 0, 1))
         for seat, digest in ((0, 1), (1, 2), (2, 1)):

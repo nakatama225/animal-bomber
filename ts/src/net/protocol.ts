@@ -42,6 +42,7 @@ export const FROM_PEER = {
   start: ['config'],
   input: ['tick', 'bits'],
   hash: ['tick', 'hash', 'rngCalls'],
+  settings: ['config'],
 } as const;
 
 /** 中継から端末へ届くメッセージの種類と、`t` 以外の項目。 */
@@ -52,6 +53,7 @@ export const FROM_RELAY = {
   start: ['seats', 'config'],
   input: ['seat', 'tick', 'bits'],
   desync: ['tick', 'reports'],
+  settings: ['config'],
 } as const;
 
 /** `desync` の `reports` に並ぶ、1人ぶんの報告の項目。 */
@@ -99,6 +101,14 @@ export type PeerMessage =
       readonly tick: number;
       readonly hash: number;
       readonly rngCalls: number;
+    }
+  | {
+      /**
+       * ホストがロビーで選んでいる設定。始まる前のゲストの画面に出すためだけに使い、試合は作らない
+       * （試合は `start` の設定から作る）。種（`seed`）は意味を持たない。
+       */
+      readonly t: 'settings';
+      readonly config: LanSettings;
     };
 
 /** 中継から端末へ届くメッセージ。 */
@@ -129,7 +139,12 @@ export type RelayMessage =
       readonly tick: number;
       readonly bits: number;
     }
-  | { readonly t: 'desync'; readonly tick: number; readonly reports: readonly HashReport[] };
+  | { readonly t: 'desync'; readonly tick: number; readonly reports: readonly HashReport[] }
+  | {
+      /** ホストが始まる前に配った設定。中継が、始まる前だけ、ホスト以外の全員へそのまま流す。 */
+      readonly t: 'settings';
+      readonly config: LanSettings;
+    };
 
 /**
  * メッセージを中継へ送る口。WebSocket で送る実物は `platform/` に置く。
@@ -197,6 +212,10 @@ export function parseRelayMessage(text: string): RelayMessage {
       };
     case 'desync':
       return { t: 'desync', tick: read.int('tick', 0), reports: read.reports('reports') };
+    case 'settings':
+      // 画面に出すだけでも、始めるときの設定と同じく確かめる。読めないのは相手の版が違うときで、
+      // そのまま始めても `start` で止まる。
+      return { t: 'settings', config: parseLanSettings(read.raw('config')) };
     default:
       // FROM_RELAY に種類を足して、ここに分岐を足し忘れると、ここが型エラーになる。
       return unhandled(kind);

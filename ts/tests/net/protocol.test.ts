@@ -36,6 +36,7 @@ describe('約束の表と型', () => {
     expectTypeOf<FieldsOf<PeerMessage, 'start'>>().toEqualTypeOf<(typeof FROM_PEER)['start'][number]>();
     expectTypeOf<FieldsOf<PeerMessage, 'input'>>().toEqualTypeOf<(typeof FROM_PEER)['input'][number]>();
     expectTypeOf<FieldsOf<PeerMessage, 'hash'>>().toEqualTypeOf<(typeof FROM_PEER)['hash'][number]>();
+    expectTypeOf<FieldsOf<PeerMessage, 'settings'>>().toEqualTypeOf<(typeof FROM_PEER)['settings'][number]>();
   });
 
   it('中継から届くメッセージ', () => {
@@ -47,6 +48,7 @@ describe('約束の表と型', () => {
     expectTypeOf<FieldsOf<RelayMessage, 'start'>>().toEqualTypeOf<T['start'][number]>();
     expectTypeOf<FieldsOf<RelayMessage, 'input'>>().toEqualTypeOf<T['input'][number]>();
     expectTypeOf<FieldsOf<RelayMessage, 'desync'>>().toEqualTypeOf<T['desync'][number]>();
+    expectTypeOf<FieldsOf<RelayMessage, 'settings'>>().toEqualTypeOf<T['settings'][number]>();
     expectTypeOf<keyof HashReport>().toEqualTypeOf<(typeof REPORT_FIELDS)[number]>();
   });
 
@@ -66,6 +68,7 @@ describe('中継から届いたメッセージを読む', () => {
       { t: 'start', seats: [0, 1], config: SETTINGS },
       { t: 'input', seat: 3, tick: 12, bits: 63 },
       { t: 'desync', tick: 19, reports: [{ seat: 0, hash: 4294967295, rngCalls: 0 }] },
+      { t: 'settings', config: SETTINGS },
     ];
     for (const message of cases) {
       expect(parseRelayMessage(JSON.stringify(message))).toEqual(message);
@@ -86,6 +89,8 @@ describe('中継から届いたメッセージを読む', () => {
     ['lastTick が -1 より小さい', '{"t":"peer_left","seat":1,"lastTick":-2}'],
     ['role が知らない値', '{"t":"welcome","seat":0,"role":"owner","seats":[]}'],
     ['報告が辞書でない', '{"t":"desync","tick":0,"reports":[1]}'],
+    // 始まる前の設定も、始めるときの設定と同じく読む。読めないまま画面に出すと、ずれた版どうしでつないだことに気づけない
+    ['始まる前の設定が読めない', '{"t":"settings","config":{"match":{}}}'],
   ])('約束に合わないものは止める: %s', (_label, text) => {
     expect(() => parseRelayMessage(text)).toThrow(ProtocolError);
   });

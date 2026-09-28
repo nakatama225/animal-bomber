@@ -173,6 +173,7 @@ export class LockstepDriver implements MatchClock {
       case 'welcome':
       case 'peer_joined':
       case 'start':
+      case 'settings':
         // 試合の前の知らせ。始まったあとには関係ない。
         return;
     }
