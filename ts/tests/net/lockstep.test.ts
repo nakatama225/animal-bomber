@@ -473,6 +473,33 @@ describe('抜けた人', () => {
     expect(hashWorld(b.session.world)).toBe(hashWorld(a.session.world));
   });
 
+  it('同じ人の知らせが2度届いたら最初のものを使い、自分と人間の一覧にいない人の知らせは記録に書かない', () => {
+    // 記録は同じ人を2度書こうとすると止まる。端末が判定しないと、2度目の知らせで試合が止まる。
+    const session = new GameSession(settings().match);
+    const driver = new LockstepDriver({
+      session,
+      link: { send: () => undefined },
+      localId: 0,
+      local: new IdleIntentSource(0),
+      humans: [0, 1],
+      replacement: (id) => new IdleIntentSource(id),
+      match: 1,
+    });
+    driver.start();
+
+    driver.receive({ t: 'peer_left', seat: 1, lastTick: 10 });
+    expect(() => driver.receive({ t: 'peer_left', seat: 1, lastTick: 20 })).not.toThrow();
+    expect(driver.log.departedAfter(1)).toBe(10);
+    // 自分の知らせ。本物の中継は抜けた本人には送らないが、届いても自分を CPU に替えない。
+    driver.receive({ t: 'peer_left', seat: 0, lastTick: 5 });
+    // 人間の一覧にいない人は、始まる前に入りかけていた接続。試合には関係ない。
+    driver.receive({ t: 'peer_left', seat: 2, lastTick: -1 });
+    expect(driver.log.departedAfter(0)).toBeUndefined();
+    expect(driver.log.departedAfter(2)).toBeUndefined();
+    expect(driver.hasLeft(0)).toBe(false);
+    expect(driver.hasLeft(2)).toBe(false);
+  });
+
   it('lastTick より後に届いた入力は、全員が同じく捨てる', () => {
     const session = new GameSession(settings().match);
     const driver = new LockstepDriver({

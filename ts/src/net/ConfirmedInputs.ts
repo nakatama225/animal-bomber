@@ -63,7 +63,7 @@ export class ConfirmedInputs {
    *
    * 時刻は試合通算の tick（`MatchClock.elapsed`）。`ReplayIntentSource` も同じ時刻で引くので、
    * 1台の試合で流し直せる。CPU の枠の操作は入っていないので、同じ設定から作り直す。
-   * 抜けた人は、再生の窓口に同じ CPU の作り方を渡せば、抜けた tick の次の tick から CPU に替わる。
+   * 抜けた人は、再生の窓口に同じ CPU の作り方を渡せば、`departedAfter` の次の tick から CPU に替わる。
    */
   get log(): InputLog {
     return this.#log;

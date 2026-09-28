@@ -141,7 +141,7 @@ export class InputLog {
   }
 
   /**
-   * `atTick` の時点で、その人が代わりの窓口に替わっているか（抜けた tick の次の tick から）。
+   * `atTick` の時点で、その人が代わりの窓口に替わっているか（`departedAfter` の次の tick から）。
    *
    * 本物の端末（`LockstepDriver`）と再生の窓口（`ReplayIntentSource`）は、どちらもこの判定で替える。
    */
@@ -177,7 +177,13 @@ export class InputLog {
     return parts.join('|');
   }
 
-  /** 保存した文字列から戻す。抜けた人の区画が無ければ、誰も抜けていない記録になる。 */
+  /**
+   * 保存した文字列から戻す。抜けた人の区画が無ければ、誰も抜けていない記録になる。
+   *
+   * @throws Error 抜けた人の区画に、読めない項目か、同じ人の2度目があるとき。黙って読み飛ばしたり
+   *   あとの値で上書きしたりすると、その人の意思を記録から使い続ける（あるいは違う tick で替える）ので、
+   *   例外も出ずに別の試合になる
+   */
   static decode(text: string): InputLog {
     const log = new InputLog();
     if (text.length === 0) return log;
@@ -186,9 +192,10 @@ export class InputLog {
       if (head === undefined || body === undefined) continue;
       if (head === DEPARTED) {
         for (const entry of body.split(';')) {
-          const [rawId, rawTick] = entry.split(',');
-          if (rawId === undefined || rawTick === undefined) continue;
-          log.#departedAfter.set(Number(rawId) as PlayerId, Number(rawTick));
+          // プレイヤー番号は 0〜3、tick は -1 以上の整数（中継の lastTick と同じ範囲）。
+          const found = /^([0-3]),(-1|0|[1-9]\d*)$/.exec(entry);
+          if (found === null) throw new Error(`記録の抜けた人の区画が読めない: ${entry}`);
+          log.depart(Number(found[2]), Number(found[1]) as PlayerId);
         }
         continue;
       }
@@ -211,7 +218,7 @@ export class InputLog {
  * 人間のキーボードや CPU と同じ資格で `Simulation` に繋がる。
  * 繋ぎ替えるのはここ1点だけで、ゲーム本体は変わらない。
  *
- * 途中で抜けた人は、抜けた tick の次の tick から、代わりの窓口（`replacement` で作るもの）に任せる。
+ * 途中で抜けた人は、`departedAfter` の次の tick から、代わりの窓口（`replacement` で作るもの）に任せる。
  * 本物の端末（`LockstepDriver`）が CPU に繋ぎ替えるのと同じ tick になる。
  */
 export class ReplayIntentSource implements IntentSource {
@@ -237,7 +244,7 @@ export class ReplayIntentSource implements IntentSource {
   next(world: Readonly<WorldState>): PlayerIntent {
     const tick = this.clock.elapsed;
     if (!this.log.replacedAt(tick, this.playerId)) return this.log.at(tick, this.playerId);
-    // 作るのは初めて任せるとき。本物の端末は抜けた tick の次の tick を進める直前に作るので、
+    // 作るのは初めて任せるとき。本物の端末は `departedAfter` の次の tick を進める直前に作るので、
     // 決着のあとの待ち（操作を集めない）に当たると作る時点がずれるが、CPU は作るときに盤面を
     // 読まないので同じ手を指す。1度作ったら作り直さない（CPU は考えた内容を覚えている）。
     this.#replaced ??= this.#requireReplacement()(this.playerId);

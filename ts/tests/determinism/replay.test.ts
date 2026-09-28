@@ -136,6 +136,21 @@ describe('途中で抜けた人の記録', () => {
     expect(restored.encode()).toBe(log.encode());
   });
 
+  it.each([
+    ['tick が数でない', 'departed:1,abc'],
+    ['tick が小数', 'departed:1,5.5'],
+    ['tick が -1 より小さい', 'departed:1,-2'],
+    ['番号が無い', 'departed:,5'],
+    ['番号が数でない', 'departed:x,5'],
+    ['番号が 0〜3 の外', 'departed:4,5'],
+    ['区画が空', '0:0,8|departed:'],
+    ['同じ人が区画の中に2度', 'departed:1,5;1,9'],
+    ['同じ人が別の区画に2度', '0:0,8|departed:1,5|departed:1,7'],
+  ])('抜けた人の区画が読めなければ、戻す前に止まる（%s）', (_case, text) => {
+    // 黙って読み飛ばしたり、あとの値で上書きしたりすると、例外も出ずに別の試合になる。
+    expect(() => InputLog.decode(text)).toThrow(/抜けた/);
+  });
+
   it('抜けた人の区画が無い文字列は、誰も抜けていない記録になる', () => {
     const restored = InputLog.decode(runScripted(300).log.encode());
     for (const id of [0, 1, 2, 3] as const) expect(restored.departedAfter(id)).toBeUndefined();
@@ -148,7 +163,7 @@ describe('途中で抜けた人の記録', () => {
     expect(log.departedAfter(1)).toBe(40);
   });
 
-  it('再生の窓口は、抜けた tick の次から代わりの窓口に任せ、代わりの窓口は1度だけ作る', () => {
+  it('再生の窓口は、departedAfter の次の tick から代わりの窓口に任せ、代わりの窓口は1度だけ作る', () => {
     const log = new InputLog();
     log.record(0, 1, press({ right: true }));
     log.depart(5, 1);
