@@ -87,15 +87,16 @@ export interface ShellTools {
 }
 
 /** 1試合ぶんの部品。試合ごとに作り直す（前の試合の粒子や幕を持ち越さない）。 */
-interface ActiveMatch {
+interface ActiveMatch extends MatchParts {
   readonly runner: MatchRunner;
-  readonly renderer: Renderer;
-  readonly presenter: Presenter;
-  readonly banner: RoundBanner;
-  readonly countdown: Countdown;
   readonly side: SidePanel;
-  /** 試合が決まった幕に並べるボタン。 */
-  readonly finalActions: readonly HTMLElement[];
+  /** 部品を作ったときの `runner.generation`。変わったら次の試合なので、部品を作り直す。 */
+  readonly generation: number;
+  /**
+   * 試合が決まった幕に並べるボタン。描くたびに呼ぶ（通信対戦では、ホストかどうかが
+   * つないだあとで分かる。ホストにだけ「もういっかい」を出す）。
+   */
+  readonly finalActions: () => readonly HTMLElement[];
   /** ゲームの速さの倍率を効かせるか。1台で遊ぶときだけ。通信対戦は全員が同じ速さで進める。 */
   readonly paced: boolean;
   /**
@@ -106,6 +107,19 @@ interface ActiveMatch {
    * パッドに肘が当たっただけで次の試合が始まらないようにするため（原型の注意書き）。キーボードは効く。
    */
   readonly padOnBanner: boolean;
+}
+
+/**
+ * 試合ごとに作り直す部品。同じ runner で次の試合が始まったとき（通信対戦の再戦）も作り直す。
+ *
+ * ⚠️ 作り直さないと、前の試合の「試合が決まった幕」が消えない（`RoundBanner` は決まった幕を、
+ * 盤面が替わっても出し続ける）。描く側も、前の試合の位置から次の試合の開始位置へ動いて見える。
+ */
+interface MatchParts {
+  readonly renderer: Renderer;
+  readonly presenter: Presenter;
+  readonly banner: RoundBanner;
+  readonly countdown: Countdown;
 }
 
 const KEY_LAYOUTS: Readonly<Record<'solo' | 'left' | 'right', KeyBinding>> = {
@@ -183,10 +197,11 @@ export class Shell {
     });
     const runner = new LocalMatch(session, plan.roster);
     // 試合が決まった幕のボタンは横に並ぶので、カーソルの1グループにする。
-    this.#begin(runner, () => help, [
+    const actions = [
       pointerButton('もういっかい', () => this.restart(), { data: { action: 'again', nav: 'final' } }),
       pointerButton('タイトルへ', () => this.showMenu(), { data: { action: 'title', nav: 'final' } }),
-    ], { paced: true, padOnBanner: plan.controllers.some(drivesPad) });
+    ];
+    this.#begin(runner, () => help, () => actions, { paced: true, padOnBanner: plan.controllers.some(drivesPad) });
     this.#setToolbar([
       speedControl(this.#speed.rate, (rate) => this.#setSpeed(rate)),
       pointerButton('⏸ ポーズ', () => this.togglePause(), { data: { action: 'pause' } }),
@@ -206,8 +221,14 @@ export class Shell {
       leave: () => this.#tools.leaveLan(),
       ...(this.#tools.connect === undefined ? {} : { connect: this.#tools.connect }),
     });
+    // ホストにだけ出す（原型も、次の試合を始められるのはホストだけだった）。押すと合図を送るだけで、
+    // 次の試合は中継が配り直した start を受け取ってから始まる。
+    const again = [pointerButton('もういっかい', () => runner.rematch(), { data: { action: 'again', nav: 'final' } })];
     // 自分のプレイヤー番号は、つないで受け取るまで分からない。名札の「あなた」から選ぶ。
-    this.#begin(runner, (source) => this.#localHelp(source), [], { paced: false, padOnBanner: true });
+    this.#begin(runner, (source) => this.#localHelp(source), () => (runner.isHost ? again : []), {
+      paced: false,
+      padOnBanner: true,
+    });
     // 通信対戦は等倍で進めるので、曲も等倍に戻す。盤面は同じ速さなのに曲だけ速いと、
     // 速さが変わったように見える。つまみの倍率（`#speed`）は、1台の試合に戻ったときのために残す。
     this.#tools.music.setSpeed(1);
@@ -252,10 +273,22 @@ export class Shell {
    * 1台で遊ぶときは、ゲームの速さの倍率ぶんの tick を進める（0.5 倍なら2回に1回）。
    */
   tick(): void {
-    const match = this.#match;
+    const match = this.#current();
     if (match === null || !this.#canStep(match)) return;
     const count = match.paced ? this.#speed.take() : 1;
-    for (let i = 0; i < count && this.#canStep(match); i += 1) this.#step(match);
+    for (let i = 0; i < count && this.#canStep(match); i += 1) this.#step(this.#current() ?? match);
+  }
+
+  /**
+   * いまの試合の部品。同じ runner で次の試合が始まっていたら、作り直してから返す。
+   *
+   * 通信対戦では、次の試合は中継から届いた1通で始まる（届くのは tick と描く合間）。
+   */
+  #current(): ActiveMatch | null {
+    const match = this.#match;
+    if (match === null || match.runner.generation === match.generation) return match;
+    this.#match = { ...match, ...this.#partsFor(match.runner), generation: match.runner.generation };
+    return this.#match;
   }
 
   /** いま1 tick 進められるか。止めている間と、通信対戦で全員の入力がそろうまでは進めない。 */
@@ -291,7 +324,7 @@ export class Shell {
     // 新しい押下と取り違えないため。原型も同じ）。
     const commands = this.#padMenu.poll();
     if (this.#padAccepted()) for (const command of commands) this.navigate(command);
-    const match = this.#match;
+    const match = this.#current();
     const music = this.#tools.music;
     if (match === null) {
       music.stop();
@@ -304,7 +337,7 @@ export class Shell {
     if (world !== null) match.renderer.draw(world, match.paced ? this.#speed.progress(alpha) : alpha);
     const hud = runner.hud;
     match.side.update(hud);
-    this.#bannerView.show(world === null ? null : match.banner.current(world), match.finalActions);
+    this.#bannerView.show(world === null ? null : match.banner.current(world), match.finalActions());
     this.#elements.pause.hidden = !runner.paused;
     runner.afterDraw();
     this.#paintCursor();
@@ -317,27 +350,34 @@ export class Shell {
   #begin(
     runner: MatchRunner,
     help: KeyHelpFor,
-    finalActions: readonly HTMLElement[],
+    finalActions: ActiveMatch['finalActions'],
     { paced, padOnBanner }: Pick<ActiveMatch, 'paced' | 'padOnBanner'>,
   ): void {
     this.#endMatch();
-    const presenter = new Presenter(this.#tools.sounds, this.#toasts, (id, world) => {
-      const roster = runner.hud?.roster;
-      const animal = world.players[id]?.animal;
-      return roster === undefined || animal === undefined ? `${id + 1}P` : displayName(roster, id, animal);
-    });
     this.#match = {
       runner,
-      renderer: new Renderer(this.#tools.context, this.#elements.canvas.width, this.#elements.canvas.height),
-      presenter,
-      banner: new RoundBanner(),
-      countdown: new Countdown(this.#tools.sounds),
+      ...this.#partsFor(runner),
       side: new SidePanel(this.#elements.side, help),
+      generation: runner.generation,
       finalActions,
       paced,
       padOnBanner,
     };
     this.#showBoard(runner.world !== null);
+  }
+
+  #partsFor(runner: MatchRunner): MatchParts {
+    const presenter = new Presenter(this.#tools.sounds, this.#toasts, (id, world) => {
+      const roster = runner.hud?.roster;
+      const animal = world.players[id]?.animal;
+      return roster === undefined || animal === undefined ? `${id + 1}P` : displayName(roster, id, animal);
+    });
+    return {
+      renderer: new Renderer(this.#tools.context, this.#elements.canvas.width, this.#elements.canvas.height),
+      presenter,
+      banner: new RoundBanner(),
+      countdown: new Countdown(this.#tools.sounds),
+    };
   }
 
   /**

@@ -14,7 +14,10 @@ import { encodePeerMessage, type LanSettings, type PeerMessage } from '../../src
  * 振る舞いは `LockstepRoom` に合わせてある。
  *
  * - 入力は送り主の番号を書き足して、送り主以外の全員へ配る
- * - ホスト（0番）の合図で、その時点の接続を人間の一覧にして全員へ `start` を配る
+ * - ホスト（0番）の合図で、その時点の接続を人間の一覧にして全員へ `start` を配る。始まったあとの
+ *   ホストの合図は、試合の番号を1つ増やした次の試合にする
+ * - 入力と報告は、いまの試合の番号が付いたものだけを扱う
+ * - 始まる前のホストの設定（`settings`）を、ホスト以外の全員へ流す
  * - 抜けた人は、入力を最後に配った tick（`lastTick`）を添えて知らせる
  * - 同じ tick の要約が全員ぶん揃ったら突き合わせ、食い違えば `desync` を配る
  *
@@ -32,6 +35,8 @@ export class FakeRelay {
   readonly #queues = new Map<number, string[]>();
   readonly #receivers = new Map<number, LockstepClient>();
   #members: number[] | null = null;
+  /** いまの試合の番号。最初の試合が 1。 */
+  #match = 0;
   readonly #lastTick = new Map<number, number>();
   readonly #pending = new Map<number, Map<number, string>>();
   #desynced = false;
@@ -88,26 +93,40 @@ export class FakeRelay {
     // 実物と同じく文字列にしてから読む。組み立て方の誤りもここで出る。
     const data = JSON.parse(encodePeerMessage(message)) as Record<string, unknown>;
     switch (data['t']) {
-      case 'start': {
+      case 'settings': {
         if (seat !== 0 || this.#members !== null) return;
+        for (const other of this.#receivers.keys()) {
+          if (other !== seat) this.#push(other, { t: 'settings', config: data['config'] });
+        }
+        return;
+      }
+      case 'start': {
+        if (seat !== 0) return;
+        // 始まったあとの合図は次の試合（LockstepRoom と同じ）。前の試合の記録は持ち越さない。
+        this.#match += 1;
         this.#members = [...this.#receivers.keys()].sort((a, b) => a - b);
+        this.#lastTick.clear();
+        this.#pending.clear();
+        this.#desynced = false;
         for (const other of this.#members) {
-          this.#push(other, { t: 'start', seats: this.#members, config: data['config'] });
+          this.#push(other, { t: 'start', seats: this.#members, config: data['config'], match: this.#match });
         }
         return;
       }
       case 'input': {
-        if (this.#members === null || !this.#members.includes(seat)) return;
+        if (this.#members === null || !this.#members.includes(seat) || data['match'] !== this.#match) return;
         // 配り始める前に記録する（LockstepRoom と同じ）。
         this.#lastTick.set(seat, data['tick'] as number);
         for (const other of this.#receivers.keys()) {
           if (other === seat || !this.#members.includes(other)) continue;
-          this.#push(other, { t: 'input', seat, tick: data['tick'], bits: data['bits'] });
+          this.#push(other, { t: 'input', seat, tick: data['tick'], bits: data['bits'], match: this.#match });
         }
         return;
       }
       case 'hash': {
-        if (this.#members === null || this.#desynced || !this.#members.includes(seat)) return;
+        if (this.#members === null || this.#desynced || !this.#members.includes(seat) || data['match'] !== this.#match) {
+          return;
+        }
         const tick = data['tick'] as number;
         const reports = this.#pending.get(tick) ?? new Map<number, string>();
         reports.set(seat, JSON.stringify([data['hash'], data['rngCalls']]));

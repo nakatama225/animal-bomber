@@ -48,14 +48,25 @@ async def started_room_again(
     return room, peers
 
 
-def input_message(tick: int, bits: object = 0) -> str:
-    return json.dumps({"t": "input", "tick": tick, "bits": bits})
+def input_message(tick: int, bits: object = 0, match: int = 1) -> str:
+    """端末が送る入力。`match` は試合の番号（部屋で最初の試合は 1）。"""
+    return json.dumps({"t": "input", "tick": tick, "bits": bits, "match": match})
 
 
-def hash_message(tick: int, digest: int, rng_calls: int = 7) -> str:
+def hash_message(tick: int, digest: int, rng_calls: int = 7, match: int = 1) -> str:
     return json.dumps(
-        {"t": "hash", "tick": tick, "hash": digest, "rngCalls": rng_calls}
+        {
+            "t": "hash",
+            "tick": tick,
+            "hash": digest,
+            "rngCalls": rng_calls,
+            "match": match,
+        }
     )
+
+
+START_AGAIN = json.dumps({"t": "start", "config": {"seed": 2}})
+"""試合が決まった幕で、ホストが「もういっかい」を押したときの合図。"""
 
 
 class Test始める:
@@ -71,7 +82,7 @@ class Test始める:
         # ⭐ ホスト自身にも届く。ホストも同じ1通を受け取ってから始める
         for ws in peers:
             assert messages(ws, "start") == [
-                {"t": "start", "seats": [0, 1, 2], "config": config}
+                {"t": "start", "seats": [0, 1, 2], "config": config, "match": 1}
             ]
         assert room.started
 
@@ -99,13 +110,6 @@ class Test始める:
         assert not room.started
         assert messages(host, "start") == []
 
-    async def test_2度目の合図は無視する(self):
-        room, peers = await started_room(2)
-
-        await room.route(HOST_SEAT, json.dumps({"t": "start", "config": {"x": 1}}))
-
-        assert messages(peers[1], "start") == []
-
     async def test_始まったあとの参加は断る(self):
         room, _ = await started_room(2)
 
@@ -126,6 +130,93 @@ class Test始める:
         await room.route(1, input_message(0))
 
         assert messages(host, "input") == []
+
+
+class Test同じ接続での次の試合:
+    """試合が決まった幕で、ホストが「もういっかい」を押したとき。接続は保ったまま次の試合を始める。"""
+
+    async def test_始まったあとのホストの合図は_番号を増やした次の試合として全員に届く(self):
+        room, peers = await started_room(3)
+        await room.route(1, input_message(5))
+        await room.route(0, hash_message(19, 1))  # 揃っていない報告
+
+        await room.route(HOST_SEAT, START_AGAIN)
+
+        for ws in peers:
+            assert messages(ws, "start") == [
+                {"t": "start", "seats": [0, 1, 2], "config": {"seed": 2}, "match": 2}
+            ]
+        # 前の試合の、最後に配った tick と揃っていない報告は持ち越さない
+        assert room._last_tick == {0: -1, 1: -1, 2: -1}
+        assert room._pending == {}
+
+    async def test_次の試合は_そのときつながっている人だけで始める(self):
+        # 抜けた人の枠は、次の試合では始めから CPU が受け持つ
+        room, peers = await started_room(3)
+        await room.leave(2)
+
+        await room.route(HOST_SEAT, START_AGAIN)
+
+        assert messages(peers[0], "start")[-1]["seats"] == [0, 1]
+        assert room.members == (0, 1)
+
+    async def test_ゲストの合図は_始まったあとも無視する(self):
+        room, peers = await started_room(2)
+
+        await room.route(1, START_AGAIN)
+
+        assert messages(peers[0], "start") == []
+
+    async def test_前の試合の入力は_次の試合では配らない(self):
+        # 端末が次の start を受け取るまでに送った入力は、前の試合の番号で届く。配ると、次の試合の
+        # 端末は「tick が飛んだ」として止まる
+        room, peers = await started_room(2)
+        await room.route(HOST_SEAT, START_AGAIN)
+        peers[0].received.clear()
+
+        await room.route(1, input_message(900, match=1))
+        assert messages(peers[0], "input") == []
+        # 抜けたときに知らせる tick も、前の試合の入力で進めない
+        assert room._last_tick[1] == -1
+
+        await room.route(1, input_message(0, match=2))
+        assert messages(peers[0], "input") == [
+            {"t": "input", "seat": 1, "tick": 0, "bits": 0, "match": 2}
+        ]
+
+    async def test_前の試合の要約は_次の試合で突き合わせない(self):
+        # 数えると、次の試合の同じ tick の報告と食い違い、ずれていないのに全員を止める
+        room, peers = await started_room(2)
+        await room.route(HOST_SEAT, START_AGAIN)
+
+        await room.route(1, hash_message(19, 99, match=1))
+        await room.route(0, hash_message(19, 1, match=2))
+        await room.route(1, hash_message(19, 1, match=2))
+
+        assert messages(peers[0], "desync") == []
+
+    async def test_ずれを知らせたあとでも_次の試合では突き合わせる(self):
+        room, peers = await started_room(2)
+        await room.route(0, hash_message(19, 1))
+        await room.route(1, hash_message(19, 2))
+        await room.route(HOST_SEAT, START_AGAIN)
+
+        await room.route(0, hash_message(19, 5, match=2))
+        await room.route(1, hash_message(19, 6, match=2))
+
+        assert [m["tick"] for m in messages(peers[0], "desync")] == [19, 19]
+
+    @pytest.mark.parametrize("kind", ["input", "hash"])
+    async def test_試合の番号の無い入力と要約は扱わない(self, kind):
+        room, peers = await started_room(2)
+        data = json.loads(input_message(0) if kind == "input" else hash_message(19, 1))
+        del data["match"]
+
+        await room.route(1, json.dumps(data))
+        await room.route(0, hash_message(19, 2))
+
+        assert messages(peers[0], "input") == []
+        assert messages(peers[0], "desync") == []
 
 
 class Test始まる前の設定:
@@ -176,7 +267,7 @@ class Test入力を配る:
 
         await room.route(1, input_message(5, bits=9))
 
-        expected = {"t": "input", "seat": 1, "tick": 5, "bits": 9}
+        expected = {"t": "input", "seat": 1, "tick": 5, "bits": 9, "match": 1}
         assert messages(peers[0], "input") == [expected]
         assert messages(peers[2], "input") == [expected]
         assert messages(peers[1], "input") == [], "送り主へは返さない"

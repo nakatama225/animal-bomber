@@ -348,6 +348,7 @@ describe('ずれを見つける', () => {
       local: new IdleIntentSource(0),
       humans: [0],
       replacement: (id) => new IdleIntentSource(id),
+      match: 1,
     });
     for (const id of [1, 2, 3] as const) session.attach(new IdleIntentSource(id));
     driver.start();
@@ -359,6 +360,7 @@ describe('ずれを見つける', () => {
       tick: HASH_INTERVAL - 1,
       hash: hashWorld(session.world),
       rngCalls: session.world.rng.calls,
+      match: 1,
     });
   });
 });
@@ -394,12 +396,13 @@ describe('抜けた人', () => {
         local: new IdleIntentSource(0),
         humans: [0, 1],
         replacement: (id) => new IdleIntentSource(id),
+        match: 1,
       });
       for (const id of [2, 3] as const) session.attach(new IdleIntentSource(id));
       driver.start();
       return { session, driver };
     };
-    const right = { t: 'input', seat: 1, bits: 8 } as const;
+    const right = { t: 'input', seat: 1, bits: 8, match: 1 } as const;
     const a = make();
     const b = make();
 
@@ -432,11 +435,12 @@ describe('抜けた人', () => {
       local: new IdleIntentSource(0),
       humans: [0, 1],
       replacement: (id) => new IdleIntentSource(id),
+      match: 1,
     });
     driver.start();
     driver.receive({ t: 'peer_left', seat: 1, lastTick: -1 });
 
-    expect(() => driver.receive({ t: 'input', seat: 1, tick: 0, bits: 8 })).not.toThrow();
+    expect(() => driver.receive({ t: 'input', seat: 1, tick: 0, bits: 8, match: 1 })).not.toThrow();
     expect(driver.log.at(0, 1)).toEqual(IDLE_INTENT);
   });
 });
@@ -469,10 +473,11 @@ describe('届いた入力', () => {
       local: new IdleIntentSource(0),
       humans: [0, 1],
       replacement: (id) => new IdleIntentSource(id),
+      match: 1,
     });
 
-    expect(() => driver.receive({ t: 'input', seat: 0, tick: 0, bits: 0 })).toThrow(/自分の入力/);
-    expect(() => driver.receive({ t: 'input', seat: 2, tick: 0, bits: 0 })).toThrow(/人間ではない/);
+    expect(() => driver.receive({ t: 'input', seat: 0, tick: 0, bits: 0, match: 1 })).toThrow(/自分の入力/);
+    expect(() => driver.receive({ t: 'input', seat: 2, tick: 0, bits: 0, match: 1 })).toThrow(/人間ではない/);
   });
 
   it('試合の途中からは始められない', () => {
@@ -488,7 +493,44 @@ describe('届いた入力', () => {
           local: new IdleIntentSource(0),
           humans: [0],
           replacement: (id) => new IdleIntentSource(id),
+          match: 1,
         }),
     ).toThrow(/最初から/);
   });
+});
+
+describe('同じ接続での次の試合', () => {
+  it('試合が決まったあとのホストの合図で、全員が接続を保ったまま同じ次の試合を始める。前の試合の入力が遅れても止まらない', () => {
+    // 1勝で優勝・体力は爆風1回ぶん・CPU は「おに」。人間が動かなくても決まる。
+    const quick: LanSettings = {
+      match: { ...defaultMatchConfig(3, ANIMALS), winsToTake: 1, startingHp: [2, 2, 2, 2] },
+      cpu: ['oni', 'oni', 'oni', 'oni'],
+    };
+    const { relay, peers } = startMatch(2, quick, () => IDLE_INTENT);
+    const [host, guest] = peers as [Peer, Peer];
+    let ticks = 0;
+    while (!host.session.match.finished || !guest.session.match.finished) {
+      runTogether(relay, peers, 1);
+      ticks += 1;
+      if (ticks > 200_000) throw new Error('試合が決まらない');
+    }
+
+    const next: LanSettings = { ...quick, match: { ...quick.match, seed: 5 } };
+    expect(host.client.requestStart(next)).toBe(true);
+    // 中継はもう次の試合。ゲストはまだ次の start を受け取っていないので、前の試合の番号で入力を送る。
+    expect(guest.step()).toBe(true);
+    relay.deliver();
+
+    for (const peer of peers) {
+      expect(peer.client.phase.kind).toBe('playing');
+      expect(peer.session.config.seed).toBe(5);
+      peer.hashes.clear();
+    }
+    runTogether(relay, peers, 200);
+    const { mismatched, compared } = compareHashes(host, guest);
+    expect(compared).toBe(200);
+    expect(mismatched).toEqual([]);
+    // 次の試合でも、中継は要約を突き合わせている。
+    expect(relay.agreed.filter((t) => t < 200).length).toBeGreaterThan(0);
+  }, 120_000);
 });

@@ -69,7 +69,8 @@ async def test_外された接続が閉じても_同じ番号に入った別の�
     await room.route(0, json.dumps({"t": "start", "config": None}))
 
     # 古い接続から入力が届き、そのあと閉じる
-    old.push(json.dumps({"t": "input", "tick": 0, "bits": 0}))
+    # 試合の番号は合っている（番号の違いで捨てられたのでなく、古い接続だから配られないことを見る）
+    old.push(json.dumps({"t": "input", "tick": 0, "bits": 0, "match": 1}))
     old.push(None)
     await asyncio.wait_for(task, timeout=2.0)
 

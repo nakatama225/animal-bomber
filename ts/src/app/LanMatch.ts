@@ -68,8 +68,12 @@ export class LanMatch implements MatchRunner {
   readonly #lobby: LobbyView;
   readonly #status: HTMLElement;
   readonly #waiting = new WaitingNotice();
+  readonly #choices = new LobbyChoices();
+  readonly #newSeed: () => number;
   /** 始まった試合。`LockstepClient` の段階は試合を窓口の形でしか持たないので、作ったときに控える。 */
   #game: GameSession | null = null;
+  /** 作った試合の数。同じ接続で次の試合を始めるたびに増える。 */
+  #generation = 0;
   #shown: string | null = null;
 
   constructor(options: LanMatchOptions) {
@@ -87,6 +91,7 @@ export class LanMatch implements MatchRunner {
     this.#client = new LockstepClient(this.#link, {
       createSession: (settings) => {
         this.#game = new GameSession(settings.match);
+        this.#generation += 1;
         return this.#game;
       },
       // 1台に1人なので、キーボード全体（WASD と矢印の両方）とゲームパッドを1人が使う。
@@ -98,7 +103,8 @@ export class LanMatch implements MatchRunner {
       // 強さと種は、ホストが配った設定から引く。全員の端末で同じ CPU が同じ手を指す。
       cpuSource: lanCpuSource,
     });
-    const choices = new LobbyChoices();
+    const choices = this.#choices;
+    this.#newSeed = options.newSeed;
     this.#lobby = new LobbyView(options.lobby, choices, {
       start: (setup) => this.#client.requestStart(lanSettingsFrom(setup, options.newSeed())),
       changed: (setup) => this.#client.shareSettings(lanSettingsFrom(setup, PREVIEW_SEED)),
@@ -140,6 +146,30 @@ export class LanMatch implements MatchRunner {
 
   get ready(): boolean {
     return this.#client.ready;
+  }
+
+  get generation(): number {
+    return this.#generation;
+  }
+
+  /** この端末がホスト（1P）か。つないで番号を受け取るまでは false。 */
+  get isHost(): boolean {
+    const phase = this.#client.phase;
+    return (phase.kind === 'lobby' || phase.kind === 'playing') && phase.seat === 0;
+  }
+
+  /**
+   * いまの試合と同じ設定のまま、新しい種で次の試合の合図を送る（試合が決まった幕の「もういっかい」）。
+   *
+   * 送るだけで、始めるのは中継が配り直した `start` を受け取ってから（全員が同じ1通から始める）。
+   * ホストが、試合が決まったあとにだけ送れる（`LockstepClient.requestStart`）。
+   * 設定は、ロビーで選んでいるものではなく、いまの試合の `start` で届いたものを使う（全員が持っている同じもの）。
+   */
+  rematch(): void {
+    const phase = this.#client.phase;
+    if (phase.kind !== 'playing') return;
+    const { settings } = phase;
+    this.#client.requestStart({ ...settings, match: { ...settings.match, seed: this.#newSeed() } });
   }
 
   togglePause(): void {

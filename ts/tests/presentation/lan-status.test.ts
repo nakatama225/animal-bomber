@@ -30,11 +30,11 @@ describe('通信対戦の案内', () => {
   it('試合中は、操作を待っている人がいるときだけ出す', () => {
     const c = client();
     c.receive(text({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
-    c.receive(text({ t: 'start', seats: [0, 1], config: SETTINGS }));
+    c.receive(text({ t: 'start', seats: [0, 1], config: SETTINGS, match: 1 }));
 
     // 最初の 3 tick ぶんは自分の入力しか無いので、2P を待っている。
     expect(describeLanPhase(c.phase)).toBe('2P の操作を待っている');
-    c.receive(text({ t: 'input', seat: 1, tick: 0, bits: 0 }));
+    c.receive(text({ t: 'input', seat: 1, tick: 0, bits: 0, match: 1 }));
     expect(describeLanPhase(c.phase)).toBe('');
   });
 
@@ -42,7 +42,7 @@ describe('通信対戦の案内', () => {
     // 読み込み直すだけでは、ほかの人がつながっている間は中継に断られる。
     const c = client();
     c.receive(text({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
-    c.receive(text({ t: 'start', seats: [0, 1], config: SETTINGS }));
+    c.receive(text({ t: 'start', seats: [0, 1], config: SETTINGS, match: 1 }));
     c.receive(text({ t: 'desync', tick: 19, reports: [] }));
     expect(describeLanPhase(c.phase)).toBe(
       '端末どうしで試合がずれたので止めた（tick 19）。もう一度遊ぶときは、全員がページを閉じてから開き直す',
@@ -59,15 +59,23 @@ describe('通信対戦の案内', () => {
     expect(describeLanPhase(refused.phase)).toMatch(/^前の試合が続いているか/);
   });
 
-  it('試合が終わったら、次の試合の始め方を出す', () => {
-    const c = client();
-    c.receive(text({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
-    c.receive(text({ t: 'start', seats: [0], config: { ...SETTINGS, match: { ...SETTINGS.match, winsToTake: 1 } } }));
-    if (c.phase.kind !== 'playing') throw new Error('始まっていない');
-    for (const id of [1, 2, 3]) c.phase.session.world.players[id]!.life = OUT;
-    c.step();
-
-    expect(c.phase.session.match.finished).toBe(true);
-    expect(describeLanPhase(c.phase)).toBe('試合が終わった。もう一度遊ぶときは、全員がページを閉じてから開き直す');
+  it('試合が終わったら、次の試合の始め方を出す。始められるのはホストだけ', () => {
+    const finishedAs = (seat: 0 | 1): string => {
+      const c = client();
+      c.receive(text({ t: 'welcome', seat, role: seat === 0 ? 'host' : 'guest', seats: seat === 0 ? [] : [0] }));
+      const config = { ...SETTINGS, match: { ...SETTINGS.match, winsToTake: 1 } };
+      c.receive(text({ t: 'start', seats: [0, 1], config, match: 1 }));
+      if (c.phase.kind !== 'playing') throw new Error('始まっていない');
+      c.receive(text({ t: 'input', seat: 1 - seat, tick: 0, bits: 0, match: 1 }));
+      const loser = seat === 0 ? [1, 2, 3] : [0, 2, 3];
+      for (const id of loser) c.phase.session.world.players[id]!.life = OUT;
+      c.step();
+      expect(c.phase.session.match.finished).toBe(true);
+      // 次の tick の相手の入力が届いていて、待ちの案内が出ない状態で見る。
+      c.receive(text({ t: 'input', seat: 1 - seat, tick: 1, bits: 0, match: 1 }));
+      return describeLanPhase(c.phase);
+    };
+    expect(finishedAs(0)).toBe('試合が終わった。「もういっかい」で、同じ人・同じ設定のまま次の試合を始める');
+    expect(finishedAs(1)).toBe('試合が終わった。1P（ホスト）が「もういっかい」を押すと、次の試合が始まる');
   });
 });

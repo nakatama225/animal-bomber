@@ -20,6 +20,13 @@ export interface MatchRunner {
   readonly inProgress: boolean;
   /** 次の tick を進めてよいか。 */
   readonly ready: boolean;
+  /**
+   * いまの盤面が、この試合の流れで何試合目か。1台の試合はいつも 1（次の試合は作り直す）。
+   *
+   * 通信対戦は、接続を保ったまま次の試合を始めるたびに増える。画面の側は、これが変わったら
+   * 試合ごとの部品（描く部品・幕・秒読み）を作り直す。
+   */
+  readonly generation: number;
   /** 止めているか。 */
   readonly paused: boolean;
   /** 止める・再開する。止められない試合（通信対戦）では何もしない。 */
@@ -34,6 +41,7 @@ export interface MatchRunner {
 
 /** 1台で遊ぶ試合。止めていなければ、いつでも次の tick を進めてよい。 */
 export class LocalMatch implements MatchRunner {
+  readonly generation = 1;
   #paused = false;
 
   constructor(

@@ -78,7 +78,7 @@ describe('通信対戦の配線', () => {
     expect(match.world).toBeNull();
 
     // 中継が、その時点の参加者を添えて全員へ配り直す（ホスト本人にも）。
-    deliver(relay, { t: 'start', seats: [0], config: start.config });
+    deliver(relay, { t: 'start', seats: [0], config: start.config, match: 1 });
     expect(match.world).not.toBeNull();
     expect(match.hud?.roster).toEqual([
       { kind: 'human', label: '1P', local: true },
@@ -122,7 +122,7 @@ describe('通信対戦の配線', () => {
     deliver(relay, { t: 'welcome', seat: 0, role: 'host', seats: [1] });
     match.afterDraw();
     const config = { match: { roundLimit: 600, winsToTake: 3, suddenDeath: true, startingHp: [6, 6], seed: 1, animals: ['rabbit', 'fox'] }, cpu: ['easy', 'hard'] };
-    deliver(relay, { t: 'start', seats: [0, 1], config });
+    deliver(relay, { t: 'start', seats: [0, 1], config, match: 1 });
     expect(match.hud?.roster[1]).toEqual({ kind: 'human', label: '2P', local: false });
 
     // 2P は1通も送らずに抜けた。次の tick から CPU が受け持つ。
@@ -137,7 +137,7 @@ describe('通信対戦の配線', () => {
     const { match, status, relay } = mount();
     deliver(relay, { t: 'welcome', seat: 0, role: 'host', seats: [1] });
     const config = { match: { roundLimit: 600, winsToTake: 3, suddenDeath: true, startingHp: [6, 6], seed: 1, animals: ['rabbit', 'fox'] }, cpu: ['easy', 'hard'] };
-    deliver(relay, { t: 'start', seats: [0, 1], config });
+    deliver(relay, { t: 'start', seats: [0, 1], config, match: 1 });
     // 2P の入力は届かないので、先に送ってある分を使い切ると待つ。
     for (let i = 0; i < 100 && match.ready; i += 1) match.step();
     expect(match.ready).toBe(false);
@@ -161,7 +161,7 @@ describe('通信対戦の配線', () => {
     deliver(relay, { t: 'welcome', seat: 0, role: 'host', seats: [] });
     match.afterDraw();
     const config = { match: { roundLimit: 600, winsToTake: 3, suddenDeath: true, startingHp: [6, 6, 6, 6], seed: 1, animals: ['rabbit', 'fox', 'frog', 'mole'] }, cpu: ['easy', 'easy', 'easy', 'easy'] };
-    deliver(relay, { t: 'start', seats: [0], config });
+    deliver(relay, { t: 'start', seats: [0], config, match: 1 });
     relay.onClose(1006);
     match.afterDraw();
     expect(match.world).not.toBeNull();

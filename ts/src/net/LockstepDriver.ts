@@ -56,6 +56,13 @@ export interface LockstepOptions {
   readonly humans: readonly PlayerId[];
   /** 抜けた人を受け持つ窓口を作る。全員の端末で同じものを返すこと（CPU など）。 */
   readonly replacement: (playerId: PlayerId) => IntentSource;
+  /**
+   * この試合の番号（中継が `start` に付けたもの）。送る入力と要約に付け、番号の違う入力は捨てる。
+   *
+   * 同じ接続で次の試合を始めると、前の試合の入力が遅れて届くことがある。受け取ると
+   * 「tick が飛んだ」として止まる。
+   */
+  readonly match: number;
 }
 
 /**
@@ -161,6 +168,8 @@ export class LockstepDriver implements MatchClock {
   receive(message: RelayMessage): void {
     switch (message.t) {
       case 'input':
+        // 前の試合の入力。中継も配らないが、届く順に頼らないよう、ここでも捨てる。
+        if (message.match !== this.#options.match) return;
         this.#receiveInput(message.seat, message.tick, message.bits);
         return;
       case 'peer_left':
@@ -282,7 +291,7 @@ export class LockstepDriver implements MatchClock {
     const { link, localId } = this.#options;
     // 自分の入力は中継から返ってこないので、送るのと同時に自分でも受け取る。
     this.#inputs.put(localId, tick, intent);
-    link.send({ t: 'input', tick, bits: packIntent(intent) });
+    link.send({ t: 'input', tick, bits: packIntent(intent), match: this.#options.match });
   }
 
   #sendHash(tick: number): void {
@@ -294,6 +303,7 @@ export class LockstepDriver implements MatchClock {
       tick,
       hash: hashWorld(world),
       rngCalls: world.rng.calls,
+      match: this.#options.match,
     });
   }
 }

@@ -43,6 +43,25 @@
 残った全員に届く（届かなかった人は、送れなかった人として外れる）。含めずに知らせると、
 先にその入力を受け取った端末は本人の入力で、あとで受け取る端末は CPU で同じ tick を
 進めてしまい、試合がずれる。
+
+## 同じ接続での次の試合
+
+試合が決まった幕でホストが「もういっかい」を押すと、ホストがもう一度 `start` を送る。
+中継はそれを次の試合として受け付け、試合の番号（`match`）を1つ増やして全員へ配る。
+接続は保ったまま、同じ人で次の試合を始める（原型も、ホストだけが次の試合を始められた）。
+
+中継は試合が終わったかを知らないので、始まったあとのホストの `start` は、いつ届いても
+次の試合として受け付ける。試合が決まる前に送らないのは端末の側の決まり
+（`LockstepClient.requestStart`）。
+
+⚠️ 端末は、次の `start` を受け取るまで前の試合の入力と要約を送り続ける。
+そこで、端末が送る `input` と `hash` にも試合の番号を付けさせ、いまの番号で
+ないものは配らず、突き合わせにも使わない。配ると、次の試合の端末は「tick が
+飛んだ」として止まり、前の試合の要約は次の試合の同じ tick の報告と食い違って、
+ずれていないのに全員を止める。配る `input` にも番号を付け、端末の側でも番号の
+違うものを捨てる（中継が受け取った順に配ることに頼らない）。
+`peer_left` と `desync` は、中継が受け取った順に配ることに頼る（どちらも、
+その時点の試合の番号のときにしか作らない）。
 """
 
 from __future__ import annotations
@@ -85,6 +104,8 @@ class LockstepRoom(Room):
 
     started: bool = field(default=False, init=False)
     members: tuple[int, ...] = field(default=(), init=False)
+    # いまの試合の番号。部屋で最初の試合が 1。全員が抜けて部屋が戻ると 0 に戻る。
+    match: int = field(default=0, init=False)
     # プレイヤー番号ごとの、入力を最後に配り始めた tick（配っている最中のものを含む）。
     _last_tick: dict[int, int] = field(default_factory=dict, init=False)
     # tick ごとの、揃うのを待っている報告。プレイヤー番号 → (要約, 乱数を引いた回数)。
@@ -174,14 +195,26 @@ class LockstepRoom(Room):
 
         ⭐ 送った本人（ホスト）にも配る。ホストも、全員と同じこの1通を受け取って
         から始める。ホストだけが先に始めると、一覧の食い違いに気づく場所がなくなる。
+
+        始まったあとの合図は、次の試合として受け付ける（モジュールの説明の「同じ接続での
+        次の試合」）。人間の一覧は、そのときつながっている人で作り直し、前の試合の記録
+        （最後に配った tick・揃うのを待っている報告・ずれを知らせた印）は持ち越さない。
         """
-        if sender_seat != HOST_SEAT or self.started:
+        if sender_seat != HOST_SEAT:
             return
+        self.match += 1
         self.started = True
         self.members = tuple(sorted(self.seats))
         self._last_tick = dict.fromkeys(self.members, -1)
+        self._pending.clear()
+        self._desynced = False
         message = json.dumps(
-            {"t": "start", "seats": list(self.members), "config": data.get("config")}
+            {
+                "t": "start",
+                "seats": list(self.members),
+                "config": data.get("config"),
+                "match": self.match,
+            }
         )
         targets = [(s, ws) for s, ws in self.seats.items() if s in self.members]
         await self._send_all(targets, message)
@@ -207,13 +240,24 @@ class LockstepRoom(Room):
         `bits`（意思のビット）は読まずにそのまま流す。
         """
         tick = _int(data, "tick")
-        if not self.started or tick is None or sender_seat not in self.members:
+        if (
+            not self.started
+            or tick is None
+            or sender_seat not in self.members
+            or _int(data, "match") != self.match
+        ):
             return
         # ⚠️ 配り始める前に記録する（モジュールの説明の「抜けた人」を見ること）。
         # 配っている最中に送り主が外されても、peer_left にはこの tick が載る
         self._last_tick[sender_seat] = tick
         message = json.dumps(
-            {"t": "input", "seat": sender_seat, "tick": tick, "bits": data.get("bits")}
+            {
+                "t": "input",
+                "seat": sender_seat,
+                "tick": tick,
+                "bits": data.get("bits"),
+                "match": self.match,
+            }
         )
         targets = [
             (s, ws)
@@ -234,6 +278,7 @@ class LockstepRoom(Room):
             or tick is None
             or digest is None
             or rng_calls is None
+            or _int(data, "match") != self.match
         ):
             return
         self._pending.setdefault(tick, {})[sender_seat] = (digest, rng_calls)
@@ -302,6 +347,7 @@ class LockstepRoom(Room):
     def _reset(self) -> None:
         self.started = False
         self.members = ()
+        self.match = 0
         self._last_tick.clear()
         self._pending.clear()
         self._desynced = False

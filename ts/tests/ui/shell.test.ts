@@ -182,7 +182,7 @@ describe('画面の切り替え', () => {
       cpu: ['easy', 'easy', 'easy', 'easy'],
     };
     relay().onMessage(JSON.stringify({ t: 'welcome', seat: 2, role: 'guest', seats: [0] }));
-    relay().onMessage(JSON.stringify({ t: 'start', seats: [0, 2], config }));
+    relay().onMessage(JSON.stringify({ t: 'start', seats: [0, 2], config, match: 1 }));
     shell.draw(0);
     expect(elements.play.hidden).toBe(false);
     const help = elements.side.querySelector('.keyhelp')?.textContent ?? '';
@@ -345,9 +345,9 @@ describe('ゲームの速さ', () => {
       cpu: ['easy', 'easy', 'easy', 'easy'],
     };
     relay().onMessage(JSON.stringify({ t: 'welcome', seat: 1, role: 'guest', seats: [0] }));
-    relay().onMessage(JSON.stringify({ t: 'start', seats: [0, 1], config }));
+    relay().onMessage(JSON.stringify({ t: 'start', seats: [0, 1], config, match: 1 }));
     // 相手（0番）の入力を先に10 tick ぶん届けておく。待たずに進められる状態にする。
-    for (let t = 0; t < 10; t += 1) relay().onMessage(JSON.stringify({ t: 'input', seat: 0, tick: t, bits: 0 }));
+    for (let t = 0; t < 10; t += 1) relay().onMessage(JSON.stringify({ t: 'input', seat: 0, tick: t, bits: 0, match: 1 }));
     shell.draw(0);
     expect(elements.toolbar.querySelector('[data-field="speed"]')).toBeNull();
     // 曲も等倍に戻す。盤面は同じ速さなのに曲だけ速いと、速さが変わったように見える。
@@ -773,8 +773,8 @@ describe('ゲームパッドとロビーでメニューを動かす', () => {
       match: { roundLimit: 600, winsToTake: 3, suddenDeath: true, startingHp: [6, 6, 6, 6], seed: 1, animals: ['rabbit', 'fox', 'frog', 'mole'] },
       cpu: ['easy', 'easy', 'easy', 'easy'],
     };
-    relay().onMessage(JSON.stringify({ t: 'start', seats: [0, 1], config }));
-    for (let t = 0; t < 40; t += 1) relay().onMessage(JSON.stringify({ t: 'input', seat: 0, tick: t, bits: 0 }));
+    relay().onMessage(JSON.stringify({ t: 'start', seats: [0, 1], config, match: 1 }));
+    for (let t = 0; t < 40; t += 1) relay().onMessage(JSON.stringify({ t: 'input', seat: 0, tick: t, bits: 0, match: 1 }));
     shell.draw(0);
     const lastBits = (): number | undefined => {
       const inputs = sent.filter((message) => message.t === 'input');
@@ -880,4 +880,69 @@ describe('ゲームパッドとロビーでメニューを動かす', () => {
     expect(cursorOf(guest.elements.menu)).toBeNull();
     expect(guest.sent.filter((message) => message.t === 'start')).toHaveLength(0);
   });
+});
+
+describe('通信対戦で、接続を保ったまま次の試合を始める', () => {
+  /** 1ラウンド 60 秒・1勝で優勝・体力は爆風1回ぶん。CPU は「おに」なので、人間が動かなくても決まる。 */
+  const config = {
+    match: { roundLimit: 3600, winsToTake: 1, suddenDeath: true, startingHp: [2, 2, 2, 2], seed: 1, animals: ['rabbit', 'fox', 'frog', 'mole'] },
+    cpu: ['oni', 'oni', 'oni', 'oni'],
+  };
+
+  /** 試合が決まった幕が出るまで進める。`others` の人間の入力は、何もしない入力として中継から届いたことにする。 */
+  function playToEnd(shell: Shell, elements: ShellElements, relay: () => WebSocketLinkHandlers, others: readonly number[], match: number): void {
+    let delivered = 0;
+    let ticks = 0;
+    const decided = (): boolean => !elements.banner.hidden && /優勝！|引き分け/.test(elements.banner.textContent ?? '');
+    while (!decided()) {
+      // 使う前に届くよう、少し先の tick まで届けておく。
+      for (; delivered < ticks + 10; delivered += 1) {
+        for (const seat of others) relay().onMessage(JSON.stringify({ t: 'input', seat, tick: delivered, bits: 0, match }));
+      }
+      shell.tick();
+      if (ticks % 30 === 0) shell.draw(0);
+      ticks += 1;
+      if (ticks > 200_000) throw new Error('試合が決まらない');
+    }
+  }
+
+  it('ホストだけが、試合が決まった幕の「もういっかい」で次の試合を始められ、幕は次の試合で消える', () => {
+    const { shell, elements, relay, sent } = mount();
+    shell.startLan('relay.local:8777');
+    relay().onMessage(JSON.stringify({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
+    relay().onMessage(JSON.stringify({ t: 'start', seats: [0], config, match: 1 }));
+    shell.draw(0);
+    playToEnd(shell, elements, relay, [], 1);
+
+    press(elements.banner, '[data-action="again"]');
+    const again = sent.filter((message) => message.t === 'start').at(-1);
+    if (again?.t !== 'start') throw new Error('次の試合の合図を送っていない');
+    // 同じ設定で、種だけを新しくする（原型も同じ設定のまま次の試合を始めた）。
+    expect(again.config.match.animals).toEqual(config.match.animals);
+    expect(again.config.match.seed).toBe(7);
+    // 中継が配り直すまでは、次の試合を始めない（全員が同じ1通から始める）。
+    expect(elements.banner.hidden).toBe(false);
+
+    relay().onMessage(JSON.stringify({ t: 'start', seats: [0], config: again.config, match: 2 }));
+    shell.draw(0);
+    expect(elements.banner.hidden).toBe(true);
+    expect(elements.side.querySelector('.time')?.textContent).toBe('1:00');
+  }, 120_000);
+
+  it('ゲストの幕にはボタンを出さず、ホストが次の試合を始めたら幕が消える', () => {
+    const { shell, elements, relay } = mount();
+    shell.startLan('relay.local:8777');
+    relay().onMessage(JSON.stringify({ t: 'welcome', seat: 1, role: 'guest', seats: [0] }));
+    relay().onMessage(JSON.stringify({ t: 'start', seats: [0, 1], config, match: 1 }));
+    shell.draw(0);
+    playToEnd(shell, elements, relay, [0], 1);
+
+    // 原型もゲストは押せなかった（盤面を進めるのはホストだけ）。
+    expect(elements.banner.querySelector('button')).toBeNull();
+
+    relay().onMessage(JSON.stringify({ t: 'start', seats: [0, 1], config: { ...config, match: { ...config.match, seed: 2 } }, match: 2 }));
+    shell.draw(0);
+    expect(elements.banner.hidden).toBe(true);
+    expect(elements.side.querySelector('.time')?.textContent).toBe('1:00');
+  }, 120_000);
 });

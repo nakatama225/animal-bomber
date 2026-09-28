@@ -91,7 +91,7 @@ class Test表の突き合わせ:
 
     def test_読み出しが壊れた表を見逃さない(self):
         """この検査が「読めなかった行を飛ばして一致」で通らないことの確認。"""
-        good = "  input: ['tick', 'bits'],"
+        good = "  input: ['tick', 'bits', 'match'],"
         assert good in ts_source()
         broken = ts_source().replace(good, "  input: [tick],")
 
@@ -143,8 +143,8 @@ class Test中継が実際に扱うもの:
             await room.join(ws)  # welcome と peer_joined
         await room.route(HOST_SEAT, peer_message("settings", {}))  # 始まる前の設定
         await room.route(HOST_SEAT, peer_message("start", {}))
-        await room.route(1, peer_message("input", 0, 1))
+        await room.route(1, peer_message("input", 0, 1, 1))
         for seat, digest in ((0, 1), (1, 2), (2, 1)):
-            await room.route(seat, peer_message("hash", 19, digest, 3))
+            await room.route(seat, peer_message("hash", 19, digest, 3, 1))
         await room.leave(2)  # peer_left
         return [json.loads(m) for ws in peers for m in ws.received]

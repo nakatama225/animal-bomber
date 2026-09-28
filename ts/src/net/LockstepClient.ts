@@ -88,8 +88,12 @@ export type LanPhase =
  * 食い違っていないかを確かめ続ける。⚠️ 終わった瞬間に閉じると、終わっていない端末は
  * 抜けた人を CPU に替えて進み続け、ずれが見つからなくなる。
  *
- * 次の試合は、ページを読み込み直して始める。全員が抜けると中継の部屋が戻る。
- * 接続を保ったまま再戦する流れは、まだ無い。中継に「試合を終えて部屋を戻す」約束を足す必要がある。
+ * ## 同じ接続での次の試合
+ *
+ * 試合が決まったあと、ホストが「もういっかい」を押すと、もう一度 `start` を送る（`requestStart`）。
+ * 中継が試合の番号を1つ増やして全員へ配り、全員がその1通から次の試合を作る（原型も、ホストだけが
+ * 次の試合を始められた）。自分の試合がまだ決まっていなくても、届いた `start` に従って前の試合を捨てる。
+ * 中継は試合が終わったかを知らないので、決まる前に送らないのはこちらの決まり。
  */
 export class LockstepClient {
   readonly #link: PeerLink;
@@ -120,12 +124,18 @@ export class LockstepClient {
   }
 
   /**
-   * 試合を始める合図を送る。ホスト（0番）が待っている間だけ送れる。
+   * 試合を始める合図を送る。ホスト（0番）が、待っている間と、試合が決まったあと（次の試合）だけ送れる。
+   *
+   * ⚠️ 試合の最中は送らない。中継は試合が終わったかを知らず、始まったあとの合図をいつでも次の試合として
+   * 配るので、決まる前に送ると全員の試合がそこで打ち切られる。ずれて止まった試合（`desync`）も、
+   * 決まっていないので送らない。
    *
    * @returns 送ったか
    */
   requestStart(settings: LanSettings): boolean {
-    if (this.#phase.kind !== 'lobby' || this.#phase.seat !== 0) return false;
+    const phase = this.#phase;
+    if ((phase.kind !== 'lobby' && phase.kind !== 'playing') || phase.seat !== 0) return false;
+    if (phase.kind === 'playing' && (phase.driver.desync !== null || !phase.session.match.finished)) return false;
     this.#link.send({ t: 'start', config: settings });
     return true;
   }
@@ -183,11 +193,13 @@ export class LockstepClient {
         } else if (message.t === 'peer_left') {
           this.#phase = { ...phase, present: phase.present.filter((s) => s !== message.seat) };
         } else if (message.t === 'start') {
-          this.#begin(phase.seat, message.seats, message.config);
+          this.#begin(phase.seat, message.seats, message.config, message.match);
         }
         return;
       case 'playing':
-        phase.driver.receive(message);
+        // 次の試合。前の試合の窓口と記録は、ここで捨てる。
+        if (message.t === 'start') this.#begin(phase.seat, message.seats, message.config, message.match);
+        else phase.driver.receive(message);
         return;
       case 'failed':
         return;
@@ -195,7 +207,7 @@ export class LockstepClient {
   }
 
   /** 中継が配った1通から試合を作る。全員の端末が、同じ1通から同じ試合を作る。 */
-  #begin(seat: PlayerId, humans: readonly PlayerId[], settings: LanSettings): void {
+  #begin(seat: PlayerId, humans: readonly PlayerId[], settings: LanSettings, match: number): void {
     if (!humans.includes(seat)) {
       this.#fail('始まった試合の参加者に、自分が入っていない');
       return;
@@ -217,6 +229,7 @@ export class LockstepClient {
       local: this.#hooks.localSource(seat),
       humans,
       replacement: (id) => this.#hooks.cpuSource(id, settings),
+      match,
     });
     driver.start();
     this.#phase = { kind: 'playing', seat, settings, session, driver };

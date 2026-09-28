@@ -217,16 +217,20 @@ async def test_ロックステップのパスでは全員の入力が全員へ�
                 "t": "start",
                 "seats": [0, 1],
                 "config": {"seed": 7},
+                "match": 1,
             }
 
         # ゲストの入力がホストへ、ホストの入力がゲストへ。向きで扱いを変えない
-        await guest_ws.send(json.dumps({"t": "input", "tick": 0, "bits": 4}))
-        await host_ws.send(json.dumps({"t": "input", "tick": 0, "bits": 1}))
+        await guest_ws.send(
+            json.dumps({"t": "input", "tick": 0, "bits": 4, "match": 1})
+        )
+        await host_ws.send(json.dumps({"t": "input", "tick": 0, "bits": 1, "match": 1}))
         assert json.loads(await recv(host_ws)) == {
             "t": "input",
             "seat": 1,
             "tick": 0,
             "bits": 4,
+            "match": 1,
         }
         assert json.loads(await recv(guest_ws))["seat"] == 0
 
@@ -257,7 +261,9 @@ async def test_ロックステップで切れた人の知らせが_残った人�
         await host_ws.send(json.dumps({"t": "start", "config": None}))
         await recv(host_ws)
         await recv(guest_ws)
-        await guest_ws.send(json.dumps({"t": "input", "tick": 0, "bits": 0}))
+        await guest_ws.send(
+            json.dumps({"t": "input", "tick": 0, "bits": 0, "match": 1})
+        )
         assert json.loads(await recv(host_ws))["t"] == "input"
 
         await guest_ws.close()
@@ -316,7 +322,9 @@ async def test_応答しなくなった接続は数秒で切り_残った人に�
         for ws in (host_ws, guest_ws):
             while json.loads(await recv(ws))["t"] != "start":
                 pass
-        await silent_ws.send(json.dumps({"t": "input", "tick": 0, "bits": 0}))
+        await silent_ws.send(
+            json.dumps({"t": "input", "tick": 0, "bits": 0, "match": 1})
+        )
         # 回線が切れた端末の代わり：受け取るのをやめる（ping に応えなくなる）
         silent_ws.transport.pause_reading()
 
@@ -329,7 +337,9 @@ async def test_応答しなくなった接続は数秒で切り_残った人に�
         assert asyncio.get_running_loop().time() - started < 2.0
 
         # 応答している人は切られていない
-        await guest_ws.send(json.dumps({"t": "input", "tick": 0, "bits": 5}))
+        await guest_ws.send(
+            json.dumps({"t": "input", "tick": 0, "bits": 5, "match": 1})
+        )
         while True:
             message = json.loads(await recv(host_ws))
             if message["t"] == "input" and message["seat"] == 1:

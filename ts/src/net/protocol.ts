@@ -40,8 +40,8 @@ export const REFUSED_CLOSE_CODE = 1013;
 /** 端末から中継へ送るメッセージの種類と、`t` 以外の項目。 */
 export const FROM_PEER = {
   start: ['config'],
-  input: ['tick', 'bits'],
-  hash: ['tick', 'hash', 'rngCalls'],
+  input: ['tick', 'bits', 'match'],
+  hash: ['tick', 'hash', 'rngCalls', 'match'],
   settings: ['config'],
 } as const;
 
@@ -50,8 +50,8 @@ export const FROM_RELAY = {
   welcome: ['seat', 'role', 'seats'],
   peer_joined: ['seat'],
   peer_left: ['seat', 'lastTick'],
-  start: ['seats', 'config'],
-  input: ['seat', 'tick', 'bits'],
+  start: ['seats', 'config', 'match'],
+  input: ['seat', 'tick', 'bits', 'match'],
   desync: ['tick', 'reports'],
   settings: ['config'],
 } as const;
@@ -94,13 +94,25 @@ export interface HashReport {
 
 /** 端末から中継へ送るメッセージ。 */
 export type PeerMessage =
-  | { readonly t: 'start'; readonly config: LanSettings }
-  | { readonly t: 'input'; readonly tick: number; readonly bits: number }
+  | {
+      /** 試合を始める。ホストだけが送る。始まったあとに送ると次の試合になる（試合が決まったあとだけ送る）。 */
+      readonly t: 'start';
+      readonly config: LanSettings;
+    }
+  | {
+      readonly t: 'input';
+      readonly tick: number;
+      readonly bits: number;
+      /** いまの試合の番号（`start` で受け取ったもの）。中継は、番号の違う入力を配らない。 */
+      readonly match: number;
+    }
   | {
       readonly t: 'hash';
       readonly tick: number;
       readonly hash: number;
       readonly rngCalls: number;
+      /** いまの試合の番号。中継は、番号の違う要約を突き合わせに使わない。 */
+      readonly match: number;
     }
   | {
       /**
@@ -132,12 +144,16 @@ export type RelayMessage =
       /** 試合を始めた時点で接続していた人。人間が操作するプレイヤーはこれで決まる。 */
       readonly seats: readonly PlayerId[];
       readonly config: LanSettings;
+      /** 試合の番号。部屋で最初の試合が 1。同じ接続で次の試合を始めるたびに1つ増える。 */
+      readonly match: number;
     }
   | {
       readonly t: 'input';
       readonly seat: PlayerId;
       readonly tick: number;
       readonly bits: number;
+      /** どの試合の入力か。前の試合のものが遅れて届いたら、端末の側でも捨てる。 */
+      readonly match: number;
     }
   | { readonly t: 'desync'; readonly tick: number; readonly reports: readonly HashReport[] }
   | {
@@ -202,6 +218,7 @@ export function parseRelayMessage(text: string): RelayMessage {
         t: 'start',
         seats: read.seats('seats'),
         config: parseLanSettings(read.raw('config')),
+        match: read.int('match', 1),
       };
     case 'input':
       return {
@@ -209,6 +226,7 @@ export function parseRelayMessage(text: string): RelayMessage {
         seat: read.seat('seat'),
         tick: read.int('tick', 0),
         bits: read.bits('bits'),
+        match: read.int('match', 1),
       };
     case 'desync':
       return { t: 'desync', tick: read.int('tick', 0), reports: read.reports('reports') };
