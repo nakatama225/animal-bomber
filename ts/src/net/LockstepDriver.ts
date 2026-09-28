@@ -89,6 +89,8 @@ export interface LockstepOptions {
  *
  * 中継が知らせた `lastTick` までは届いた入力で進め、その次の tick から
  * `replacement` の窓口（CPU）に替える。全員の端末で同じ tick に替わる。
+ * 抜けた人と `lastTick` は、届いた入力の記録（`log`）に書く。記録を1台で流し直すときも、
+ * 同じ tick で CPU に替えられる。
  *
  * ## 試合が終わったあとも、入力と要約の交換を続ける
  *
@@ -100,9 +102,8 @@ export interface LockstepOptions {
  */
 export class LockstepDriver implements MatchClock {
   readonly #options: LockstepOptions;
+  /** 届いた入力と、抜けた人の記録。抜けた人は、ここだけに持つ。 */
   readonly #inputs = new ConfirmedInputs();
-  /** 抜けた人と、その人の入力を最後に使う tick。 */
-  readonly #departedAfter = new Map<PlayerId, number>();
   readonly #replaced = new Set<PlayerId>();
   #desync: Desync | null = null;
   #started = false;
@@ -213,7 +214,7 @@ export class LockstepDriver implements MatchClock {
   waitingFor(): PlayerId[] {
     const t = this.#tick;
     return this.#options.humans.filter(
-      (playerId) => !this.#isReplacedAt(playerId, t) && !this.#inputs.has(playerId, t),
+      (playerId) => !this.#inputs.log.replacedAt(t, playerId) && !this.#inputs.has(playerId, t),
     );
   }
 
@@ -232,7 +233,7 @@ export class LockstepDriver implements MatchClock {
    * 届いた時点で true になる（画面の案内を、替わるのを待たずに変えるため）。
    */
   hasLeft(playerId: PlayerId): boolean {
-    return this.#departedAfter.has(playerId);
+    return this.#inputs.log.departedAfter(playerId) !== undefined;
   }
 
   /** 中継が知らせてきたずれ。無ければ null。 */
@@ -240,7 +241,7 @@ export class LockstepDriver implements MatchClock {
     return this.#desync;
   }
 
-  /** 全員の入力の記録。時刻は試合通算の tick。 */
+  /** 全員の入力の記録。時刻は試合通算の tick。途中で抜けた人と、その人の入力を最後に使う tick も入る。 */
   get log(): InputLog {
     return this.#inputs.log;
   }
@@ -262,9 +263,8 @@ export class LockstepDriver implements MatchClock {
     if (!humans.includes(playerId)) {
       throw new Error(`人間ではないプレイヤー ${playerId} の入力が届いた`);
     }
-    const last = this.#departedAfter.get(playerId);
     // 抜けた人の、使わないと決まった tick の入力。全員が同じく捨てる。
-    if (last !== undefined && tick > last) return;
+    if (this.#inputs.log.replacedAt(tick, playerId)) return;
     this.#inputs.put(playerId, tick, unpackIntent(bits));
   }
 
@@ -272,13 +272,8 @@ export class LockstepDriver implements MatchClock {
     const { humans, localId } = this.#options;
     // 人間の一覧にいない人は、始まる前に入りかけていた接続。試合には関係ない。
     if (!humans.includes(playerId) || playerId === localId) return;
-    if (!this.#departedAfter.has(playerId)) this.#departedAfter.set(playerId, lastTick);
-  }
-
-  /** `tick` の時点で、抜けた人の代わりの窓口に替わっているべきか。 */
-  #isReplacedAt(playerId: PlayerId, tick: number): boolean {
-    const last = this.#departedAfter.get(playerId);
-    return last !== undefined && tick > last;
+    // 同じ人の知らせが2度届いても、最初のものを使う（記録は2度書こうとすると止まる）。
+    if (this.#inputs.log.departedAfter(playerId) === undefined) this.#inputs.log.depart(lastTick, playerId);
   }
 
   /**
@@ -288,8 +283,8 @@ export class LockstepDriver implements MatchClock {
    * ここを通る（その人の入力が届かないので、知らせが届くまでは待っている）。
    */
   #replaceDeparted(tick: number): void {
-    for (const playerId of this.#departedAfter.keys()) {
-      if (this.#replaced.has(playerId) || !this.#isReplacedAt(playerId, tick)) continue;
+    for (const playerId of this.#options.humans) {
+      if (this.#replaced.has(playerId) || !this.#inputs.log.replacedAt(tick, playerId)) continue;
       this.#options.session.attach(this.#options.replacement(playerId));
       this.#replaced.add(playerId);
     }

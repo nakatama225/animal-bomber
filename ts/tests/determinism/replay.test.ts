@@ -120,6 +120,66 @@ describe('リプレイ', () => {
   });
 });
 
+describe('途中で抜けた人の記録', () => {
+  it('抜けた人は変化の一覧とは別に持ち、文字列にしても往復できる', () => {
+    const log = new InputLog();
+    log.record(0, 0, press({ right: true }));
+    log.record(0, 1, press({ down: true }));
+    log.depart(40, 1);
+    // 入力が1つも配られないうちに抜けた人（変化の一覧に居ない）も落とさない。
+    log.depart(-1, 2);
+
+    const restored = InputLog.decode(log.encode());
+    expect(restored.departedAfter(1)).toBe(40);
+    expect(restored.departedAfter(2)).toBe(-1);
+    expect(restored.departedAfter(0)).toBeUndefined();
+    expect(restored.encode()).toBe(log.encode());
+  });
+
+  it('抜けた人の区画が無い文字列は、誰も抜けていない記録になる', () => {
+    const restored = InputLog.decode(runScripted(300).log.encode());
+    for (const id of [0, 1, 2, 3] as const) expect(restored.departedAfter(id)).toBeUndefined();
+  });
+
+  it('同じ人が抜けたことを2度記録しようとしたら止まる', () => {
+    const log = new InputLog();
+    log.depart(40, 1);
+    expect(() => log.depart(50, 1)).toThrow(/2度/);
+    expect(log.departedAfter(1)).toBe(40);
+  });
+
+  it('再生の窓口は、抜けた tick の次から代わりの窓口に任せ、代わりの窓口は1度だけ作る', () => {
+    const log = new InputLog();
+    log.record(0, 1, press({ right: true }));
+    log.depart(5, 1);
+    const clock = { elapsed: 0 };
+    let made = 0;
+    const source = new ReplayIntentSource(1, log, clock, (playerId) => {
+      made += 1;
+      return new ScriptedSource(playerId, () => press({ up: true }));
+    });
+    const world = createWorld({ seed: SEED, animals: ANIMALS });
+
+    clock.elapsed = 5;
+    expect(source.next(world)).toEqual(press({ right: true }));
+    expect(made).toBe(0);
+    clock.elapsed = 6;
+    expect(source.next(world)).toEqual(press({ up: true }));
+    clock.elapsed = 7;
+    source.next(world);
+    // CPU は考えた内容を覚えているので、作り直すと本物の端末とは別の手を指す。
+    expect(made).toBe(1);
+  });
+
+  it('抜けた人の記録があるのに代わりの窓口の作り方が無ければ、再生を始める前に止まる', () => {
+    const log = new InputLog();
+    log.depart(5, 1);
+    expect(() => new ReplayIntentSource(1, log, { elapsed: 0 })).toThrow(/代わりの窓口/);
+    // 抜けていない人は、作り方が無くてよい（1台の試合の記録と同じ）。
+    expect(() => new ReplayIntentSource(0, log, { elapsed: 0 })).not.toThrow();
+  });
+});
+
 describe('ラウンドをまたぐ記録の再生', () => {
   it('ラウンドをまたいでも、記録を流し直すと同じ試合になる', () => {
     // 盤面の時刻（world.now）はラウンドごとに 0 へ戻るので、同じ時刻が試合の中で何度も現れる。

@@ -8,6 +8,9 @@ import {
 import type { PlayerId } from '../domain/state/PlayerState.js';
 import type { WorldState } from '../domain/state/WorldState.js';
 
+/** 記録の文字列で、途中で抜けた人の区画の見出し。プレイヤー番号と取り違えないよう、数字にしない。 */
+const DEPARTED = 'departed';
+
 /**
  * いま何番目の tick を進めているかを答えるもの。`GameSession` と `LockstepDriver` がこの形を持つ。
  *
@@ -41,12 +44,24 @@ export interface MatchClock {
  *
  * 記録の時刻は `MatchClock.elapsed`（試合が始まってからの tick）で持つ。
  * 通信対戦で届いた入力の記録（`ConfirmedInputs.log`）も同じ時刻なので、
- * `ReplayIntentSource` で流し直せる。ただし CPU の枠は設定から作り直す必要があり、
- * 途中で抜けた人がいた試合は流し直せない（`ConfirmedInputs.log` の説明と docs/05）。
+ * `ReplayIntentSource` で流し直せる。CPU の枠は設定から作り直す（`ConfirmedInputs.log` の説明と docs/05）。
+ *
+ * ## 途中で抜けた人
+ *
+ * 通信対戦で途中で抜けた人は、その人の意思を記録から最後に使う tick（`departedAfter`）を持つ。
+ * 本物の端末（`LockstepDriver`）はその次の tick から CPU に替え、再生の窓口も同じ tick で
+ * 代わりの窓口に任せる。これが無いと、記録はその人の最後の意思を返し続けるので、
+ * 例外も出ずに別の試合になる。
+ *
+ * ⚠️ 似た名前が3つある。このクラスの `lastTick` は、記録にある最後の変化の tick。
+ * 約束の `peer_left` の `lastTick` は、中継がその人の入力を最後に配った tick。
+ * `departedAfter` は、その人の意思を記録から最後に使う tick で、`peer_left` の `lastTick` をそのまま入れる。
  */
 export class InputLog {
   /** プレイヤーごとの、変化した時点の一覧。tick の昇順で並ぶ。 */
   readonly #changes = new Map<PlayerId, { tick: number; bits: number }[]>();
+  /** 途中で抜けた人と、その人の意思を記録から最後に使う tick。 */
+  readonly #departedAfter = new Map<PlayerId, number>();
 
   /**
    * ある tick の意思を記録する。
@@ -107,10 +122,41 @@ export class InputLog {
   }
 
   /**
+   * 途中で抜けた人を記録する。その人の意思は `afterTick` まで記録から使い、次の tick からは
+   * 代わりの窓口（CPU）に任せる。
+   *
+   * @param afterTick 中継が知らせた `peer_left` の `lastTick`。入力が1つも配られないうちに抜けた人は -1
+   * @throws Error 同じ人を2度記録しようとしたとき
+   */
+  depart(afterTick: number, playerId: PlayerId): void {
+    if (this.#departedAfter.has(playerId)) {
+      throw new Error(`プレイヤー ${playerId} が抜けたことを2度記録しようとした`);
+    }
+    this.#departedAfter.set(playerId, afterTick);
+  }
+
+  /** その人の意思を記録から最後に使う tick。途中で抜けていなければ undefined。 */
+  departedAfter(playerId: PlayerId): number | undefined {
+    return this.#departedAfter.get(playerId);
+  }
+
+  /**
+   * `atTick` の時点で、その人が代わりの窓口に替わっているか（抜けた tick の次の tick から）。
+   *
+   * 本物の端末（`LockstepDriver`）と再生の窓口（`ReplayIntentSource`）は、どちらもこの判定で替える。
+   */
+  replacedAt(atTick: number, playerId: PlayerId): boolean {
+    const last = this.#departedAfter.get(playerId);
+    return last !== undefined && atTick > last;
+  }
+
+  /**
    * 保存できる文字列にする。
    *
-   * 形式は `プレイヤー番号:tick,ビット;tick,ビット|プレイヤー番号:...`。読んで確かめられることを
-   * 優先し、圧縮はしていない。3分の試合でも数キロバイトに収まる。
+   * 形式は `プレイヤー番号:tick,ビット;tick,ビット|プレイヤー番号:...`。途中で抜けた人がいれば、
+   * 最後に `|departed:プレイヤー番号,tick;...`（tick は `departedAfter`）を足す。抜けた人を変化の一覧と
+   * 別に書くのは、入力が1つも配られないうちに抜けた人は変化の一覧に居ないため。
+   * 読んで確かめられることを優先し、圧縮はしていない。3分の試合でも数キロバイトに収まる。
    */
   encode(): string {
     const parts: string[] = [];
@@ -121,16 +167,31 @@ export class InputLog {
       const body = list.map((e) => `${e.tick},${e.bits}`).join(';');
       parts.push(`${playerId}:${body}`);
     }
+    if (this.#departedAfter.size > 0) {
+      const body = [...this.#departedAfter.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([playerId, afterTick]) => `${playerId},${afterTick}`)
+        .join(';');
+      parts.push(`${DEPARTED}:${body}`);
+    }
     return parts.join('|');
   }
 
-  /** 保存した文字列から戻す。 */
+  /** 保存した文字列から戻す。抜けた人の区画が無ければ、誰も抜けていない記録になる。 */
   static decode(text: string): InputLog {
     const log = new InputLog();
     if (text.length === 0) return log;
     for (const part of text.split('|')) {
       const [head, body] = part.split(':');
       if (head === undefined || body === undefined) continue;
+      if (head === DEPARTED) {
+        for (const entry of body.split(';')) {
+          const [rawId, rawTick] = entry.split(',');
+          if (rawId === undefined || rawTick === undefined) continue;
+          log.#departedAfter.set(Number(rawId) as PlayerId, Number(rawTick));
+        }
+        continue;
+      }
       const playerId = Number(head) as PlayerId;
       const list: { tick: number; bits: number }[] = [];
       for (const entry of body.split(';')) {
@@ -149,16 +210,45 @@ export class InputLog {
  *
  * 人間のキーボードや CPU と同じ資格で `Simulation` に繋がる。
  * 繋ぎ替えるのはここ1点だけで、ゲーム本体は変わらない。
+ *
+ * 途中で抜けた人は、抜けた tick の次の tick から、代わりの窓口（`replacement` で作るもの）に任せる。
+ * 本物の端末（`LockstepDriver`）が CPU に繋ぎ替えるのと同じ tick になる。
  */
 export class ReplayIntentSource implements IntentSource {
+  readonly #replacement: ((playerId: PlayerId) => IntentSource) | undefined;
+  #replaced: IntentSource | null = null;
+
+  /**
+   * @param replacement 抜けた人を受け持つ窓口を作る。本物の端末と同じものを返すこと
+   *   （通信対戦なら `lanCpuSource` に同じ設定を渡す）。記録でこの人が途中で抜けているなら必ず渡す
+   * @throws Error 記録でこの人が途中で抜けているのに、`replacement` が無いとき
+   */
   constructor(
     readonly playerId: PlayerId,
     private readonly log: InputLog,
     private readonly clock: MatchClock,
-  ) {}
+    replacement?: (playerId: PlayerId) => IntentSource,
+  ) {
+    this.#replacement = replacement;
+    // 再生の途中で止まるより、始める前に止まるほうが原因に近い。
+    if (log.departedAfter(playerId) !== undefined) this.#requireReplacement();
+  }
 
-  next(): PlayerIntent {
-    return this.log.at(this.clock.elapsed, this.playerId);
+  next(world: Readonly<WorldState>): PlayerIntent {
+    const tick = this.clock.elapsed;
+    if (!this.log.replacedAt(tick, this.playerId)) return this.log.at(tick, this.playerId);
+    // 作るのは初めて任せるとき。本物の端末は抜けた tick の次の tick を進める直前に作るので、
+    // 決着のあとの待ち（操作を集めない）に当たると作る時点がずれるが、CPU は作るときに盤面を
+    // 読まないので同じ手を指す。1度作ったら作り直さない（CPU は考えた内容を覚えている）。
+    this.#replaced ??= this.#requireReplacement()(this.playerId);
+    return this.#replaced.next(world);
+  }
+
+  #requireReplacement(): (playerId: PlayerId) => IntentSource {
+    if (this.#replacement === undefined) {
+      throw new Error(`プレイヤー ${this.playerId} は途中で抜けているのに、代わりの窓口の作り方が無い`);
+    }
+    return this.#replacement;
   }
 }
 

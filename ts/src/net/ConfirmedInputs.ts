@@ -59,13 +59,11 @@ export class ConfirmedInputs {
   }
 
   /**
-   * 届いた入力の記録。
+   * 届いた入力の記録。途中で抜けた人と、その人の入力を最後に使う tick も、`LockstepDriver` がここに書く。
    *
    * 時刻は試合通算の tick（`MatchClock.elapsed`）。`ReplayIntentSource` も同じ時刻で引くので、
    * 1台の試合で流し直せる。CPU の枠の操作は入っていないので、同じ設定から作り直す。
-   *
-   * ⚠️ 途中で抜けた人がいた試合は流し直せない。抜けた人を CPU に替えた tick（`lastTick` の次）が
-   * ここには残らず、`InputLog.at()` はその人の最後の意思を返し続けるので、黙って別の試合になる。
+   * 抜けた人は、再生の窓口に同じ CPU の作り方を渡せば、抜けた tick の次の tick から CPU に替わる。
    */
   get log(): InputLog {
     return this.#log;

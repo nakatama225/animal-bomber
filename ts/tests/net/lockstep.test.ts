@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { GameSession } from '../../src/app/GameSession.js';
 import { centerOf } from '../../src/domain/core/Coord.js';
 import { tick } from '../../src/domain/core/Tick.js';
-import { IdleIntentSource } from '../../src/domain/intent/IntentSource.js';
+import { IdleIntentSource, type IntentSource } from '../../src/domain/intent/IntentSource.js';
 import { IDLE_INTENT, packIntent, type PlayerIntent } from '../../src/domain/intent/PlayerIntent.js';
 import { defaultMatchConfig } from '../../src/domain/rules/MatchConfig.js';
 import { SPAWN_CELLS } from '../../src/domain/rules/tuning.js';
@@ -11,7 +11,7 @@ import { OUT } from '../../src/domain/state/Life.js';
 import type { PlayerId } from '../../src/domain/state/PlayerState.js';
 import { hashWorld } from '../../src/domain/state/WorldState.js';
 import { ConfirmedInputs, NetworkIntentSource } from '../../src/net/ConfirmedInputs.js';
-import { ReplayIntentSource } from '../../src/net/InputLog.js';
+import { InputLog, ReplayIntentSource } from '../../src/net/InputLog.js';
 import { lanCpuSource } from '../../src/net/lanCpu.js';
 import { HASH_INTERVAL, INPUT_DELAY, LockstepDriver } from '../../src/net/LockstepDriver.js';
 import type { LanSettings, PeerMessage } from '../../src/net/protocol.js';
@@ -61,6 +61,38 @@ function compareHashes(a: Peer, b: Peer): { mismatched: number[]; compared: numb
     if (other === undefined) continue;
     compared += 1;
     if (other !== hash) mismatched.push(t);
+  }
+  return { mismatched, compared };
+}
+
+/**
+ * 届いた入力の記録を1台の試合で流し直し、本物の端末の要約と tick ごとに比べる。
+ *
+ * 最後の盤面だけを比べると、最後のラウンドしか見ないことになる（途中のラウンドが
+ * 時間切れの引き分けだと、勝ち数にも差が出ない）。
+ */
+function replayAgainst(
+  host: Peer,
+  log: InputLog,
+  config: LanSettings,
+  humans: readonly PlayerId[],
+): { mismatched: number[]; compared: number } {
+  const replay = new GameSession(config.match);
+  for (const player of replay.world.players) {
+    // CPU の枠の操作は記録に無い。本物の端末と同じ設定から作り直す。抜けた人も、同じ CPU に替える。
+    const cpu = (id: PlayerId): IntentSource => lanCpuSource(id, config);
+    replay.attach(humans.includes(player.id) ? new ReplayIntentSource(player.id, log, replay, cpu) : cpu(player.id));
+  }
+  const mismatched: number[] = [];
+  let compared = 0;
+  // 再生の側の試合が先に終わると elapsed が進まなくなるので、回数に上限を置く。
+  for (let guard = 0; replay.elapsed < host.session.elapsed && guard < 10_000; guard += 1) {
+    const t = replay.elapsed;
+    replay.tick();
+    const expected = host.hashes.get(t);
+    if (expected === undefined) continue;
+    compared += 1;
+    if (hashWorld(replay.world) !== expected) mismatched.push(t);
   }
   return { mismatched, compared };
 }
@@ -232,26 +264,7 @@ describe('ロックステップ', () => {
     // 前提：ラウンドが入れ替わっている。1ラウンドだけだと、盤面の時刻と通算の tick が同じ値になる。
     expect(host.session.match.round).toBeGreaterThanOrEqual(3);
 
-    const replay = new GameSession(config.match);
-    for (const id of [0, 1] as const) {
-      replay.attach(new ReplayIntentSource(id, host.driver.log, replay));
-    }
-    // CPU の枠の操作は記録に無い。本物の端末と同じ設定から作り直す。
-    for (const id of [2, 3] as const) replay.attach(lanCpuSource(id, config));
-
-    // 最後の盤面だけを比べると、最後のラウンドしか見ないことになる（この設定では、
-    // 途中のラウンドは時間切れの引き分けで、勝ち数にも差が出ない）。tick ごとに比べる。
-    const mismatched: number[] = [];
-    let compared = 0;
-    // 再生の側の試合が先に終わると elapsed が進まなくなるので、回数に上限を置く。
-    for (let guard = 0; replay.elapsed < host.session.elapsed && guard < 10_000; guard += 1) {
-      const t = replay.elapsed;
-      replay.tick();
-      const expected = host.hashes.get(t);
-      if (expected === undefined) continue;
-      compared += 1;
-      if (hashWorld(replay.world) !== expected) mismatched.push(t);
-    }
+    const { mismatched, compared } = replayAgainst(host, host.driver.log, config, [0, 1]);
     expect(compared).toBeGreaterThan(1400);
     expect(mismatched).toEqual([]);
   });
@@ -383,6 +396,40 @@ describe('抜けた人', () => {
     expect(host.session.world.players[2]!.position).not.toEqual(before);
     const phase = host.client.phase;
     expect(phase.kind === 'playing' && phase.driver.waitingFor()).toEqual([]);
+  });
+
+  it('途中で抜けた人がいた試合も、届いた入力の記録を1台で流し直すと同じ試合になる', () => {
+    // 本物の端末は、抜けた人を lastTick の次の tick から CPU に替える。記録にその tick が無いと、
+    // 再生の窓口はその人の最後の操作を返し続け、例外も出ずに別の試合になる。
+    // 抜ける人には、CPU が選ばない押し方（上下左右を全部）をさせておく。CPU に替える tick が
+    // 1つずれると、その tick に使った意思が食い違い、要約（使った意思も混ぜる）に出る。
+    // 普通に歩かせると、替わった直後の CPU がたまたま同じ向きを選び、ずれが見えないことがある。
+    const all = press({ up: true, down: true, left: true, right: true });
+    const script = (id: PlayerId, call: number): PlayerIntent => (id === 2 && call >= 90 ? all : wander(id, call));
+    const config = settings({ roundLimit: tick(240), suddenDeath: false });
+    const { relay, peers } = startMatch(3, config, script);
+    const [host, guest] = peers as [Peer, Peer, Peer];
+    runTogether(relay, peers, 100);
+    // 前提：抜ける時点で、抜ける人は盤面にいて、その押し方をしている（倒れていると意思が効かない）。
+    expect(host.session.world.players[2]!.life.kind).toBe('alive');
+    expect(host.session.world.players[2]!.previousIntent).toEqual(all);
+    relay.leave(2);
+    runTogether(relay, [host, guest], 1100);
+    // 前提：抜けた人が CPU に替わり、そのあとも長く（ラウンドをまたいで）続いた。
+    expect(host.driver.humanPlayers()).toEqual([0, 1]);
+    expect(host.session.elapsed).toBeGreaterThan(1100);
+    expect(host.session.match.round).toBeGreaterThanOrEqual(3);
+
+    // 文字列にして戻した記録でも流し直せる。
+    for (const log of [host.driver.log, InputLog.decode(host.driver.log.encode())]) {
+      const { mismatched, compared } = replayAgainst(host, log, config, [0, 1, 2]);
+      expect(compared).toBeGreaterThan(1100);
+      expect(mismatched).toEqual([]);
+    }
+    // 抜けたのは比べた範囲の前のほう（100 tick 目のすぐあと）。
+    const departed = host.driver.log.departedAfter(2);
+    expect(departed).toBeGreaterThanOrEqual(100);
+    expect(departed).toBeLessThan(100 + 2 * INPUT_DELAY);
   });
 
   it('抜けた知らせと最後の入力の届く順が端末ごとに違っても、同じ試合になる', () => {
