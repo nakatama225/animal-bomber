@@ -225,7 +225,7 @@ export class Shell {
     // 次の試合は中継が配り直した start を受け取ってから始まる。
     const again = [pointerButton('もういっかい', () => runner.rematch(), { data: { action: 'again', nav: 'final' } })];
     // 自分のプレイヤー番号は、つないで受け取るまで分からない。名札の「あなた」から選ぶ。
-    this.#begin(runner, (source) => this.#localHelp(source), () => (runner.isHost ? again : []), {
+    this.#begin(runner, (source) => this.#localHelp(source), () => (runner.canRematch ? again : []), {
       paced: false,
       padOnBanner: true,
     });
@@ -287,6 +287,8 @@ export class Shell {
   #current(): ActiveMatch | null {
     const match = this.#match;
     if (match === null || match.runner.generation === match.generation) return match;
+    // 前の試合の通知も持ち越さない（1台の「もういっかい」は、試合を作り直すときに消している）。
+    this.#toasts.clear();
     this.#match = { ...match, ...this.#partsFor(match.runner), generation: match.runner.generation };
     return this.#match;
   }

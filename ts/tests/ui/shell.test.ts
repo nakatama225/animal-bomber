@@ -923,10 +923,31 @@ describe('通信対戦で、接続を保ったまま次の試合を始める', (
     // 中継が配り直すまでは、次の試合を始めない（全員が同じ1通から始める）。
     expect(elements.banner.hidden).toBe(false);
 
+    // 前の試合の通知は、次の試合へ持ち越さない（1台の「もういっかい」と同じ）。
+    elements.toasts.append(Object.assign(document.createElement('div'), { className: 'toast', textContent: '前の試合の通知' }));
+
     relay().onMessage(JSON.stringify({ t: 'start', seats: [0], config: again.config, match: 2 }));
     shell.draw(0);
     expect(elements.banner.hidden).toBe(true);
     expect(elements.side.querySelector('.time')?.textContent).toBe('1:00');
+    expect(elements.toasts.childElementCount).toBe(0);
+  }, 120_000);
+
+  it('試合が決まったあとにずれが知らされたら、ホストの幕から「もういっかい」を消す', () => {
+    // ずれた試合は、決まっていても「決まった」とは扱わない（どの端末の決着が正しいか分からない）。
+    // 押しても合図を送らない（LockstepClient.requestStart）ので、ボタンを残すと押しても何も起きない。
+    const { shell, elements, relay } = mount();
+    shell.startLan('relay.local:8777');
+    relay().onMessage(JSON.stringify({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
+    relay().onMessage(JSON.stringify({ t: 'start', seats: [0], config, match: 1 }));
+    shell.draw(0);
+    playToEnd(shell, elements, relay, [], 1);
+    shell.draw(0);
+    expect(elements.banner.querySelector('[data-action="again"]')).not.toBeNull();
+
+    relay().onMessage(JSON.stringify({ t: 'desync', tick: 19, reports: [] }));
+    shell.draw(0);
+    expect(elements.banner.querySelector('[data-action="again"]')).toBeNull();
   }, 120_000);
 
   it('ゲストの幕にはボタンを出さず、ホストが次の試合を始めたら幕が消える', () => {

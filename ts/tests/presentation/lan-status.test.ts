@@ -78,4 +78,22 @@ describe('通信対戦の案内', () => {
     expect(finishedAs(0)).toBe('試合が終わった。「もういっかい」で、同じ人・同じ設定のまま次の試合を始める');
     expect(finishedAs(1)).toBe('試合が終わった。1P（ホスト）が「もういっかい」を押すと、次の試合が始まる');
   });
+
+  it('ホストが抜けたあとに試合が終わったら、ゲストには次の試合が始められないことを出す', () => {
+    // 次の試合を始められるのはホストだけ。来ないホストを待つよう案内しない。
+    const c = client();
+    c.receive(text({ t: 'welcome', seat: 1, role: 'guest', seats: [0] }));
+    const config = { ...SETTINGS, match: { ...SETTINGS.match, winsToTake: 1 } };
+    c.receive(text({ t: 'start', seats: [0, 1], config, match: 1 }));
+    if (c.phase.kind !== 'playing') throw new Error('始まっていない');
+    // ホストは tick 0 の入力を最後に抜けた。知らせが届いた時点で、案内を替える（CPU に替わる tick を待たない）。
+    c.receive(text({ t: 'input', seat: 0, tick: 0, bits: 0, match: 1 }));
+    c.receive(text({ t: 'peer_left', seat: 0, lastTick: 0 }));
+    for (const id of [0, 2, 3]) c.phase.session.world.players[id]!.life = OUT;
+    c.step();
+    expect(c.phase.session.match.finished).toBe(true);
+    expect(describeLanPhase(c.phase)).toBe(
+      '試合が終わった。1P（ホスト）が抜けたので、次の試合は始められない。もう一度遊ぶときは、全員がページを閉じてから開き直す',
+    );
+  });
 });

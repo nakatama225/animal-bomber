@@ -293,16 +293,33 @@ class Test入力を配る:
         # ⚠️ True も捨てる。Python では bool が int の仲間なので、明示して外している
         room, peers = await started_room(2)
 
-        await room.route(1, json.dumps({"t": "input", "tick": tick, "bits": 0}))
+        # 試合の番号は合わせておく（番号の違いで捨てられて、tick を確かめる前に通ってしまわないように）
+        message = {"t": "input", "tick": tick, "bits": 0, "match": 1}
+        await room.route(1, json.dumps(message))
 
         assert messages(peers[0], "input") == []
+        assert room._last_tick[1] == -1
+
+    @pytest.mark.parametrize("match", ["1", 1.0, True, None])
+    @pytest.mark.parametrize("kind", ["input", "hash"])
+    async def test_試合の番号が整数でない入力と要約は扱わない(self, kind, match):
+        # ⚠️ True と 1.0 も捨てる。Python では True == 1、1.0 == 1 なので、いまの試合（1）と比べるだけでは通る
+        room, peers = await started_room(2)
+        data = json.loads(input_message(0) if kind == "input" else hash_message(19, 1))
+        data["match"] = match
+
+        await room.route(1, json.dumps(data))
+
+        assert messages(peers[0], "input") == []
+        assert room._pending == {}
 
     @pytest.mark.parametrize(
         "raw",
         [
-            '{"t": "input", "tick": 0, "bits": NaN}',
-            '{"t": "input", "tick": 0, "bits": Infinity}',
-            '{"t": "input", "tick": 0, "bits": 1e400}',
+            # 試合の番号は合わせておく（番号の違いで捨てられて、読む段階の確かめを通らないように）
+            '{"t": "input", "tick": 0, "bits": NaN, "match": 1}',
+            '{"t": "input", "tick": 0, "bits": Infinity, "match": 1}',
+            '{"t": "input", "tick": 0, "bits": 1e400, "match": 1}',
         ],
     )
     async def test_JSONに無い数を含むものは配らない(self, raw):

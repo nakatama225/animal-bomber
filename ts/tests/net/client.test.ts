@@ -40,7 +40,7 @@ describe('つないでから始まるまで', () => {
     expect(c.phase).toEqual({ kind: 'lobby', seat: 0, present: [0, 1] });
   });
 
-  it('始める合図を送れるのは、待っている間のホストだけ', () => {
+  it('試合の前に始める合図を送れるのは、ホストだけ（番号を受け取る前は送らない）', () => {
     const host = client();
     const guest = client();
     expect(host.client.requestStart(SETTINGS)).toBe(false); // まだ番号を受け取っていない
@@ -191,6 +191,18 @@ describe('同じ接続での次の試合', () => {
     guest.client.receive(text({ t: 'start', seats: [0, 1], config: SETTINGS, match: 1 }));
     guest.finish();
     expect(guest.client.requestStart(OTHER)).toBe(false);
+  });
+
+  it('ずれが知らされた試合では、決まっていても次の試合の合図を送らない', () => {
+    // どの端末の決着が正しいか分からない。続けるなら、全員が閉じて開き直す。
+    const host = switchable();
+    host.client.receive(text({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
+    host.client.receive(text({ t: 'start', seats: [0], config: SETTINGS, match: 1 }));
+    host.finish();
+    host.client.receive(text({ t: 'desync', tick: 19, reports: [] }));
+    const before = host.sent.length;
+    expect(host.client.requestStart(OTHER)).toBe(false);
+    expect(host.sent.length).toBe(before);
   });
 
   it('試合の最中に届いた start で、前の試合を捨てて次の試合を作る', () => {

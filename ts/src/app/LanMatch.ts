@@ -152,10 +152,13 @@ export class LanMatch implements MatchRunner {
     return this.#generation;
   }
 
-  /** この端末がホスト（1P）か。つないで番号を受け取るまでは false。 */
-  get isHost(): boolean {
+  /**
+   * いま次の試合の合図を送れるか。ホスト（1P）で、試合が決まっていて、ずれていないとき
+   * （`LockstepClient.requestStart` と同じ条件）。試合が決まった幕に「もういっかい」を出すかをこれで決める。
+   */
+  get canRematch(): boolean {
     const phase = this.#client.phase;
-    return (phase.kind === 'lobby' || phase.kind === 'playing') && phase.seat === 0;
+    return phase.kind === 'playing' && phase.seat === 0 && phase.driver.desync === null && phase.session.match.finished;
   }
 
   /**

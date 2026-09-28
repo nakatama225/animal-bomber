@@ -6,8 +6,8 @@ import type { LanPhase } from '../../net/LockstepClient.js';
  *
  * ⚠️ 「読み込み直す」だけでは足りない。中継は、前の試合にいた人が1人でもつながっている間は
  * 新しい接続を断る（途中から入った人の入力を、誰の試合にも入れられないため）。
- * 全員が閉じてからでないと、次の試合に入れない。
- * 試合が決まったあとは、閉じずに「もういっかい」で次の試合を始められる（`FINISHED_HOST`）。
+ * 全員が閉じてからでないと、開き直した人は入れない。
+ * 同じ人のまま続けるときは、試合が決まったあとに閉じずに「もういっかい」を押す（`FINISHED_HOST`）。
  */
 export const START_OVER = 'もう一度遊ぶときは、全員がページを閉じてから開き直す';
 
@@ -16,6 +16,9 @@ const FINISHED_HOST = '試合が終わった。「もういっかい」で、同
 
 /** 試合が決まったあとの、ゲストへの案内。ゲストの幕にはボタンが無い（原型も、次の試合を始めるのはホストだけ）。 */
 const FINISHED_GUEST = '試合が終わった。1P（ホスト）が「もういっかい」を押すと、次の試合が始まる';
+
+/** ホストが抜けたあとに試合が決まったときの、ゲストへの案内。次の試合の合図を送れるのはホストだけ。 */
+const FINISHED_HOST_LEFT = `試合が終わった。1P（ホスト）が抜けたので、次の試合は始められない。${START_OVER}`;
 
 /**
  * 通信対戦の、いまの様子を1行の文にする。画面の上に出す。
@@ -42,7 +45,8 @@ export function describeLanPhase(
       }
       if (waiting.length > 0) return `${waiting.map(label).join('・')} の操作を待っている`;
       if (!phase.session.match.finished) return '';
-      return phase.seat === 0 ? FINISHED_HOST : FINISHED_GUEST;
+      if (phase.seat === 0) return FINISHED_HOST;
+      return phase.driver.hasLeft(0) ? FINISHED_HOST_LEFT : FINISHED_GUEST;
     }
     case 'failed':
       return `${phase.reason}。${START_OVER}`;

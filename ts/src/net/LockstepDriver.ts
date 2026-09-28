@@ -227,6 +227,14 @@ export class LockstepDriver implements MatchClock {
     return this.#options.humans.filter((playerId) => !this.#replaced.has(playerId));
   }
 
+  /**
+   * 抜けたと知らされた人か。CPU に替わるのは `lastTick` の次の tick からだが、こちらは知らせが
+   * 届いた時点で true になる（画面の案内を、替わるのを待たずに変えるため）。
+   */
+  hasLeft(playerId: PlayerId): boolean {
+    return this.#departedAfter.has(playerId);
+  }
+
   /** 中継が知らせてきたずれ。無ければ null。 */
   get desync(): Desync | null {
     return this.#desync;
