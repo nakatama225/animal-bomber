@@ -118,6 +118,121 @@ describe('リプレイ', () => {
     log.record(10, 0, press({ right: true }));
     expect(() => log.record(5, 0, press({ left: true }))).toThrow();
   });
+
+  it.each([
+    ['負', -1],
+    ['小数', 1.5],
+    ['数でない', Number.NaN],
+    ['安全な整数の範囲の外', Number.MAX_SAFE_INTEGER + 1],
+  ])('記録する tick が 0 以上の安全な整数でなければ止まる（%s）', (_case, atTick) => {
+    // 文字列にすると `decode` が読めない形（「-1」「1.5」「NaN」など）になり、記録できた試合を戻せなくなる。
+    const log = new InputLog();
+    // まだ記録の無い人でも、止まったときは何も残さない（空の区画を書かない）。
+    expect(() => log.record(atTick, 1, press({ right: true }))).toThrow(/^記録する tick が/);
+    expect(log.encode()).toBe('');
+    log.record(0, 0, press({ right: true }));
+    // 直前と同じ値でも確かめる（同じ値なら何もしない、より先に確かめる）。
+    expect(() => log.record(atTick, 0, press({ right: true }))).toThrow(/^記録する tick が/);
+  });
+});
+
+describe('記録の文字列の区画と変化の一覧', () => {
+  it.each([
+    ['区画に「:」が無い', '0', /^記録の区画に「:」が無い/],
+    ['区画が空（「||」）', '0:0,8||1:0,4', /^記録の区画に「:」が無い/],
+    ['最後が「|」', '0:0,8|', /^記録の区画に「:」が無い/],
+    ['番号が無い', ':0,8', /^記録の区画が読めない/],
+    ['番号の前に空白', ' 1:0,8', /^記録の区画が読めない/],
+    ['番号の後に空白', '1 :0,8', /^記録の区画が読めない/],
+    ['番号が2桁', '12:0,8', /^記録の区画が読めない/],
+    ['番号が 0〜3 の外', '4:0,8', /^記録の区画が読めない/],
+    ['抜けた人の見出しの書き間違い', '0:0,8|departd:1,5', /^記録の区画が読めない/],
+    ['中身が空', '0:', /^記録のプレイヤー 0 の項目が読めない/],
+    ['項目が空（「;;」）', '0:0,8;;5,4', /^記録のプレイヤー 0 の項目が読めない/],
+    ['最後が「;」', '0:0,8;', /^記録のプレイヤー 0 の項目が読めない/],
+    ['ビットが無い', '0:5', /^記録のプレイヤー 0 の項目が読めない/],
+    ['項目に「,」が2つ', '0:0,8,1', /^記録のプレイヤー 0 の項目が読めない/],
+    ['「:」が2つ', '0:0,8:5,4', /^記録のプレイヤー 0 の項目が読めない/],
+    ['tick が数でない', '0:a,8', /^記録のプレイヤー 0 の項目が読めない/],
+    ['tick が負', '0:-1,8', /^記録のプレイヤー 0 の項目が読めない/],
+    ['tick が小数', '0:1.5,8', /^記録のプレイヤー 0 の項目が読めない/],
+    ['tick の頭に 0', '0:05,8', /^記録のプレイヤー 0 の項目が読めない/],
+    ['tick が安全な整数の範囲の外', '0:9007199254740992,8', /^記録のプレイヤー 0 の項目が読めない/],
+    ['ビットの頭に 0', '0:0,08', /^記録のプレイヤー 0 の項目が読めない/],
+    ['ビットが6つのボタンを超える', '0:0,64', /^記録のプレイヤー 0 の項目が読めない/],
+  ])('区画か変化の一覧に読めない所があれば、戻す前に止まる（%s）', (_case, text, message) => {
+    // 黙って読み飛ばしたり違う値に読んだりすると、その人の意思が記録と違うまま、例外も出ずに別の試合になる。
+    expect(() => InputLog.decode(text)).toThrow(message);
+  });
+
+  it('変化の tick が3つ目の項目で1つだけ戻っていても、戻す前に止まる', () => {
+    // `at` は tick の昇順に並んでいる前提で探す（二分探索）。並びが崩れると、例外も出ずに違う意思を返す。
+    // 最初の項目とだけ比べたり、1つ戻るのを許したりすると、ここを見逃す。
+    expect(() => InputLog.decode('0:1,8;5,4;4,2')).toThrow(/^記録のプレイヤー 0 の tick が戻っている/);
+  });
+
+  it('同じ人の区画が2度あれば、戻す前に止まる', () => {
+    // あとの区画で上書きすると、前の区画の変化が黙って消える。
+    expect(() => InputLog.decode('0:0,8|1:0,4|0:10,2')).toThrow(/^記録にプレイヤー 0 の区画が2度ある/);
+  });
+
+  it('同じ tick に2度記録した値も、文字列にして戻せる', () => {
+    // record() は同じ tick の2度目を拒まない（あとの値が勝つ）。読む側だけ厳しくすると、記録できた試合を戻せない。
+    const log = new InputLog();
+    log.record(5, 0, press({ right: true }));
+    log.record(5, 0, press({ left: true }));
+    const restored = InputLog.decode(log.encode());
+    expect(restored.encode()).toBe(log.encode());
+    expect(restored.at(5, 0)).toEqual(press({ left: true }));
+  });
+
+  it('何も記録していない記録も、文字列にして戻せる', () => {
+    // 空の文字列は区画が1つも無い。「:」の無い区画として止めない。
+    const restored = InputLog.decode(new InputLog().encode());
+    expect(restored.encode()).toBe('');
+    expect(restored.lastTick).toBe(-1);
+  });
+
+  it('6つのボタンを全部押した意思も、文字列にして戻せる', () => {
+    // 上の「ビットが6つのボタンを超える」の対照。上限そのものは読める。
+    const all = press({ up: true, down: true, left: true, right: true, bomb: true, action: true });
+    const log = new InputLog();
+    log.record(0, 0, all);
+    expect(InputLog.decode(log.encode()).at(0, 0)).toEqual(all);
+  });
+
+  it('何も押していない意思に戻したのも、文字列にして戻せる', () => {
+    // 手を全部離すと、record はビット 0 を書く。
+    const log = new InputLog();
+    log.record(0, 0, press({ right: true }));
+    log.record(4, 0, press({}));
+    const restored = InputLog.decode(log.encode());
+    expect(restored.encode()).toBe('0:0,8;4,0');
+    expect(restored.at(4, 0)).toEqual(press({}));
+  });
+
+  it('プレイヤー 3 の変化も、文字列にして戻せる', () => {
+    // 上の「番号が 0〜3 の外」の対照。上限の番号そのものは読める。
+    const log = new InputLog();
+    log.record(0, 3, press({ up: true }));
+    expect(InputLog.decode(log.encode()).at(0, 3)).toEqual(press({ up: true }));
+  });
+
+  it('tick が安全な整数の上限でも、文字列にして戻せる', () => {
+    // 上の「tick が安全な整数の範囲の外」と、record の同じ確かめの対照。
+    const log = new InputLog();
+    log.record(Number.MAX_SAFE_INTEGER, 0, press({ right: true }));
+    const restored = InputLog.decode(log.encode());
+    expect(restored.encode()).toBe(log.encode());
+    expect(restored.at(Number.MAX_SAFE_INTEGER, 0)).toEqual(press({ right: true }));
+  });
+
+  it('同じビットが続く項目も読める', () => {
+    // record は書かないが、意思が変わらないので、流し直しの答えは変わらない。
+    const restored = InputLog.decode('0:0,8;5,8');
+    expect(restored.at(3, 0)).toEqual(press({ right: true }));
+    expect(restored.at(5, 0)).toEqual(press({ right: true }));
+  });
 });
 
 describe('途中で抜けた人の記録', () => {
@@ -143,9 +258,11 @@ describe('途中で抜けた人の記録', () => {
     ['番号が無い', 'departed:,5'],
     ['番号が数でない', 'departed:x,5'],
     ['番号が 0〜3 の外', 'departed:4,5'],
-    ['区画が空', '0:0,8|departed:'],
+    ['tick が安全な整数の範囲の外', 'departed:1,9007199254740992'],
+    ['中身が空', '0:0,8|departed:'],
     ['同じ人が区画の中に2度', 'departed:1,5;1,9'],
     ['同じ人が別の区画に2度', '0:0,8|departed:1,5|departed:1,7'],
+    ['「:」が2つ', 'departed:1,5:2,6'],
   ])('抜けた人の区画が読めなければ、戻す前に止まる（%s）', (_case, text) => {
     // 黙って読み飛ばしたり、あとの値で上書きしたりすると、例外も出ずに別の試合になる。
     expect(() => InputLog.decode(text)).toThrow(/抜けた/);
@@ -161,6 +278,25 @@ describe('途中で抜けた人の記録', () => {
     log.depart(40, 1);
     expect(() => log.depart(50, 1)).toThrow(/2度/);
     expect(log.departedAfter(1)).toBe(40);
+  });
+
+  it.each([
+    ['-1 より小さい', -2],
+    ['小数', 0.5],
+    ['数でない', Number.NaN],
+    ['安全な整数の範囲の外', Number.MAX_SAFE_INTEGER + 1],
+  ])('departedAfter が -1 以上の安全な整数でなければ止まり、記録しない（%s）', (_case, afterTick) => {
+    // 文字列にすると `decode` が読めない形になる。通信対戦では、中継が知らせた `lastTick` がここに来る。
+    const log = new InputLog();
+    expect(() => log.depart(afterTick, 1)).toThrow(/^プレイヤー 1 の departedAfter が/);
+    expect(log.departedAfter(1)).toBeUndefined();
+  });
+
+  it('departedAfter が安全な整数の上限でも、文字列にして戻せる', () => {
+    // 上の表の「tick が安全な整数の範囲の外」と、depart の同じ確かめの対照。
+    const log = new InputLog();
+    log.depart(Number.MAX_SAFE_INTEGER, 1);
+    expect(InputLog.decode(log.encode()).departedAfter(1)).toBe(Number.MAX_SAFE_INTEGER);
   });
 
   it('再生の窓口は、departedAfter の次の tick から代わりの窓口に任せ、代わりの窓口は1度だけ作る', () => {

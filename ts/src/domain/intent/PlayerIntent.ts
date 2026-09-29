@@ -60,6 +60,21 @@ export function packIntent(intent: PlayerIntent): number {
   );
 }
 
+/**
+ * 意思のビットの上限（6つのボタンを全部押した値）。通信の約束と記録の文字列が、読んだ値を確かめるのに使う。
+ *
+ * 数を直接書かず `packIntent` から作る。ボタンを足すと、ここでそのボタンが足りずに型が合わなくなるので、
+ * 上限の直し忘れに気づける。
+ */
+export const MAX_INTENT_BITS = packIntent({
+  up: true,
+  down: true,
+  left: true,
+  right: true,
+  bomb: true,
+  action: true,
+});
+
 /** 1 バイトから意思を戻す。 */
 export function unpackIntent(bits: number): PlayerIntent {
   return {

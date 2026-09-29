@@ -1,6 +1,7 @@
 import type { IntentSource } from '../domain/intent/IntentSource.js';
 import {
   IDLE_INTENT,
+  MAX_INTENT_BITS,
   packIntent,
   unpackIntent,
   type PlayerIntent,
@@ -8,7 +9,10 @@ import {
 import type { PlayerId } from '../domain/state/PlayerState.js';
 import type { WorldState } from '../domain/state/WorldState.js';
 
-/** 記録の文字列で、途中で抜けた人の区画の見出し。プレイヤー番号と取り違えないよう、数字にしない。 */
+/**
+ * 記録の文字列で、途中で抜けた人の区画の見出し（区画と見出しは `InputLog.encode` の説明にある）。
+ * プレイヤー番号と取り違えないよう、数字にしない。
+ */
 const DEPARTED = 'departed';
 
 /**
@@ -66,9 +70,17 @@ export class InputLog {
   /**
    * ある tick の意思を記録する。
    *
-   * 直前と同じ値なら何もしない。tick は昇順に渡す。
+   * 直前と同じ値なら何もしない。tick は 0 以上の安全な整数（`Number.MAX_SAFE_INTEGER` 以下で、
+   * 隣の整数と区別できる整数）を昇順に渡す。
+   *
+   * @throws Error tick が 0 以上の安全な整数でないとき（文字列にすると `decode` が読めない形になる）か、
+   *   直前と違う値で tick が戻っているとき
    */
   record(atTick: number, playerId: PlayerId, intent: PlayerIntent): void {
+    // 直前と同じ値のときも確かめる。一覧を作るより前に止めないと、空の一覧が残って `encode` が読めない区画を書く。
+    if (!Number.isSafeInteger(atTick) || atTick < 0) {
+      throw new Error(`記録する tick が 0 以上の安全な整数ではない: ${atTick}`);
+    }
     const bits = packIntent(intent);
     let list = this.#changes.get(playerId);
     if (list === undefined) {
@@ -126,9 +138,13 @@ export class InputLog {
    * 代わりの窓口（CPU）に任せる。
    *
    * @param afterTick 中継が知らせた `peer_left` の `lastTick`。入力が1つも配られないうちに抜けた人は -1
-   * @throws Error 同じ人を2度記録しようとしたとき
+   * @throws Error `afterTick` が -1 以上の安全な整数でないとき（文字列にすると `decode` が読めない形になる）か、
+   *   同じ人を2度記録しようとしたとき
    */
   depart(afterTick: number, playerId: PlayerId): void {
+    if (!Number.isSafeInteger(afterTick) || afterTick < -1) {
+      throw new Error(`プレイヤー ${playerId} の departedAfter が -1 以上の安全な整数ではない: ${afterTick}`);
+    }
     if (this.#departedAfter.has(playerId)) {
       throw new Error(`プレイヤー ${playerId} が抜けたことを2度記録しようとした`);
     }
@@ -153,7 +169,8 @@ export class InputLog {
   /**
    * 保存できる文字列にする。
    *
-   * 形式は `プレイヤー番号:tick,ビット;tick,ビット|プレイヤー番号:...`。途中で抜けた人がいれば、
+   * 形式は `プレイヤー番号:tick,ビット;tick,ビット|プレイヤー番号:...`。`|` で区切った1つを区画、
+   * 区画の最初の「:」より前を見出し、`;` で区切った1つを項目と呼ぶ。途中で抜けた人がいれば、
    * 最後に `|departed:プレイヤー番号,tick;...`（tick は `departedAfter`）を足す。抜けた人を変化の一覧と
    * 別に書くのは、入力が1つも配られないうちに抜けた人は変化の一覧に居ないため。
    * 読んで確かめられることを優先し、圧縮はしていない。3分の試合でも数キロバイトに収まる。
@@ -180,31 +197,54 @@ export class InputLog {
   /**
    * 保存した文字列から戻す。抜けた人の区画が無ければ、誰も抜けていない記録になる。
    *
-   * @throws Error 抜けた人の区画に、読めない項目か、同じ人の2度目があるとき。黙って読み飛ばしたり
-   *   あとの値で上書きしたりすると、その人の意思を記録から使い続ける（あるいは違う tick で替える）ので、
-   *   例外も出ずに別の試合になる
+   * 数は `encode` が書く形（頭に 0 を付けない10進の整数）で、`record`・`depart` が受け付ける範囲
+   * （変化の一覧の tick は 0 以上、抜けた人の区画の tick（`departedAfter`）は -1 以上の安全な整数。
+   * ビットは6つのボタンまで）のものだけを読む。
+   * 同じ tick の変化が続くのは `record` も書く形（あとの値が勝つ）なので受け付ける。同じビットが続く項目は、
+   * `record` は書かないが、意思が変わらず流し直しの答えも変わらないので受け付ける。
+   *
+   * @throws Error 読めない区画か項目（範囲の外の数を含む）、戻っている tick、同じ人の区画の2度目、
+   *   同じ人が抜けたことの2度目があるとき。黙って読み飛ばしたりあとの値で上書きしたりすると、その人の
+   *   意思が記録と違うまま（あるいは違う tick で替わって）、例外も出ずに別の試合になる
    */
   static decode(text: string): InputLog {
     const log = new InputLog();
     if (text.length === 0) return log;
     for (const part of text.split('|')) {
-      const [head, body] = part.split(':');
-      if (head === undefined || body === undefined) continue;
+      // 見出しと中身は最初の「:」で分ける。中身に「:」が混じっていれば、その項目が読めずに止まる。
+      const colon = part.indexOf(':');
+      if (colon < 0) throw new Error(`記録の区画に「:」が無い: ${part}`);
+      const head = part.slice(0, colon);
+      const body = part.slice(colon + 1);
       if (head === DEPARTED) {
         for (const entry of body.split(';')) {
-          // プレイヤー番号は 0〜3、tick は -1 以上の整数（中継の lastTick と同じ範囲）。
+          // プレイヤー番号は 0〜3、tick は -1 以上の安全な整数（`depart` と同じ範囲）。
           const found = /^([0-3]),(-1|0|[1-9]\d*)$/.exec(entry);
-          if (found === null) throw new Error(`記録の抜けた人の区画が読めない: ${entry}`);
+          if (found === null || !Number.isSafeInteger(Number(found[2]))) {
+            throw new Error(`記録の抜けた人の区画の項目が読めない: ${entry}`);
+          }
           log.depart(Number(found[2]), Number(found[1]) as PlayerId);
         }
         continue;
       }
+      // `Number` は空の文字列を 0 と読み、前後の空白も読み飛ばすので、形を先に確かめる。
+      if (!/^[0-3]$/.test(head)) throw new Error(`記録の区画が読めない: ${part}`);
       const playerId = Number(head) as PlayerId;
+      if (log.#changes.has(playerId)) throw new Error(`記録にプレイヤー ${playerId} の区画が2度ある`);
       const list: { tick: number; bits: number }[] = [];
       for (const entry of body.split(';')) {
-        const [rawTick, rawBits] = entry.split(',');
-        if (rawTick === undefined || rawBits === undefined) continue;
-        list.push({ tick: Number(rawTick), bits: Number(rawBits) });
+        // tick は 0 以上の安全な整数（`record` と同じ範囲）。抜けた人の区画と違い、-1 は無い。
+        const found = /^(0|[1-9]\d*),(0|[1-9]\d*)$/.exec(entry);
+        if (found === null || !Number.isSafeInteger(Number(found[1])) || Number(found[2]) > MAX_INTENT_BITS) {
+          throw new Error(`記録のプレイヤー ${playerId} の項目が読めない: ${entry}`);
+        }
+        const tick = Number(found[1]);
+        const last = list[list.length - 1];
+        // `at` は tick の昇順に並んでいる前提で探す。同じ tick が続くのは `record` と同じく受け付ける。
+        if (last !== undefined && last.tick > tick) {
+          throw new Error(`記録のプレイヤー ${playerId} の tick が戻っている: ${last.tick} のあとに ${tick}`);
+        }
+        list.push({ tick, bits: Number(found[2]) });
       }
       log.#changes.set(playerId, list);
     }
