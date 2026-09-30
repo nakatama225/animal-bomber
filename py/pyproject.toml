@@ -1,0 +1,137 @@
+[project]
+name = "animal-bomber"
+version = "0.1.0"
+description = "どうぶつボンバーの Python 版（デスクトップ・pygame-ce）"
+requires-python = ">=3.11"
+# 実際に import しているものだけを書く。描画の層を書き始めたところで pygame-ce を足す。
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "import-linter>=2.1",
+    "mypy>=1.17",
+    "pytest>=8.0",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/animal_bomber"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+# import の並べ替えで、このパッケージを自前のもの（first-party）として扱わせる。
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "TID"]
+
+# 試合の結果を決める層（ルール・動物のデータ・CPU）で使ってはいけないもの。
+# 既定で全体に掛け（通信の層にも掛かる）、使ってよい層だけを下の per-file-ignores
+# で外す。新しい層を足したときに、外し忘れても安全な側（禁止のまま）に倒れる。
+# 禁じる基準は4つ：乱数の出どころ・実時間の出どころ・描画・環境で結果が違いうる計算。
+# 足すときも外すときも、tests/boundary/banned_names.py の一覧を同じく変える（食い違うと失敗する）。
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"random".msg = "ルールの層は乱数を自前で取らない。domain/core/rng.py の Rng を引数で受け取る"
+"secrets".msg = "ルールの層は乱数を自前で取らない。domain/core/rng.py の Rng を引数で受け取る"
+"os.urandom".msg = "ルールの層は乱数を自前で取らない。domain/core/rng.py の Rng を引数で受け取る"
+"os.getrandom".msg = "ルールの層は乱数を自前で取らない。domain/core/rng.py の Rng を引数で受け取る"
+"uuid".msg = "ルールの層は識別子を乱数や時刻から作らない。domain/core/entity_id.py の IdSource で連番を取る"
+"time".msg = "ルールの層は実時間を読まない。時間は tick の回数で数える"
+"datetime".msg = "ルールの層は実時間を読まない。時間は tick の回数で数える"
+"os.times".msg = "ルールの層は実時間を読まない。時間は tick の回数で数える"
+"pygame".msg = "ルールの層は描画を知らない"
+"numpy".msg = "ルールの層は numpy を使わない。計算の結果が環境に左右されないよう、標準の四則演算で書く"
+"cmath".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+# 四則演算と sqrt は IEEE 754 が正確な丸めを求めているので、どの環境でも同じ値になる。
+# 次の関数には保証が無く、実装ごとに最後の桁が違いうる。
+"math.sin".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.cos".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.tan".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.asin".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.acos".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.atan".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.atan2".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.sinh".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.cosh".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.tanh".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.asinh".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.acosh".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.atanh".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.exp".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.exp2".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.expm1".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.log".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.log2".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.log10".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.log1p".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.pow".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.cbrt".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.erf".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.erfc".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.gamma".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.lgamma".msg = "ルールの層では使わない（環境ごとに最後の桁が違いうる）"
+"math.hypot".msg = "ルールの層では使わない。math.sqrt(dx * dx + dy * dy) と書く"
+"math.dist".msg = "ルールの層では使わない。math.sqrt(dx * dx + dy * dy) と書く"
+
+[tool.ruff.lint.per-file-ignores]
+# 見た目・入出力・起動の層と、テスト・補助のスクリプトは乱数と実時間を使ってよい。
+"src/animal_bomber/presentation/**" = ["TID251"]
+"src/animal_bomber/shell/**" = ["TID251"]
+"src/animal_bomber/app/**" = ["TID251"]
+"tests/**" = ["TID251"]
+"tools/**" = ["TID251"]
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+files = ["src", "tests"]
+# 戻り値を返さない match の書き忘れは、strict でも見つからない（既定では切ってある）。
+# 1.17 より古い mypy はこの名前を知らず、1行警告するだけで検査を切ったまま通る。
+enable_error_code = ["exhaustive-match"]
+
+# 層の依存の向き。上の層は下の層を使ってよく、下の層は上の層を使わない。
+# exhaustive は、ここに並べていないディレクトリ（net を network と作った、など）を
+# 違反にする。並べ忘れた層が、依存の向きの検査の外に出ないように。
+# 括弧で囲んだ層は、まだ作っていない（無くても違反にしない）。作ったら括弧を外す
+# （括弧のままだと、あとでその層のディレクトリを消しても黙って通る）。
+[tool.importlinter]
+root_package = "animal_bomber"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "層の依存は上から下へだけ流れる"
+type = "layers"
+containers = ["animal_bomber"]
+exhaustive = true
+layers = [
+    "(app)",
+    "(shell)",
+    "presentation",
+    "(net)",
+    "(ai)",
+    "(content)",
+    "domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "ルールの層は乱数・実時間・描画・環境で結果が違いうる計算を import しない"
+type = "forbidden"
+source_modules = ["animal_bomber.domain"]
+forbidden_modules = [
+    "random",
+    "secrets",
+    "uuid",
+    "time",
+    "datetime",
+    "pygame",
+    "numpy",
+    "cmath",
+]
