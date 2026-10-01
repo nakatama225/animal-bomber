@@ -3,8 +3,11 @@ name = "animal-bomber"
 version = "0.1.0"
 description = "どうぶつボンバーの Python 版（デスクトップ・pygame-ce）"
 requires-python = ">=3.11"
-# 実際に import しているものだけを書く。描画の層を書き始めたところで pygame-ce を足す。
-dependencies = []
+# 実際に import しているものだけを書く。pygame-ce をいま import するのは、描画の重さの
+# 測定（tools/）だけ。描画の層を書く段で src も使うので、先に本体の依存に入れた。
+dependencies = [
+    "pygame-ce>=2.5",
+]
 
 [dependency-groups]
 dev = [
@@ -23,12 +26,15 @@ packages = ["src/animal_bomber"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# 補助のスクリプト（tools/）のうち pygame を使わないものを、テストが直接 import する。
+pythonpath = ["tools"]
 
 [tool.ruff]
 line-length = 88
 target-version = "py311"
-# import の並べ替えで、このパッケージを自前のもの（first-party）として扱わせる。
-src = ["src", "tests"]
+# import の並べ替えで、このパッケージと補助のスクリプトを自前のもの（first-party）
+# として扱わせる。
+src = ["src", "tests", "tools"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "TID"]
@@ -92,7 +98,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "TID"]
 [tool.mypy]
 strict = true
 python_version = "3.11"
-files = ["src", "tests"]
+files = ["src", "tests", "tools"]
 # 戻り値を返さない match の書き忘れは、strict でも見つからない（既定では切ってある）。
 # 1.17 より古い mypy はこの名前を知らず、1行警告するだけで検査を切ったまま通る。
 enable_error_code = ["exhaustive-match"]
