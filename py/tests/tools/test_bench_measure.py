@@ -2,7 +2,7 @@
 
 `test_bench_render.py` は、窓を開かないことと結果の形を見る。ここでは、測る範囲・
 列の値・眠り方・負荷を、時計を差し替えて確かめる。どれも、壊れても測定は最後まで
-走り、それらしい数字を出す種類の誤りで（関門が黙って甘くなるものもある）、読み直しで
+走り、それらしい数字を出す種類の誤りで（判定が黙って甘くなるものもある）、読み直しで
 見つかった。描き方の数は `test_bench_scene.py` が確かめる。
 
 時計を差し替えるテストは、時計を「描いたとき」と「描いた面を窓の面へ貼ったとき」
@@ -84,12 +84,12 @@ def side_record(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
 
 class TestClocked:
     def test_JSONに_描くことと窓の面への貼りを測った値と_負荷が出る(self) -> None:
-        """測る範囲から描くことか窓の面への貼りが抜けると、関門はほぼ必ず合格と出る。
+        """測る範囲から描くことか窓の面への貼りが抜けると、ほぼ必ず合格と出る。
 
         まとめ方の取り違え（並べ替えない・CPU の時間の代わりに実時間を入れる・捨てる
         フレームも入れる）も、列の値が変わるので見つかる。窓の面への貼りは、捨てる
         フレームも含めて毎フレーム 1 回、描いた面と同じ大きさで、アルファの桁のある
-        面へ（関門はこの形で測った）。全速では眠らない。
+        面へ（合否はこの形で測って決めた）。全速では眠らない。
         """
         completed = run_clocked(SHUFFLED, [*GATE_ARGV, "--json"])
         report = report_of(completed)
@@ -147,7 +147,7 @@ class TestClocked:
 
 
 class TestEdgeCases:
-    def test_既定の引数で_関門の行を測る(self) -> None:
+    def test_既定の引数で_判定に使う行を測る(self) -> None:
         """案内しているコマンド（引数なし）が、合否を出さずに終わらないこと。"""
         completed = run_patched(
             "from bench_gate import GATE_FADE, GATE_KINDS, GATE_PACE, GATE_PHASES\n"
@@ -161,7 +161,10 @@ class TestEdgeCases:
         assert completed.stdout.split() == ["True"] * 6
 
     def test_フレームが少ないと_表の最後にそう出す(self) -> None:
-        """数フレームだけの試し走りで、「関門の行を測っていない」と取り違えないこと。"""
+        """試し走り（数フレーム）では、フレームが少ないことを先に出すこと。
+
+        この引数では判定に使う行もそろっていないが、理由はフレームの数のほうを出す。
+        """
         completed = run_patched(
             "sys.exit(bench_render.main(['--tiles', '60', '--kinds', 'glow',"
             " '--frames', '3', '--warmup', '1']))\n"

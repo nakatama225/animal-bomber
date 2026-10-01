@@ -1,7 +1,7 @@
 """描画の重さの測定の記録（`tools/bench_result.py`）の、まとめ方の検査。
 
-フレームの時間から p50・p99 などを出す計算を、手で作った値で確かめる。関門の値は
-ここで出した p99 から決まるので、計算の取り違えはそのまま関門の取り違えになる。
+フレームの時間から p50・p99 などを出す計算を、手で作った値で確かめる。判定に使う値は
+ここで出した p99 から決まるので、計算の取り違えはそのまま合否の取り違えになる。
 """
 
 import pytest
@@ -23,7 +23,7 @@ class TestPercentile:
     def test_列の中の値をそのまま返す(
         self, values: range | list[int], q: float, expected: int
     ) -> None:
-        """位置の数え方のずれ（最速の値や最大を返す、など）で、関門が甘くならないこと。
+        """位置の数え方のずれ（最速の値や最大を返す、など）で、判定が甘くならないこと。
 
         600 フレームの 0.99 は、遅いほうから 7 番目（README に書いた数え方）。
         """
@@ -48,8 +48,8 @@ class TestPercentile:
 
 
 class TestSummarize:
-    def test_持ち時間を超えたフレームだけを数える(self) -> None:
-        """ちょうど持ち時間のフレームは数えない（超えたときだけ）。"""
+    def test_フレームバジェットを超えたフレームだけを数える(self) -> None:
+        """ちょうどフレームバジェットのフレームは数えない（超えたときだけ）。"""
         wall = [1.0, FRAME_MS, FRAME_MS + 0.01, 30.0]
         stats = summarize(wall, [0.5] * len(wall))
         assert stats.over_frame == 2

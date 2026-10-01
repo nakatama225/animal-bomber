@@ -1,4 +1,4 @@
-"""描画の重さの関門（`tools/bench_gate.py`）が、決めたとおりに合否を出すことの検査。
+"""描画の重さの合格基準（`tools/bench_gate.py`）が、決めたとおりに合否を出すことの検査。
 
 合否を決める計算は、測った値（機械と負荷で変わる）と切り離して確かめられる。
 ここでは結果を手で作って渡す。測定のほうのテストは、合否が出るかどうかまでしか
@@ -63,26 +63,29 @@ def gate_rows(square: float = 1.0, glow: float = 1.0, **kwargs: Any) -> list[Res
 
 
 class TestGatePassed:
-    def test_関門の値を決めたとおりに持つ(self) -> None:
-        """文書に書いた値（持ち時間の半分 8.33 ms・100 フレーム）を固定する。"""
+    def test_しきい値と最小のフレーム数を決めたとおりに持つ(self) -> None:
+        """文書に書いた値を固定する。
+
+        しきい値はフレームバジェットの半分の 8.33 ms、最小のフレーム数は 100。
+        """
         assert pytest.approx(1000 / 60 / 2) == GATE_MS
         assert MIN_GATE_FRAMES == 100
 
-    def test_ちょうど関門の値なら合格(self) -> None:
+    def test_ちょうどしきい値なら合格(self) -> None:
         assert gate_passed(gate_rows(GATE_MS, GATE_MS), 600) is True
 
-    def test_光の玉の行が関門の値を超えたら不合格(self) -> None:
+    def test_光の玉の行がしきい値を超えたら不合格(self) -> None:
         assert gate_passed(gate_rows(1.0, GATE_MS + 0.01), 600) is False
 
-    def test_四角い粒の行が関門の値を超えても不合格(self) -> None:
+    def test_四角い粒の行がしきい値を超えても不合格(self) -> None:
         """重い側で見ること。
 
         薄めた絵を先に作っておく形では、四角い粒の行のほうが重い回があった。
-        光の玉の行だけを見ると、重いほうの行が関門を超えても合格と出てしまう。
+        光の玉の行だけを見ると、重いほうの行がしきい値を超えても合格と出てしまう。
         """
         assert gate_passed(gate_rows(GATE_MS + 0.01, 1.0), 600) is False
 
-    def test_関門で見る値は2行の大きいほうのp99(self) -> None:
+    def test_判定に使う値は2行の大きいほうのp99(self) -> None:
         assert gate_p99(gate_rows(3.0, 5.0), 600) == 5.0
         assert gate_p99(gate_rows(5.0, 3.0), 600) == 5.0
 
@@ -94,7 +97,7 @@ class TestGatePassed:
         assert gate_passed(rows, 600) is False
 
     @pytest.mark.parametrize("kind", ["square", "glow"])
-    def test_関門の2行の片方しか無ければ合否を出さない(self, kind: str) -> None:
+    def test_判定に使う2行の片方しか無ければ合否を出さない(self, kind: str) -> None:
         """重い側が分からないまま、片方の行だけで合否を出さないこと。"""
         assert gate_passed([result(kind=kind)], 600) is None
 
@@ -103,15 +106,15 @@ class TestGatePassed:
         [{"tile": 52}, {"phases": "spread"}, {"fade": "alpha"}, {"pace": "sleep"}],
         ids=["マス52", "位相を散らす", "貼るときに薄める", "眠る"],
     )
-    def test_関門と違う条件の行では合否を出さない(
+    def test_判定に使う行の条件に合わない行では合否を出さない(
         self, condition: dict[str, Any]
     ) -> None:
         assert gate_passed(gate_rows(**condition), 600) is None
 
-    def test_関門より大きいマスの行は_合否に使わない(self) -> None:
+    def test_マス60より大きい行は_合否に使わない(self) -> None:
         """既定の引数はマス 96 の行も測る。その行で合否を決めないこと。
 
-        関門の行を「マスが 60 以上」で選ぶ誤りは、マス 52 の行では見つからない。
+        判定に使う行を「マスが 60 以上」で選ぶ誤りは、マス 52 の行では見つからない。
         """
         rows = gate_rows() + gate_rows(GATE_MS + 1, GATE_MS + 1, tile=96)
         assert gate_passed(rows, 600) is True
