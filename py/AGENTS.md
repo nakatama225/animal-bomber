@@ -11,10 +11,11 @@ uv を使います。`uv.lock` を手で編集しないでください。`pyproj
 ## 検査
 
 ```sh
-uv run tools/verify.sh   # ruff → ruff format --check → mypy --strict → lint-imports → pytest
+uv run tools/verify.sh   # ruff → ruff format --check → mypy --strict → lint-imports → pytest（3.12 と 3.11）
 ```
 
-各段階はこれが通ることを完了の条件にしています。
+各段階はこれが通ることを完了の条件にしています。pytest は 3.12 のあと、3.11 でも走らせます
+（`uv run --isolated --python 3.11 pytest`。試合の結果が Python の版で変わらないことを見るため）。
 
 ## 描画の重さ
 
@@ -93,8 +94,31 @@ ruff の禁止（TID251）は全体に掛け、使ってよい層（`presentatio
 `test_guards.py` は、違反したファイルを書き出して本物の検査コマンドが失敗することも確かめています。
 
 set の反復は、import でも構文木でも止められません。`tests/determinism/test_hashseed.py` が、
-同じ処理を文字列の hash の種を変えた2つのプロセスで走らせて突き合わせます
-（いまは乱数と状態の要約だけ。1試合ぶんのリプレイができたら、それに差し替えてください）。
+台本どおりの試合（`tests/determinism/scenario.py`）を文字列の hash の種を変えた2つの
+プロセスで走らせて突き合わせます。ルールの層に処理を足したら、台本がその処理を通るように
+台本も足してください（台本が通らない処理の set の反復は、ここでは見つかりません）。
+
+## 時刻と記録
+
+- ⛔ 操作の記録と通信の時刻に、盤面の時刻（`world.now`。型は `Tick`）を使わないでください。
+  試合通算の時刻（`MatchTick`）を使います。型が違うので、盤面の時刻をそのまま渡すと mypy が
+  失敗します（理由は `domain/core/tick.py` の `MatchTick`）
+- ⛔ `MatchTick(world.now)` と書かないでください（包むと mypy は通ります。段階 1 では2つの時刻が
+  いつも同じ値なので、テストでも見つかりません）。`MatchTick(...)` を作るのは、試合通算の時刻を
+  数える1か所（段階 1 の後半で作るフレームを回す輪）とテストだけにします
+- `tests/determinism/test_golden.py` は、台本どおりの試合の状態の要約を固定値と比べます。
+  ルールを変えて試合の結果が変わったら失敗します。変わることが意図どおりなら値を出し直して
+  書き換え、なぜ変わったかをコミットに書いてください。意図していなければ、値を書き換えずに
+  原因を探してください。3.12 と 3.11 で値が違ったら、ルールの層の誤り（版で値が変わる計算）です
+
+## docstring と docs
+
+- docstring は PEP 257 の例と同じ形にします。要約は開きの引用符と同じ行に1行で書き、
+  複数行なら要約の下を1行空け、閉じの引用符は単独の行に置きます。関数・クラス・モジュールは
+  ruff（D205・D209・D212）が、定数や項目の下の docstring は `tests/boundary/test_docstrings.py` が
+  見ます
+- `docs/` の Markdown に書いた REPL の例（`>>>` の行）は、pytest が走らせて値を確かめます。
+  ルールを変えて値が変わったら、例の値も直してください
 
 ## 動物の能力を追加するとき
 

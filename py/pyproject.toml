@@ -25,7 +25,10 @@ build-backend = "hatchling.build"
 packages = ["src/animal_bomber"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# docs/ の Markdown に書いた REPL の例（`>>>` で始まる行）も、書いたとおりの値が出るかを
+# 確かめる。例が古くなると失敗する。
+testpaths = ["tests", "docs"]
+addopts = ["--doctest-glob=*.md"]
 # 補助のスクリプト（tools/）のうち pygame を使わないものを、テストが直接 import する。
 pythonpath = ["tools"]
 
@@ -37,7 +40,10 @@ target-version = "py311"
 src = ["src", "tests", "tools"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "TID"]
+# D205・D209・D212 は docstring の形（PEP 257 の例と同じ形）。要約は開きの `"""` と同じ行に
+# 1行で書き、複数行なら要約の下を1行空け、閉じの `"""` は単独の行に置く。ruff は定数や
+# 項目の下の docstring を見ないので、そちらは tests/boundary/test_docstrings.py が見る。
+select = ["E", "F", "I", "UP", "B", "SIM", "TID", "D205", "D209", "D212"]
 
 # 試合の結果を決める層（ルール・動物のデータ・CPU）で使ってはいけないもの。
 # 既定で全体に掛け（通信の層にも掛かる）、使ってよい層だけを下の per-file-ignores
@@ -121,7 +127,7 @@ layers = [
     "(app)",
     "(shell)",
     "presentation",
-    "(net)",
+    "net",
     "(ai)",
     "(content)",
     "domain",

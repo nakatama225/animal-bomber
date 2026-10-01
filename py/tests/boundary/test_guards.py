@@ -1,8 +1,9 @@
 """層の境界を守る検査が、実際に違反を見つけることの確認。
 
 この実装には「ルールの層は乱数・実時間・描画・環境で結果が違いうる計算を自前で使わない」
-「依存を逆流させない」「種類の分岐を書き忘れない」という約束があり、それぞれを
-ruff（TID251）・import-linter・mypy の設定として書いてある。
+「依存を逆流させない」「種類の分岐を書き忘れない」「盤面の時刻と試合通算の時刻を
+取り違えない」「docstring の形をそろえる」という約束があり、それぞれを ruff（TID251 と
+D205・D209・D212）・import-linter・mypy の設定や型として書いてある。
 
 ⚠️ 設定を書いただけでは、それが効いているかは分からない。設定の書き方を間違えていても、
 違反が無ければ検査は緑のまま通る。**緑のまま通る検査は何も防いでいない。**
@@ -19,6 +20,10 @@ ruff（TID251）・import-linter・mypy の設定として書いてある。
 - ruff の禁止を外す先に、`domain/` か `domain/core/` を足す
 - import-linter の層の検査から `exhaustive` を外す
 - mypy の設定から `exhaustive-match` を外す
+- ruff の select から D205・D209・D212 を外す
+
+設定がほかの所で緩められていないこと（docs の例を集める設定・docstring の規則を外す
+先）は `test_config.py` が見る。
 """
 
 import subprocess
@@ -240,6 +245,39 @@ class Test境界を守る検査:
         assert result.failed
         assert "[exhaustive-match]" in result.output
         assert path.name in result.output
+
+    def test_記録の時刻に盤面の時刻を渡すと_mypyが失敗する(self, probe: Probe) -> None:
+        """盤面の時刻（`Tick`）と試合通算の時刻（`MatchTick`）を取り違えないこと。
+
+        盤面の時刻はラウンドごとに 0 へ戻るので、記録に使うと2ラウンド目から記録が
+        止まる（`domain/core/tick.py` の `MatchTick`）。
+        """
+        path = probe.write(
+            "net",
+            "from animal_bomber.domain.input.player_input import PlayerInput\n"
+            "from animal_bomber.domain.state.world import create_world\n"
+            "from animal_bomber.net.input_log import InputLog\n\n"
+            'world = create_world(1, ["rabbit"])\n'
+            "InputLog().record(world.now, 0, PlayerInput.IDLE)\n",
+        )
+        result = mypy()
+        assert result.failed
+        assert '"Tick"; expected "MatchTick"  [arg-type]' in result.output
+        assert path.name in result.output
+
+    def test_docstringの形を崩すと_ruffが失敗する(self, probe: Probe) -> None:
+        """要約が次の行・要約が2行に折れる・閉じが本文と同じ行、の3つを1つずつ書く。"""
+        path = probe.write(
+            "domain/core",
+            'def a() -> None:\n    """\n    要約。\n    """\n\n\n'
+            'def b() -> None:\n    """要約が\n    折れている。\n    """\n\n\n'
+            'def c() -> None:\n    """要約。\n\n    本文。"""\n',
+        )
+        result = ruff()
+        assert result.failed
+        assert path.name in result.output
+        for code in ("D212", "D205", "D209"):
+            assert code in result.output, code
 
     def test_描画の層では_乱数と実時間を使ってよい(self, probe: Probe) -> None:
         """禁止が層を選んで効いていること。全体に効いていると、描画が書けない。"""

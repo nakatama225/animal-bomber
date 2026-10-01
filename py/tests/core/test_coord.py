@@ -37,8 +37,11 @@ class TestCoord:
         assert start.step(direction, 3).step(direction.opposite, 3) == start
 
     def test_4方向へ_1マスと3マス進んだ位置(self) -> None:
-        """差分を取り違えても（下と左を入れ替えるなど）、進む距離を無視しても、
-        進んで戻るテストは元の位置に戻るので通ってしまう。"""
+        """進んだ先のマスを、向きごとに値で確かめる。
+
+        差分を取り違えても（下と左を入れ替えるなど）、進む距離を無視しても、
+        進んで戻るテストは元の位置に戻るので通ってしまう。
+        """
         start = Cell(5, 5)
         assert {d: start.step(d) for d in Direction} == {
             Direction.UP: Cell(5, 4),
