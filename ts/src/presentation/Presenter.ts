@@ -39,7 +39,7 @@ export class NullNoticeSink implements NoticeSink {
  * 戻り値で返るので、受け取らないという選択ができる。
  *
  * ```
- * const events = simulation.step(world, intents);
+ * const events = simulation.step(world, playerInputs);
  * // 遊ぶとき
  * presenter.consume(events);
  * // 1万試合を測るとき（何も書かない）

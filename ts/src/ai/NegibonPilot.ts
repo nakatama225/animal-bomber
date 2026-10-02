@@ -1,6 +1,6 @@
 import { cellOf, DIRECTIONS, step, type Point } from '../domain/core/Coord.js';
 import { secondsToTicks } from '../domain/core/Tick.js';
-import { IDLE_INTENT, type PlayerIntent } from '../domain/intent/PlayerIntent.js';
+import { IDLE_INPUT, type PlayerInput } from '../domain/input/PlayerInput.js';
 import {
   alongsAiming,
   alongsFacing,
@@ -79,21 +79,21 @@ export class NegibonPilot {
   /** 寄る位置（外周の上の位置）。 */
   #target: number | null = null;
 
-  next(world: Readonly<WorldState>, lane: Negibon): PlayerIntent {
+  next(world: Readonly<WorldState>, lane: Negibon): PlayerInput {
     const foes = world.players.filter((player) => canBeHit(world, player));
     if (foes.length === 0) {
       this.#locked = 0;
-      return IDLE_INTENT;
+      return IDLE_INPUT;
     }
     this.#reaimIn -= 1;
     const spot = laneSpot(lane.along);
 
     if (foes.some((foe) => inLine(world, spot, foe))) {
       this.#locked += 1;
-      if (this.#locked <= AIM_TICKS) return IDLE_INTENT; // 狙っている間は動かない
+      if (this.#locked <= AIM_TICKS) return IDLE_INPUT; // 狙っている間は動かない
       this.#locked = 0;
       // まだ撃てなくても押す。そのときは何も起きず、狙い直しになる（原型と同じ）。
-      return { ...IDLE_INTENT, bomb: true };
+      return { ...IDLE_INPUT, bomb: true };
     }
     this.#locked = 0;
 
@@ -244,11 +244,11 @@ function directionTo(along: number, target: number): -1 | 0 | 1 {
  * どの辺で何を押すとどちらへ進むかは、人の操作と同じ変換（`laneStep`）から逆に引く。
  * 別に表を持つと、人と CPU で外周の進み方が食い違ったときに気づけない。
  */
-function keysFor(spot: LaneSpot, direction: -1 | 0 | 1): PlayerIntent {
-  if (direction === 0) return IDLE_INTENT;
+function keysFor(spot: LaneSpot, direction: -1 | 0 | 1): PlayerInput {
+  if (direction === 0) return IDLE_INPUT;
   for (const key of DIRECTIONS) {
-    const intent = { ...IDLE_INTENT, [key]: true };
-    if (laneStep(spot.side, intent) === direction) return intent;
+    const playerInput = { ...IDLE_INPUT, [key]: true };
+    if (laneStep(spot.side, playerInput) === direction) return playerInput;
   }
-  return IDLE_INTENT;
+  return IDLE_INPUT;
 }

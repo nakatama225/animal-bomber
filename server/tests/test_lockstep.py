@@ -281,7 +281,7 @@ class Test入力を配る:
         assert len(messages(peers[1], "input")) == 1
         assert len(messages(peers[2], "input")) == 1
 
-    async def test_意思のビットは中身を見ずに流す(self):
+    async def test_入力のビットは中身を見ずに流す(self):
         room, peers = await started_room(2)
 
         await room.route(1, input_message(0, bits="読まない"))

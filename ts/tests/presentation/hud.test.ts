@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { GameSession } from '../../src/app/GameSession.js';
 import { secondsToTicks, tick } from '../../src/domain/core/Tick.js';
-import { IdleIntentSource } from '../../src/domain/intent/IntentSource.js';
+import { IdleInputSource } from '../../src/domain/input/InputSource.js';
 import { defaultMatchConfig } from '../../src/domain/rules/MatchConfig.js';
 import { OUT } from '../../src/domain/state/Life.js';
 import { Countdown } from '../../src/presentation/audio/Countdown.js';
@@ -24,7 +24,7 @@ const ROSTER: Roster = [
 
 function game(overrides: Partial<ReturnType<typeof defaultMatchConfig>> = {}): GameSession {
   const session = new GameSession({ ...defaultMatchConfig(5, ['rabbit', 'elephant']), ...overrides });
-  for (const player of session.world.players) session.attach(new IdleIntentSource(player.id));
+  for (const player of session.world.players) session.attach(new IdleInputSource(player.id));
   return session;
 }
 

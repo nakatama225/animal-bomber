@@ -1,6 +1,6 @@
 import type { Direction, Point } from '../core/Coord.js';
 import type { ActiveAction } from '../abilities/ActiveAction.js';
-import type { PlayerIntent } from '../intent/PlayerIntent.js';
+import type { PlayerInput } from '../input/PlayerInput.js';
 import type { EffectBag } from './EffectBag.js';
 import type { Life } from './Life.js';
 import type { Tick } from '../core/Tick.js';
@@ -101,16 +101,16 @@ export interface PlayerState {
    * 失われる。**状態の一部として持つ**ことで、リプレイと通信対戦で
    * 押した瞬間の判定まで一致する。
    */
-  previousIntent: PlayerIntent;
+  previousInput: PlayerInput;
 }
 
 /** そのボタンをこの tick に押し下げたか（押しっぱなしは含まない）。 */
 export function justPressed(
   player: PlayerState,
-  intent: PlayerIntent,
+  playerInput: PlayerInput,
   button: 'bomb' | 'action',
 ): boolean {
-  return intent[button] && !player.previousIntent[button];
+  return playerInput[button] && !player.previousInput[button];
 }
 
 /**

@@ -12,7 +12,7 @@ TypeScript 版の `ts/src/net/protocol.ts` と**同じ約束を、もう一方�
 
 中継は `input` の `tick` `match` と、`hash` の `tick` `hash` `rngCalls` `match` を読む。
 どれも「数を比べる・最後に配った tick を覚える・いまの試合のものかを見る」ためだけで、
-その数が試合の中で何を意味するかは知らない。意思のビット（`bits`）も、試合の設定（`config`）も、
+その数が試合の中で何を意味するかは知らない。入力のビット（`bits`）も、試合の設定（`config`）も、
 中身を見ずにそのまま流す。始まる前の設定（`settings`）も同じで、見るのは送り主が
 ホストか・試合が始まる前か、だけ。
 
@@ -40,7 +40,7 @@ FROM_PEER: dict[str, tuple[str, ...]] = {
     # 試合を始める。ホスト（0番）だけが送れる。config は中継が読まずに全員へ配る。
     # 始まったあとに送ると次の試合になる（試合が決まった幕の「もういっかい」）
     "start": ("config",),
-    # ある tick の自分の意思。1 tick に1通、tick の昇順に送る。match はいまの試合の番号
+    # ある tick の自分の入力。1 tick に1通、tick の昇順に送る。match はいまの試合の番号
     "input": ("tick", "bits", "match"),
     # ある tick を進めたあとの状態の要約と、試合の乱数を引いた回数、いまの試合の番号
     "hash": ("tick", "hash", "rngCalls", "match"),

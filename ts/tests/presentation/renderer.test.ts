@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CpuIntentSource, cpuSeed } from '../../src/ai/CpuIntentSource.js';
+import { CpuInputSource, cpuSeed } from '../../src/ai/CpuInputSource.js';
 import { CPU_LEVELS } from '../../src/ai/CpuLevel.js';
 import { GameSession } from '../../src/app/GameSession.js';
 import { centerOf } from '../../src/domain/core/Coord.js';
@@ -34,7 +34,7 @@ describe('描画', () => {
     const animals = ['rabbit', 'frog', 'elephant', 'fox'];
     const game = new GameSession({ ...defaultMatchConfig(seed, animals), winsToTake: 2 });
     game.world.players.forEach((player) =>
-      game.attach(new CpuIntentSource(player.id, CPU_LEVELS.oni, cpuSeed(seed, player.id))),
+      game.attach(new CpuInputSource(player.id, CPU_LEVELS.oni, cpuSeed(seed, player.id))),
     );
     const canvas = fakeCanvas({ keepLog: false });
     const renderer = new Renderer(canvas.context, 920, 680);

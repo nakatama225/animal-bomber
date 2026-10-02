@@ -1,5 +1,5 @@
 import type { Point } from '../core/Coord.js';
-import type { PlayerIntent } from '../intent/PlayerIntent.js';
+import type { PlayerInput } from '../input/PlayerInput.js';
 import { abilityOf } from '../abilities/registry.js';
 import { isSolidFor } from '../query/BoardQuery.js';
 import type { PlayerId, PlayerState } from '../state/PlayerState.js';
@@ -33,16 +33,16 @@ import type { Direction } from '../core/Coord.js';
  * というのがこの配置の主張になっている。
  */
 export class MovementSystem {
-  step(world: WorldState, intents: ReadonlyMap<PlayerId, PlayerIntent>): void {
+  step(world: WorldState, playerInputs: ReadonlyMap<PlayerId, PlayerInput>): void {
     for (const player of world.players) {
       if (!isAlive(player)) continue;
-      const intent = intents.get(player.id);
-      if (intent === undefined) continue;
-      this.#movePlayer(world, player, intent);
+      const playerInput = playerInputs.get(player.id);
+      if (playerInput === undefined) continue;
+      this.#movePlayer(world, player, playerInput);
     }
   }
 
-  #movePlayer(world: WorldState, player: PlayerState, intent: PlayerIntent): void {
+  #movePlayer(world: WorldState, player: PlayerState, playerInput: PlayerInput): void {
     // 泣いている間はどの入力も通らない。
     if (isFrozen(player)) return;
 
@@ -51,8 +51,8 @@ export class MovementSystem {
     // 動物を足すたびにこの行が増えていく。
     if (player.action?.drivesMovement === true) return;
 
-    let dx = (intent.right ? 1 : 0) - (intent.left ? 1 : 0);
-    let dy = (intent.down ? 1 : 0) - (intent.up ? 1 : 0);
+    let dx = (playerInput.right ? 1 : 0) - (playerInput.left ? 1 : 0);
+    let dy = (playerInput.down ? 1 : 0) - (playerInput.up ? 1 : 0);
 
     // 「そうさ反転」がかかっていると、押した向きと逆へ進む。
     if (player.effects.has('reverse')) {

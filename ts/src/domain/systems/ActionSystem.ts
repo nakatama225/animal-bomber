@@ -1,7 +1,7 @@
 import { abilityOf } from '../abilities/registry.js';
 import { tick } from '../core/Tick.js';
 import type { SimEvent } from '../events/SimEvent.js';
-import type { PlayerIntent } from '../intent/PlayerIntent.js';
+import type { PlayerInput } from '../input/PlayerInput.js';
 import type { PlayerId, PlayerState } from '../state/PlayerState.js';
 import { isAlive } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
@@ -35,11 +35,11 @@ import type { WorldState } from '../state/WorldState.js';
  * 自分で進める。ここは押した長さを数えて呼び分けるだけ。
  */
 export class ActionSystem {
-  step(world: WorldState, intents: ReadonlyMap<PlayerId, PlayerIntent>): SimEvent[] {
+  step(world: WorldState, playerInputs: ReadonlyMap<PlayerId, PlayerInput>): SimEvent[] {
     const events: SimEvent[] = [];
     for (const player of world.players) {
-      const intent = intents.get(player.id);
-      if (intent === undefined) continue;
+      const playerInput = playerInputs.get(player.id);
+      if (playerInput === undefined) continue;
 
       if (player.abilityCooldown > 0) {
         player.abilityCooldown = tick(player.abilityCooldown - 1);
@@ -50,7 +50,7 @@ export class ActionSystem {
         continue;
       }
       if (!isAlive(player)) continue;
-      events.push(...this.#watchButton(world, player, intent));
+      events.push(...this.#watchButton(world, player, playerInput));
     }
     return events;
   }
@@ -77,17 +77,17 @@ export class ActionSystem {
   #watchButton(
     world: WorldState,
     player: PlayerState,
-    intent: PlayerIntent,
+    playerInput: PlayerInput,
   ): SimEvent[] {
     // ラウンド開始時から押しっぱなしのぶんは、離すまで数え始めない。
     if (player.actionHeld < 0) {
-      if (!intent.action) player.actionHeld = tick(0);
+      if (!playerInput.action) player.actionHeld = tick(0);
       return [];
     }
 
     const ability = abilityOf(player.animal);
 
-    if (intent.action) {
+    if (playerInput.action) {
       player.actionHeld = tick(player.actionHeld + 1);
       // 長押しがしきい値に届いた瞬間に1回だけ出す。
       if (player.actionHeld === ability.holdTicks && player.specialCharges > 0) {

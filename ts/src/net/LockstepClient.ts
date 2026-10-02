@@ -1,4 +1,4 @@
-import type { IntentSource } from '../domain/intent/IntentSource.js';
+import type { InputSource } from '../domain/input/InputSource.js';
 import type { SimEvent } from '../domain/events/SimEvent.js';
 import type { PlayerId } from '../domain/state/PlayerState.js';
 import { LockstepDriver, type LockstepSession } from './LockstepDriver.js';
@@ -20,14 +20,14 @@ export interface LanHooks {
   /** 設定から試合を作る。操作の窓口はまだ繋がない。 */
   readonly createSession: (settings: LanSettings) => LockstepSession;
   /** この端末で操作する人の入力。 */
-  readonly localSource: (playerId: PlayerId) => IntentSource;
+  readonly localSource: (playerId: PlayerId) => InputSource;
   /**
    * 人間のいない枠と、抜けた人を受け持つ CPU。
    *
    * ⚠️ 全員の端末で同じ手を指す必要がある。種は試合の設定から作り、
    * 端末ごとの値（時刻・乱数）を混ぜないこと。
    */
-  readonly cpuSource: (playerId: PlayerId, settings: LanSettings) => IntentSource;
+  readonly cpuSource: (playerId: PlayerId, settings: LanSettings) => InputSource;
 }
 
 /** 試合中の段階。 */

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { GameSession } from '../../src/app/GameSession.js';
-import { IDLE_INTENT } from '../../src/domain/intent/PlayerIntent.js';
+import { IDLE_INPUT } from '../../src/domain/input/PlayerInput.js';
 import { defaultMatchConfig } from '../../src/domain/rules/MatchConfig.js';
 import { LockstepClient, type LanHooks } from '../../src/net/LockstepClient.js';
 import type { LanSettings, PeerMessage } from '../../src/net/protocol.js';
@@ -14,7 +14,7 @@ const SETTINGS: LanSettings = {
 
 function client(): { client: LockstepClient; sent: PeerMessage[] } {
   const sent: PeerMessage[] = [];
-  const c = new LockstepClient({ send: (m) => sent.push(m) }, hooksWith(() => IDLE_INTENT));
+  const c = new LockstepClient({ send: (m) => sent.push(m) }, hooksWith(() => IDLE_INPUT));
   return { client: c, sent };
 }
 
@@ -62,7 +62,7 @@ describe('つないでから始まるまで', () => {
     c.receive(text({ t: 'start', seats: [0, 1], config: SETTINGS, match: 1 }));
 
     expect(c.phase.kind).toBe('playing');
-    // 始めた時点で、最初の 3 tick ぶんの何もしない意思を送っている。
+    // 始めた時点で、tick 0〜2 の3通を送っている（中身は始まった時点で押している内容。この試合の窓口は何も押さない）。
     expect(sent.filter((m) => m.t === 'input').map((m) => m.t === 'input' && m.tick)).toEqual([0, 1, 2]);
   });
 
@@ -149,7 +149,7 @@ describe('同じ接続での次の試合', () => {
   /** 試合が決まったかを、テストの側で決められる端末。決めた印は、次の試合を作るたびに戻る。 */
   function switchable(): { client: LockstepClient; sent: PeerMessage[]; finish: () => void } {
     let finished = false;
-    const base = hooksWith(() => IDLE_INTENT);
+    const base = hooksWith(() => IDLE_INPUT);
     const hooks: LanHooks = {
       ...base,
       createSession: (settings) => {

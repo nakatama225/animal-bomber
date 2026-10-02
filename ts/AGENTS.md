@@ -73,7 +73,7 @@ CPU が永久に爆弾を置かなくなります（原型で実際に起きま�
   片方だけ変えると `server/tests/test_protocol_sync.py` が落ちます
 - ⛔ 通信と操作の記録の時刻に `world.now` を使わないでください。ラウンドごとに 0 へ戻り、決着のあとの待ちの間は
   止まります。試合通算の tick（`MatchClock` の形。`GameSession.elapsed` と `LockstepDriver.elapsed`）を使います
-- 自分の端末のプレイヤーも `NetworkIntentSource` を通します。キーボードを直接繋ぐと、自分の手元でだけ
+- 自分の端末のプレイヤーも `NetworkInputSource` を通します。キーボードを直接繋ぐと、自分の手元でだけ
   操作が早く効いて試合がずれます
 
 ## 数値の調整

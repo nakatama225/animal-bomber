@@ -1,11 +1,11 @@
-import type { IntentSource } from '../domain/intent/IntentSource.js';
+import type { InputSource } from '../domain/input/InputSource.js';
 import {
-  IDLE_INTENT,
-  MAX_INTENT_BITS,
-  packIntent,
-  unpackIntent,
-  type PlayerIntent,
-} from '../domain/intent/PlayerIntent.js';
+  IDLE_INPUT,
+  MAX_INPUT_BITS,
+  packInput,
+  unpackInput,
+  type PlayerInput,
+} from '../domain/input/PlayerInput.js';
 import type { PlayerId } from '../domain/state/PlayerState.js';
 import type { WorldState } from '../domain/state/WorldState.js';
 
@@ -48,27 +48,27 @@ export interface MatchClock {
  *
  * 記録の時刻は `MatchClock.elapsed`（試合が始まってからの tick）で持つ。
  * 通信対戦で届いた入力の記録（`ConfirmedInputs.log`）も同じ時刻なので、
- * `ReplayIntentSource` で流し直せる。CPU の枠は設定から作り直す（`ConfirmedInputs.log` の説明と docs/05）。
+ * `ReplayInputSource` で流し直せる。CPU の枠は設定から作り直す（`ConfirmedInputs.log` の説明と docs/05）。
  *
  * ## 途中で抜けた人
  *
- * 通信対戦で途中で抜けた人は、その人の意思を記録から最後に使う tick（`departedAfter`）を持つ。
+ * 通信対戦で途中で抜けた人は、その人の入力を記録から最後に使う tick（`departedAfter`）を持つ。
  * 本物の端末（`LockstepDriver`）はその次の tick から CPU に替え、再生の窓口も同じ tick で
- * 代わりの窓口に任せる。これが無いと、記録はその人の最後の意思を返し続けるので、
+ * 代わりの窓口に任せる。これが無いと、記録はその人の最後の入力を返し続けるので、
  * 例外も出ずに別の試合になる。
  *
  * ⚠️ 似た名前が3つある。このクラスの `lastTick` は、記録にある最後の変化の tick。
  * 約束の `peer_left` の `lastTick` は、中継がその人の入力を最後に配った tick。
- * `departedAfter` は、その人の意思を記録から最後に使う tick で、`peer_left` の `lastTick` をそのまま入れる。
+ * `departedAfter` は、その人の入力を記録から最後に使う tick で、`peer_left` の `lastTick` をそのまま入れる。
  */
 export class InputLog {
   /** プレイヤーごとの、変化した時点の一覧。tick の昇順で並ぶ。 */
   readonly #changes = new Map<PlayerId, { tick: number; bits: number }[]>();
-  /** 途中で抜けた人と、その人の意思を記録から最後に使う tick。 */
+  /** 途中で抜けた人と、その人の入力を記録から最後に使う tick。 */
   readonly #departedAfter = new Map<PlayerId, number>();
 
   /**
-   * ある tick の意思を記録する。
+   * ある tick の入力を記録する。
    *
    * 直前と同じ値なら何もしない。tick は 0 以上の安全な整数（`Number.MAX_SAFE_INTEGER` 以下で、
    * 隣の整数と区別できる整数）を昇順に渡す。
@@ -76,12 +76,12 @@ export class InputLog {
    * @throws Error tick が 0 以上の安全な整数でないとき（文字列にすると `decode` が読めない形になる）か、
    *   直前と違う値で tick が戻っているとき
    */
-  record(atTick: number, playerId: PlayerId, intent: PlayerIntent): void {
+  record(atTick: number, playerId: PlayerId, playerInput: PlayerInput): void {
     // 直前と同じ値のときも確かめる。一覧を作るより前に止めないと、空の一覧が残って `encode` が読めない区画を書く。
     if (!Number.isSafeInteger(atTick) || atTick < 0) {
       throw new Error(`記録する tick が 0 以上の安全な整数ではない: ${atTick}`);
     }
-    const bits = packIntent(intent);
+    const bits = packInput(playerInput);
     let list = this.#changes.get(playerId);
     if (list === undefined) {
       list = [];
@@ -96,13 +96,13 @@ export class InputLog {
   }
 
   /**
-   * ある tick の意思を取り出す。
+   * ある tick の入力を取り出す。
    *
-   * 記録の無いプレイヤーと、記録が始まる前の tick には何もしない意思を返す。
+   * 記録の無いプレイヤーと、記録が始まる前の tick には何も押していない入力を返す。
    */
-  at(atTick: number, playerId: PlayerId): PlayerIntent {
+  at(atTick: number, playerId: PlayerId): PlayerInput {
     const list = this.#changes.get(playerId);
-    if (list === undefined || list.length === 0) return IDLE_INTENT;
+    if (list === undefined || list.length === 0) return IDLE_INPUT;
 
     // 記録は昇順なので、二分探索で「atTick 以下の最後の変化」を探す。
     let low = 0;
@@ -119,8 +119,8 @@ export class InputLog {
         high = mid - 1;
       }
     }
-    if (found < 0) return IDLE_INTENT;
-    return unpackIntent((list[found] as { tick: number; bits: number }).bits);
+    if (found < 0) return IDLE_INPUT;
+    return unpackInput((list[found] as { tick: number; bits: number }).bits);
   }
 
   /** 記録されている最後の tick。何も無ければ -1。 */
@@ -134,7 +134,7 @@ export class InputLog {
   }
 
   /**
-   * 途中で抜けた人を記録する。その人の意思は `afterTick` まで記録から使い、次の tick からは
+   * 途中で抜けた人を記録する。その人の入力は `afterTick` まで記録から使い、次の tick からは
    * 代わりの窓口（CPU）に任せる。
    *
    * @param afterTick 中継が知らせた `peer_left` の `lastTick`。入力が1つも配られないうちに抜けた人は -1
@@ -151,7 +151,7 @@ export class InputLog {
     this.#departedAfter.set(playerId, afterTick);
   }
 
-  /** その人の意思を記録から最後に使う tick。途中で抜けていなければ undefined。 */
+  /** その人の入力を記録から最後に使う tick。途中で抜けていなければ undefined。 */
   departedAfter(playerId: PlayerId): number | undefined {
     return this.#departedAfter.get(playerId);
   }
@@ -159,7 +159,7 @@ export class InputLog {
   /**
    * `atTick` の時点で、その人が代わりの窓口に替わっているか（`departedAfter` の次の tick から）。
    *
-   * 本物の端末（`LockstepDriver`）と再生の窓口（`ReplayIntentSource`）は、どちらもこの判定で替える。
+   * 本物の端末（`LockstepDriver`）と再生の窓口（`ReplayInputSource`）は、どちらもこの判定で替える。
    */
   replacedAt(atTick: number, playerId: PlayerId): boolean {
     const last = this.#departedAfter.get(playerId);
@@ -201,11 +201,11 @@ export class InputLog {
    * （変化の一覧の tick は 0 以上、抜けた人の区画の tick（`departedAfter`）は -1 以上の安全な整数。
    * ビットは6つのボタンまで）のものだけを読む。
    * 同じ tick の変化が続くのは `record` も書く形（あとの値が勝つ）なので受け付ける。同じビットが続く項目は、
-   * `record` は書かないが、意思が変わらず流し直しの答えも変わらないので受け付ける。
+   * `record` は書かないが、入力が変わらず流し直しの答えも変わらないので受け付ける。
    *
    * @throws Error 読めない区画か項目（範囲の外の数を含む）、戻っている tick、同じ人の区画の2度目、
    *   同じ人が抜けたことの2度目があるとき。黙って読み飛ばしたりあとの値で上書きしたりすると、その人の
-   *   意思が記録と違うまま（あるいは違う tick で替わって）、例外も出ずに別の試合になる
+   *   入力が記録と違うまま（あるいは違う tick で替わって）、例外も出ずに別の試合になる
    */
   static decode(text: string): InputLog {
     const log = new InputLog();
@@ -235,7 +235,7 @@ export class InputLog {
       for (const entry of body.split(';')) {
         // tick は 0 以上の安全な整数（`record` と同じ範囲）。抜けた人の区画と違い、-1 は無い。
         const found = /^(0|[1-9]\d*),(0|[1-9]\d*)$/.exec(entry);
-        if (found === null || !Number.isSafeInteger(Number(found[1])) || Number(found[2]) > MAX_INTENT_BITS) {
+        if (found === null || !Number.isSafeInteger(Number(found[1])) || Number(found[2]) > MAX_INPUT_BITS) {
           throw new Error(`記録のプレイヤー ${playerId} の項目が読めない: ${entry}`);
         }
         const tick = Number(found[1]);
@@ -261,9 +261,9 @@ export class InputLog {
  * 途中で抜けた人は、`departedAfter` の次の tick から、代わりの窓口（`replacement` で作るもの）に任せる。
  * 本物の端末（`LockstepDriver`）が CPU に繋ぎ替えるのと同じ tick になる。
  */
-export class ReplayIntentSource implements IntentSource {
-  readonly #replacement: ((playerId: PlayerId) => IntentSource) | undefined;
-  #replaced: IntentSource | null = null;
+export class ReplayInputSource implements InputSource {
+  readonly #replacement: ((playerId: PlayerId) => InputSource) | undefined;
+  #replaced: InputSource | null = null;
 
   /**
    * @param replacement 抜けた人を受け持つ窓口を作る。本物の端末と同じものを返すこと
@@ -274,14 +274,14 @@ export class ReplayIntentSource implements IntentSource {
     readonly playerId: PlayerId,
     private readonly log: InputLog,
     private readonly clock: MatchClock,
-    replacement?: (playerId: PlayerId) => IntentSource,
+    replacement?: (playerId: PlayerId) => InputSource,
   ) {
     this.#replacement = replacement;
     // 再生の途中で止まるより、始める前に止まるほうが原因に近い。
     if (log.departedAfter(playerId) !== undefined) this.#requireReplacement();
   }
 
-  next(world: Readonly<WorldState>): PlayerIntent {
+  next(world: Readonly<WorldState>): PlayerInput {
     const tick = this.clock.elapsed;
     if (!this.log.replacedAt(tick, this.playerId)) return this.log.at(tick, this.playerId);
     // 作るのは初めて任せるとき。本物の端末は `departedAfter` の次の tick を進める直前に作るので、
@@ -291,7 +291,7 @@ export class ReplayIntentSource implements IntentSource {
     return this.#replaced.next(world);
   }
 
-  #requireReplacement(): (playerId: PlayerId) => IntentSource {
+  #requireReplacement(): (playerId: PlayerId) => InputSource {
     if (this.#replacement === undefined) {
       throw new Error(`プレイヤー ${this.playerId} は途中で抜けているのに、代わりの窓口の作り方が無い`);
     }
@@ -305,9 +305,9 @@ export class ReplayIntentSource implements IntentSource {
  * 試合中はこれで包んでおけば、あとから記録を取り出して再生できる。
  * 包まれている側は、記録されていることを知らない。
  */
-export class RecordingIntentSource implements IntentSource {
+export class RecordingInputSource implements InputSource {
   constructor(
-    private readonly inner: IntentSource,
+    private readonly inner: InputSource,
     private readonly log: InputLog,
     private readonly clock: MatchClock,
   ) {}
@@ -316,9 +316,9 @@ export class RecordingIntentSource implements IntentSource {
     return this.inner.playerId;
   }
 
-  next(world: Readonly<WorldState>): PlayerIntent {
-    const intent = this.inner.next(world);
-    this.log.record(this.clock.elapsed, this.inner.playerId, intent);
-    return intent;
+  next(world: Readonly<WorldState>): PlayerInput {
+    const playerInput = this.inner.next(world);
+    this.log.record(this.clock.elapsed, this.inner.playerId, playerInput);
+    return playerInput;
   }
 }

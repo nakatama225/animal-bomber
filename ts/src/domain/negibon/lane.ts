@@ -1,5 +1,5 @@
 import { cellOf, type Cell, type Direction, type Point } from '../core/Coord.js';
-import type { PlayerIntent } from '../intent/PlayerIntent.js';
+import type { PlayerInput } from '../input/PlayerInput.js';
 import { LANE_WIDTH } from '../rules/negibon.js';
 import { COLS, ROWS } from '../rules/tuning.js';
 
@@ -128,9 +128,9 @@ const FORWARD: Readonly<Record<LaneSide, readonly [number, number]>> = {
  * 増えるので、直結すると下辺と左辺で操作が逆になる（原型で実際に起きた）。
  * 押した向きを、その辺で位置が増える向きに重ねて、符号だけを採る。
  */
-export function laneStep(side: LaneSide, intent: PlayerIntent): -1 | 0 | 1 {
-  const kx = (intent.right ? 1 : 0) - (intent.left ? 1 : 0);
-  const ky = (intent.down ? 1 : 0) - (intent.up ? 1 : 0);
+export function laneStep(side: LaneSide, playerInput: PlayerInput): -1 | 0 | 1 {
+  const kx = (playerInput.right ? 1 : 0) - (playerInput.left ? 1 : 0);
+  const ky = (playerInput.down ? 1 : 0) - (playerInput.up ? 1 : 0);
   const [fx, fy] = FORWARD[side];
   const along = kx * fx + ky * fy;
   // `Math.sign` は使わない。-0 を返すことがあり、-0 は約束した 0 と同じ値として

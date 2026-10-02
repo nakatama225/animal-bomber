@@ -1,8 +1,8 @@
 import { cellOf, type Direction } from '../domain/core/Coord.js';
 import { Rng } from '../domain/core/Rng.js';
 import { secondsToTicks } from '../domain/core/Tick.js';
-import type { IntentSource } from '../domain/intent/IntentSource.js';
-import { IDLE_INTENT, type PlayerIntent } from '../domain/intent/PlayerIntent.js';
+import type { InputSource } from '../domain/input/InputSource.js';
+import { IDLE_INPUT, type PlayerInput } from '../domain/input/PlayerInput.js';
 import { isSolidFor, playerById } from '../domain/query/BoardQuery.js';
 import { DangerMap } from '../domain/query/DangerMap.js';
 import { cellsTouchedBy } from '../domain/query/Hitbox.js';
@@ -24,7 +24,7 @@ import { tacticOf } from './tactics/registry.js';
 /**
  * CPU の操作の出どころ。
  *
- * キーボードやゲームパッドと同じく、1 tick ごとに `PlayerIntent` を返すだけ。
+ * キーボードやゲームパッドと同じく、1 tick ごとに `PlayerInput` を返すだけ。
  * ゲーム本体からは人間と区別がつかない。
  *
  * ## 1 tick の流れ
@@ -43,7 +43,7 @@ import { tacticOf } from './tactics/registry.js';
  * 決まるので、同じ種・同じ盤面なら CPU は毎回同じ手を指す。
  * 通信対戦で各端末が CPU を動かしても、全員が同じ手を得る。
  */
-export class CpuIntentSource implements IntentSource {
+export class CpuInputSource implements InputSource {
   readonly #level: CpuLevel;
   readonly #rng: Rng;
   readonly #chain: readonly CpuBehavior[];
@@ -82,7 +82,7 @@ export class CpuIntentSource implements IntentSource {
     return this.#memory;
   }
 
-  next(world: Readonly<WorldState>): PlayerIntent {
+  next(world: Readonly<WorldState>): PlayerInput {
     // ラウンドが変わると盤面が作り直される。前のラウンドの経路を捨てる。
     // 延長戦に入ったときも、全員が開始位置へ移って盤面が片付くので同じく捨てる。
     if (world !== this.#world || world.suddenDeath !== this.#sawSuddenDeath) {
@@ -94,7 +94,7 @@ export class CpuIntentSource implements IntentSource {
     }
 
     const me = playerById(world, this.playerId);
-    if (me === undefined) return IDLE_INTENT;
+    if (me === undefined) return IDLE_INPUT;
     if (me.life.kind === 'negibon') {
       this.#onBoard = false;
       this.#pilot ??= new NegibonPilot();
@@ -103,7 +103,7 @@ export class CpuIntentSource implements IntentSource {
     this.#pilot = null;
     if (!isAlive(me)) {
       this.#onBoard = false;
-      return IDLE_INTENT;
+      return IDLE_INPUT;
     }
     // 外周から葱を当てて戻ると、当てた相手の位置へ移る。倒れる前の道筋は使えない。
     if (!this.#onBoard) {
@@ -120,7 +120,7 @@ export class CpuIntentSource implements IntentSource {
     // ここで一律に待つと、危ないマスで2秒固まって倒れる。
     if (me.action !== null) {
       memory.macro = null;
-      if (me.action.drivesMovement) return IDLE_INTENT;
+      if (me.action.drivesMovement) return IDLE_INPUT;
     }
 
     const here = cellOf(me.position);
@@ -266,8 +266,8 @@ function takeStep(memory: CpuMemory): MacroStep | null {
   return step;
 }
 
-/** ボタンと向きを1つの意思にまとめる。 */
-function compose(me: PlayerState, step: MacroStep | null, direction: Direction | null): PlayerIntent {
+/** ボタンと向きを1つの入力にまとめる。 */
+function compose(me: PlayerState, step: MacroStep | null, direction: Direction | null): PlayerInput {
   const pressed = direction === null ? null : compensateReverse(me, direction);
   return {
     up: pressed === 'up',

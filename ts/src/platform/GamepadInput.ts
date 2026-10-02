@@ -1,6 +1,6 @@
-import type { IntentSource } from '../domain/intent/IntentSource.js';
-import type { PlayerIntent } from '../domain/intent/PlayerIntent.js';
-import { IDLE_INTENT } from '../domain/intent/PlayerIntent.js';
+import type { InputSource } from '../domain/input/InputSource.js';
+import type { PlayerInput } from '../domain/input/PlayerInput.js';
+import { IDLE_INPUT } from '../domain/input/PlayerInput.js';
 import type { PlayerId } from '../domain/state/PlayerState.js';
 import type { NavCommand } from '../presentation/menu/MenuCursor.js';
 
@@ -161,7 +161,7 @@ function held(pad: PadSnapshot, index: number): boolean {
 }
 
 /**
- * パッドの入力を意思に変える窓口。
+ * パッドのボタンとスティックを、1 tick ぶんの入力に変える窓口。
  *
  * ⚠️ 読み取りに使う関数を（`PadChoice` を通して）引数で受け取るのは、ブラウザの
  * `navigator.getGamepads` に直接触らずにテストできるようにするため。
@@ -170,7 +170,7 @@ function held(pad: PadSnapshot, index: number): boolean {
  *
  * @param choice つかむパッド。メニューの操作（`PadMenuInput`）と同じものを渡す
  */
-export class GamepadIntentSource implements IntentSource {
+export class GamepadInputSource implements InputSource {
   readonly #reader: PadReader;
 
   constructor(
@@ -180,9 +180,9 @@ export class GamepadIntentSource implements IntentSource {
     this.#reader = new PadReader(choice);
   }
 
-  next(): PlayerIntent {
+  next(): PlayerInput {
     const pad = this.#reader.pick();
-    if (pad === null) return IDLE_INTENT;
+    if (pad === null) return IDLE_INPUT;
     return {
       ...this.#reader.directions(pad),
       bomb: held(pad, BUTTON.a) || held(pad, BUTTON.r1),
@@ -204,7 +204,7 @@ export class PadMenuInput {
   readonly #reader: PadReader;
   #previous: ReadonlySet<NavCommand> = new Set();
 
-  /** @param choice つかむパッド。試合の操作（`GamepadIntentSource`）と同じものを渡す */
+  /** @param choice つかむパッド。試合の操作（`GamepadInputSource`）と同じものを渡す */
   constructor(choice: PadChoice) {
     this.#reader = new PadReader(choice);
   }

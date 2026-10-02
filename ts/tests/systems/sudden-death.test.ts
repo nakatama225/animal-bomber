@@ -7,7 +7,7 @@ import { abilityOf } from '../../src/domain/abilities/registry.js';
 import { centerOf } from '../../src/domain/core/Coord.js';
 import { secondsToTicks, tick } from '../../src/domain/core/Tick.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
-import { IdleIntentSource } from '../../src/domain/intent/IntentSource.js';
+import { IdleInputSource } from '../../src/domain/input/InputSource.js';
 import { placeBomb, placeBombAt } from '../../src/domain/mutations/bombs.js';
 import { detonate } from '../../src/domain/mutations/explode.js';
 import { enterSuddenDeath } from '../../src/domain/mutations/suddenDeath.js';
@@ -29,7 +29,7 @@ const THREE = ['rabbit', 'elephant', 'mole'];
 function session(overrides: Partial<ReturnType<typeof defaultMatchConfig>> = {}): GameSession {
   const config = { ...defaultMatchConfig(777, ['rabbit', 'elephant']), ...overrides };
   const game = new GameSession(config);
-  for (const player of game.world.players) game.attach(new IdleIntentSource(player.id));
+  for (const player of game.world.players) game.attach(new IdleInputSource(player.id));
   return game;
 }
 

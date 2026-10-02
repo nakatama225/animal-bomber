@@ -20,7 +20,7 @@ import type { ItemKind } from '../rules/items.js';
  * 音を鳴らすか、画面を光らせるか、何もしないかは受け取った側が決める。
  *
  * ```
- * const events = simulation.step(world, intents);
+ * const events = simulation.step(world, playerInputs);
  * presenter.consume(events);   // 画面と音
  * // 検証のときは consume しない。それだけで無音・無描画になる
  * ```

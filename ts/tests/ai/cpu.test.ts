@@ -4,7 +4,7 @@ import { footBomb, decideBomb } from '../../src/ai/BombPlacement.js';
 import { ButtonMacro } from '../../src/ai/ButtonMacro.js';
 import type { CpuBehavior } from '../../src/ai/CpuBehavior.js';
 import { CpuContext } from '../../src/ai/CpuContext.js';
-import { CpuIntentSource, cpuSeed } from '../../src/ai/CpuIntentSource.js';
+import { CpuInputSource, cpuSeed } from '../../src/ai/CpuInputSource.js';
 import { CPU_LEVELS, type CpuLevelKey } from '../../src/ai/CpuLevel.js';
 import { freshMemory, type CpuMemory } from '../../src/ai/CpuMemory.js';
 import { DEFAULT_CHAIN } from '../../src/ai/behaviors/DefaultChain.js';
@@ -16,8 +16,8 @@ import { cellOf, centerOf, type Cell } from '../../src/domain/core/Coord.js';
 import { Rng } from '../../src/domain/core/Rng.js';
 import { secondsToTicks, tick } from '../../src/domain/core/Tick.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
-import { IdleIntentSource, IntentGatherer } from '../../src/domain/intent/IntentSource.js';
-import { IDLE_INTENT } from '../../src/domain/intent/PlayerIntent.js';
+import { IdleInputSource, InputGatherer } from '../../src/domain/input/InputSource.js';
+import { IDLE_INPUT } from '../../src/domain/input/PlayerInput.js';
 import { placeBomb, placeBombAt } from '../../src/domain/mutations/bombs.js';
 import { enterSuddenDeath } from '../../src/domain/mutations/suddenDeath.js';
 import { DangerMap } from '../../src/domain/query/DangerMap.js';
@@ -38,15 +38,15 @@ interface CpuSpec {
 
 /** 指定したプレイヤーを CPU に、残りを何もしないプレイヤーにした盤面。 */
 function arena(world: WorldState, cpus: readonly CpuSpec[], matchSeed = 1234) {
-  const gatherer = new IntentGatherer();
-  const sources = new Map<PlayerId, CpuIntentSource>();
+  const gatherer = new InputGatherer();
+  const sources = new Map<PlayerId, CpuInputSource>();
   for (const player of world.players) {
     const spec = cpus.find((c) => c.id === player.id);
     if (spec === undefined) {
-      gatherer.add(new IdleIntentSource(player.id));
+      gatherer.add(new IdleInputSource(player.id));
       continue;
     }
-    const source = new CpuIntentSource(
+    const source = new CpuInputSource(
       player.id,
       CPU_LEVELS[spec.level],
       spec.seed ?? cpuSeed(matchSeed, player.id),
@@ -69,22 +69,22 @@ function arena(world: WorldState, cpus: readonly CpuSpec[], matchSeed = 1234) {
 
 const ALL_FOUR = ['rabbit', 'elephant', 'fox', 'frog'];
 
-describe('CPU は意思を返すだけ', () => {
-  it('意思を返す前と後で、試合の状態が変わらない', () => {
+describe('CPU は入力を返すだけ', () => {
+  it('入力を返す前と後で、試合の状態が変わらない', () => {
     // 型の Readonly は浅く、中の配列やプレイヤーの書き換えは止められない。
     // 状態の要約を前後で比べて、実際に書き換えていないことを見る。
     // 要約には試合の乱数を引いた回数も入るので、試合の乱数を引いていないことも分かる。
     const world = makeWorld(7, ALL_FOUR);
-    const gatherer = new IntentGatherer();
+    const gatherer = new InputGatherer();
     for (const player of world.players) {
-      gatherer.add(new CpuIntentSource(player.id, CPU_LEVELS.oni, cpuSeed(7, player.id)));
+      gatherer.add(new CpuInputSource(player.id, CPU_LEVELS.oni, cpuSeed(7, player.id)));
     }
     const sim = new Simulation();
     for (let i = 0; i < 1500; i += 1) {
       const before = hashWorld(world);
-      const intents = gatherer.gather(world);
+      const playerInputs = gatherer.gather(world);
       expect(hashWorld(world)).toBe(before);
-      sim.step(world, intents);
+      sim.step(world, playerInputs);
     }
   });
 
@@ -117,7 +117,7 @@ describe('身を守る', () => {
   });
 
   it('「そうさ反転」がかかっていても、行きたい向きへ歩く', () => {
-    // ゲームの側は意思の段階で向きを反転する。CPU は反転を知っていて打ち消す。
+    // ゲームの側は入力の段階で向きを反転する。CPU は反転を知っていて打ち消す。
     // 原型の CPU は反転の影響を受けなかったので、同じ強さに揃えている。
     const world = makeWorld(3, ['rabbit', 'elephant']);
     clearBoard(world);
@@ -281,7 +281,7 @@ describe('ボタンの押し方の手順', () => {
 describe('ラウンドをまたぐ', () => {
   it('盤面が作り直されたら、前のラウンドの記憶を捨てる', () => {
     const first = makeWorld(3, ['rabbit', 'elephant']);
-    const source = new CpuIntentSource(0, CPU_LEVELS.hard, 1);
+    const source = new CpuInputSource(0, CPU_LEVELS.hard, 1);
     const sim = new Simulation();
     for (let i = 0; i < 600 && source.memory.lastBomb === null; i += 1) {
       sim.step(first, new Map([[0, source.next(first)]]));
@@ -296,7 +296,7 @@ describe('ラウンドをまたぐ', () => {
     // 延長戦では盤面を作り直さず、全員を開始位置へ移す。盤面が同じものなので、
     // 作り直しだけを見ていると、移る前の場所で立てた道筋をたどり続ける。
     const world = makeWorld(3, ['rabbit', 'elephant']);
-    const source = new CpuIntentSource(0, CPU_LEVELS.hard, 1);
+    const source = new CpuInputSource(0, CPU_LEVELS.hard, 1);
     const sim = new Simulation();
     for (let i = 0; i < 600 && source.memory.lastBomb === null; i += 1) {
       sim.step(world, new Map([[0, source.next(world)]]));
@@ -361,10 +361,10 @@ describe('技の最中と技の出し方', () => {
     fox.position = centerOf({ col: 5, row: 1 });
     fox.actionHeld = tick(0);
     fox.maxBombs = 3;
-    const source = new CpuIntentSource(0, CPU_LEVELS.oni, 1);
+    const source = new CpuInputSource(0, CPU_LEVELS.oni, 1);
     const sim = new Simulation();
     const step = (): void => {
-      sim.step(world, new Map([[0, source.next(world)], [1, IDLE_INTENT]]));
+      sim.step(world, new Map([[0, source.next(world)], [1, IDLE_INPUT]]));
     };
     step(); // 記憶を作る（盤面が変わった扱い）
     (source.memory as CpuMemory).macro = ButtonMacro.facing('right', ButtonMacro.tap());

@@ -889,7 +889,7 @@ describe('通信対戦で、接続を保ったまま次の試合を始める', (
     cpu: ['oni', 'oni', 'oni', 'oni'],
   };
 
-  /** 試合が決まった幕が出るまで進める。`others` の人間の入力は、何もしない入力として中継から届いたことにする。 */
+  /** 試合が決まった幕が出るまで進める。`others` の人間の入力は、何も押していない入力として中継から届いたことにする。 */
   function playToEnd(shell: Shell, elements: ShellElements, relay: () => WebSocketLinkHandlers, others: readonly number[], match: number): void {
     let delivered = 0;
     let ticks = 0;

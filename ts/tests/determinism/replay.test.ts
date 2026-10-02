@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { CpuIntentSource, cpuSeed } from '../../src/ai/CpuIntentSource.js';
+import { CpuInputSource, cpuSeed } from '../../src/ai/CpuInputSource.js';
 import { CPU_LEVELS } from '../../src/ai/CpuLevel.js';
 import { GameSession } from '../../src/app/GameSession.js';
-import { IntentGatherer } from '../../src/domain/intent/IntentSource.js';
-import type { PlayerIntent } from '../../src/domain/intent/PlayerIntent.js';
+import { InputGatherer } from '../../src/domain/input/InputSource.js';
+import type { PlayerInput } from '../../src/domain/input/PlayerInput.js';
 import { secondsToTicks, tick } from '../../src/domain/core/Tick.js';
 import { defaultMatchConfig } from '../../src/domain/rules/MatchConfig.js';
 import { ALIVE, OUT } from '../../src/domain/state/Life.js';
@@ -13,8 +13,8 @@ import { createWorld, hashWorld, type WorldState } from '../../src/domain/state/
 import { Simulation } from '../../src/domain/systems/Simulation.js';
 import {
   InputLog,
-  RecordingIntentSource,
-  ReplayIntentSource,
+  RecordingInputSource,
+  ReplayInputSource,
 } from '../../src/net/InputLog.js';
 import { press } from '../helpers.js';
 
@@ -25,16 +25,16 @@ const ANIMALS = ['rabbit', 'elephant'];
 class ScriptedSource {
   constructor(
     readonly playerId: PlayerId,
-    private readonly script: (tickValue: number) => PlayerIntent,
+    private readonly script: (tickValue: number) => PlayerInput,
   ) {}
 
-  next(world: Readonly<WorldState>): PlayerIntent {
+  next(world: Readonly<WorldState>): PlayerInput {
     return this.script(world.now);
   }
 }
 
 /** プレイヤー0は右と左を往復し、プレイヤー1は上下に動く台本。 */
-function scriptFor(playerId: PlayerId): (tickValue: number) => PlayerIntent {
+function scriptFor(playerId: PlayerId): (tickValue: number) => PlayerInput {
   if (playerId === 0) {
     return (t) => (Math.floor(t / 37) % 2 === 0 ? press({ right: true }) : press({ left: true }));
   }
@@ -45,10 +45,10 @@ function runScripted(ticks: number): { world: WorldState; log: InputLog } {
   const world = createWorld({ seed: SEED, animals: ANIMALS });
   const log = new InputLog();
   const clock = { elapsed: 0 };
-  const gatherer = new IntentGatherer();
+  const gatherer = new InputGatherer();
   for (const player of world.players) {
     gatherer.add(
-      new RecordingIntentSource(new ScriptedSource(player.id, scriptFor(player.id)), log, clock),
+      new RecordingInputSource(new ScriptedSource(player.id, scriptFor(player.id)), log, clock),
     );
   }
   const sim = new Simulation();
@@ -59,9 +59,9 @@ function runScripted(ticks: number): { world: WorldState; log: InputLog } {
 function runFromLog(log: InputLog, ticks: number): WorldState {
   const world = createWorld({ seed: SEED, animals: ANIMALS });
   const clock = { elapsed: 0 };
-  const gatherer = new IntentGatherer();
+  const gatherer = new InputGatherer();
   for (const player of world.players) {
-    gatherer.add(new ReplayIntentSource(player.id, log, clock));
+    gatherer.add(new ReplayInputSource(player.id, log, clock));
   }
   const sim = new Simulation();
   for (; clock.elapsed < ticks; clock.elapsed += 1) sim.step(world, gatherer.gather(world));
@@ -161,12 +161,12 @@ describe('記録の文字列の区画と変化の一覧', () => {
     ['ビットの頭に 0', '0:0,08', /^記録のプレイヤー 0 の項目が読めない/],
     ['ビットが6つのボタンを超える', '0:0,64', /^記録のプレイヤー 0 の項目が読めない/],
   ])('区画か変化の一覧に読めない所があれば、戻す前に止まる（%s）', (_case, text, message) => {
-    // 黙って読み飛ばしたり違う値に読んだりすると、その人の意思が記録と違うまま、例外も出ずに別の試合になる。
+    // 黙って読み飛ばしたり違う値に読んだりすると、その人の入力が記録と違うまま、例外も出ずに別の試合になる。
     expect(() => InputLog.decode(text)).toThrow(message);
   });
 
   it('変化の tick が3つ目の項目で1つだけ戻っていても、戻す前に止まる', () => {
-    // `at` は tick の昇順に並んでいる前提で探す（二分探索）。並びが崩れると、例外も出ずに違う意思を返す。
+    // `at` は tick の昇順に並んでいる前提で探す（二分探索）。並びが崩れると、例外も出ずに違う入力を返す。
     // 最初の項目とだけ比べたり、1つ戻るのを許したりすると、ここを見逃す。
     expect(() => InputLog.decode('0:1,8;5,4;4,2')).toThrow(/^記録のプレイヤー 0 の tick が戻っている/);
   });
@@ -193,7 +193,7 @@ describe('記録の文字列の区画と変化の一覧', () => {
     expect(restored.lastTick).toBe(-1);
   });
 
-  it('6つのボタンを全部押した意思も、文字列にして戻せる', () => {
+  it('6つのボタンを全部押した入力も、文字列にして戻せる', () => {
     // 上の「ビットが6つのボタンを超える」の対照。上限そのものは読める。
     const all = press({ up: true, down: true, left: true, right: true, bomb: true, action: true });
     const log = new InputLog();
@@ -201,7 +201,7 @@ describe('記録の文字列の区画と変化の一覧', () => {
     expect(InputLog.decode(log.encode()).at(0, 0)).toEqual(all);
   });
 
-  it('何も押していない意思に戻したのも、文字列にして戻せる', () => {
+  it('何も押していない入力に戻したのも、文字列にして戻せる', () => {
     // 手を全部離すと、record はビット 0 を書く。
     const log = new InputLog();
     log.record(0, 0, press({ right: true }));
@@ -228,7 +228,7 @@ describe('記録の文字列の区画と変化の一覧', () => {
   });
 
   it('同じビットが続く項目も読める', () => {
-    // record は書かないが、意思が変わらないので、流し直しの答えは変わらない。
+    // record は書かないが、入力が変わらないので、流し直しの答えは変わらない。
     const restored = InputLog.decode('0:0,8;5,8');
     expect(restored.at(3, 0)).toEqual(press({ right: true }));
     expect(restored.at(5, 0)).toEqual(press({ right: true }));
@@ -305,7 +305,7 @@ describe('途中で抜けた人の記録', () => {
     log.depart(5, 1);
     const clock = { elapsed: 0 };
     let made = 0;
-    const source = new ReplayIntentSource(1, log, clock, (playerId) => {
+    const source = new ReplayInputSource(1, log, clock, (playerId) => {
       made += 1;
       return new ScriptedSource(playerId, () => press({ up: true }));
     });
@@ -325,9 +325,9 @@ describe('途中で抜けた人の記録', () => {
   it('抜けた人の記録があるのに代わりの窓口の作り方が無ければ、再生を始める前に止まる', () => {
     const log = new InputLog();
     log.depart(5, 1);
-    expect(() => new ReplayIntentSource(1, log, { elapsed: 0 })).toThrow(/代わりの窓口/);
+    expect(() => new ReplayInputSource(1, log, { elapsed: 0 })).toThrow(/代わりの窓口/);
     // 抜けていない人は、作り方が無くてよい（1台の試合の記録と同じ）。
-    expect(() => new ReplayIntentSource(0, log, { elapsed: 0 })).not.toThrow();
+    expect(() => new ReplayInputSource(0, log, { elapsed: 0 })).not.toThrow();
   });
 });
 
@@ -343,8 +343,8 @@ describe('ラウンドをまたぐ記録の再生', () => {
     const log = new InputLog();
     const original = new GameSession(config);
     for (const player of original.world.players) {
-      const cpu = new CpuIntentSource(player.id, CPU_LEVELS.hard, cpuSeed(config.seed, player.id));
-      original.attach(new RecordingIntentSource(cpu, log, original));
+      const cpu = new CpuInputSource(player.id, CPU_LEVELS.hard, cpuSeed(config.seed, player.id));
+      original.attach(new RecordingInputSource(cpu, log, original));
     }
     let ticks = 0;
     let roundsEnded = 0;
@@ -359,7 +359,7 @@ describe('ラウンドをまたぐ記録の再生', () => {
 
     const replay = new GameSession(config);
     for (const player of replay.world.players) {
-      replay.attach(new ReplayIntentSource(player.id, log, replay));
+      replay.attach(new ReplayInputSource(player.id, log, replay));
     }
     for (let i = 0; i < ticks; i += 1) replay.tick();
 

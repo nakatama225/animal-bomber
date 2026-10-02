@@ -3,7 +3,7 @@ import type { Direction } from '../domain/core/Coord.js';
 /**
  * 1 tick ぶんのボタンの押し方。
  *
- * `PlayerIntent` の向きの部分を除いたもの。向きは経路の追従が決めるが、
+ * `PlayerInput` の向きの部分を除いたもの。向きは経路の追従が決めるが、
  * 技の向きを揃えるために一時的に向きを指定したいときは `face` を使う。
  */
 export interface MacroStep {
@@ -32,7 +32,7 @@ const RELEASE: MacroStep = Object.freeze({
  * - 爆弾は「押し下げた瞬間」に1個置く。押しっぱなしでは連射しない
  * - 技のボタンは「押して離す」と通常技、「押し続ける」ととくぎ
  *
- * 人間は指で自然にこれをやるが、CPU は tick ごとに意思を返すだけなので、
+ * 人間は指で自然にこれをやるが、CPU は tick ごとに入力を返すだけなので、
  * 「1 tick 押して次の tick に離す」「90 tick 押し続けて離す」を
  * 手順として覚えておく必要がある。
  *

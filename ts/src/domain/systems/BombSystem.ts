@@ -1,7 +1,7 @@
 import { cellOf, sameCell } from '../core/Coord.js';
 import { tick } from '../core/Tick.js';
 import type { SimEvent } from '../events/SimEvent.js';
-import type { PlayerIntent } from '../intent/PlayerIntent.js';
+import type { PlayerInput } from '../input/PlayerInput.js';
 import { placeBomb } from '../mutations/bombs.js';
 import type { PlayerId } from '../state/PlayerState.js';
 import { isAlive, justPressed } from '../state/PlayerState.js';
@@ -15,20 +15,20 @@ import type { WorldState } from '../state/WorldState.js';
  * 「1つの爆弾の話」ではなく「連鎖でまとめて起きること」だから。
  */
 export class BombSystem {
-  step(world: WorldState, intents: ReadonlyMap<PlayerId, PlayerIntent>): SimEvent[] {
-    const events = this.#place(world, intents);
+  step(world: WorldState, playerInputs: ReadonlyMap<PlayerId, PlayerInput>): SimEvent[] {
+    const events = this.#place(world, playerInputs);
     this.#advanceFuses(world);
     this.#releasePassThrough(world);
     return events;
   }
 
   /** 押し下げた瞬間に1つ置く。 */
-  #place(world: WorldState, intents: ReadonlyMap<PlayerId, PlayerIntent>): SimEvent[] {
+  #place(world: WorldState, playerInputs: ReadonlyMap<PlayerId, PlayerInput>): SimEvent[] {
     const events: SimEvent[] = [];
     for (const player of world.players) {
       if (!isAlive(player)) continue;
-      const intent = intents.get(player.id);
-      if (intent === undefined) continue;
+      const playerInput = playerInputs.get(player.id);
+      if (playerInput === undefined) continue;
 
       // ⚠️ 「勝手に設置」がかかっていると、「爆弾おけない」を上書きして
       // 毎 tick 置こうとする。2つの悪い状態が重なったときにどちらが
@@ -38,7 +38,7 @@ export class BombSystem {
 
       const forced = player.effects.has('autobomb');
       if (!forced && player.effects.has('nobomb')) continue;
-      if (!forced && !justPressed(player, intent, 'bomb')) continue;
+      if (!forced && !justPressed(player, playerInput, 'bomb')) continue;
       const bomb = placeBomb(world, player);
       if (bomb !== undefined) {
         events.push({ type: 'bombPlaced', cell: bomb.cell, owner: bomb.owner });

@@ -1,6 +1,6 @@
 import { tick } from '../core/Tick.js';
 import type { SimEvent } from '../events/SimEvent.js';
-import { IDLE_INTENT, type PlayerIntent } from '../intent/PlayerIntent.js';
+import { IDLE_INPUT, type PlayerInput } from '../input/PlayerInput.js';
 import { lanesOpen } from '../mutations/negibon.js';
 import { laneSpot, laneStep, wrapAlong } from '../negibon/lane.js';
 import { LeekActor } from '../negibon/LeekActor.js';
@@ -20,19 +20,19 @@ import type { WorldState } from '../state/WorldState.js';
  * 飛んでいる葱は自律物（`LeekActor`）として `ActorSystem` が進める。
  */
 export class NegibonSystem {
-  step(world: WorldState, intents: ReadonlyMap<PlayerId, PlayerIntent>): SimEvent[] {
+  step(world: WorldState, playerInputs: ReadonlyMap<PlayerId, PlayerInput>): SimEvent[] {
     if (!lanesOpen(world)) return closeLanes(world);
 
     const events: SimEvent[] = [];
     for (const player of world.players) {
       const life = player.life;
       if (life.kind !== 'negibon') continue;
-      const intent = intents.get(player.id) ?? IDLE_INTENT;
+      const playerInput = playerInputs.get(player.id) ?? IDLE_INPUT;
 
-      const along = wrapAlong(life.along + laneStep(laneSpot(life.along).side, intent) * LANE_SPEED);
+      const along = wrapAlong(life.along + laneStep(laneSpot(life.along).side, playerInput) * LANE_SPEED);
       let readyAt = life.readyAt;
       // 動いてから撃つ。撃つ位置は動いたあとの位置になる。
-      if (wantsToThrow(player, intent) && world.now >= readyAt) {
+      if (wantsToThrow(player, playerInput) && world.now >= readyAt) {
         const spot = laneSpot(along);
         world.actors.push(new LeekActor(spot.position, spot.facing, player.id));
         readyAt = tick(world.now + LEEK_COOLDOWN);
@@ -46,8 +46,8 @@ export class NegibonSystem {
 }
 
 /** 爆弾と技のどちらのボタンでも撃てる。押した瞬間に1回だけ。 */
-function wantsToThrow(player: PlayerState, intent: PlayerIntent): boolean {
-  return justPressed(player, intent, 'bomb') || justPressed(player, intent, 'action');
+function wantsToThrow(player: PlayerState, playerInput: PlayerInput): boolean {
+  return justPressed(player, playerInput, 'bomb') || justPressed(player, playerInput, 'action');
 }
 
 /**

@@ -1,7 +1,7 @@
 import { CPU_LEVEL_KEYS, type CpuLevelKey } from '../ai/CpuLevel.js';
 import { abilityOf } from '../domain/abilities/registry.js';
 import { tick } from '../domain/core/Tick.js';
-import { MAX_INTENT_BITS } from '../domain/intent/PlayerIntent.js';
+import { MAX_INPUT_BITS } from '../domain/input/PlayerInput.js';
 import type { MatchConfig } from '../domain/rules/MatchConfig.js';
 import type { PlayerId } from '../domain/state/PlayerState.js';
 
@@ -366,7 +366,7 @@ class FieldReader {
 
   bits(name: string): number {
     const value = this.int(name, 0);
-    if (value > MAX_INTENT_BITS) throw new ProtocolError(`${this.kind} の ${name} が大きすぎる: ${value}`);
+    if (value > MAX_INPUT_BITS) throw new ProtocolError(`${this.kind} の ${name} が大きすぎる: ${value}`);
     return value;
   }
 

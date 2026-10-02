@@ -4,7 +4,7 @@ import type { ActiveAction } from '../../src/domain/abilities/ActiveAction.js';
 import { centerOf, cellOf, DIRECTIONS, type Cell, type Direction } from '../../src/domain/core/Coord.js';
 import { tick } from '../../src/domain/core/Tick.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
-import type { PlayerIntent } from '../../src/domain/intent/PlayerIntent.js';
+import type { PlayerInput } from '../../src/domain/input/PlayerInput.js';
 import { placeBombAt } from '../../src/domain/mutations/bombs.js';
 import { hurt } from '../../src/domain/mutations/damage.js';
 import {
@@ -48,11 +48,11 @@ function topAlongFor(col: number): number {
   return alongsFacing({ col, row: 1 })[0];
 }
 
-/** プレイヤー0だけに意思を与えて1 tick 進める。 */
-function stepWith(world: WorldState, sim: Simulation, intent: PlayerIntent, id: PlayerId = 0): SimEvent[] {
-  const intents = new Map<PlayerId, PlayerIntent>();
-  for (const player of world.players) intents.set(player.id, player.id === id ? intent : press({}));
-  return sim.step(world, intents);
+/** プレイヤー0だけに入力を与えて1 tick 進める。 */
+function stepWith(world: WorldState, sim: Simulation, playerInput: PlayerInput, id: PlayerId = 0): SimEvent[] {
+  const playerInputs = new Map<PlayerId, PlayerInput>();
+  for (const player of world.players) playerInputs.set(player.id, player.id === id ? playerInput : press({}));
+  return sim.step(world, playerInputs);
 }
 
 /** 1回撃って、葱が消えるまで進める。起きたイベントを返す。 */
@@ -222,8 +222,8 @@ describe('外周を動いて撃つ', () => {
     const player = world.players[0]!;
     onLane(player, 10, 5);
     const sim = new Simulation();
-    const thrown = (intent: PlayerIntent): number =>
-      stepWith(world, sim, intent).filter((e) => e.type === 'leekThrown').length;
+    const thrown = (playerInput: PlayerInput): number =>
+      stepWith(world, sim, playerInput).filter((e) => e.type === 'leekThrown').length;
 
     expect(thrown(press({ bomb: true }))).toBe(0); // 撃てるまで待つ
     thrown(press({}));

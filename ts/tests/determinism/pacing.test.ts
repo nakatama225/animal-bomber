@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { IntentGatherer } from '../../src/domain/intent/IntentSource.js';
+import { InputGatherer } from '../../src/domain/input/InputSource.js';
 import { createWorld, hashWorld } from '../../src/domain/state/WorldState.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
-import { InputLog, ReplayIntentSource } from '../../src/net/InputLog.js';
+import { InputLog, ReplayInputSource } from '../../src/net/InputLog.js';
 import { GameSpeed, TickAccumulator } from '../../src/platform/FrameLoop.js';
 import { press } from '../helpers.js';
 
@@ -29,8 +29,8 @@ function makeLog(): InputLog {
 function runWithPacing(log: InputLog, ticksPerFrame: number): number {
   const world = createWorld({ seed: SEED, animals: ANIMALS });
   const clock = { elapsed: 0 };
-  const gatherer = new IntentGatherer();
-  for (const player of world.players) gatherer.add(new ReplayIntentSource(player.id, log, clock));
+  const gatherer = new InputGatherer();
+  for (const player of world.players) gatherer.add(new ReplayInputSource(player.id, log, clock));
 
   const sim = new Simulation();
   while (clock.elapsed < TOTAL_TICKS) {
@@ -68,8 +68,8 @@ describe('時間の刻み方', () => {
     const log = makeLog();
     const world = createWorld({ seed: SEED, animals: ANIMALS });
     const clock = { elapsed: 0 };
-    const gatherer = new IntentGatherer();
-    for (const player of world.players) gatherer.add(new ReplayIntentSource(player.id, log, clock));
+    const gatherer = new InputGatherer();
+    for (const player of world.players) gatherer.add(new ReplayInputSource(player.id, log, clock));
     const sim = new Simulation();
     for (; clock.elapsed < 100; clock.elapsed += 1) sim.step(world, gatherer.gather(world));
     expect(hashWorld(world)).not.toBe(runWithPacing(log, 1));

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { IDLE_INTENT } from '../../src/domain/intent/PlayerIntent.js';
+import { IDLE_INPUT } from '../../src/domain/input/PlayerInput.js';
 import { defaultMatchConfig } from '../../src/domain/rules/MatchConfig.js';
 import { OUT } from '../../src/domain/state/Life.js';
 import { LockstepClient } from '../../src/net/LockstepClient.js';
@@ -14,7 +14,7 @@ const SETTINGS: LanSettings = {
 };
 
 function client(): LockstepClient {
-  return new LockstepClient({ send: () => undefined }, hooksWith(() => IDLE_INTENT));
+  return new LockstepClient({ send: () => undefined }, hooksWith(() => IDLE_INPUT));
 }
 
 const text = (message: object): string => JSON.stringify(message);

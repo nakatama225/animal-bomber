@@ -1,6 +1,6 @@
 import { GameSession } from '../../src/app/GameSession.js';
-import type { IntentSource } from '../../src/domain/intent/IntentSource.js';
-import type { PlayerIntent } from '../../src/domain/intent/PlayerIntent.js';
+import type { InputSource } from '../../src/domain/input/InputSource.js';
+import type { PlayerInput } from '../../src/domain/input/PlayerInput.js';
 import type { PlayerId } from '../../src/domain/state/PlayerState.js';
 import { hashWorld } from '../../src/domain/state/WorldState.js';
 import { LockstepClient, type LanHooks, type LanPhase } from '../../src/net/LockstepClient.js';
@@ -167,20 +167,20 @@ export class FakeRelay {
  *
  * 台本には「何回目に読まれたか」を渡す。0 回目は試合が始まったとき（`LockstepDriver.start`）に
  * 読まれ、tick 0〜2 に効く。そのあとは tick を進めるときだけ読まれるので、n 回目（n ≥ 1）に
- * 読まれた意思は、tick n − 1 を進めるときに送られ、tick n + 2 に効く。
+ * 読まれた入力は、tick n − 1 を進めるときに送られ、tick n + 2 に効く。
  */
-export class ScriptedLocal implements IntentSource {
+export class ScriptedLocal implements InputSource {
   #calls = 0;
 
   constructor(
     readonly playerId: PlayerId,
-    private readonly script: (call: number) => PlayerIntent,
+    private readonly script: (call: number) => PlayerInput,
   ) {}
 
-  next(): PlayerIntent {
-    const intent = this.script(this.#calls);
+  next(): PlayerInput {
+    const playerInput = this.script(this.#calls);
     this.#calls += 1;
-    return intent;
+    return playerInput;
   }
 }
 
@@ -221,7 +221,7 @@ export class Peer {
 }
 
 /** テストで使う試合の作り方。この端末の操作は台本で、残りは設定どおりの CPU。 */
-export function hooksWith(script: (playerId: PlayerId, call: number) => PlayerIntent): LanHooks {
+export function hooksWith(script: (playerId: PlayerId, call: number) => PlayerInput): LanHooks {
   return {
     createSession: (settings: LanSettings) => new GameSession(settings.match),
     localSource: (playerId) => new ScriptedLocal(playerId, (call) => script(playerId, call)),

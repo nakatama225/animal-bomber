@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CpuIntentSource, cpuSeed } from '../../src/ai/CpuIntentSource.js';
+import { CpuInputSource, cpuSeed } from '../../src/ai/CpuInputSource.js';
 import { CPU_LEVELS } from '../../src/ai/CpuLevel.js';
 import { GameSession } from '../../src/app/GameSession.js';
 import { ANIMAL_LOOKS } from '../../src/content/animals.js';
@@ -118,7 +118,7 @@ describe('選んだものから試合を作る', () => {
       const game = new GameSession({ ...plan.config, winsToTake: 1 });
       // 人間の代わりに CPU を繋ぐ。画面なしで決着まで進めるため。
       for (const player of game.world.players) {
-        game.attach(new CpuIntentSource(player.id, CPU_LEVELS.hard, cpuSeed(plan.config.seed, player.id)));
+        game.attach(new CpuInputSource(player.id, CPU_LEVELS.hard, cpuSeed(plan.config.seed, player.id)));
       }
       for (let i = 0; i < 60_000 && !game.match.finished; i += 1) game.tick();
       expect(game.match.finished, mode).toBe(true);

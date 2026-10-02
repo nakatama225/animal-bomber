@@ -1,9 +1,9 @@
-import type { IntentSource } from '../domain/intent/IntentSource.js';
+import type { InputSource } from '../domain/input/InputSource.js';
 import type { SimEvent } from '../domain/events/SimEvent.js';
-import { IDLE_INTENT, packIntent, unpackIntent, type PlayerIntent } from '../domain/intent/PlayerIntent.js';
+import { IDLE_INPUT, packInput, unpackInput, type PlayerInput } from '../domain/input/PlayerInput.js';
 import type { PlayerId } from '../domain/state/PlayerState.js';
 import { hashWorld, type WorldState } from '../domain/state/WorldState.js';
-import { ConfirmedInputs, NetworkIntentSource } from './ConfirmedInputs.js';
+import { ConfirmedInputs, NetworkInputSource } from './ConfirmedInputs.js';
 import type { InputLog, MatchClock } from './InputLog.js';
 import type { HashReport, PeerLink, RelayMessage } from './protocol.js';
 
@@ -36,7 +36,7 @@ export interface LockstepSession extends MatchClock {
   readonly world: WorldState;
   readonly match: { readonly finished: boolean };
   readonly tick: () => SimEvent[];
-  readonly attach: (source: IntentSource) => unknown;
+  readonly attach: (source: InputSource) => unknown;
 }
 
 /** 中継が知らせてきた、状態のずれ。 */
@@ -51,11 +51,11 @@ export interface LockstepOptions {
   /** この端末で操作するプレイヤー。 */
   readonly localId: PlayerId;
   /** この端末の操作（キーボードなど）。 */
-  readonly local: IntentSource;
+  readonly local: InputSource;
   /** 人間が操作するプレイヤー。自分を含む。試合を始めた時点で中継が決めたもの。 */
   readonly humans: readonly PlayerId[];
   /** 抜けた人を受け持つ窓口を作る。全員の端末で同じものを返すこと（CPU など）。 */
-  readonly replacement: (playerId: PlayerId) => IntentSource;
+  readonly replacement: (playerId: PlayerId) => InputSource;
   /**
    * この試合の番号（中継が `start` に付けたもの）。送る入力と要約に付け、番号の違う入力は捨てる。
    *
@@ -70,19 +70,19 @@ export interface LockstepOptions {
  *
  * ## やり方
  *
- * 全員が同じ試合を手元で進める。送り合うのは1 tick ぶんの意思だけで、盤面は送らない。
+ * 全員が同じ試合を手元で進める。送り合うのは1 tick ぶんの入力だけで、盤面は送らない。
  * 同じ種・同じ入力なら全員の手元で同じ試合になる（段階1で作ったリプレイと同じ理屈）。
  *
- * 1. tick T を進める前に、人間全員の tick T の意思が届いているかを見る。
+ * 1. tick T を進める前に、人間全員の tick T の入力が届いているかを見る。
  *    1人でも届いていなければ、進めずに待つ
- * 2. 届いていれば、自分の操作を読んで **tick T+3 の意思**として送る
- * 3. 全員の tick T の意思で試合を1 tick 進める
+ * 2. 届いていれば、自分の操作を読んで **tick T+3 の入力**として送る
+ * 3. 全員の tick T の入力で試合を1 tick 進める
  * 4. 20 tick ごとに、状態の要約を中継へ送る。中継が全員ぶんを突き合わせる
  *
  * ## 窓口を差し替えるだけで済む
  *
  * 試合の側（`GameSession` と `Simulation`）には、このクラスのための分岐が1つも無い。
- * 人間のプレイヤーに繋ぐ窓口を、キーボードから `NetworkIntentSource` に替えただけ。
+ * 人間のプレイヤーに繋ぐ窓口を、キーボードから `NetworkInputSource` に替えただけ。
  * 段階1で操作の出どころを窓口1つに絞っておいたことが、ここで効いている。
  *
  * ## 抜けた人
@@ -94,7 +94,7 @@ export interface LockstepOptions {
  *
  * ## 試合が終わったあとも、入力と要約の交換を続ける
  *
- * 試合が終わった端末は盤面を進めないが、tick を数え、何もしない意思と要約を送り続ける。
+ * 試合が終わった端末は盤面を進めないが、tick を数え、何も押していない入力と要約を送り続ける。
  * やめると、試合を決めたラウンドの決着が端末ごとに食い違ったとき（ずれの不具合があるとき）に
  * 気づけない。終わった端末が要約を送らなくなるので、中継の突き合わせが揃わず、
  * 終わっていない端末は入力を待って止まるか、違う勝者を出したまま全員が終わる。
@@ -111,7 +111,7 @@ export class LockstepDriver implements MatchClock {
   #tick = 0;
 
   /**
-   * 人間のプレイヤー全員に、通信で届いた意思を流す窓口を繋ぐ。
+   * 人間のプレイヤー全員に、通信で届いた入力を流す窓口を繋ぐ。
    *
    * @throws Error 試合がもう進んでいるとき、自分が人間の一覧にいないとき
    */
@@ -127,7 +127,7 @@ export class LockstepDriver implements MatchClock {
     }
     this.#options = options;
     for (const playerId of options.humans) {
-      options.session.attach(new NetworkIntentSource(playerId, this.#inputs, this));
+      options.session.attach(new NetworkInputSource(playerId, this.#inputs, this));
     }
   }
 
@@ -148,10 +148,10 @@ export class LockstepDriver implements MatchClock {
   /**
    * 最初の `INPUT_DELAY` tick ぶんを、始まった時点で押している内容で埋めて送る。
    *
-   * ⚠️ これが無いと、tick 0 の意思は誰も送らない（最初に送るのは tick 3 の意思）ので、
+   * ⚠️ これが無いと、tick 0 の入力は誰も送らない（最初に送るのは tick 3 の入力）ので、
    * 全員が互いの tick 0 を待ったまま止まる。
    *
-   * ⚠️ 埋める値を何もしない意思にしない。tick 0 に「離した」が届いて、ラウンドの始まりの
+   * ⚠️ 埋める値を何も押していない入力にしない。tick 0 に「離した」が届いて、ラウンドの始まりの
    * 「押していた扱い」（`WorldState` の `HELD_AT_ROUND_START`・`actionHeld` の -1）が外れ、
    * tick 3 に押していた内容が「押した瞬間」として届く。ホストが Enter で「はじめる」を押し、
    * その Enter がまだ押されている、という普通の始め方で、押したまま始まった人（ホスト）が開始位置に爆弾を置く。
@@ -202,8 +202,8 @@ export class LockstepDriver implements MatchClock {
     const finished = session.match.finished;
 
     this.#replaceDeparted(t);
-    // 試合が終わったあとの操作は何にも効かないので、何もしない意思を送る。
-    this.#sendLocal(t + INPUT_DELAY, finished ? IDLE_INTENT : local.next(session.world));
+    // 試合が終わったあとの操作は何にも効かないので、何も押していない入力を送る。
+    this.#sendLocal(t + INPUT_DELAY, finished ? IDLE_INPUT : local.next(session.world));
     const events = finished ? [] : this.#advance(t);
     this.#tick += 1;
     if ((t + 1) % HASH_INTERVAL === 0) this.#sendHash(t);
@@ -265,7 +265,7 @@ export class LockstepDriver implements MatchClock {
     }
     // 抜けた人の、使わないと決まった tick の入力。全員が同じく捨てる。
     if (this.#inputs.log.replacedAt(tick, playerId)) return;
-    this.#inputs.put(playerId, tick, unpackIntent(bits));
+    this.#inputs.put(playerId, tick, unpackInput(bits));
   }
 
   #depart(playerId: PlayerId, lastTick: number): void {
@@ -290,11 +290,11 @@ export class LockstepDriver implements MatchClock {
     }
   }
 
-  #sendLocal(tick: number, intent: PlayerIntent): void {
+  #sendLocal(tick: number, playerInput: PlayerInput): void {
     const { link, localId } = this.#options;
     // 自分の入力は中継から返ってこないので、送るのと同時に自分でも受け取る。
-    this.#inputs.put(localId, tick, intent);
-    link.send({ t: 'input', tick, bits: packIntent(intent), match: this.#options.match });
+    this.#inputs.put(localId, tick, playerInput);
+    link.send({ t: 'input', tick, bits: packInput(playerInput), match: this.#options.match });
   }
 
   #sendHash(tick: number): void {

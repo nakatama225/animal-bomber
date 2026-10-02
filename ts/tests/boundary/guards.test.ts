@@ -164,7 +164,7 @@ describe('動物の追加が閉じていること', () => {
   it('見張る対象に、CPU の共通の判断と葱ボンが入っている', () => {
     // 見張るファイルの一覧が空だと、上の確認は何も見ずに通る。
     expect(listTs('src/ai')).toContain('src/ai/behaviors/Flee.ts');
-    expect(listTs('src/ai')).toContain('src/ai/CpuIntentSource.ts');
+    expect(listTs('src/ai')).toContain('src/ai/CpuInputSource.ts');
     expect(listTs('src/domain/negibon')).toContain('src/domain/negibon/LeekActor.ts');
   });
 

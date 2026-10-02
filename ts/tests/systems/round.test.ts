@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { GameSession, ROUND_INTERMISSION } from '../../src/app/GameSession.js';
-import { IdleIntentSource } from '../../src/domain/intent/IntentSource.js';
+import { IdleInputSource } from '../../src/domain/input/InputSource.js';
 import { defaultMatchConfig, seedForRound } from '../../src/domain/rules/MatchConfig.js';
 import { OUT } from '../../src/domain/state/Life.js';
 import { winsOf } from '../../src/domain/state/MatchState.js';
@@ -11,7 +11,7 @@ import { centerOf } from '../../src/domain/core/Coord.js';
 import { secondsToTicks } from '../../src/domain/core/Tick.js';
 import { SPAWN_CELLS } from '../../src/domain/rules/tuning.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
-import { IDLE_INTENT, type PlayerIntent } from '../../src/domain/intent/PlayerIntent.js';
+import { IDLE_INPUT, type PlayerInput } from '../../src/domain/input/PlayerInput.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
 import { onlyFor, press } from '../helpers.js';
 
@@ -23,7 +23,7 @@ function skipIntermission(game: GameSession): void {
 function session(overrides: Partial<ReturnType<typeof defaultMatchConfig>> = {}): GameSession {
   const config = { ...defaultMatchConfig(777, ['rabbit', 'elephant']), ...overrides };
   const game = new GameSession(config);
-  for (const player of game.world.players) game.attach(new IdleIntentSource(player.id));
+  for (const player of game.world.players) game.attach(new IdleInputSource(player.id));
   return game;
 }
 
@@ -185,7 +185,7 @@ describe('開始位置', () => {
   it('次のラウンドも、渡した並びの隅から始まる', () => {
     const animals = ['rabbit', 'frog', 'fox', 'mole'];
     const game = new GameSession({ ...defaultMatchConfig(777, animals), spawnOrder: [0, 3, 1, 2] });
-    for (const player of game.world.players) game.attach(new IdleIntentSource(player.id));
+    for (const player of game.world.players) game.attach(new IdleInputSource(player.id));
     for (const id of [1, 2, 3]) game.world.players[id]!.life = OUT;
     game.tick();
     skipIntermission(game);
@@ -217,11 +217,11 @@ describe('ラウンドの始まりに押していたボタン', () => {
   it('爆弾のボタンを押したまま始まっても置かず、離して押し直すと置く', () => {
     const world = createWorld({ seed: 5, animals: ['rabbit', 'frog'] });
     const sim = new Simulation();
-    const placed = (intent: PlayerIntent): number =>
-      sim.step(world, onlyFor(world, 0, intent)).filter((e) => e.type === 'bombPlaced').length;
+    const placed = (playerInput: PlayerInput): number =>
+      sim.step(world, onlyFor(world, 0, playerInput)).filter((e) => e.type === 'bombPlaced').length;
     expect(placed(holdBomb)).toBe(0);
     expect(placed(holdBomb)).toBe(0);
-    expect(placed(IDLE_INTENT)).toBe(0);
+    expect(placed(IDLE_INPUT)).toBe(0);
     expect(placed(holdBomb)).toBe(1);
   });
 

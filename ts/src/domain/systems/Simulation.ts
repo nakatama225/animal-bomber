@@ -1,5 +1,5 @@
 import { tick } from '../core/Tick.js';
-import type { PlayerIntent } from '../intent/PlayerIntent.js';
+import type { PlayerInput } from '../input/PlayerInput.js';
 import type { PlayerId } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 import type { SimEvent } from '../events/SimEvent.js';
@@ -53,22 +53,22 @@ export class Simulation {
   /**
    * 1 tick 進める。
    *
-   * @param intents この tick に各プレイヤーが何をしたいか。
+   * @param playerInputs この tick の、プレイヤーごとの入力。
    *   出どころ（キーボード・CPU・通信・記録の再生）は問わない
    */
-  step(world: WorldState, intents: ReadonlyMap<PlayerId, PlayerIntent>): SimEvent[] {
+  step(world: WorldState, playerInputs: ReadonlyMap<PlayerId, PlayerInput>): SimEvent[] {
     const events: SimEvent[] = [];
 
     // 乗っ取り中の振る舞いを先に進める。位置を決めるのがそちらなので、
     // あとから移動の入力を当てると1 tick ぶん食い違う。
-    events.push(...this.#actions.step(world, intents));
+    events.push(...this.#actions.step(world, playerInputs));
 
     // 動いてから置く。置いてから動く形にすると、置いた瞬間に
     // そのマスから出られてしまい、通り抜けの扱いが1 tick ずれる。
-    this.#movement.step(world, intents);
+    this.#movement.step(world, playerInputs);
     // 外周の葱ボンは盤面の外を動く。盤面の上の移動とは互いに影響しない。
-    events.push(...this.#negibon.step(world, intents));
-    events.push(...this.#bombs.step(world, intents));
+    events.push(...this.#negibon.step(world, playerInputs));
+    events.push(...this.#bombs.step(world, playerInputs));
     events.push(...this.#blasts.step(world));
 
     // 飛び道具や落とし穴を進める。爆発のあとに置くのは、
@@ -85,8 +85,8 @@ export class Simulation {
     // ⚠️ この tick の入力を控えるのは、すべての System が終わったあと。
     // 途中で控えると、後ろの System から見て「押した瞬間」が消える。
     for (const player of world.players) {
-      const intent = intents.get(player.id);
-      if (intent !== undefined) player.previousIntent = intent;
+      const playerInput = playerInputs.get(player.id);
+      if (playerInput !== undefined) player.previousInput = playerInput;
     }
 
     world.now = tick(world.now + 1);

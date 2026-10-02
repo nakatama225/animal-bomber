@@ -4,7 +4,7 @@ import { IdSource } from '../core/EntityId.js';
 import { Rng } from '../core/Rng.js';
 import { StateHasher } from '../core/StateHash.js';
 import { secondsToTicks, tick, type Tick } from '../core/Tick.js';
-import { IDLE_INTENT, packIntent, type PlayerIntent } from '../intent/PlayerIntent.js';
+import { IDLE_INPUT, packInput, type PlayerInput } from '../input/PlayerInput.js';
 import { DUEL_SPAWN_ORDER, ROUND_SECONDS, ROWS, SPAWN_CELLS, STARTING_HP } from '../rules/tuning.js';
 import type { Blast, Bomb } from './Bomb.js';
 import { EffectBag } from './EffectBag.js';
@@ -18,7 +18,7 @@ import type { PlayerId, PlayerState } from './PlayerState.js';
  * 試合のいまの状態すべて。
  *
  * **この構造体に入っているものだけが、試合の結果を左右する。** 画面の
- * 見た目・音・粒子はここに含まれない。だから「同じ状態から同じ意思を
+ * 見た目・音・粒子はここに含まれない。だから「同じ状態から同じ入力を
  * 与えれば同じ結果になる」が成り立つ。
  *
  * 逆に言えば、ここに何かを足すときは「それが結果を左右するか」を
@@ -100,7 +100,7 @@ const NO_BONUS: StartingBonus = { hp: 0, power: 0, bombs: 0 };
 /**
  * ラウンドの始まりの「前の tick に押していた内容」。爆弾のボタンを押していた扱いにする。
  *
- * ⚠️ 何も押していない扱い（`IDLE_INTENT`）にすると、爆弾のボタンを押したままラウンドが
+ * ⚠️ 何も押していない扱い（`IDLE_INPUT`）にすると、爆弾のボタンを押したままラウンドが
  * 始まったとき、最初の tick が「押した瞬間」になり、押したまま始まった人が開始位置に爆弾を置く。
  * 原型でも、決着の幕を Space で送った押下が次のラウンドの最初に届いて、同じことが起きた
  * （`legacy/test/README.md` の 11）。押したまま始まったボタンは、一度離して押し直すと効く。
@@ -110,7 +110,7 @@ const NO_BONUS: StartingBonus = { hp: 0, power: 0, bombs: 0 };
  * ここで技のボタンも押していた扱いにしても、変わるのは外周の葱ボンが撃つ判定だけで、
  * ラウンドの始まりに葱ボンはいない。
  */
-const HELD_AT_ROUND_START: PlayerIntent = Object.freeze({ ...IDLE_INTENT, bomb: true });
+const HELD_AT_ROUND_START: PlayerInput = Object.freeze({ ...IDLE_INPUT, bomb: true });
 
 /**
  * 各プレイヤーが始まる隅の番号。プレイヤー番号の順。
@@ -176,7 +176,7 @@ export function createWorld(config: WorldSeed): WorldState {
       activeBombs: 0,
       invulnerableUntil: tick(0),
       walked: 0,
-      previousIntent: HELD_AT_ROUND_START,
+      previousInput: HELD_AT_ROUND_START,
       effects: new EffectBag(),
       specialCharges: 0,
       action: null,
@@ -238,7 +238,7 @@ export function hashWorld(world: WorldState): number {
       .int(player.maxBombs)
       .int(player.activeBombs)
       .int(player.invulnerableUntil)
-      .int(packIntent(player.previousIntent))
+      .int(packInput(player.previousInput))
       .text(player.effects.encode())
       .int(player.specialCharges)
       .text(player.action?.kind ?? '')

@@ -1,5 +1,5 @@
-import type { IntentSource } from '../domain/intent/IntentSource.js';
-import type { PlayerIntent } from '../domain/intent/PlayerIntent.js';
+import type { InputSource } from '../domain/input/InputSource.js';
+import type { PlayerInput } from '../domain/input/PlayerInput.js';
 import type { PlayerId } from '../domain/state/PlayerState.js';
 import type { NavCommand } from '../presentation/menu/MenuCursor.js';
 
@@ -117,7 +117,7 @@ export function navCommandOf(
 /**
  * 押されているキーを答えるもの。
  *
- * `KeyboardIntentSource` がこの形だけに依存するので、テストでは
+ * `KeyboardInputSource` がこの形だけに依存するので、テストでは
  * ブラウザのイベントを起こさずに好きな状態を渡せる。
  */
 export interface KeyStateReader {
@@ -192,19 +192,19 @@ export class KeyboardWatcher implements KeyStateReader {
 }
 
 /**
- * キーボードの入力を意思に変える窓口。
+ * 押しているキーを、1 tick ぶんの入力に変える窓口。
  *
  * CPU や通信から届く窓口と同じ資格で `Simulation` に繋がる。
  * ゲーム本体はこれがキーボードだと知らない。
  */
-export class KeyboardIntentSource implements IntentSource {
+export class KeyboardInputSource implements InputSource {
   constructor(
     readonly playerId: PlayerId,
     private readonly watcher: KeyStateReader,
     private readonly binding: KeyBinding,
   ) {}
 
-  next(): PlayerIntent {
+  next(): PlayerInput {
     return {
       up: this.watcher.anyOf(this.binding.up),
       down: this.watcher.anyOf(this.binding.down),

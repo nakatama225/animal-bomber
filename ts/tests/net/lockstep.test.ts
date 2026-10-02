@@ -3,15 +3,15 @@ import { describe, expect, it } from 'vitest';
 import { GameSession } from '../../src/app/GameSession.js';
 import { centerOf } from '../../src/domain/core/Coord.js';
 import { tick } from '../../src/domain/core/Tick.js';
-import { IdleIntentSource, type IntentSource } from '../../src/domain/intent/IntentSource.js';
-import { IDLE_INTENT, packIntent, type PlayerIntent } from '../../src/domain/intent/PlayerIntent.js';
+import { IdleInputSource, type InputSource } from '../../src/domain/input/InputSource.js';
+import { IDLE_INPUT, packInput, type PlayerInput } from '../../src/domain/input/PlayerInput.js';
 import { defaultMatchConfig } from '../../src/domain/rules/MatchConfig.js';
 import { SPAWN_CELLS } from '../../src/domain/rules/tuning.js';
 import { OUT } from '../../src/domain/state/Life.js';
 import type { PlayerId } from '../../src/domain/state/PlayerState.js';
 import { hashWorld } from '../../src/domain/state/WorldState.js';
-import { ConfirmedInputs, NetworkIntentSource } from '../../src/net/ConfirmedInputs.js';
-import { InputLog, ReplayIntentSource } from '../../src/net/InputLog.js';
+import { ConfirmedInputs, NetworkInputSource } from '../../src/net/ConfirmedInputs.js';
+import { InputLog, ReplayInputSource } from '../../src/net/InputLog.js';
 import { lanCpuSource } from '../../src/net/lanCpu.js';
 import { HASH_INTERVAL, INPUT_DELAY, LockstepDriver } from '../../src/net/LockstepDriver.js';
 import type { LanSettings, PeerMessage } from '../../src/net/protocol.js';
@@ -25,11 +25,11 @@ function settings(overrides: Partial<LanSettings['match']> = {}): LanSettings {
 }
 
 /** プレイヤーごとに違う動きをする台本。爆弾も置く。 */
-function wander(playerId: PlayerId, call: number): PlayerIntent {
+function wander(playerId: PlayerId, call: number): PlayerInput {
   const period = 23 + playerId * 14;
   const phase = Math.floor(call / period) % 4;
   const bomb = call % (70 + playerId * 11) === 0;
-  const moves: Partial<PlayerIntent>[] = [{ right: true }, { down: true }, { left: true }, { up: true }];
+  const moves: Partial<PlayerInput>[] = [{ right: true }, { down: true }, { left: true }, { up: true }];
   return press({ ...moves[phase], bomb });
 }
 
@@ -80,8 +80,8 @@ function replayAgainst(
   const replay = new GameSession(config.match);
   for (const player of replay.world.players) {
     // CPU の枠の操作は記録に無い。本物の端末と同じ設定から作り直す。抜けた人も、同じ CPU に替える。
-    const cpu = (id: PlayerId): IntentSource => lanCpuSource(id, config);
-    replay.attach(humans.includes(player.id) ? new ReplayIntentSource(player.id, log, replay, cpu) : cpu(player.id));
+    const cpu = (id: PlayerId): InputSource => lanCpuSource(id, config);
+    replay.attach(humans.includes(player.id) ? new ReplayInputSource(player.id, log, replay, cpu) : cpu(player.id));
   }
   const mismatched: number[] = [];
   let compared = 0;
@@ -151,7 +151,7 @@ describe('ロックステップ', () => {
 
   it('押した操作は、3 tick 遅れて効く', () => {
     // 21 回目に読まれた（= tick 20 を進めたときの）操作だけ爆弾を押す。0 回目は始まったときに読まれる。
-    const script = (_id: PlayerId, call: number): PlayerIntent => press({ bomb: call === 21 });
+    const script = (_id: PlayerId, call: number): PlayerInput => press({ bomb: call === 21 });
     const { relay, peers } = startMatch(2, settings(), script);
     const [host] = peers as [Peer];
 
@@ -166,14 +166,14 @@ describe('ロックステップ', () => {
   });
 
   it('押したまま始まった爆弾と技のボタンは、1ラウンド目でも離すまで効かない', () => {
-    // ⚠️ 最初の INPUT_DELAY tick を何もしない意思で埋めると、tick 0 に「離した」が届き、
+    // ⚠️ 最初の INPUT_DELAY tick を何も押していない入力で埋めると、tick 0 に「離した」が届き、
     // tick 3 に押していた内容が「押した瞬間」として届いて、押したまま始まった人が開始位置に爆弾を置く。
     // ホストが Enter で「はじめる」を押し、その Enter がまだ押されている、という普通の始め方で起きる。
     // この台本では2人とも押しているので、2人とも置く。
     const held = press({ bomb: true, action: true });
     // 0〜9 回目は押したまま、10・11 回目で離し、12 回目から押し直す。
-    const script = (_id: PlayerId, call: number): PlayerIntent =>
-      call < 10 ? held : call < 12 ? IDLE_INTENT : press({ bomb: true });
+    const script = (_id: PlayerId, call: number): PlayerInput =>
+      call < 10 ? held : call < 12 ? IDLE_INPUT : press({ bomb: true });
     const { relay, peers } = startMatch(2, settings(), script);
     const [host] = peers as [Peer];
     const bombsOfHumans = (): number => host.session.world.bombs.filter((bomb) => bomb.owner <= 1).length;
@@ -227,10 +227,10 @@ describe('ロックステップ', () => {
     expect(fast.session.elapsed - slow.session.elapsed).toBeLessThanOrEqual(INPUT_DELAY);
   });
 
-  it('試合が実際に使った操作は、その tick に届いた操作と同じ（2ラウンド目以降も）', () => {
+  it('試合が実際に使った入力は、その tick に届いた入力と同じ（2ラウンド目以降も）', () => {
     // 全端末が同じく時刻を取り違えると（ラウンドごとに 0 へ戻る world.now で引く、など）、
     // 要約は一致したまま、押したキーが効かなくなる。要約の比較では見つからないので、
-    // 試合が実際に使った操作（previousIntent）を、届いた操作の記録と tick ごとに比べる。
+    // 試合が実際に使った入力（previousInput）を、届いた入力の記録と tick ごとに比べる。
     const config = settings({ roundLimit: tick(240), suddenDeath: false });
     const { relay, peers } = startMatch(2, config);
     const [host, guest] = peers as [Peer, Peer];
@@ -245,8 +245,8 @@ describe('ロックステップ', () => {
       // 決着のあとの待ちの tick は操作を使わない（盤面を止めている）。
       if (!stepped || waiting || host.session.betweenRounds) continue;
       for (const id of [0, 1] as const) {
-        const used = packIntent(host.session.world.players[id]!.previousIntent);
-        expect(used, `tick ${t} のプレイヤー ${id}`).toBe(packIntent(host.driver.log.at(t, id)));
+        const used = packInput(host.session.world.players[id]!.previousInput);
+        expect(used, `tick ${t} のプレイヤー ${id}`).toBe(packInput(host.driver.log.at(t, id)));
       }
       if (host.session.match.round >= 2) laterRounds += 1;
     }
@@ -358,12 +358,12 @@ describe('ずれを見つける', () => {
       session,
       link: { send: (m) => sent.push(m) },
       localId: 0,
-      local: new IdleIntentSource(0),
+      local: new IdleInputSource(0),
       humans: [0],
-      replacement: (id) => new IdleIntentSource(id),
+      replacement: (id) => new IdleInputSource(id),
       match: 1,
     });
-    for (const id of [1, 2, 3] as const) session.attach(new IdleIntentSource(id));
+    for (const id of [1, 2, 3] as const) session.attach(new IdleInputSource(id));
     driver.start();
     for (let i = 0; i < HASH_INTERVAL; i += 1) driver.step();
 
@@ -402,17 +402,17 @@ describe('抜けた人', () => {
     // 本物の端末は、抜けた人を lastTick の次の tick から CPU に替える。記録にその tick が無いと、
     // 再生の窓口はその人の最後の操作を返し続け、例外も出ずに別の試合になる。
     // 抜ける人には、CPU が選ばない押し方（上下左右を全部）をさせておく。CPU に替える tick が
-    // 1つずれると、その tick に使った意思が食い違い、要約（使った意思も混ぜる）に出る。
+    // 1つずれると、その tick に使った入力が食い違い、要約（使った入力も混ぜる）に出る。
     // 普通に歩かせると、替わった直後の CPU がたまたま同じ向きを選び、ずれが見えないことがある。
     const all = press({ up: true, down: true, left: true, right: true });
-    const script = (id: PlayerId, call: number): PlayerIntent => (id === 2 && call >= 90 ? all : wander(id, call));
+    const script = (id: PlayerId, call: number): PlayerInput => (id === 2 && call >= 90 ? all : wander(id, call));
     const config = settings({ roundLimit: tick(240), suddenDeath: false });
     const { relay, peers } = startMatch(3, config, script);
     const [host, guest] = peers as [Peer, Peer, Peer];
     runTogether(relay, peers, 100);
-    // 前提：抜ける時点で、抜ける人は盤面にいて、その押し方をしている（倒れていると意思が効かない）。
+    // 前提：抜ける時点で、抜ける人は盤面にいて、その押し方をしている（倒れていると入力が効かない）。
     expect(host.session.world.players[2]!.life.kind).toBe('alive');
-    expect(host.session.world.players[2]!.previousIntent).toEqual(all);
+    expect(host.session.world.players[2]!.previousInput).toEqual(all);
     relay.leave(2);
     runTogether(relay, [host, guest], 1100);
     // 前提：抜けた人が CPU に替わり、そのあとも長く（ラウンドをまたいで）続いた。
@@ -440,12 +440,12 @@ describe('抜けた人', () => {
         session,
         link: { send: () => undefined },
         localId: 0,
-        local: new IdleIntentSource(0),
+        local: new IdleInputSource(0),
         humans: [0, 1],
-        replacement: (id) => new IdleIntentSource(id),
+        replacement: (id) => new IdleInputSource(id),
         match: 1,
       });
-      for (const id of [2, 3] as const) session.attach(new IdleIntentSource(id));
+      for (const id of [2, 3] as const) session.attach(new IdleInputSource(id));
       driver.start();
       return { session, driver };
     };
@@ -480,9 +480,9 @@ describe('抜けた人', () => {
       session,
       link: { send: () => undefined },
       localId: 0,
-      local: new IdleIntentSource(0),
+      local: new IdleInputSource(0),
       humans: [0, 1],
-      replacement: (id) => new IdleIntentSource(id),
+      replacement: (id) => new IdleInputSource(id),
       match: 1,
     });
     driver.start();
@@ -506,35 +506,35 @@ describe('抜けた人', () => {
       session,
       link: { send: () => undefined },
       localId: 0,
-      local: new IdleIntentSource(0),
+      local: new IdleInputSource(0),
       humans: [0, 1],
-      replacement: (id) => new IdleIntentSource(id),
+      replacement: (id) => new IdleInputSource(id),
       match: 1,
     });
     driver.start();
     driver.receive({ t: 'peer_left', seat: 1, lastTick: -1 });
 
     expect(() => driver.receive({ t: 'input', seat: 1, tick: 0, bits: 8, match: 1 })).not.toThrow();
-    expect(driver.log.at(0, 1)).toEqual(IDLE_INTENT);
+    expect(driver.log.at(0, 1)).toEqual(IDLE_INPUT);
   });
 });
 
 describe('届いた入力', () => {
   it('まだ届いていない tick を読もうとしたら止まる', () => {
-    // 記録の無い tick に「直前の意思が続いている」を返すと、届く前に進めても気づけない。
+    // 記録の無い tick に「直前の入力が続いている」を返すと、届く前に進めても気づけない。
     const inputs = new ConfirmedInputs();
     inputs.put(1, 0, press({ right: true }));
-    const source = new NetworkIntentSource(1, inputs, { elapsed: 1 });
+    const source = new NetworkInputSource(1, inputs, { elapsed: 1 });
 
     expect(() => source.next()).toThrow(/まだ届いていない/);
   });
 
   it('tick が飛んだ入力は受け取らない', () => {
     const inputs = new ConfirmedInputs();
-    inputs.put(1, 0, IDLE_INTENT);
+    inputs.put(1, 0, IDLE_INPUT);
 
-    expect(() => inputs.put(1, 2, IDLE_INTENT)).toThrow(/順が乱れた/);
-    expect(() => inputs.put(1, 0, IDLE_INTENT)).toThrow(/順が乱れた/);
+    expect(() => inputs.put(1, 2, IDLE_INPUT)).toThrow(/順が乱れた/);
+    expect(() => inputs.put(1, 0, IDLE_INPUT)).toThrow(/順が乱れた/);
     expect(inputs.through(1)).toBe(0);
   });
 
@@ -544,9 +544,9 @@ describe('届いた入力', () => {
       session,
       link: { send: () => undefined },
       localId: 0,
-      local: new IdleIntentSource(0),
+      local: new IdleInputSource(0),
       humans: [0, 1],
-      replacement: (id) => new IdleIntentSource(id),
+      replacement: (id) => new IdleInputSource(id),
       match: 1,
     });
 
@@ -564,9 +564,9 @@ describe('届いた入力', () => {
           session,
           link: { send: () => undefined },
           localId: 0,
-          local: new IdleIntentSource(0),
+          local: new IdleInputSource(0),
           humans: [0],
-          replacement: (id) => new IdleIntentSource(id),
+          replacement: (id) => new IdleInputSource(id),
           match: 1,
         }),
     ).toThrow(/最初から/);
@@ -580,7 +580,7 @@ describe('同じ接続での次の試合', () => {
       match: { ...defaultMatchConfig(3, ANIMALS), winsToTake: 1, startingHp: [2, 2, 2, 2] },
       cpu: ['oni', 'oni', 'oni', 'oni'],
     };
-    const { relay, peers } = startMatch(2, quick, () => IDLE_INTENT);
+    const { relay, peers } = startMatch(2, quick, () => IDLE_INPUT);
     const [host, guest] = peers as [Peer, Peer];
     let ticks = 0;
     while (!host.session.match.finished || !guest.session.match.finished) {

@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import type { CpuBehavior } from '../../src/ai/CpuBehavior.js';
-import { CpuIntentSource } from '../../src/ai/CpuIntentSource.js';
+import { CpuInputSource } from '../../src/ai/CpuInputSource.js';
 import { CPU_LEVELS } from '../../src/ai/CpuLevel.js';
 import { DODGE_LEEK } from '../../src/ai/behaviors/DodgeLeek.js';
 import { FLEE } from '../../src/ai/behaviors/Flee.js';
 import { centerOf } from '../../src/domain/core/Coord.js';
 import { secondsToTicks, tick } from '../../src/domain/core/Tick.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
-import type { IntentSource } from '../../src/domain/intent/IntentSource.js';
-import { IdleIntentSource, IntentGatherer } from '../../src/domain/intent/IntentSource.js';
+import type { InputSource } from '../../src/domain/input/InputSource.js';
+import { IdleInputSource, InputGatherer } from '../../src/domain/input/InputSource.js';
 import { swapPlaces } from '../../src/domain/mutations/negibon.js';
 import { alongsFacing, laneSpot } from '../../src/domain/negibon/lane.js';
 import { LeekActor } from '../../src/domain/negibon/LeekActor.js';
@@ -37,8 +37,8 @@ function arena(): { world: WorldState; cpu: PlayerState; foe: PlayerState } {
 }
 
 /** 登録した操作の出どころで `ticks` 回進め、起きたことを tick ごとに返す。 */
-function run(world: WorldState, sources: readonly IntentSource[], ticks: number): SimEvent[][] {
-  const gatherer = new IntentGatherer();
+function run(world: WorldState, sources: readonly InputSource[], ticks: number): SimEvent[][] {
+  const gatherer = new InputGatherer();
   for (const source of sources) gatherer.add(source);
   const sim = new Simulation();
   const out: SimEvent[][] = [];
@@ -46,15 +46,15 @@ function run(world: WorldState, sources: readonly IntentSource[], ticks: number)
   return out;
 }
 
-const cpuOf = (chain?: readonly CpuBehavior[]): CpuIntentSource =>
-  new CpuIntentSource(0, CPU_LEVELS.hard, 1, chain);
+const cpuOf = (chain?: readonly CpuBehavior[]): CpuInputSource =>
+  new CpuInputSource(0, CPU_LEVELS.hard, 1, chain);
 
 describe('外周にいる CPU', () => {
   it('射線の上に相手がいれば、動かずに狙いを定めてから撃つ', () => {
     const { world, cpu, foe } = arena();
     onLane(cpu, topAlongFor(5));
     foe.position = centerOf({ col: 5, row: 3 });
-    const events = run(world, [cpuOf(), new IdleIntentSource(1)], 120);
+    const events = run(world, [cpuOf(), new IdleInputSource(1)], 120);
 
     const thrownAt = events.findIndex((tickEvents) => tickEvents.some((e) => e.type === 'leekThrown'));
     // 捉えた瞬間には撃たない。人のように反応を遅らせる。
@@ -68,7 +68,7 @@ describe('外周にいる CPU', () => {
     const { world, cpu, foe } = arena();
     onLane(cpu, topAlongFor(6));
     foe.position = centerOf({ col: 6, row: 3 });
-    const events = run(world, [cpuOf(), new IdleIntentSource(1)], 240);
+    const events = run(world, [cpuOf(), new IdleInputSource(1)], 240);
     expect(events.flat().some((e) => e.type === 'leekThrown')).toBe(false);
   });
 
@@ -78,7 +78,7 @@ describe('外周にいる CPU', () => {
     onLane(cpu, topAlongFor(5));
     foe.position = centerOf({ col: 5, row: 3 });
     placeBombAt(world, foe, { col: 5, row: 2 })!.fuse = tick(1000);
-    const events = run(world, [cpuOf(), new IdleIntentSource(1)], 240);
+    const events = run(world, [cpuOf(), new IdleInputSource(1)], 240);
     expect(events.flat().some((e) => e.type === 'leekThrown')).toBe(false);
   });
 
@@ -86,7 +86,7 @@ describe('外周にいる CPU', () => {
     const { world, cpu, foe } = arena();
     onLane(cpu, topAlongFor(3));
     foe.position = centerOf({ col: 9, row: 3 });
-    const events = run(world, [cpuOf(), new IdleIntentSource(1)], 600);
+    const events = run(world, [cpuOf(), new IdleInputSource(1)], 600);
     const revived = events.flat().find((e) => e.type === 'revived');
     expect(revived).toMatchObject({ player: 0, replaced: 1 });
   });
@@ -102,7 +102,7 @@ describe('外周にいる CPU', () => {
     const { world, cpu, foe } = arena();
     onLane(cpu, topAlongFor(from));
     foe.position = { x: 9.5 + dx, y: 3.5 };
-    const events = run(world, [cpuOf(), new IdleIntentSource(1)], 900).flat();
+    const events = run(world, [cpuOf(), new IdleInputSource(1)], 900).flat();
     expect(events.find((e) => e.type === 'revived')).toMatchObject({ player: 0, replaced: 1 });
     // 当たらない位置から撃たない。
     expect(events.filter((e) => e.type === 'leekThrown')).toHaveLength(1);
@@ -117,7 +117,7 @@ describe('外周にいる CPU', () => {
         const { world, cpu, foe } = arena();
         onLane(cpu, topAlongFor(from));
         foe.position = { x: 9.5 + dx, y: 3.5 };
-        const events = run(world, [cpuOf(), new IdleIntentSource(1)], 900).flat();
+        const events = run(world, [cpuOf(), new IdleInputSource(1)], 900).flat();
         const label = `ずれ ${dx}・${from} 列から`;
         expect(events.some((e) => e.type === 'revived'), label).toBe(true);
         expect(events.filter((e) => e.type === 'leekThrown'), label).toHaveLength(1);
@@ -138,7 +138,7 @@ describe('外周にいる CPU', () => {
       const { world, cpu, foe } = arena();
       onLane(cpu, start);
       foe.position = { ...at };
-      const events = run(world, [cpuOf(), new IdleIntentSource(1)], 1500).flat();
+      const events = run(world, [cpuOf(), new IdleInputSource(1)], 1500).flat();
       expect(events.some((e) => e.type === 'revived'), `${start} から`).toBe(true);
     }
   });
@@ -149,7 +149,7 @@ describe('外周にいる CPU', () => {
     const { world, cpu, foe } = arena();
     onLane(cpu, topAlongFor(6));
     foe.position = { x: 4.2, y: 3.5 };
-    const events = run(world, [cpuOf(), new IdleIntentSource(1)], 900).flat();
+    const events = run(world, [cpuOf(), new IdleInputSource(1)], 900).flat();
     expect(events.some((e) => e.type === 'revived')).toBe(true);
   });
 
@@ -158,7 +158,7 @@ describe('外周にいる CPU', () => {
     const { world, cpu, foe } = arena();
     onLane(cpu, 71.5);
     foe.position = centerOf({ col: 7, row: 1 });
-    const events = run(world, [cpuOf(), new IdleIntentSource(1)], 200).flat();
+    const events = run(world, [cpuOf(), new IdleInputSource(1)], 200).flat();
     expect(events.some((e) => e.type === 'revived')).toBe(true);
   });
 
@@ -167,7 +167,7 @@ describe('外周にいる CPU', () => {
     const { world, cpu, foe } = arena();
     onLane(cpu, topAlongFor(5));
     foe.position = centerOf({ col: 5, row: 11 });
-    const events = run(world, [cpuOf(), new IdleIntentSource(1)], 300).flat();
+    const events = run(world, [cpuOf(), new IdleInputSource(1)], 300).flat();
     expect(events.some((e) => e.type === 'leekThrown')).toBe(false);
   });
 
@@ -183,7 +183,7 @@ describe('外周にいる CPU', () => {
       canPlaceBomb: false,
       tick: () => ({ events: [], done: false }),
     };
-    const events = run(world, [cpuOf(), new IdleIntentSource(1)], 300).flat();
+    const events = run(world, [cpuOf(), new IdleInputSource(1)], 300).flat();
     expect(events.some((e) => e.type === 'leekThrown')).toBe(false);
   });
 
@@ -192,7 +192,7 @@ describe('外周にいる CPU', () => {
     const { world, cpu, foe } = arena();
     onLane(cpu, topAlongFor(6));
     foe.position = centerOf({ col: 4, row: 3 });
-    const events = run(world, [cpuOf(), new IdleIntentSource(1)], 1200).flat();
+    const events = run(world, [cpuOf(), new IdleInputSource(1)], 1200).flat();
     expect(events.find((e) => e.type === 'revived')).toMatchObject({ player: 0, replaced: 1 });
   });
 
@@ -201,7 +201,7 @@ describe('外周にいる CPU', () => {
     onLane(cpu, topAlongFor(5));
     foe.position = centerOf({ col: 5, row: 3 });
     foe.invulnerableUntil = tick(1000);
-    const events = run(world, [cpuOf(), new IdleIntentSource(1)], 300).flat();
+    const events = run(world, [cpuOf(), new IdleInputSource(1)], 300).flat();
     expect(events.some((e) => e.type === 'leekThrown')).toBe(false);
   });
 
@@ -212,7 +212,7 @@ describe('外周にいる CPU', () => {
     onLane(cpu, bottom);
     foe.position = centerOf({ col: 9, row: 13 });
     const startX = laneSpot(bottom).position.x;
-    run(world, [cpuOf(), new IdleIntentSource(1)], 30);
+    run(world, [cpuOf(), new IdleInputSource(1)], 30);
     const lane = cpu.life.kind === 'negibon' ? cpu.life : null;
     expect(lane).not.toBeNull();
     expect(laneSpot(lane!.along).side).toBe('bottom');
@@ -236,14 +236,14 @@ describe('盤面にいる CPU と葱', () => {
   it('葱をよける規則が無ければ、飛んでくる葱に当たる', () => {
     // 次の確認が「もともと当たらない場面」で通っていないことの対照。
     const { world, cpu } = leekIncoming();
-    const events = run(world, [cpuOf([FLEE]), new IdleIntentSource(1)], 120);
+    const events = run(world, [cpuOf([FLEE]), new IdleInputSource(1)], 120);
     expect(events.flat().some((e) => e.type === 'revived')).toBe(true);
     expect(cpu.life.kind).toBe('negibon');
   });
 
   it('規則を1つ足すと、飛んでくる葱の列から直角に外れる', () => {
     const { world, cpu } = leekIncoming();
-    const events = run(world, [cpuOf([FLEE, DODGE_LEEK]), new IdleIntentSource(1)], 120);
+    const events = run(world, [cpuOf([FLEE, DODGE_LEEK]), new IdleInputSource(1)], 120);
     expect(events.flat().some((e) => e.type === 'revived')).toBe(false);
     expect(cpu.life.kind).toBe('alive');
     expect(Math.abs(cpu.position.x - 5.5)).toBeGreaterThan(0.5);
@@ -254,7 +254,7 @@ describe('盤面にいる CPU と葱', () => {
     const { world, cpu } = leekIncoming();
     const leek = world.actors[0] as LeekActor;
     world.actors = [new LeekActor({ x: 5.9, y: leek.position.y }, 'down', 1)];
-    const events = run(world, [cpuOf([FLEE, DODGE_LEEK]), new IdleIntentSource(1)], 120).flat();
+    const events = run(world, [cpuOf([FLEE, DODGE_LEEK]), new IdleInputSource(1)], 120).flat();
     expect(events.some((e) => e.type === 'revived')).toBe(false);
     expect(cpu.position.x).toBeLessThan(5.5);
   });
@@ -265,7 +265,7 @@ describe('盤面にいる CPU と葱', () => {
     const leek = world.actors[0] as LeekActor;
     world.actors = [new LeekActor({ x: 5.9, y: leek.position.y }, 'down', 1)];
     world.board.set({ col: 4, row: 5 }, 'soft');
-    const events = run(world, [cpuOf([FLEE, DODGE_LEEK]), new IdleIntentSource(1)], 120).flat();
+    const events = run(world, [cpuOf([FLEE, DODGE_LEEK]), new IdleInputSource(1)], 120).flat();
     expect(events.some((e) => e.type === 'revived')).toBe(false);
     expect(cpu.position.x).toBeCloseTo(5.5);
   });
@@ -275,14 +275,14 @@ describe('盤面にいる CPU と葱', () => {
     const { world, cpu } = leekIncoming();
     world.players[1]!.power = 1;
     placeBombAt(world, world.players[1]!, { col: 7, row: 5 })!.fuse = tick(1000);
-    const events = run(world, [cpuOf([FLEE, DODGE_LEEK]), new IdleIntentSource(1)], 120).flat();
+    const events = run(world, [cpuOf([FLEE, DODGE_LEEK]), new IdleInputSource(1)], 120).flat();
     expect(events.some((e) => e.type === 'revived')).toBe(false);
     expect(cpu.position.x).toBeLessThan(5.5);
   });
 
   it('標準の並びにも、葱をよける規則が入っている', () => {
     const { world, cpu } = leekIncoming();
-    run(world, [cpuOf(), new IdleIntentSource(1)], 120);
+    run(world, [cpuOf(), new IdleInputSource(1)], 120);
     expect(cpu.life.kind).toBe('alive');
   });
 });

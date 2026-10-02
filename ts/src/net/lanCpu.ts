@@ -1,4 +1,4 @@
-import { CpuIntentSource, cpuSeed } from '../ai/CpuIntentSource.js';
+import { CpuInputSource, cpuSeed } from '../ai/CpuInputSource.js';
 import { CPU_LEVELS } from '../ai/CpuLevel.js';
 import type { PlayerId } from '../domain/state/PlayerState.js';
 import { cpuLevelOf, type LanSettings } from './protocol.js';
@@ -13,6 +13,6 @@ import { cpuLevelOf, type LanSettings } from './protocol.js';
  * 見つからないから。全員の端末が同じ取り違えをするので、状態の要約は一致したまま進む。
  * 取り違えはここのテストでしか捕まらない。
  */
-export function lanCpuSource(playerId: PlayerId, settings: LanSettings): CpuIntentSource {
-  return new CpuIntentSource(playerId, CPU_LEVELS[cpuLevelOf(settings, playerId)], cpuSeed(settings.match.seed, playerId));
+export function lanCpuSource(playerId: PlayerId, settings: LanSettings): CpuInputSource {
+  return new CpuInputSource(playerId, CPU_LEVELS[cpuLevelOf(settings, playerId)], cpuSeed(settings.match.seed, playerId));
 }

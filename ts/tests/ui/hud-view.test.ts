@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { GameSession } from '../../src/app/GameSession.js';
 import { tick } from '../../src/domain/core/Tick.js';
-import { IdleIntentSource } from '../../src/domain/intent/IntentSource.js';
+import { IdleInputSource } from '../../src/domain/input/InputSource.js';
 import { defaultMatchConfig } from '../../src/domain/rules/MatchConfig.js';
 import { keyHelpFor } from '../../src/platform/keyHelp.js';
 import { SOLO_KEYS } from '../../src/platform/Keyboard.js';
@@ -28,7 +28,7 @@ const ROSTER: Roster = [
 
 function hud(): { session: GameSession; source: () => HudSource } {
   const session = new GameSession(defaultMatchConfig(9, ['rabbit', 'frog']));
-  for (const player of session.world.players) session.attach(new IdleIntentSource(player.id));
+  for (const player of session.world.players) session.attach(new IdleInputSource(player.id));
   return {
     session,
     source: () => ({

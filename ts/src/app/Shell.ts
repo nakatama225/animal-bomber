@@ -1,13 +1,13 @@
 import { CPU_LEVELS } from '../ai/CpuLevel.js';
-import { CpuIntentSource, cpuSeed } from '../ai/CpuIntentSource.js';
-import type { IntentSource } from '../domain/intent/IntentSource.js';
+import { CpuInputSource, cpuSeed } from '../ai/CpuInputSource.js';
+import type { InputSource } from '../domain/input/InputSource.js';
 import type { PlayerId } from '../domain/state/PlayerState.js';
-import { CombinedIntentSource } from '../platform/CombinedIntentSource.js';
+import { CombinedInputSource } from '../platform/CombinedInputSource.js';
 import { GameSpeed } from '../platform/FrameLoop.js';
-import { GamepadIntentSource, PadChoice, PadMenuInput, type PadSnapshot } from '../platform/GamepadInput.js';
+import { GamepadInputSource, PadChoice, PadMenuInput, type PadSnapshot } from '../platform/GamepadInput.js';
 import { GAMEPAD_HELP, keyHelpFor, type KeyHelp } from '../platform/keyHelp.js';
 import {
-  KeyboardIntentSource,
+  KeyboardInputSource,
   PLAYER1_KEYS,
   PLAYER2_KEYS,
   SOLO_KEYS,
@@ -446,11 +446,11 @@ export class Shell {
     this.#elements.toolbar.replaceChildren(...buttons);
   }
 
-  #sourceFor(id: PlayerId, controller: LocalController, seed: number): IntentSource {
-    if (controller.kind === 'cpu') return new CpuIntentSource(id, CPU_LEVELS[controller.level], cpuSeed(seed, id));
-    const keyboard = new KeyboardIntentSource(id, this.#tools.keyboard, KEY_LAYOUTS[controller.layout]);
+  #sourceFor(id: PlayerId, controller: LocalController, seed: number): InputSource {
+    if (controller.kind === 'cpu') return new CpuInputSource(id, CPU_LEVELS[controller.level], cpuSeed(seed, id));
+    const keyboard = new KeyboardInputSource(id, this.#tools.keyboard, KEY_LAYOUTS[controller.layout]);
     if (!drivesPad(controller)) return keyboard;
-    return new CombinedIntentSource([keyboard, new GamepadIntentSource(id, this.#pads)]);
+    return new CombinedInputSource([keyboard, new GamepadInputSource(id, this.#pads)]);
   }
 
   #helpFor(id: PlayerId, layout: 'solo' | 'left' | 'right'): KeyHelp {

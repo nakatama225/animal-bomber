@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CpuIntentSource, cpuSeed } from '../../src/ai/CpuIntentSource.js';
+import { CpuInputSource, cpuSeed } from '../../src/ai/CpuInputSource.js';
 import { CPU_LEVELS, type CpuLevelKey } from '../../src/ai/CpuLevel.js';
 import { GameSession } from '../../src/app/GameSession.js';
 import { defaultMatchConfig } from '../../src/domain/rules/MatchConfig.js';
@@ -23,7 +23,7 @@ function play(seed: number, animals: string[], levels: CpuLevelKey[], rounds: nu
   const game = new GameSession(config);
   levels.forEach((level, index) => {
     const id = index as PlayerId;
-    game.attach(new CpuIntentSource(id, CPU_LEVELS[level], cpuSeed(seed, id)));
+    game.attach(new CpuInputSource(id, CPU_LEVELS[level], cpuSeed(seed, id)));
   });
 
   const wins = levels.map(() => 0);

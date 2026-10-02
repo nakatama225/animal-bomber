@@ -3,9 +3,9 @@ import type { WorldState } from '../domain/state/WorldState.js';
 import { LockstepClient, type LanPhase, type PlayingPhase } from '../net/LockstepClient.js';
 import { lanCpuSource } from '../net/lanCpu.js';
 import { cpuLevelOf, REFUSED_CLOSE_CODE, type PeerLink } from '../net/protocol.js';
-import { CombinedIntentSource } from '../platform/CombinedIntentSource.js';
-import { GamepadIntentSource, type PadChoice } from '../platform/GamepadInput.js';
-import { KeyboardIntentSource, SOLO_KEYS, type KeyStateReader } from '../platform/Keyboard.js';
+import { CombinedInputSource } from '../platform/CombinedInputSource.js';
+import { GamepadInputSource, type PadChoice } from '../platform/GamepadInput.js';
+import { KeyboardInputSource, SOLO_KEYS, type KeyStateReader } from '../platform/Keyboard.js';
 import { LobbyView, type LobbyState } from '../platform/ui/LobbyView.js';
 import { lockstepUrl, WebSocketLink, type WebSocketLinkHandlers } from '../platform/WebSocketLink.js';
 import { describeLanPhase, WaitingNotice } from '../presentation/hud/lanStatus.js';
@@ -96,9 +96,9 @@ export class LanMatch implements MatchRunner {
       },
       // 1台に1人なので、キーボード全体（WASD と矢印の両方）とゲームパッドを1人が使う。
       localSource: (playerId) =>
-        new CombinedIntentSource([
-          new KeyboardIntentSource(playerId, options.keyboard, SOLO_KEYS),
-          new GamepadIntentSource(playerId, options.pads),
+        new CombinedInputSource([
+          new KeyboardInputSource(playerId, options.keyboard, SOLO_KEYS),
+          new GamepadInputSource(playerId, options.pads),
         ]),
       // 強さと種は、ホストが配った設定から引く。全員の端末で同じ CPU が同じ手を指す。
       cpuSource: lanCpuSource,

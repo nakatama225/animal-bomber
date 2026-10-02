@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  GamepadIntentSource,
+  GamepadInputSource,
   PadChoice,
   PadMenuInput,
   readBrowserGamepads,
   type PadSnapshot,
 } from '../../src/platform/GamepadInput.js';
 import {
-  KeyboardIntentSource,
+  KeyboardInputSource,
   PLAYER1_KEYS,
   type KeyStateReader,
 } from '../../src/platform/Keyboard.js';
@@ -38,84 +38,84 @@ function pad(options: {
 }
 
 describe('キーボード', () => {
-  it('押しているキーが意思になる', () => {
-    const source = new KeyboardIntentSource(0, keys('KeyD', 'Space'), PLAYER1_KEYS);
-    const intent = source.next();
-    expect(intent.right).toBe(true);
-    expect(intent.bomb).toBe(true);
-    expect(intent.left).toBe(false);
+  it('押しているキーが入力になる', () => {
+    const source = new KeyboardInputSource(0, keys('KeyD', 'Space'), PLAYER1_KEYS);
+    const playerInput = source.next();
+    expect(playerInput.right).toBe(true);
+    expect(playerInput.bomb).toBe(true);
+    expect(playerInput.left).toBe(false);
   });
 
   it('割り当ての中のどれを押しても同じ操作になる', () => {
     // 1P の爆弾は Space と Z の2つ。移動をどちらの手でやっても
     // 反対の手で押せるようにしてある。
-    expect(new KeyboardIntentSource(0, keys('Space'), PLAYER1_KEYS).next().bomb).toBe(true);
-    expect(new KeyboardIntentSource(0, keys('KeyZ'), PLAYER1_KEYS).next().bomb).toBe(true);
+    expect(new KeyboardInputSource(0, keys('Space'), PLAYER1_KEYS).next().bomb).toBe(true);
+    expect(new KeyboardInputSource(0, keys('KeyZ'), PLAYER1_KEYS).next().bomb).toBe(true);
   });
 
-  it('何も押していなければ何もしない意思になる', () => {
-    const intent = new KeyboardIntentSource(0, keys(), PLAYER1_KEYS).next();
-    expect(Object.values(intent).every((value) => value === false)).toBe(true);
+  it('キーを押していなければ、何も押していない入力になる', () => {
+    const playerInput = new KeyboardInputSource(0, keys(), PLAYER1_KEYS).next();
+    expect(Object.values(playerInput).every((value) => value === false)).toBe(true);
   });
 });
 
 describe('ゲームパッド', () => {
   it('十字キーで動く', () => {
-    const source = new GamepadIntentSource(0, new PadChoice(() => [pad({ buttons: [15] })]));
+    const source = new GamepadInputSource(0, new PadChoice(() => [pad({ buttons: [15] })]));
     expect(source.next().right).toBe(true);
   });
 
   it('A ボタンで爆弾', () => {
-    const source = new GamepadIntentSource(0, new PadChoice(() => [pad({ buttons: [0] })]));
+    const source = new GamepadInputSource(0, new PadChoice(() => [pad({ buttons: [0] })]));
     expect(source.next().bomb).toBe(true);
   });
 
   it('先頭が空いていても、繋がっているパッドを見つける', () => {
     // 実機では2番目に入っていた。番号を決め打ちにしない。
-    const source = new GamepadIntentSource(0, new PadChoice(() => [null, pad({ index: 1, buttons: [0] })]));
+    const source = new GamepadInputSource(0, new PadChoice(() => [null, pad({ index: 1, buttons: [0] })]));
     expect(source.next().bomb).toBe(true);
   });
 
   it('標準の並びでないパッドは使わない', () => {
-    const source = new GamepadIntentSource(0, new PadChoice(() => [pad({ mapping: '', buttons: [0] })]));
+    const source = new GamepadInputSource(0, new PadChoice(() => [pad({ mapping: '', buttons: [0] })]));
     expect(source.next().bomb).toBe(false);
   });
 
-  it('繋がっていなければ何もしない意思になる', () => {
-    const source = new GamepadIntentSource(0, new PadChoice(() => []));
-    const intent = source.next();
-    expect(Object.values(intent).every((value) => value === false)).toBe(true);
+  it('繋がっていなければ何も押していない入力になる', () => {
+    const source = new GamepadInputSource(0, new PadChoice(() => []));
+    const playerInput = source.next();
+    expect(Object.values(playerInput).every((value) => value === false)).toBe(true);
   });
 
   it('つかんだパッドを試合中に変えない', () => {
     // 途中で別のパッドが目を覚ますと、選択が静かに移ってしまう。
     let pads: (PadSnapshot | null)[] = [pad({ index: 1, buttons: [0] })];
-    const source = new GamepadIntentSource(0, new PadChoice(() => pads));
+    const source = new GamepadInputSource(0, new PadChoice(() => pads));
     expect(source.next().bomb).toBe(true);
     pads = [pad({ index: 0, buttons: [1] }), pad({ index: 1, buttons: [0] })];
-    const intent = source.next();
-    expect(intent.bomb).toBe(true); // 1番のパッドを見続けている
-    expect(intent.action).toBe(false);
+    const playerInput = source.next();
+    expect(playerInput.bomb).toBe(true); // 1番のパッドを見続けている
+    expect(playerInput.action).toBe(false);
   });
 
   it('スティックは傾きの大きい軸だけを採る', () => {
     // 軸ごとに独立して判定すると、真上から少し倒しただけで
     // 縦横の両方がしきい値を超え、横が優先されて別の向きに歩く。
-    const source = new GamepadIntentSource(0, new PadChoice(() => [pad({ axes: [0.6, -0.9, 0, 0] })]));
-    const intent = source.next();
-    expect(intent.up).toBe(true);
-    expect(intent.right).toBe(false);
+    const source = new GamepadInputSource(0, new PadChoice(() => [pad({ axes: [0.6, -0.9, 0, 0] })]));
+    const playerInput = source.next();
+    expect(playerInput.up).toBe(true);
+    expect(playerInput.right).toBe(false);
   });
 
   it('わずかな傾きでは動かない', () => {
-    const source = new GamepadIntentSource(0, new PadChoice(() => [pad({ axes: [0.2, 0, 0, 0] })]));
+    const source = new GamepadInputSource(0, new PadChoice(() => [pad({ axes: [0.2, 0, 0, 0] })]));
     expect(source.next().right).toBe(false);
   });
 
   it('倒したあとは戻りのしきい値まで効き続ける', () => {
     // 境目でちらつかないよう、倒すときと戻すときでしきい値を分けている。
     let axes = [0.6, 0, 0, 0];
-    const source = new GamepadIntentSource(0, new PadChoice(() => [pad({ axes })]));
+    const source = new GamepadInputSource(0, new PadChoice(() => [pad({ axes })]));
     expect(source.next().right).toBe(true);
     axes = [0.4, 0, 0, 0];
     expect(source.next().right).toBe(true);
@@ -172,7 +172,7 @@ describe('つかむパッド', () => {
     const choice = new PadChoice(() => [first, second]);
     expect(new PadMenuInput(choice).poll()).toEqual(['confirm']);
     first = pad({ index: 0 });
-    expect(new GamepadIntentSource(0, choice).next().bomb).toBe(true);
+    expect(new GamepadInputSource(0, choice).next().bomb).toBe(true);
   });
 });
 

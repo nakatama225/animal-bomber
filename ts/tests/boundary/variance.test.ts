@@ -4,8 +4,8 @@ import type { CpuBehavior } from '../../src/ai/CpuBehavior.js';
 import type { CpuContext } from '../../src/ai/CpuContext.js';
 import type { Ability } from '../../src/domain/abilities/Ability.js';
 import { abilityOf } from '../../src/domain/abilities/registry.js';
-import type { IntentSource } from '../../src/domain/intent/IntentSource.js';
-import { IDLE_INTENT } from '../../src/domain/intent/PlayerIntent.js';
+import type { InputSource } from '../../src/domain/input/InputSource.js';
+import { IDLE_INPUT } from '../../src/domain/input/PlayerInput.js';
 import type { PlayerState } from '../../src/domain/state/PlayerState.js';
 import type { WorldState } from '../../src/domain/state/WorldState.js';
 
@@ -34,13 +34,13 @@ type NarrowContext = CpuContext & { readonly extra: number };
 type NarrowPlayer = PlayerState & { readonly extra: number };
 
 describe('窓口の引数を、実装の側で狭められない', () => {
-  it('意思の出どころ（IntentSource）', () => {
-    const same = { playerId: 0 as const, next: (_world: Readonly<WorldState>) => IDLE_INTENT };
-    const narrowed = { playerId: 0 as const, next: (_world: NarrowWorld) => IDLE_INTENT };
+  it('入力を返す窓口（InputSource）', () => {
+    const same = { playerId: 0 as const, next: (_world: Readonly<WorldState>) => IDLE_INPUT };
+    const narrowed = { playerId: 0 as const, next: (_world: NarrowWorld) => IDLE_INPUT };
 
-    const accepted: IntentSource = same;
-    // @ts-expect-error 狭めた盤面しか受け取れない出どころは、IntentSource として渡せない
-    const rejected: IntentSource = narrowed;
+    const accepted: InputSource = same;
+    // @ts-expect-error 狭めた盤面しか受け取れない窓口は、InputSource として渡せない
+    const rejected: InputSource = narrowed;
 
     expect([accepted, rejected]).toEqual([same, narrowed]);
   });

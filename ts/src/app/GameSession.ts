@@ -1,7 +1,7 @@
 import { abilityOf } from '../domain/abilities/registry.js';
 import { secondsToTicks, type Tick } from '../domain/core/Tick.js';
 import type { SimEvent } from '../domain/events/SimEvent.js';
-import { IntentGatherer, type IntentSource } from '../domain/intent/IntentSource.js';
+import { InputGatherer, type InputSource } from '../domain/input/InputSource.js';
 import { enterSuddenDeath } from '../domain/mutations/suddenDeath.js';
 import { seedForRound, type MatchConfig } from '../domain/rules/MatchConfig.js';
 import { createMatch, type MatchState } from '../domain/state/MatchState.js';
@@ -43,7 +43,7 @@ export const ROUND_INTERMISSION: Tick = secondsToTicks(2);
 export class GameSession {
   readonly #simulation = new Simulation();
   readonly #rounds = new RoundSystem();
-  readonly #gatherer = new IntentGatherer();
+  readonly #gatherer = new InputGatherer();
   readonly #config: MatchConfig;
   #world: WorldState;
   #match: MatchState;
@@ -110,7 +110,7 @@ export class GameSession {
    * キーボードでも CPU でも記録の再生でも、同じ形で受け取る。
    * 途中で差し替えれば、接続が切れたプレイヤーを CPU が引き継ぐこともできる。
    */
-  attach(source: IntentSource): this {
+  attach(source: InputSource): this {
     this.#gatherer.add(source);
     return this;
   }
