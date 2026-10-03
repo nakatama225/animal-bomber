@@ -164,13 +164,13 @@ class Testフレームの回し方:
 
 
 class Test待ち方:
-    def test_既定の待ち方は_測って決めた空回り(self) -> None:
+    def test_既定の待ち方は_眠る(self) -> None:
         """README とモジュールの説明に書いた決めと、コードの既定が食い違わないこと。
 
-        変えるときは、測り直して README の数と決めも直す（AGENTS.md）。
+        変えるときは、README の数と決めも直す（AGENTS.md）。
         """
         default = inspect.signature(frames).parameters["wait"].default
-        assert default is spin_until
+        assert default is sleep_until
 
     def test_眠りが早く覚めたら_予定の時刻まで眠り直す(self) -> None:
         fake = FakeTime()
