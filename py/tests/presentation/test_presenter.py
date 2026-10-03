@@ -13,8 +13,10 @@ from animal_bomber.domain.events import (
     ItemBurned,
     ItemDropped,
     ItemTaken,
+    MatchEnded,
     PlayerDown,
     PlayerHurt,
+    RoundEnded,
     SimEvent,
 )
 from animal_bomber.domain.input.player_input import PlayerInput
@@ -58,8 +60,11 @@ ALL_EVENTS: list[SimEvent] = [
     EffectApplied(target=0, effect=EffectKind.STUN),
     PlayerHurt(target=0, by=1, amount=2),
     PlayerDown(target=0, by=1),
+    RoundEnded(round=1, winner=None),
+    RoundEnded(round=2, winner=1),
+    MatchEnded(champion=1),
 ]
-"""イベントの種類をすべて含む並び（状態がかかったときの音の3通りも）。"""
+"""イベントの種類をすべて含む並び（状態がかかったときの音の3通りと、引き分けも）。"""
 
 
 def test_受け取らなければ何も起きない() -> None:
@@ -86,8 +91,18 @@ def test_すべての種類を_決めた音と通知に変える() -> None:
         (SoundName.CRY, 1),
         (SoundName.HURT, 1),
         (SoundName.DOWN, 1),
+        (SoundName.ROUND_END, 1),
+        (SoundName.ROUND_END, 1),
+        (SoundName.FANFARE, 1),
     ]
-    assert notices.shown == ["2P：🐌超スロー", "1P：🍌すべる", "1P：😭涙で動けない"]
+    assert notices.shown == [
+        "2P：🐌超スロー",
+        "1P：🍌すべる",
+        "1P：😭涙で動けない",
+        "ラウンド 1 は引き分け",
+        "ラウンド 2 は 2P の勝ち",
+        "2P の優勝",
+    ]
 
 
 def test_プレイヤーの呼び方は外から渡せる() -> None:

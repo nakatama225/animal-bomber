@@ -17,7 +17,7 @@ pytest` の行）ので、版で結果が変わればどちらかで失敗する
 
 from animal_bomber.domain.state.world import hash_world
 
-from .scenario import play_and_record, replay
+from .scenario import play_and_record, play_match, replay
 
 # 台本どおりに 600 tick 進めたあとの要約（`StateHasher.hex` と同じ 8 桁）。
 # 2026-10-04 に Python 3.12 で出し、3.11 でも同じ値になることを確かめた。段階 3 で、
@@ -28,6 +28,16 @@ from .scenario import play_and_record, replay
 # 重なった爆風であとから置かれた爆風の持ち主を当てたプレイヤーにしたので、c50eb1f2 から
 # 変わった（原型に合わせた。TypeScript 版は 32bf68b）。
 GOLDEN = "a599364a"
+
+# ラウンドをまたぐ台本（`play_match`）を 1500 tick 進めたあとの盤面の要約。段階 4 で
+# 足した。3回の時間切れのあと、4ラウンド目の盤面になっている。
+GOLDEN_MATCH = "4084481e"
+
+
+def test_ラウンドをまたぐ台本は_決めておいた要約に行き着く() -> None:
+    session = play_match()
+    assert (session.match.round, session.match.wins) == (4, {})
+    assert f"{hash_world(session.world):08x}" == GOLDEN_MATCH
 
 
 def test_台本どおりの試合は_決めておいた要約に行き着く() -> None:

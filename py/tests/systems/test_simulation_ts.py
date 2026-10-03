@@ -1,31 +1,33 @@
 """1 tick の処理の全体が、TypeScript 版の段階 3 と同じ結果になることの検査。
 
-同じ盤面に同じ台本を流し、20 tick ごとに、プレイヤー（位置・向き・体力・無敵の切れる
-tick・一時的な状態・強さ・「勝手に設置」の待ち）・盤面の爆弾と爆風とアイテム（識別子も）・
-盤面の中身・発番した識別子の数・乱数を引いた回数と、その間に起きたイベントの並びを
-比べる。20 tick ごとにするのは、爆風が 28 tick で消えるので、区切りの間が長いと、爆風の
-並びのずれを見逃すため。爆発の順・拾う順・被弾の順・状態の時間の進め方のどれを変えても、
-識別子かイベントの並びか乱数の回数がずれて失敗する。
+同じ盤面に同じ台本を流し、20 tick ごとに、盤面の状態（`tests/ts_rows.py` の
+`world_rows`）と、その間に起きたイベントの並びを比べる。20 tick ごとにするのは、爆風が
+28 tick で消えるので、区切りの間が長いと、爆風の並びのずれを見逃すため。爆発の順・
+拾う順・被弾の順・状態の時間の進め方のどれを変えても、識別子かイベントの並びか乱数の
+回数がずれて失敗する。
 
 期待する値は `ts_simulation_values.json`。TypeScript 版の段階 3（コミット f95d2a5）に、
-次の2つの直しを当て、同じ台本を流して出したもの。
+あとから TypeScript 版を原型に合わせた次の直しを当て、同じ台本を流して出したもの。
 
-1. 壊れたブロックの一覧に同じマスを1回だけ入れる（TypeScript 版を直したコミット 7825fac
-   と同じもの。段階 3 では `systems/BlastSystem.ts` の中にある）。当てないと、「まばらな
-   盤面」が 500 tick 目、「ブロックの詰まった盤面」が 160 tick 目でずれる（壊れた
-   ブロックからアイテムを落とす抽選の回数が違う）
+1. 壊れたブロックの一覧に同じマスを1回だけ入れる（7825fac と同じもの。段階 3 では
+   `systems/BlastSystem.ts` の中にある）。当てないと、「まばらな盤面」が 500 tick 目、
+   「ブロックの詰まった盤面」が 160 tick 目でずれる（壊れたブロックからアイテムを
+   落とす抽選の回数が違う）
 2. 「勝手に設置」は 0.5 秒に1回だけ置こうとし、重なった爆風ではあとから置かれた爆風の
    持ち主を当てたプレイヤーにする（32bf68b と同じもの）。当てないと、「アイテムを並べた
    盤面」が 20 tick 目でずれる。重なった爆風の持ち主の違いは、3つの台本のどれにも出ない
    （別々のプレイヤーの爆風が重なったマスで当たる場面を通らない）ので、
    `test_items_damage.py` で同じ場面を確かめる
+3. ラウンドの始まりは爆弾のボタンを押していた扱いにする（bcb1567 と同じもの。HEAD と
+   同じく爆弾のボタンだけ）。台本はどれも 0 tick 目に爆弾のボタンを押すので、当てないと
+   3つとも 20 tick 目でずれる
 
 ⚠️ 原型の値ではない（原型の乱数は種を与えられないので、同じ盤面を作れない）。
 
 3つ目の台本は、悪い状態の動き方を通すためのもの。空いたマスにアイテムを並べ、ときどき
 向きのボタンを全部離す。種 9 では、悪い状態が8つともかかり、チキンを拾い、手を離しても
 滑る・とまれないで進む・壁で滑りが終わる・反転して進む、をどれも通る（TypeScript 版で
-数えて選んだ）。
+数えて選んだ。3 を当てる前の値で選んだ）。
 
 台本は `tests/determinism/scenario.py` と切り離して、このファイルに持つ。決定性の台本は
 ルールを足すたびに足していくので、それに頼ると、この固定値が意図せず変わる。
@@ -34,22 +36,9 @@ tick・一時的な状態・強さ・「勝手に設置」の待ち）・盤面�
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import assert_never
 
 import pytest
 
-from animal_bomber.domain.events import (
-    BlockDestroyed,
-    BombPlaced,
-    EffectApplied,
-    Exploded,
-    ItemBurned,
-    ItemDropped,
-    ItemTaken,
-    PlayerDown,
-    PlayerHurt,
-    SimEvent,
-)
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.state.board import Tile
@@ -57,6 +46,7 @@ from animal_bomber.domain.state.item import Item
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState, create_world
 from animal_bomber.domain.systems import simulation
+from tests.ts_rows import event_row, world_rows
 
 EXPECTED = json.loads(
     (Path(__file__).parent / "ts_simulation_values.json").read_text(encoding="utf-8")
@@ -188,79 +178,6 @@ CASES = [
 ]
 
 
-def event_row(event: SimEvent) -> list[object]:
-    """イベントを、TypeScript 版の出力と同じ形の1行にする（種類の名前と中身）。"""
-    match event:
-        case BombPlaced(cell=cell, owner=owner):
-            return ["bombPlaced", cell.col, cell.row, owner]
-        case Exploded(cell=cell, owner=owner, count=count):
-            return ["exploded", cell.col, cell.row, owner, count]
-        case BlockDestroyed(cell=cell):
-            return ["blockDestroyed", cell.col, cell.row]
-        case ItemDropped(cell=cell, kind=kind):
-            return ["itemDropped", cell.col, cell.row, kind.value]
-        case ItemTaken(cell=cell, kind=kind, taker=taker):
-            return ["itemTaken", cell.col, cell.row, kind.value, taker]
-        case ItemBurned(cell=cell, kind=kind):
-            return ["itemBurned", cell.col, cell.row, kind.value]
-        case EffectApplied(target=target, effect=effect):
-            return ["effectApplied", target, effect.value]
-        case PlayerHurt(target=target, by=by, amount=amount):
-            return ["playerHurt", target, by, amount]
-        case PlayerDown(target=target, by=by):
-            return ["playerDown", target, by]
-        case _:
-            assert_never(event)
-
-
-def checkpoint(world: WorldState, events: list[list[object]]) -> dict[str, object]:
-    """TypeScript 版の出力と同じ形に並べた、いまの状態と、前の区切りからのイベント。"""
-    return {
-        "tick": world.now,
-        "players": [
-            [
-                p.position.x,
-                p.position.y,
-                p.facing.name.lower(),
-                p.active_bombs,
-                p.life.value,
-                p.hp,
-                p.invulnerable_until,
-                p.effects.encode(),
-                p.special_charges,
-                p.last_hit_by,
-                p.power,
-                p.max_bombs,
-                p.shoes,
-                p.autobomb_wait,
-            ]
-            for p in world.players
-        ],
-        "bombs": [
-            [
-                b.id,
-                b.cell.col,
-                b.cell.row,
-                b.owner,
-                b.power,
-                b.fuse,
-                b.chained,
-                sorted(b.pass_through),
-            ]
-            for b in world.bombs
-        ],
-        "blasts": [
-            [b.id, b.cell.col, b.cell.row, b.owner, b.is_center, b.remaining]
-            for b in world.blasts
-        ],
-        "items": [[i.id, i.cell.col, i.cell.row, i.kind.value] for i in world.items],
-        "board": world.board.encode(),
-        "issued": world.ids.issued,
-        "rngCalls": world.rng.calls,
-        "events": events,
-    }
-
-
 @pytest.mark.parametrize(
     ("name", "seed", "shoes", "max_bombs", "powers", "script", "sparse", "items"),
     CASES,
@@ -294,7 +211,7 @@ def test_同じ台本を流すと_TypeScript版と同じ結果になる(
         )
         pending.extend(event_row(event) for event in events)
         if (tick + 1) % INTERVAL == 0:
-            got.append(checkpoint(world, pending))
+            got.append({"tick": world.now, **world_rows(world), "events": pending})
             pending = []
     # 区切りごとに比べ、どこで初めてずれたかが分かるようにする。
     for expected, actual in zip(EXPECTED[name], got, strict=True):

@@ -50,6 +50,16 @@ SPAWN_CLEARANCE: Final = 2
 記録は無い。
 """
 
+DUEL_SPAWN_ORDER: Final = (0, 3)
+"""1台で2人が遊ぶときの開始位置の並び（`SPAWN_CELLS` の番号を、プレイヤー番号の順に）。
+
+左上と右下の対角。原型の 2p モードと同じ（`legacy/animal-bomber.html` の「2人の
+ときは対角スタート」）。上の2隅だと同じ辺に並ぶ（横に20マス）が、対角なら縦横
+あわせて34マス離れ、始まってすぐには出会わない。人数ではなく遊び方で決まる（原型の
+LAN 対戦は番号の順のまま）ので、`create_world` の既定にはせず、試合の設定
+（`rules/match.py` の `MatchConfig.spawn_order`）で渡す。
+"""
+
 # ------------------------------------------------------------------ 移動
 
 BASE_SPEED_PER_SECOND: Final = 3.7
@@ -214,3 +224,26 @@ AUTOBOMB_INTERVAL_SECONDS: Final = 0.5
 
 AUTOBOMB_INTERVAL: Final = seconds_to_ticks(AUTOBOMB_INTERVAL_SECONDS)
 """「勝手に設置」が爆弾を置こうとする間隔（tick）。30。"""
+
+# ------------------------------------------------------------------ 試合
+
+ROUND_SECONDS: Final = 180
+"""1ラウンドの制限時間の既定値（秒）。原型・TypeScript 版と同じ。
+
+設定の画面（段階 10）で変えられるようにする。
+"""
+
+WINS_TO_TAKE_MATCH: Final = 3
+"""何勝で試合を取るかの既定値。原型・TypeScript 版と同じ。"""
+
+ROUND_INTERMISSION_SECONDS: Final = 2
+"""ラウンドが決まってから、次の盤面を作るまでの間（秒）。
+
+⚠️ 決まった tick のうちに盤面を作り直すと、決着をつけた爆発も、倒れる瞬間も、画面に
+1度も描かれない（描く前に次の盤面へ切り替わる）。決着の場面を見せるために、前の盤面を
+止めたまま少し待つ（TypeScript 版は c391fa1 で直した）。ラウンドの間に出す画面
+（段階 10）は、この待ちの間に重ねる。
+"""
+
+ROUND_INTERMISSION: Final = seconds_to_ticks(ROUND_INTERMISSION_SECONDS)
+"""ラウンドが決まってから、次の盤面を作るまでの間（tick）。120。"""

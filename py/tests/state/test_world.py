@@ -40,7 +40,8 @@ class Test始めの状態:
             (1, 1, 0),
             (1, 1, 0),
         ]
-        assert all(p.previous_input is PlayerInput.IDLE for p in world.players)
+        # 前の tick の入力は、爆弾のボタンを押していた扱い（`HELD_AT_ROUND_START`）。
+        assert all(p.previous_input is PlayerInput.BOMB for p in world.players)
         assert (world.bombs, world.blasts, world.ids.issued) == ([], [], 0)
 
     def test_体力は満タンで_状態もアイテムも無く始まる(self) -> None:

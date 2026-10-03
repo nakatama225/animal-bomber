@@ -2,12 +2,14 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from typing import Final
 
 from animal_bomber.domain.core.coord import Direction
 from animal_bomber.domain.core.entity_id import IdSource
 from animal_bomber.domain.core.rng import Rng
 from animal_bomber.domain.core.statehash import StateHasher
 from animal_bomber.domain.core.tick import Tick
+from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.tuning import SPAWN_CELLS
 from animal_bomber.domain.state.board import Board, build_board
 from animal_bomber.domain.state.bomb import Blast, Bomb
@@ -26,7 +28,8 @@ class WorldState:
     足すと、通信対戦で突き合わせるものが無駄に増える。左右するものを足したら、
     `hash_world` にも足す（足さないと、その値がずれても気づけない）。
 
-    いまは段階 3 までで使うものだけを持つ。
+    いまは段階 4 までで使うものだけを持つ。ラウンドをまたいで残る勝ち数は、ここには
+    入れない（`state/match.py` の `MatchState`）。
     """
 
     now: Tick
@@ -53,38 +56,76 @@ class WorldState:
     """盤面に置かれるもの（爆弾・爆風・アイテム）の識別子を発番する。"""
 
 
-def create_world(seed: int, animals: Sequence[str]) -> WorldState:
-    """試合の始めの状態を作る。
+HELD_AT_ROUND_START: Final = PlayerInput.BOMB
+"""ラウンドの始まりの「前の tick に押していたボタン」。爆弾のボタンを押していた扱い。
+
+⚠️ 何も押していない扱い（`PlayerInput.IDLE`）にすると、爆弾のボタンを押したまま
+ラウンドが始まったとき、最初の tick が「押した瞬間」になり、開始位置に爆弾を置く
+（逃げ場が無く詰む）。決着のあとの待ち（`ROUND_INTERMISSION`）の間も押し続けていれば、
+実際の試合でも起きる。原型も、決着の幕を Space で送った押下が次のラウンドの最初に
+届いて同じことが起き、ラウンドの始めに押下の記録を消していた（`legacy/animal-bomber.html`
+の startRound）。押したまま始まったボタンは、一度離して押し直すと効く（TypeScript 版は
+段階 11e の bcb1567 で直した）。
+
+技のボタンは含めない。技（段階 5）は押し続けた長さで決まるので、技を作るときに技の
+側で同じ扱いを入れる（TypeScript 版は押し続けた長さを -1 から始める）。
+"""
+
+
+def create_world(
+    seed: int, animals: Sequence[str], spawn_order: Sequence[int] | None = None
+) -> WorldState:
+    """ラウンドの始めの状態を作る。ラウンドごとに作り直す（`app/session.py`）。
 
     ⚠️ 乱数を引く順が結果を決めるので、盤面を先に作る。あとでプレイヤーを置く処理が
     乱数を引くようになっても、同じ種から同じ盤面ができるように。
 
-    向きは全員が下で始まる（原型と同じ）。開始位置は、プレイヤー番号の順に4隅へ置く。
-    原型は1台で2人が遊ぶとき（2p モード）、2人目を右下（対角）の隅から始める
-    （`legacy/animal-bomber.html` L1225-1228「2人のときは対角スタート」。LAN 対戦は
-    番号の順のまま）。人数ではなく遊び方で決まるので、試合の設定を作る段階 4 で入れる。
+    向きは全員が下で始まる（原型と同じ）。プレイヤーの状態はどれも始めの値で作るので、
+    原型がラウンドの始めに戻していたもの（効果・手持ち・「勝手に設置」の待ちなど）は、
+    作り直すことで戻る。
 
     Args:
-        seed: 盤面などに使う乱数の種。同じ種なら同じ試合になる。
+        seed: 盤面などに使う乱数の種。同じ種なら同じ盤面になる。
         animals: 参加する動物を、プレイヤー番号の順に並べたもの。
+        spawn_order: 始める隅（`SPAWN_CELLS` の番号）を、プレイヤー番号の順に並べた
+            もの。省くと番号の順。1台で2人なら `DUEL_SPAWN_ORDER`（対角）。
 
     Raises:
-        ValueError: 動物の数が 1 から開始位置の数（4）までに入らないとき。
+        ValueError: 動物の数が 1 から開始位置の数（4）までに入らないとき。始める隅の
+            並びが人数と合わない・隅の番号でない・重なるとき（黙って番号の順に戻すと、
+            1台だけ並びを取り違えても試合が始まり、気づけない）。
     """
     if not 1 <= len(animals) <= len(SPAWN_CELLS):
         raise ValueError(f"参加する数は 1〜{len(SPAWN_CELLS)}: {len(animals)}")
+    corners = _spawn_corners(len(animals), spawn_order)
     rng = Rng(seed)
     board = build_board(rng, SPAWN_CELLS)
     players = [
         PlayerState(
             id=PLAYER_IDS[index],
             animal=animal,
-            position=SPAWN_CELLS[index].center(),
+            position=SPAWN_CELLS[corners[index]].center(),
             facing=Direction.DOWN,
+            previous_input=HELD_AT_ROUND_START,
         )
         for index, animal in enumerate(animals)
     ]
     return WorldState(now=Tick(0), board=board, players=players, rng=rng)
+
+
+def _spawn_corners(count: int, spawn_order: Sequence[int] | None) -> tuple[int, ...]:
+    """プレイヤー番号の順に、始める隅の番号を返す。並びを渡されたら確かめる。"""
+    if spawn_order is None:
+        return tuple(range(count))
+    order = tuple(spawn_order)
+    valid = (
+        len(order) == count
+        and all(0 <= corner < len(SPAWN_CELLS) for corner in order)
+        and all(order.count(corner) == 1 for corner in order)
+    )
+    if not valid:
+        raise ValueError(f"始める隅の並びが人数（{count}）と合わない: {order}")
+    return order
 
 
 def hash_world(world: WorldState) -> int:

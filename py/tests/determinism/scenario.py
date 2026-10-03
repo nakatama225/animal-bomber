@@ -13,14 +13,16 @@
 
 from dataclasses import dataclass
 
+from animal_bomber.app.session import GameSession
 from animal_bomber.domain.core.coord import Cell
-from animal_bomber.domain.core.tick import MatchTick
+from animal_bomber.domain.core.tick import MatchTick, Tick
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.input.sources import InputGatherer, InputSource
 from animal_bomber.domain.rules.items import ItemKind
+from animal_bomber.domain.rules.match import MatchConfig
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import PlayerId
+from animal_bomber.domain.state.player import PLAYER_IDS, PlayerId
 from animal_bomber.domain.state.world import WorldState, create_world
 from animal_bomber.domain.systems import simulation
 from animal_bomber.net.input_log import (
@@ -109,8 +111,15 @@ def new_world(seed: int = SEED) -> WorldState:
 
     空いたマスのうち、列と行の和が偶数のマスにアイテムを置く（左上から順に、
     `_PLACED_KINDS` の種類をくり返す）。
+
+    盤面に手を入れたので、ラウンドの途中の状態として扱い、前の tick の入力を「何も
+    押していない」にする（`tests/helpers.py` の `make_world` と同じ）。ラウンドの
+    始まり（爆弾のボタンを押していた扱い）は、ラウンドをまたぐ台本（`play_match`）が
+    通る。
     """
     world = create_world(seed, ANIMALS)
+    for player in world.players:
+        player.previous_input = PlayerInput.IDLE
     for cell, tile in list(world.board.cells()):
         if tile is Tile.SOFT:
             world.board.put(cell, Tile.EMPTY)
@@ -166,3 +175,26 @@ def replay(log: InputLog, ticks: int = TICKS, seed: int = SEED) -> WorldState:
     ]
     run(world, sources, ticks)
     return world
+
+
+MATCH_TICKS = 1500
+MATCH_ROUND_LIMIT = Tick(300)
+"""ラウンドをまたぐ台本の制限時間（tick）。
+
+1500 tick の間に、ラウンドの終わり・決着のあとの待ち・次の盤面を何度か通るよう短くする。
+"""
+
+
+def play_match(ticks: int = MATCH_TICKS, seed: int = SEED) -> GameSession:
+    """ラウンドをまたぐ台本。手を入れない盤面で、試合の進行（`GameSession`）を通す。
+
+    1ラウンドの台本（`new_world`）は盤面に手を入れるので、ラウンドの始まりの扱い・
+    ラウンドごとの種・決着のあとの待ちは、こちらが通る。
+    """
+    config = MatchConfig(seed=seed, animals=ANIMALS, round_limit=MATCH_ROUND_LIMIT)
+    session = GameSession(
+        config, [ScriptedSource(player) for player in PLAYER_IDS[: len(ANIMALS)]]
+    )
+    for _ in range(ticks):
+        session.tick()
+    return session

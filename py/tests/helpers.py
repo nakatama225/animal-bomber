@@ -15,8 +15,17 @@ from animal_bomber.domain.systems.bomb import place_bomb
 def make_world(
     seed: int = 1234, animals: Sequence[str] = ("rabbit", "elephant")
 ) -> WorldState:
-    """テスト用の状態。種を変えなければ、何度作っても同じ盤面になる。"""
-    return create_world(seed, animals)
+    """テスト用の状態。種を変えなければ、何度作っても同じ盤面になる。
+
+    前の tick の入力だけを、ラウンドの途中の状態（だれも何も押していない）にする。
+    ラウンドの始まりは爆弾のボタンを押していた扱い（`HELD_AT_ROUND_START`）なので、
+    そのままだと、押した瞬間を見るテストがどれも 1 tick 待つ形になる。ラウンドの
+    始まりの扱いは `tests/app/test_session.py` で `create_world` から確かめる。
+    """
+    world = create_world(seed, animals)
+    for player in world.players:
+        player.previous_input = PlayerInput.IDLE
+    return world
 
 
 def only_for(

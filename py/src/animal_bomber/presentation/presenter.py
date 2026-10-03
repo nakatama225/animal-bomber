@@ -35,8 +35,10 @@ from animal_bomber.domain.events import (
     ItemBurned,
     ItemDropped,
     ItemTaken,
+    MatchEnded,
     PlayerDown,
     PlayerHurt,
+    RoundEnded,
     SimEvent,
 )
 from animal_bomber.domain.rules.items import ItemKind
@@ -62,6 +64,8 @@ class SoundName(Enum):
     POOP = "poop"
     HURT = "hurt"
     DOWN = "down"
+    ROUND_END = "round_end"
+    FANFARE = "fanfare"
 
 
 class SoundBank(Protocol):
@@ -208,5 +212,16 @@ class Presenter:
                 self._sounds.play(SoundName.HURT)
             case PlayerDown():
                 self._sounds.play(SoundName.DOWN)
+            case RoundEnded(round=number, winner=winner):
+                self._sounds.play(SoundName.ROUND_END)
+                if winner is None:
+                    self._notices.show(f"ラウンド {number} は引き分け")
+                else:
+                    self._notices.show(
+                        f"ラウンド {number} は {self._name_of(winner)} の勝ち"
+                    )
+            case MatchEnded(champion=champion):
+                self._sounds.play(SoundName.FANFARE)
+                self._notices.show(f"{self._name_of(champion)} の優勝")
             case _:
                 assert_never(event)

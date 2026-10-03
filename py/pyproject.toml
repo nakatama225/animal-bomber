@@ -124,7 +124,7 @@ type = "layers"
 containers = ["animal_bomber"]
 exhaustive = true
 layers = [
-    "(app)",
+    "app",
     "shell",
     "presentation",
     "net",

@@ -110,6 +110,28 @@ class PlayerDown:
     by: PlayerId | None
 
 
+@dataclass(frozen=True, slots=True)
+class RoundEnded:
+    """ラウンドが決まった。
+
+    `step()` は返さない。ラウンドの終わりを見て返すのは、試合を進める側
+    （`app/session.py` の `GameSession`）。
+    """
+
+    round: int
+    """決まったラウンドの番号（1 から数える）。"""
+    winner: PlayerId | None
+    """勝ったプレイヤー。引き分けなら None。"""
+
+
+@dataclass(frozen=True, slots=True)
+class MatchEnded:
+    """試合が決まった（勝ち数が、試合を取る数に届いた）。`step()` は返さない。"""
+
+    champion: PlayerId
+    """試合を取ったプレイヤー。"""
+
+
 SimEvent: TypeAlias = (
     BombPlaced
     | Exploded
@@ -120,5 +142,7 @@ SimEvent: TypeAlias = (
     | EffectApplied
     | PlayerHurt
     | PlayerDown
+    | RoundEnded
+    | MatchEnded
 )
 """試合の中で起きたイベントのどれか。"""

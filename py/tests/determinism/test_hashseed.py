@@ -26,14 +26,17 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 # 突き合わせる処理。台本どおりの試合（`scenario.py`）を遊んで記録し、流し直す。
-# 遊んだあとと流し直したあとの状態の要約、記録の文字列を出す。ルールの層を足したら、
-# 台本がそれを通るようにする（通らない処理の set の反復は、ここでは見つからない）。
+# 遊んだあとと流し直したあとの状態の要約、記録の文字列を出す。ラウンドをまたぐ台本
+# （`play_match`）の盤面の要約と勝ち数も出す。ルールの層を足したら、台本がそれを
+# 通るようにする（通らない処理の set の反復は、ここでは見つからない）。
 DETERMINISTIC = """
 from animal_bomber.domain.state.world import hash_world
-from tests.determinism.scenario import play_and_record, replay
+from tests.determinism.scenario import play_and_record, play_match, replay
 
 played, log = play_and_record()
 print(f"{hash_world(played):08x}", f"{hash_world(replay(log)):08x}", log.encode())
+session = play_match()
+print(f"{hash_world(session.world):08x}", session.match.round, session.match.wins)
 """
 
 # 対照。下の突き合わせが「種を変えられていない」ために通ってしまわないためのもの。
