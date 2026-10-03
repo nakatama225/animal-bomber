@@ -178,23 +178,41 @@ def replay(log: InputLog, ticks: int = TICKS, seed: int = SEED) -> WorldState:
 
 
 MATCH_TICKS = 1500
-MATCH_ROUND_LIMIT = Tick(300)
-"""ラウンドをまたぐ台本の制限時間（tick）。
+MATCH_ROUND_LIMIT = Tick(600)
+"""ラウンドをまたぐ台本の制限時間（tick）。1ラウンド目が時間切れで終わる長さ。"""
+SIT_FROM = 720
+"""2P〜4P が爆弾を押し始める試合通算の時刻（2ラウンド目の始まり。600 + 待ち 120）。"""
 
-1500 tick の間に、ラウンドの終わり・決着のあとの待ち・次の盤面を何度か通るよう短くする。
-"""
+
+@dataclass(frozen=True, slots=True)
+class SittingSource:
+    """動かずに、`SIT_FROM` から 40 tick ごとに爆弾を押す窓口（自分の爆弾で倒れる）。"""
+
+    player_id: PlayerId
+
+    def next_input(self, world: WorldState, tick: MatchTick) -> PlayerInput:
+        if tick >= SIT_FROM and tick % 40 == 0:
+            return PlayerInput.BOMB
+        return PlayerInput.IDLE
 
 
 def play_match(ticks: int = MATCH_TICKS, seed: int = SEED) -> GameSession:
     """ラウンドをまたぐ台本。手を入れない盤面で、試合の進行（`GameSession`）を通す。
 
     1ラウンドの台本（`new_world`）は盤面に手を入れるので、ラウンドの始まりの扱い・
-    ラウンドごとの種・決着のあとの待ちは、こちらが通る。
+    ラウンドごとの種・決着のあとの待ちは、こちらが通る。1P は台本どおりに動き、2P〜4P は
+    1ラウンド目は何もせず（時間切れの引き分け）、2ラウンド目は動かずに自分の爆弾で倒れる
+    （1223 tick 目に 1P の勝ちで決まり、1勝で試合も決まる。そのあとの tick は何も
+    しない）。
+    2ラウンド目の始まりは、2P〜4P が爆弾のボタンを押す tick で、ラウンドの始まりの扱いを
+    通る。
     """
-    config = MatchConfig(seed=seed, animals=ANIMALS, round_limit=MATCH_ROUND_LIMIT)
-    session = GameSession(
-        config, [ScriptedSource(player) for player in PLAYER_IDS[: len(ANIMALS)]]
+    config = MatchConfig(
+        seed=seed, animals=ANIMALS, round_limit=MATCH_ROUND_LIMIT, wins_to_take=1
     )
+    sources: list[InputSource] = [ScriptedSource(PLAYER_IDS[0])]
+    sources.extend(SittingSource(player) for player in PLAYER_IDS[1 : len(ANIMALS)])
+    session = GameSession(config, sources)
     for _ in range(ticks):
         session.tick()
     return session

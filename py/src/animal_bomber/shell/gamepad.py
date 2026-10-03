@@ -25,7 +25,8 @@ SDL のゲームコントローラーの仕組み（pygame の `pygame._sdl2.con
 （`PadSnapshot` の並び）だけを受け取る。窓口の判断（どのパッドを使うか・スティックの
 向き）は、パッドを繋がずにテストできる。
 
-⚠️ `ControllerReader` は実機で確かめていない（パッドを繋いだ Mac で窓を開いていない）。
+⚠️ `ControllerReader` は実機のパッドで確かめていない（パッドを繋いだ Mac で窓を開いて
+いない）。抜き差ししたときの番号の扱いは、SDL の仮想パッドで確かめている。
 """
 
 from collections.abc import Callable, Sequence
@@ -61,7 +62,7 @@ class PadSnapshot:
     """読み取ったパッド1つの、その瞬間の状態。"""
 
     pad_id: int
-    """パッドを見分ける番号。繋いでいる間は変わらない。"""
+    """パッドを見分ける番号。繋いでいる間は変わらない（`PadClaims` はこれに拠る）。"""
     pressed: frozenset[PadButton]
     """押されているボタン。"""
     stick_x: float = 0.0
@@ -189,10 +190,23 @@ _AXIS_MAX = 32767
 class ControllerReader:
     """SDL のゲームコントローラーを読む（`GamepadSource.read` に渡す）。
 
-    繋がっている数が変わったら、開き直す。⚠️ 実機で確かめていない。
+    パッドを見分ける番号（`PadSnapshot.pad_id`）には、SDL のインスタンス番号を使う。
+    繋いでいる間は変わらず、外して繋ぎ直すと新しい番号になる。
 
-    ⚠️ HOME ボタンは割り当てない。原型の実機（macOS）では、システムが握っていて
-    ブラウザに届かなかった（SDL でも届くかは確かめていない）。
+    ⚠️ `Controller.id` は使わない。開いたときの並びの番号（デバイスの番号）で、前の
+    パッドが外れると詰まる。使うと、1P のパッドを抜いたとき、2P のパッドが 1P の
+    番号で読まれ、1P に渡る。インスタンス番号も、開いた直後（並びの番号がまだ正しい
+    うち）に控える。pygame の `as_joystick()` は開いたときの並びの番号でパッドを引き
+    直すので、詰まったあとに呼ぶと隣のパッドの番号を返す（レビューで SDL の仮想パッドを
+    使って確かめた）。
+
+    繋がっている数が変わったときと、開いているパッドが1つでも外れたときに開き直す。
+    数だけを見ると、2台のうち1台を抜いて別の1台を繋いだ（数が同じ）とき、新しい
+    パッドを読まない。
+
+    ⚠️ 実機のパッドでは確かめていない（SDL の仮想パッドで確かめた）。HOME ボタンは
+    割り当てない。原型の実機（macOS）では、システムが握っていてブラウザに届かなかった
+    （SDL でも届くかは確かめていない）。
     """
 
     __slots__ = ("_count", "_pads")
@@ -200,31 +214,35 @@ class ControllerReader:
     def __init__(self) -> None:
         controller.init()
         self._count = -1
-        self._pads: list[controller.Controller] = []
+        self._pads: list[tuple[int, controller.Controller]] = []
 
     def __call__(self) -> list[PadSnapshot]:
         """いま繋がっているパッドの状態を、繋がっている順に返す。"""
         count = controller.get_count()
-        if count != self._count:
+        if count != self._count or any(not pad.attached() for _, pad in self._pads):
             self._reopen(count)
-        return [self._snapshot(pad) for pad in self._pads if pad.attached()]
+        return [
+            self._snapshot(pad_id, pad) for pad_id, pad in self._pads if pad.attached()
+        ]
 
     def _reopen(self, count: int) -> None:
-        for pad in self._pads:
+        for _, pad in self._pads:
             pad.quit()
-        self._pads = [
-            controller.Controller(index)
-            for index in range(count)
-            if controller.is_controller(index)
-        ]
+        pads: list[tuple[int, controller.Controller]] = []
+        for index in range(count):
+            if not controller.is_controller(index):
+                continue
+            pad = controller.Controller(index)
+            pads.append((pad.as_joystick().get_instance_id(), pad))
+        self._pads = pads
         self._count = count
 
-    def _snapshot(self, pad: controller.Controller) -> PadSnapshot:
+    def _snapshot(self, pad_id: int, pad: controller.Controller) -> PadSnapshot:
         pressed = frozenset(
             button for button, code in _SDL_BUTTONS if pad.get_button(code)
         )
         return PadSnapshot(
-            pad_id=pad.id,
+            pad_id=pad_id,
             pressed=pressed,
             stick_x=pad.get_axis(pygame.CONTROLLER_AXIS_LEFTX) / _AXIS_MAX,
             stick_y=pad.get_axis(pygame.CONTROLLER_AXIS_LEFTY) / _AXIS_MAX,

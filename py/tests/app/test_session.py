@@ -207,7 +207,7 @@ class Testラウンドの始まり:
         assert not any(isinstance(event, BombPlaced) for event in events)
         assert session.world.bombs == []
 
-    def test_ラウンドの始めは_爆弾のボタンだけを押していた扱い(self) -> None:
+    def test_ラウンドの始まりは_爆弾のボタンだけを押していた扱い(self) -> None:
         world = create_world(1, ANIMALS)
         assert all(p.previous_input is PlayerInput.BOMB for p in world.players)
 

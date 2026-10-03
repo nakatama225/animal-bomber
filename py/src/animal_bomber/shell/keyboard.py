@@ -10,14 +10,17 @@ pygame のイベントを受けるのは `KeyboardWatcher` だけで、ルール
 英語配列など）によって `/` や `.` の位置が変わる。TypeScript 版も位置
 （`KeyboardEvent.code`）で持つ。
 
-## 押してすぐ離したキーも、1 tick は押したことにする
+## 押してすぐ離した爆弾と技のキーも、1 tick は押したことにする
 
 1回の描画の間に届いたイベントを、まとめて読む。押してから離すまでが 1 tick より
 短いと、押したことと離したことが同じ回に届き、押されているキーの一覧だけを見ると、
-押したこと自体が消える。そこで、前の tick から押されたキーを別に覚えておき、離して
-いても次の 1 tick は押していたことにする（`end_tick` で忘れる）。原型も、押した
-瞬間を別の一覧（`pressed`）に覚え、1フレームの終わりに消していた。TypeScript 版は
-押されているキーだけを見る。
+押したこと自体が消える。そこで、前の tick から押されたキーを別に覚えておき、爆弾と
+技のキーは、離していても次の 1 tick は押していたことにする（`end_tick` で忘れる）。
+
+原型と同じ範囲にしてある。原型も押した瞬間を別の一覧（`pressed`）に覚え、1フレームの
+終わりに消していたが、その一覧で見るのは爆弾と技だけで、向きは押されているキーだけで
+見る（押してすぐ離した向きのキーでは動かない）。TypeScript 版は、どのキーも押されて
+いるかだけを見る。
 
 ⚠️ 実機（窓を開いたキーボード）では確かめていない。テストは pygame のイベントを
 作って渡す。
@@ -101,9 +104,17 @@ class KeyStateReader(Protocol):
     好きな状態を渡せる。
     """
 
-    def any_of(self, scancodes: tuple[int, ...]) -> bool:
-        """そのキーのどれかが、この tick に押されていたことになるか。"""
+    def held(self, scancodes: tuple[int, ...]) -> bool:
+        """そのキーのどれかが、いま押されているか。"""
         ...
+
+    def tapped(self, scancodes: tuple[int, ...]) -> bool:
+        """そのキーのどれかが、前の tick から押されたか（もう離していても）。"""
+        ...
+
+
+_TAP_BUTTONS = PlayerInput.BOMB | PlayerInput.ACTION
+"""押してすぐ離しても、1 tick は押したことにするボタン（原型と同じく爆弾と技だけ）。"""
 
 
 class KeyboardWatcher:
@@ -131,9 +142,13 @@ class KeyboardWatcher:
             self._held.clear()
             self._tapped.clear()
 
-    def any_of(self, scancodes: tuple[int, ...]) -> bool:
-        """そのキーのどれかが押されているか、前の tick から押されたか。"""
-        return any(code in self._held or code in self._tapped for code in scancodes)
+    def held(self, scancodes: tuple[int, ...]) -> bool:
+        """そのキーのどれかが、いま押されているか。"""
+        return any(code in self._held for code in scancodes)
+
+    def tapped(self, scancodes: tuple[int, ...]) -> bool:
+        """そのキーのどれかが、前の tick から押されたか（もう離していても）。"""
+        return any(code in self._tapped for code in scancodes)
 
     def end_tick(self) -> None:
         """1 tick ぶんの入力を読み終えたら呼ぶ。押してすぐ離したキーを忘れる。"""
@@ -153,9 +168,13 @@ class KeyboardSource:
     binding: KeyBinding
 
     def next_input(self, world: WorldState, tick: MatchTick) -> PlayerInput:
-        """割り当てたキーのうち、押されているものに当たるボタンを返す。"""
+        """割り当てたキーのうち、押されているものに当たるボタンを返す。
+
+        爆弾と技は、前の tick から押してすぐ離したキーも押していたことにする。
+        """
         player_input = PlayerInput.IDLE
         for button, scancodes in self.binding.pairs():
-            if self.keys.any_of(scancodes):
+            tap = button in _TAP_BUTTONS and self.keys.tapped(scancodes)
+            if tap or self.keys.held(scancodes):
                 player_input |= button
         return player_input

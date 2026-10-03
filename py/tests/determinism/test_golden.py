@@ -24,19 +24,26 @@ from .scenario import play_and_record, play_match, replay
 # アイテムとプレイヤーごとの体力・無敵の切れる tick・一時的な状態・とくぎの回数・最後に
 # 当てたプレイヤーを要約に足し、台本の盤面にアイテムを並べ、向きのボタンを離す間を足し、
 # 種を 4649 から 4658 に替えたので、段階 2 の値（89535742）から変わった。
-# そのあと、「勝手に設置」を 0.5 秒に1回にし（待ちを要約に足した。台本では2回かかる）、
-# 重なった爆風であとから置かれた爆風の持ち主を当てたプレイヤーにしたので、c50eb1f2 から
-# 変わった（原型に合わせた。TypeScript 版は 32bf68b）。
+# そのあと、「勝手に設置」を 0.5 秒に1回にして待ちを要約に足したので（台本では2回
+# かかる）、c50eb1f2 から変わった。同じときに入れた重なった爆風の持ち主の直しは、この
+# 台本の値を変えない（どちらも原型に合わせた。TypeScript 版は 32bf68b）。
 GOLDEN = "a599364a"
 
 # ラウンドをまたぐ台本（`play_match`）を 1500 tick 進めたあとの盤面の要約。段階 4 で
-# 足した。3回の時間切れのあと、4ラウンド目の盤面になっている。
-GOLDEN_MATCH = "4084481e"
+# 足した。1ラウンド目は時間切れ、2ラウンド目は 1P の勝ちで試合が決まり、決まった盤面の
+# まま止まっている。
+GOLDEN_MATCH = "ec70ff0f"
 
 
 def test_ラウンドをまたぐ台本は_決めておいた要約に行き着く() -> None:
     session = play_match()
-    assert (session.match.round, session.match.wins) == (4, {})
+    match = session.match
+    assert (match.round, match.wins, match.champion, match.finished) == (
+        2,
+        {0: 1},
+        0,
+        True,
+    )
     assert f"{hash_world(session.world):08x}" == GOLDEN_MATCH
 
 

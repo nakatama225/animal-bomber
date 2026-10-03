@@ -461,6 +461,29 @@ class Test被弾:
         assert PlayerHurt(target=1, by=1, amount=BLAST_DAMAGE) in step_damage(world)
         assert second.last_hit_by == 1
 
+    def test_兄弟の爆弾の腕が交わるマスでは_伸ばす向きの順で当てたプレイヤーが決まる(
+        self,
+    ) -> None:
+        """同じ爆弾に誘爆された2つの爆弾は、伸ばす向きの順（上・右・下・左）に積む。
+
+        原型は右・左・下・上の順なので、この場面では原型と逆になる（原型は 1）。揃える
+        かは決めていない。今の答えを書き留める（変えるときに、意図して変えたことになる）。
+        TypeScript 版の「兄弟の爆弾の腕が交わるマスでは…」のテストと同じ場面。
+        """
+        world = make_world()
+        clear_board(world)
+        first, second = world.players
+        first.power, first.max_bombs, second.power = 2, 2, 2
+        trigger = put_bomb(world, first, Cell(5, 5))
+        put_bomb(world, first, Cell(7, 5))
+        put_bomb(world, second, Cell(5, 3))
+        second.position = Cell(7, 3).center()
+        first.position = Cell(1, 1).center()
+        detonate(world, trigger)
+        owners = [blast.owner for blast in world.blasts if blast.cell == Cell(7, 3)]
+        assert owners == [1, 0]
+        assert PlayerHurt(target=1, by=0, amount=BLAST_DAMAGE) in step_damage(world)
+
     def test_被弾するとアイテムを1つ吐き出す(self) -> None:
         world = make_world()
         player = world.players[0]

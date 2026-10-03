@@ -45,13 +45,24 @@ class Testキーを読む:
         watcher.handle(_up(pygame.KSCAN_D))
         assert _read(watcher, PLAYER1_KEYS) is PlayerInput.IDLE
 
-    def test_押してすぐ離したキーも_その_tick_は押したことにする(self) -> None:
+    def test_押してすぐ離した爆弾と技のキーも_その_tick_は押したことにする(
+        self,
+    ) -> None:
         """押してから離すまでが 1 tick より短いと、押したこと自体が消える。"""
         watcher = KeyboardWatcher()
-        watcher.handle(_down(pygame.KSCAN_SPACE))
-        watcher.handle(_up(pygame.KSCAN_SPACE))
-        assert _read(watcher, PLAYER1_KEYS) == PlayerInput.BOMB
+        for code in (pygame.KSCAN_SPACE, pygame.KSCAN_E):
+            watcher.handle(_down(code))
+            watcher.handle(_up(code))
+        both = PlayerInput.BOMB | PlayerInput.ACTION
+        assert _read(watcher, PLAYER1_KEYS) == both
         watcher.end_tick()
+        assert _read(watcher, PLAYER1_KEYS) is PlayerInput.IDLE
+
+    def test_押してすぐ離した向きのキーでは動かない(self) -> None:
+        """原型も、押した瞬間を覚えて見るのは爆弾と技だけ。向きは押されているかだけ。"""
+        watcher = KeyboardWatcher()
+        watcher.handle(_down(pygame.KSCAN_D))
+        watcher.handle(_up(pygame.KSCAN_D))
         assert _read(watcher, PLAYER1_KEYS) is PlayerInput.IDLE
 
     def test_押し続けているキーは_tick_をまたいでも押している(self) -> None:

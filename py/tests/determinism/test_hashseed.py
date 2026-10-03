@@ -36,7 +36,7 @@ from tests.determinism.scenario import play_and_record, play_match, replay
 played, log = play_and_record()
 print(f"{hash_world(played):08x}", f"{hash_world(replay(log)):08x}", log.encode())
 session = play_match()
-print(f"{hash_world(session.world):08x}", session.match.round, session.match.wins)
+print(f"{hash_world(session.world):08x}", session.match)
 """
 
 # 対照。下の突き合わせが「種を変えられていない」ために通ってしまわないためのもの。

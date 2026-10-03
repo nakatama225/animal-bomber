@@ -71,6 +71,10 @@ def _autobomb_beat(player: PlayerState) -> bool:
 
     前にかかったときの待ちが残っていなければ、かかった次の tick が最初の拍になり、
     そのあとは `AUTOBOMB_INTERVAL` ごと。置けなかった拍も、次は1拍あと（原型と同じ）。
+
+    ⚠️ 置くマスは、その tick に動いたあとのマス（`simulation.step` は動いてから爆弾を
+    置く）。原型は効果の時間を進める処理の中で、動く前に置く。拍の tick にマスの境目を
+    またぐと、原型より1マス先に置く（TypeScript 版も同じ）。揃えるかは決めていない。
     """
     if not player.effects.has(EffectKind.AUTOBOMB):
         return False

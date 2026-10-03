@@ -10,8 +10,10 @@
 ## 起動の層に置く
 
 盤面を丸ごと作り直す処理は、ルールの層（`domain/`）に入れない（`systems/round.py` の
-説明）。通信対戦（段階 9）の層からも呼ばず、起動の層（`app/main.py`）で通信の層と
-繋ぐ（TypeScript 版と同じ形）。
+説明）。通信対戦（段階 9）の層は `app/` を import せず、使う部分（`tick`・窓口の
+差し替えなど）だけを形（Protocol）として持つ。`GameSession` を渡して繋ぐのは起動の層
+（`app/main.py`）にする（TypeScript 版の `net/LockstepDriver.ts` の `LockstepSession`
+と同じ形）。
 """
 
 from collections.abc import Iterable

@@ -9,7 +9,7 @@ from animal_bomber.domain.state.player import PlayerId
 class MatchState:
     """ラウンドをまたいで残る状態。
 
-    試合の状態（`WorldState`）とは分けてある。ラウンドが変わると盤面とプレイヤーは
+    盤面の状態（`WorldState`）とは分けてある。ラウンドが変わると盤面とプレイヤーは
     作り直すが、勝ち数は引き継ぐため。
     """
 

@@ -152,7 +152,7 @@ set の反復は、import でも構文木でも止められません。`tests/de
 - ルールの層から音・画面・通知を呼ばないでください。起きたことは `SimEvent` の種類に足して
   `step()` の戻り値で返し、音と通知に変えるのは `presentation/presenter.py` です
 - 種類を足すと、`presentation/presenter.py` の `match` と、TypeScript 版と比べるテストの
-  `event_row`（`tests/systems/test_simulation_ts.py`）が mypy で失敗します。扱いを書いてから
+  `event_row`（`tests/ts_rows.py`。TypeScript 版と比べる段階 3・4 のテストが使う）が mypy で失敗します。扱いを書いてから
   完了としてください。`case _:` には `assert_never` だけを置きます
 - TypeScript 版と比べる固定値（`tests/systems/test_simulation_ts.py` は段階 3 の f95d2a5、
   `tests/app/test_session_ts.py` は段階 4 の 6e25fc2）は、その段階のコミットに、あとから

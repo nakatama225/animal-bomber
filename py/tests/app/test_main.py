@@ -26,14 +26,18 @@ from animal_bomber.shell.keyboard import KeyboardWatcher
 pygame.init()
 assert pygame.display.get_driver() == "dummy", pygame.display.get_driver()
 screen = pygame.display.set_mode(SCREEN_SIZE)
-def key(scancode, code):
-    return pygame.event.Event(pygame.KEYDOWN, scancode=scancode, key=code)
+def key(scancode, code, kind=pygame.KEYDOWN):
+    return pygame.event.Event(kind, scancode=scancode, key=code)
 EVENTS = {
     "none": [],
     "down": [key(pygame.KSCAN_S, pygame.K_s)],
-    "tap": [
+    "tap_down": [
         key(pygame.KSCAN_S, pygame.K_s),
-        pygame.event.Event(pygame.KEYUP, scancode=pygame.KSCAN_S, key=pygame.K_s),
+        key(pygame.KSCAN_S, pygame.K_s, pygame.KEYUP),
+    ],
+    "tap_bomb": [
+        key(pygame.KSCAN_SPACE, pygame.K_SPACE),
+        key(pygame.KSCAN_SPACE, pygame.K_SPACE, pygame.KEYUP),
     ],
     "quit": [pygame.event.Event(pygame.QUIT)],
     "esc": [key(pygame.KSCAN_ESCAPE, pygame.K_ESCAPE)],
@@ -55,6 +59,8 @@ print(json.dumps({
     "second": [p.position.cell().col for p in session.world.players][1],
     "pixel": list(screen.get_at((x, y)))[:3],
     "color": list(PLAYER_COLORS[0]),
+    "bombs": len(session.world.bombs),
+    "previous": int(first.previous_input),
 }))
 pygame.quit()
 """
@@ -86,12 +92,22 @@ def test_フレームごとに_決めた数だけ試合を進めて描く() -> N
     assert result["pixel"] == result["color"]
 
 
-def test_押してすぐ離したキーは_1_tick_だけ効く() -> None:
-    """1回の描画の間に押して離したキーは、最初の 1 tick だけ押したことにする。"""
-    tapped = _run([(0, "none"), (3, "tap"), (2, "none")])
-    held = _run([(0, "none"), (1, "down")])
-    assert tapped["elapsed"] == 5
-    assert tapped["first"] == held["first"]
+def test_押してすぐ離した爆弾のキーは_1_tick_だけ押したことにする() -> None:
+    """1回の描画の間に押して離した爆弾のキーで、爆弾を1つ置く。
+
+    次の tick からは押していない（`end_tick` で忘れる）。最初の 1 tick は何も押さずに
+    進める（ラウンドの始まりは爆弾のボタンを押していた扱いなので）。
+    """
+    result = _run([(0, "none"), (1, "none"), (3, "tap_bomb"), (2, "none")])
+    assert result["elapsed"] == 6
+    assert result["bombs"] == 1
+    assert result["previous"] == 0
+
+
+def test_押してすぐ離した向きのキーでは動かない() -> None:
+    """原型と同じ。押した瞬間を覚えて見るのは、爆弾と技のキーだけ。"""
+    result = _run([(0, "none"), (3, "tap_down"), (2, "none")])
+    assert result["first"] == [1.5, 1.5]
 
 
 def test_窓を閉じたら_試合を進めずに戻る() -> None:

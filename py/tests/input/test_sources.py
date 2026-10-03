@@ -97,12 +97,16 @@ class Test入力を集める:
 class Test窓口を合わせる:
     def test_どれかで押していれば_押したことにする(self) -> None:
         world = make_world()
-        either = EitherSource(
-            0, (Fixed(0, PlayerInput.UP), Fixed(0, PlayerInput.UP | PlayerInput.BOMB))
-        )
+        either = EitherSource(0, (Fixed(0, PlayerInput.UP), Fixed(0, PlayerInput.BOMB)))
         assert (
             either.next_input(world, MatchTick(0)) == PlayerInput.UP | PlayerInput.BOMB
         )
+
+    def test_あとの窓口が何も押していなくても_前の窓口の入力は消えない(self) -> None:
+        world = make_world()
+        both = PlayerInput.UP | PlayerInput.BOMB
+        either = EitherSource(0, (Fixed(0, both), IdleSource(0)))
+        assert either.next_input(world, MatchTick(0)) == both
 
     def test_どれも押していなければ_何も押していない(self) -> None:
         world = make_world()
