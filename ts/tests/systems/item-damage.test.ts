@@ -213,6 +213,19 @@ describe('悪い状態の作用', () => {
     expect(world.bombs).toHaveLength(2);
   });
 
+  it('勝手に設置が切れても、待ちは残る', () => {
+    // 待ちを 0 に戻すのはラウンドの始まりだけ（原型と同じ）。
+    const world = makeWorld();
+    clearBoard(world);
+    const player = world.players[0]!;
+    player.effects.add('autobomb', itemEffectTicks(4), itemEffectTicks(12));
+    const sim = new Simulation();
+    sim.step(world, onlyFor(world, 0, press({})));
+    player.effects.clear('autobomb');
+    advance(world, onlyFor(world, 0, press({})), 10, sim);
+    expect(player.autobombWait).toBe(AUTOBOMB_INTERVAL);
+  });
+
   it('爆風1マスの状態では火力が落ちる', () => {
     const world = makeWorld();
     const player = world.players[0]!;
@@ -286,6 +299,34 @@ describe('被弾', () => {
     const events = new DamageSystem().step(world);
     expect(events).toContainEqual(expect.objectContaining({ type: 'playerHurt', target: 1, by: 1 }));
     expect(second!.lastHitBy).toBe(1);
+  });
+
+  it('兄弟の爆弾の腕が交わるマスでは、爆風を伸ばす向きの順で当てたプレイヤーが決まる', () => {
+    // 同じ爆弾に誘爆された2つの爆弾は、伸ばす向きの順（上・右・下・左）に待ち行列へ積む。
+    // 原型は右・左・下・上の順なので、この場面では原型と逆になる（原型は 1）。
+    // 揃えるかは決めていない。今の答えを書き留める（変えるときに、意図して変えたことになる）。
+    const world = makeWorld();
+    clearBoard(world);
+    const [first, second] = world.players;
+    first!.power = 2;
+    first!.maxBombs = 2;
+    second!.power = 2;
+    first!.position = centerOf({ col: 5, row: 5 });
+    const trigger = placeBomb(world, first!)!;
+    first!.position = centerOf({ col: 7, row: 5 });
+    placeBomb(world, first!);
+    second!.position = centerOf({ col: 5, row: 3 });
+    placeBomb(world, second!);
+    second!.position = centerOf({ col: 7, row: 3 });
+    first!.position = centerOf({ col: 1, row: 1 });
+    detonate(world, trigger);
+    const owners = world.blasts
+      .filter((blast) => blast.cell.col === 7 && blast.cell.row === 3)
+      .map((blast) => blast.owner);
+    expect(owners).toEqual([1, 0]);
+
+    const events = new DamageSystem().step(world);
+    expect(events).toContainEqual(expect.objectContaining({ type: 'playerHurt', target: 1, by: 0 }));
   });
 
   it('爆風に当たると体力が減る', () => {

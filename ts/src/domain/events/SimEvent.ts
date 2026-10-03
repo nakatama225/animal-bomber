@@ -31,8 +31,8 @@ import type { ItemKind } from '../rules/items.js';
  * ## なぜ判別可能ユニオンなのか
  *
  * `type` の値で分岐すると、型検査が「まだ扱っていない種類」を見つける。
- * イベントを1種類足したとき、対応を書き忘れた場所が
- * `assertNever` のところで型検査が失敗する（`Presenter` を参照）。
+ * イベントを1種類足して対応を書き忘れると、書き忘れた分岐の
+ * `assertNever` で型検査が失敗する（`Presenter` を参照）。
  */
 export type SimEvent =
   | { readonly type: 'bombPlaced'; readonly cell: Cell; readonly owner: PlayerId }

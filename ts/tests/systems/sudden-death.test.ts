@@ -199,4 +199,12 @@ describe('延長戦の準備', () => {
     enterSuddenDeath(world, [0, 1, 2], 'timeUp');
     expect(world.rng.calls).toBe(calls);
   });
+
+  it('「勝手に設置」の待ちは戻さない', () => {
+    // 原型も延長戦では待ちに触らない。0 に戻すのはラウンドの始まりだけ。
+    const world = makeWorld(3, THREE);
+    world.players[0]!.autobombWait = tick(17);
+    enterSuddenDeath(world, [0, 1, 2], 'timeUp');
+    expect(world.players[0]!.autobombWait).toBe(17);
+  });
 });

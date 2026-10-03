@@ -55,6 +55,10 @@ export class BombSystem {
    *
    * 前にかかったときの待ちが残っていなければ、かかった次の tick が最初の拍になり、
    * そのあとは `AUTOBOMB_INTERVAL` ごと。
+   *
+   * ⚠️ 置くマスは、その tick に動いたあとのマス（`Simulation` は移動のあとに爆弾を置く）。
+   * 原型は効果の時間を進める処理の中で、動く前に置く。拍の tick にマスの境目をまたぐと、
+   * 原型より1マス先に置く。揃えるかは決めていない。
    */
   #autobombBeat(player: PlayerState): boolean {
     if (!player.effects.has('autobomb')) return false;
