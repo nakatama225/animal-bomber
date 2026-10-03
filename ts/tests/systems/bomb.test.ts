@@ -203,10 +203,13 @@ describe('爆発', () => {
 
     // 先の爆弾の爆風は、あとの爆弾を巻き込んで (5,8) で止まる。
     // あとの爆弾の爆風も (5,8) で止まる。
+    const before = world.rng.calls;
     const result = detonate(world, first);
     expect(result.chained).toBe(2);
     expect(result.destroyed).toEqual([block]);
     expect(result.events.filter((event) => event.type === 'blockDestroyed')).toHaveLength(1);
+    // 抽選1回で引くのは、出るかで1回、出るなら種類で1回まで（2回引くと、この場面では3回）。
+    expect(world.rng.calls - before).toBeLessThanOrEqual(2);
     const itemsOnBlock = world.items.filter(
       (item) => item.cell.col === block.col && item.cell.row === block.row,
     );
