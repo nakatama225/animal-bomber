@@ -185,6 +185,7 @@ export function createWorld(config: WorldSeed): WorldState {
       // これが無いと開始 0.5 秒でとくぎが暴発する。
       actionHeld: tick(-1),
       abilityCooldown: tick(0),
+      autobombWait: tick(0),
       lastHitBy: null,
     };
   });
@@ -244,6 +245,7 @@ export function hashWorld(world: WorldState): number {
       .text(player.action?.kind ?? '')
       .int(player.actionHeld)
       .int(player.abilityCooldown)
+      .int(player.autobombWait)
       .int(player.lastHitBy ?? -1);
   }
 

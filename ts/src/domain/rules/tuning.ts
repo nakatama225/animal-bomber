@@ -202,3 +202,13 @@ export const SLIDE_SPEED_RATIO = 1.25;
 
 /** 「爆風1マス」がかかっているときの火力。 */
 export const WEAKENED_POWER = 1;
+
+/**
+ * 「勝手に設置」が爆弾を置こうとする間隔（秒）。置けなかった拍も、次は1拍あと。
+ *
+ * ⚠️ 毎 tick 置こうとしない。毎 tick だと、歩きながら隣り合うマスに続けて置き、
+ * 爆発で手持ちが戻った次の tick に置き直す。原型は 0.5 秒に1回で、素の速さで
+ * 歩くと1マスおきに並ぶ。
+ */
+export const AUTOBOMB_INTERVAL_SECONDS = 0.5;
+export const AUTOBOMB_INTERVAL: Tick = secondsToTicks(AUTOBOMB_INTERVAL_SECONDS);

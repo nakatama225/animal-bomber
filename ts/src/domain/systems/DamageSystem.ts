@@ -33,12 +33,23 @@ export class DamageSystem {
     return events;
   }
 
-  /** 体に触れている爆風の持ち主。触れていなければ null。 */
+  /**
+   * 体に触れている爆風の持ち主。触れていなければ null。
+   *
+   * ⚠️ 1つのマスに別々の爆弾の爆風が重なっているときは、あとから置かれた爆風の
+   * 持ち主にする（原型と同じ）。相手の爆風に誘爆された自分の爆弾のマスで当たると、
+   * 自爆として数える。先に置かれた爆風にすると相手の手柄になり、自爆の割合
+   * （`tests/ai/balance.test.ts`）の数え方が原型と変わる。
+   * 爆風はどれも同じ長さで残るので、あとから置いた爆風が先に消えることは無い。
+   */
   #blastOwnerTouching(world: WorldState, player: PlayerState): PlayerId | null {
     // 体が触れているマスの求め方は、CPU が危険を見る処理と同じ関数を使う。
     for (const cell of cellsTouchedBy(player.position)) {
-      const blast = world.blasts.find((candidate) => sameCell(candidate.cell, cell));
-      if (blast !== undefined) return blast.owner;
+      // 爆風は置いた順に並んでいるので、後ろから探す。
+      for (let index = world.blasts.length - 1; index >= 0; index -= 1) {
+        const blast = world.blasts[index];
+        if (blast !== undefined && sameCell(blast.cell, cell)) return blast.owner;
+      }
     }
     return null;
   }

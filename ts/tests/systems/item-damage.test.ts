@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { centerOf } from '../../src/domain/core/Coord.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
-import { MAX_BOMBS, MAX_POWER, MAX_SHOES } from '../../src/domain/rules/tuning.js';
+import { AUTOBOMB_INTERVAL, MAX_BOMBS, MAX_POWER, MAX_SHOES } from '../../src/domain/rules/tuning.js';
 import { itemEffectTicks, POOP_STACK_LIMIT } from '../../src/domain/rules/items.js';
 import { OUT } from '../../src/domain/state/Life.js';
 import { isAlive, powerOf, speedOf } from '../../src/domain/state/PlayerState.js';
@@ -11,9 +11,10 @@ import { tick } from '../../src/domain/core/Tick.js';
 import { detonate } from '../../src/domain/mutations/explode.js';
 import { placeBomb } from '../../src/domain/mutations/bombs.js';
 import { applyItem, spitPowerUp } from '../../src/domain/mutations/items.js';
+import { DamageSystem } from '../../src/domain/systems/DamageSystem.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
 import { Presenter } from '../../src/presentation/Presenter.js';
-import { advance, makeWorld, onlyFor, press } from '../helpers.js';
+import { advance, clearBoard, makeWorld, onlyFor, press } from '../helpers.js';
 
 describe('アイテムの効果', () => {
   it('爆弾・火力・靴は上限で止まる', () => {
@@ -160,6 +161,58 @@ describe('悪い状態の作用', () => {
     expect(world.bombs).toHaveLength(1);
   });
 
+  it('勝手に設置は 0.5 秒に1回だけ置こうとする', () => {
+    // 毎 tick 置こうとすると、歩きながら隣り合うマスに続けて置く。
+    // 原型は 0.5 秒に1回で、素の速さで歩くと1マスおきに並ぶ。
+    const world = makeWorld();
+    clearBoard(world);
+    const player = world.players[0]!;
+    player.position = centerOf({ col: 1, row: 1 });
+    player.maxBombs = 3;
+    player.effects.add('autobomb', itemEffectTicks(4), itemEffectTicks(12));
+    const sim = new Simulation();
+    const placedAt: number[] = [];
+    for (let t = 0; t < 70; t += 1) {
+      const events = sim.step(world, onlyFor(world, 0, press({ right: true })));
+      if (events.some((event) => event.type === 'bombPlaced')) placedAt.push(t);
+    }
+    expect(placedAt).toEqual([0, AUTOBOMB_INTERVAL, AUTOBOMB_INTERVAL * 2]);
+  });
+
+  it('勝手に設置は、手持ちが戻っても次の拍まで置き直さない', () => {
+    // 毎 tick 置こうとすると、爆発で手持ちが戻った次の tick に置き直す。
+    const world = makeWorld();
+    clearBoard(world);
+    const player = world.players[0]!;
+    player.hp = 100;
+    player.effects.add('autobomb', itemEffectTicks(4), itemEffectTicks(12));
+    const sim = new Simulation();
+    const placedAt: number[] = [];
+    for (let t = 0; t < 200; t += 1) {
+      const events = sim.step(world, onlyFor(world, 0, press({})));
+      if (events.some((event) => event.type === 'bombPlaced')) placedAt.push(t);
+    }
+    expect(placedAt.length).toBeGreaterThanOrEqual(2);
+    for (const t of placedAt) expect(t % AUTOBOMB_INTERVAL).toBe(0);
+  });
+
+  it('勝手に設置の拍の合間でも、ボタンを押せば置ける', () => {
+    // 原型も、ボタンで置く処理と勝手に設置は別々に置こうとする。
+    const world = makeWorld();
+    clearBoard(world);
+    const player = world.players[0]!;
+    player.position = centerOf({ col: 1, row: 1 });
+    player.maxBombs = 3;
+    player.effects.add('autobomb', itemEffectTicks(4), itemEffectTicks(12));
+    const sim = new Simulation();
+    sim.step(world, onlyFor(world, 0, press({})));
+    // 隣のマスへ歩く。次の拍より手前で止める。
+    advance(world, onlyFor(world, 0, press({ right: true })), 20, sim);
+    const events = sim.step(world, onlyFor(world, 0, press({ right: true, bomb: true })));
+    expect(events.filter((event) => event.type === 'bombPlaced')).toHaveLength(1);
+    expect(world.bombs).toHaveLength(2);
+  });
+
   it('爆風1マスの状態では火力が落ちる', () => {
     const world = makeWorld();
     const player = world.players[0]!;
@@ -212,6 +265,29 @@ describe('アイテムの焼却と抽選の順序', () => {
 });
 
 describe('被弾', () => {
+  it('爆風が重なったマスでは、あとから置かれた爆風の持ち主が当てたことになる', () => {
+    // 相手の爆風に誘爆された自分の爆弾のマスで当たったら、自爆として数える。
+    // 原型が爆風の持ち主を控えていたのは、自爆の割合を測るため。
+    const world = makeWorld();
+    clearBoard(world);
+    const [first, second] = world.players;
+    first!.position = centerOf({ col: 5, row: 5 });
+    first!.power = 2;
+    const trigger = placeBomb(world, first!)!;
+    second!.position = centerOf({ col: 7, row: 5 });
+    placeBomb(world, second!);
+    first!.position = centerOf({ col: 1, row: 1 });
+    detonate(world, trigger);
+    const owners = world.blasts
+      .filter((blast) => blast.cell.col === 7 && blast.cell.row === 5)
+      .map((blast) => blast.owner);
+    expect(owners).toEqual([0, 1]);
+
+    const events = new DamageSystem().step(world);
+    expect(events).toContainEqual(expect.objectContaining({ type: 'playerHurt', target: 1, by: 1 }));
+    expect(second!.lastHitBy).toBe(1);
+  });
+
   it('爆風に当たると体力が減る', () => {
     const world = makeWorld();
     const player = world.players[0]!;
