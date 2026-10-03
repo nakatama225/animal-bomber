@@ -45,6 +45,21 @@ uv run tools/verify.sh   # ruff → ruff format --check → mypy --strict → li
   上げるなら測り直してください（マス 96 は、3 回測った四角い粒と光の玉の p99 の 6 つのうち 5 つが、
   しきい値を超えました）
 
+## フレームの間の待ち方
+
+`uv run python tools/bench_pacing.py` で、フレームを回す輪（`src/animal_bomber/shell/loop.py`）の
+待ち方を比べて測れます（窓は開きません。2 分半ほど）。決め方は `tools/bench_pacing_rule.py`、
+測った結果と経緯は README の Design Choice の 7. にあります。
+
+- 既定の待ち方（`frames` の `wait`）を変えるときは、測り直して README の数と決めも直してください。
+  `tests/shell/test_loop.py` の `test_既定の待ち方は_測って決めた空回り` は既定の関数だけを見るので
+  失敗します。そのテストの期待と名前も新しい既定に直し、ここで名前を指している所も直します
+- いまの決め（空回り。CPU のコアを1つ使い続ける）は仮です。窓を開く段階（段階 4）で、vsync も
+  候補に入れ、CPU の使用率の上限を足した決め方を、測る前に書いてから、窓を通して測り直します。
+  区切りの並べ方も、隣り合う組がそろう形に替えます（`tools/bench_pacing.py` の「並べ方」）
+- 空回りの間、ほかの Python のスレッドは GIL の受け渡しを待たないと動けません（`shell/loop.py`）。
+  通信の受信をスレッドで書く段階（9）では、裏のスレッドが目を覚ますまでの遅れも決め方に入れて測ります
+
 ## 層の依存方向
 
 ```text
@@ -104,8 +119,12 @@ set の反復は、import でも構文木でも止められません。`tests/de
   試合通算の時刻（`MatchTick`）を使います。型が違うので、盤面の時刻をそのまま渡すと mypy が
   失敗します（理由は `domain/core/tick.py` の `MatchTick`）
 - ⛔ `MatchTick(world.now)` と書かないでください（包むと mypy は通ります。段階 1 では2つの時刻が
-  いつも同じ値なので、テストでも見つかりません）。`MatchTick(...)` を作るのは、試合通算の時刻を
-  数える1か所（段階 1 の後半で作るフレームを回す輪）とテストだけにします
+  いつも同じ値なので、テストの値でも見つかりません）。`src/` の中で `MatchTick(...)` を呼んでよいのは、
+  試合通算の時刻を数える `MatchClock`（`domain/core/tick.py`）と、記録を文字列から戻す所
+  （`net/input_log.py` の `_decode_entry`）だけです。ほかで呼んだり、`MatchTick` を値として使ったり
+  すると `tests/boundary/test_match_tick.py` が失敗します。試合を進める側は `MatchClock` を持ち、1 tick 進め終えたら `advance()` を呼びます
+  （フレームを回す輪は数えません。理由は `shell/loop.py`）。呼んでよい場所を足すときは、そのテストの
+  `ALLOWED` に足し、理由を書いてください
 - `tests/determinism/test_golden.py` は、台本どおりの試合の状態の要約を固定値と比べます。
   ルールを変えて試合の結果が変わったら失敗します。変わることが意図どおりなら値を出し直して
   書き換え、なぜ変わったかをコミットに書いてください。意図していなければ、値を書き換えずに

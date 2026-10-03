@@ -36,8 +36,10 @@ MatchTick = NewType("MatchTick", int)
 この版は最初から別の型にしてある。`Tick` を `MatchTick` の所へそのまま渡すと mypy が
 失敗する（`tests/boundary/test_guards.py` で確かめている）。どちらも実行時はただの
 `int`。⚠️ `MatchTick(world.now)` と包んで渡すと mypy は通る。段階 1 では2つの時刻が
-いつも同じ値なので、テストでも見つからない。`MatchTick(...)` を作るのは、試合通算の
-時刻を数える1か所（段階 1 の後半で作るフレームを回す輪）とテストだけにする。
+いつも同じ値なので、型でもテストの値でも見つからない。そこで `src/` の中で
+`MatchTick(...)` を呼んでよい場所を、下の `MatchClock` と、記録を文字列から戻す所
+（`net/input_log.py`）の2つに限り、ほかで呼ぶと `tests/boundary/test_match_tick.py` が
+失敗するようにしてある。
 """
 
 TICKS_PER_SECOND = 60
@@ -50,6 +52,31 @@ SECONDS_PER_TICK = 1 / TICKS_PER_SECOND
 計算式に漏れる。秒で書かれた設定値（「爆弾は3秒で爆発する」など）を tick 数へ
 直すときは `seconds_to_ticks` を通す。
 """
+
+
+class MatchClock:
+    """試合通算の時刻を数える。
+
+    `src/` の中で `MatchTick` の値を作るのは、ここと、記録を文字列から戻す所だけ
+    （上の `MatchTick` の説明）。試合を 1 tick 進めた側が、進め終えたら
+    `advance()` を呼ぶ。フレームを回す輪（`shell/loop.py`）は数えない。輪は試合の
+    無い画面でも回るうえ、進めるかどうかは試合の側が決める（一時停止など）。
+    進めなかった tick を数えると、記録の時刻と盤面の進みがずれる。
+    """
+
+    __slots__ = ("_elapsed",)
+
+    def __init__(self) -> None:
+        self._elapsed = 0
+
+    @property
+    def now(self) -> MatchTick:
+        """いま進めている tick の時刻（試合が始まってから進め終えた tick の数）。"""
+        return MatchTick(self._elapsed)
+
+    def advance(self) -> None:
+        """1 tick 進め終えたことを数える。"""
+        self._elapsed += 1
 
 
 def seconds_to_ticks(seconds: float) -> Tick:

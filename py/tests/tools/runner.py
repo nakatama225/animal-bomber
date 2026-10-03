@@ -1,4 +1,4 @@
-"""描画の重さの測定（`tools/bench_render.py`）を、テストから別のプロセスで走らせる補助。
+"""測定（`tools/bench_render.py`・`tools/bench_pacing.py`）を、別のプロセスで走らせる補助。
 
 別のプロセスにするのは、テストのプロセスで pygame の画面を初期化しないため。
 環境を渡さないときも SDL のドライバに dummy を指定しておく。測定の側の上書きが
@@ -16,6 +16,7 @@ from typing import Any
 
 TOOLS = Path(__file__).resolve().parents[2] / "tools"
 BENCH = TOOLS / "bench_render.py"
+PACING = TOOLS / "bench_pacing.py"
 DUMMY_ENV = {**os.environ, "SDL_VIDEODRIVER": "dummy"}
 
 # 測定のモジュールを読み込んでから、一部を差し替えて main を呼ぶための前置き。
@@ -23,6 +24,7 @@ PRELUDE = f"""
 import itertools, os, sys
 sys.path.insert(0, {str(TOOLS)!r})
 import bench_render
+import bench_pacing
 """
 
 
@@ -35,6 +37,24 @@ def run_bench(
     """
     return subprocess.run(
         [sys.executable, str(BENCH), "--frames", "3", "--warmup", "1", "--json", *args],
+        env=DUMMY_ENV if env is None else env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+
+def run_pacing(
+    *args: str, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    """待ち方の測定を、小さく走らせる。
+
+    1 回・1 周・区切りごとに 3 フレーム・前の 1 フレームを捨てる・JSON で出す。
+    `args` は既定のあとに並べるので、同じ引数を渡せば上書きできる。
+    """
+    return subprocess.run(
+        [sys.executable, str(PACING), "--runs", "1", "--rounds", "1"]
+        + ["--frames", "3", "--warmup", "1", "--json", *args],
         env=DUMMY_ENV if env is None else env,
         capture_output=True,
         text=True,
