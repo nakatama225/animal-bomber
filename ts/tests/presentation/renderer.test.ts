@@ -30,7 +30,9 @@ describe('描画', () => {
   it('CPU どうしの試合を毎 tick 描いても例外が出ず、状態も変わらない', () => {
     // 種は、すべての技と外周の葱ボン・葱が現れるものを選んである。CPU の判断を変えると
     // 現れるものが変わるので、下の確認が落ちたら種を選び直す。
-    const seed = 18;
+    // 2026-10-04 に 18 から選び直した（壊れたブロックからアイテムを落とす抽選を1ブロック
+    // 1回に直し、乱数の引き方が変わった）。0〜79 のうち、すべて現れる種で試合がいちばん短いもの。
+    const seed = 39;
     const animals = ['rabbit', 'frog', 'elephant', 'fox'];
     const game = new GameSession({ ...defaultMatchConfig(seed, animals), winsToTake: 2 });
     game.world.players.forEach((player) =>
@@ -41,7 +43,7 @@ describe('描画', () => {
 
     const seen = new Set<string>();
     let intermissions = 0;
-    // 試合の長さは種によって大きく変わる（この顔ぶれで 80 通りの種を試すと 7,290〜33,162 tick）。
+    // 試合の長さは種によって大きく変わる（この顔ぶれで 80 通りの種を試すと 7,093〜37,308 tick）。
     // 上限は余裕を見て大きくとる。
     for (let i = 0; i < 60000 && !game.match.finished; i += 1) {
       const world = game.world;

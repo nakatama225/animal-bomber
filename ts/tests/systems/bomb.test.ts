@@ -184,6 +184,34 @@ describe('爆発', () => {
     expect(world.board.at({ col: 5, row: 7 })).toBe('empty');
     expect(blastAt(world, { col: 5, row: 8 })).toBeUndefined();
   });
+
+  it('2つの爆弾の爆風が同じブロックに届いても、壊すのは1回', () => {
+    // 壊すたびにアイテムの抽選を引くので、2回壊すと同じマスにアイテムが
+    // 2つ出うる（段階 3 から 2026-10-04 まで、この版はそうなっていた）。
+    // 原型は、ブロックを壊す関数の入口で「もう壊れていれば帰る」ので1回だけ。
+    const world = makeWorld();
+    clearBoard(world);
+    const player = world.players[0]!;
+    player.power = 3;
+    player.maxBombs = 2;
+    player.position = centerOf({ col: 5, row: 5 });
+    const first = placeBomb(world, player)!;
+    player.position = centerOf({ col: 5, row: 6 });
+    placeBomb(world, player);
+    const block = { col: 5, row: 8 };
+    world.board.set(block, 'soft');
+
+    // 先の爆弾の爆風は、あとの爆弾を巻き込んで (5,8) で止まる。
+    // あとの爆弾の爆風も (5,8) で止まる。
+    const result = detonate(world, first);
+    expect(result.chained).toBe(2);
+    expect(result.destroyed).toEqual([block]);
+    expect(result.events.filter((event) => event.type === 'blockDestroyed')).toHaveLength(1);
+    const itemsOnBlock = world.items.filter(
+      (item) => item.cell.col === block.col && item.cell.row === block.row,
+    );
+    expect(itemsOnBlock.length).toBeLessThanOrEqual(1);
+  });
 });
 
 describe('誘爆', () => {

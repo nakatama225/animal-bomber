@@ -22,7 +22,8 @@ import { rollDrop } from './items.js';
 /**
  * 1つの爆弾から始まる連鎖をすべて処理する。
  *
- * @returns 連鎖した爆弾の数と、壊れたブロックの位置
+ * @returns 連鎖した爆弾の数と、壊れたブロックの位置（初めて爆風が届いた順。
+ *   同じマスは1回だけ）
  */
 export function detonate(
   world: WorldState,
@@ -50,7 +51,13 @@ export function detonate(
         queue.push(next);
       }
 
-      if (arm.stoppedBySoft) destroyed.push(arm.cell);
+      // ⚠️ 別々の爆弾の爆風が同じブロックに届いても、一覧には1回だけ入れる。
+      // 下で1件ごとにアイテムの抽選を引くので、重なると同じマスにアイテムが
+      // 2つ出うる。原型は、ブロックを壊す関数の入口で「もう壊れていれば帰る」
+      // ので1回だけだった。この版は一覧に入れるときに除く。
+      if (arm.stoppedBySoft && !destroyed.some((cell) => sameCell(cell, arm.cell))) {
+        destroyed.push(arm.cell);
+      }
     }
   }
 
