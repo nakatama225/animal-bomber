@@ -66,15 +66,15 @@ describe('爆弾を置く', () => {
 });
 
 describe('置いた爆弾の通り抜け', () => {
-  it('置いた本人は、降りるまで通り抜けられる', () => {
+  it('置いたプレイヤー自身は、降りるまで通り抜けられる', () => {
     const world = makeWorld();
     const player = world.players[0]!;
     placeBomb(world, player);
     expect(isSolidFor(world, { col: 1, row: 1 }, player)).toBe(false);
   });
 
-  it('足元に置かれた他人も通り抜けられる', () => {
-    // 置いた本人だけを通す形にすると、足元へ置かれた側が
+  it('足元に置かれたほかのプレイヤーも通り抜けられる', () => {
+    // 置いたプレイヤー自身だけを通す形にすると、足元へ置かれた側が
     // その場から動けなくなって詰む。
     const world = makeWorld();
     const owner = world.players[0]!;

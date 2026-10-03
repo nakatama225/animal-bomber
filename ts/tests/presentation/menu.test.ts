@@ -178,7 +178,7 @@ describe('表どうしの食い違い', () => {
     const plan = planLocalMatch({ ...DEFAULT_SETUP, mode: 'solo', picks: ['rabbit', 'frog'] }, 1);
     const known = new Set(ANIMAL_LOOKS.map((look) => look.key));
     for (const animal of plan.config.animals) expect(known.has(animal)).toBe(true);
-    // 試合を作れること（能力が登録されていない動物なら、ここで落ちる）。
+    // 試合を作れること（能力が登録されていない動物なら、ここで失敗する）。
     expect(() => new GameSession(plan.config)).not.toThrow();
     expect(plan.config.animals.map((_, id) => id as PlayerId)).toEqual([0, 1, 2, 3]);
   });

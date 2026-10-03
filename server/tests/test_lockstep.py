@@ -70,7 +70,7 @@ START_AGAIN = json.dumps({"t": "start", "config": {"seed": 2}})
 
 
 class Test始める:
-    async def test_ホストの合図が送った本人を含む全員に届く(self):
+    async def test_ホストの合図が送ったホスト自身を含む全員に届く(self):
         room = LockstepRoom(max_seats=4)
         peers = [FakeConnection() for _ in range(3)]
         for ws in peers:
@@ -234,7 +234,7 @@ class Test始まる前の設定:
 
         for ws in peers[1:]:
             assert messages(ws, "settings") == [{"t": "settings", "config": config}]
-        # 送った本人には返さない（原型も、ホストは自分の送った設定を無視していた）
+        # 送った端末には返さない（原型も、ホストは自分の送った設定を無視していた）
         assert messages(peers[0], "settings") == []
         # 設定を配っても、試合は始まらない
         assert not room.started
@@ -382,7 +382,7 @@ class Test抜けた人:
     async def test_配っている最中に送り主が外されたら_そのtickまでを知らせる(self):
         """配っている最中の入力は、残った全員に届く。だから lastTick に含める。
 
-        含めずに1つ前を知らせると、先にその入力を受け取った端末は本人の入力で、
+        含めずに1つ前を知らせると、先にその入力を受け取った端末はそのプレイヤー自身の入力で、
         あとで受け取る端末は CPU で、同じ tick を進めてしまう。
         """
         room = LockstepRoom(max_seats=4)

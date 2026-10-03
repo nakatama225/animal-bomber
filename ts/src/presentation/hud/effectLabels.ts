@@ -10,7 +10,7 @@ export interface EffectLabel {
  * 状態の種類ごとの呼び方。原型の表から持ってきた。
  *
  * `Record` にしてあるので、ルールの層に状態を1つ足すと、ここで呼び方を
- * 書き忘れたときに型検査で落ちる。
+ * 書き忘れたときに型検査が失敗する。
  */
 export const EFFECT_LABELS: Readonly<Record<EffectKind, EffectLabel>> = {
   slide: { emoji: '🍌', label: 'すべる' },

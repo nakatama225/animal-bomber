@@ -21,7 +21,7 @@ def test_mdns_hostnameは取れるかNoneのどちらか():
 def test_lan_ipは取れたら妥当なIPv4になっている():
     result = lan_ip()
     if result is not None:
-        ipaddress.IPv4Address(result)  # 形が違えば例外で落ちる
+        ipaddress.IPv4Address(result)  # 形が違えば例外でテストが失敗する
 
 
 def test_candidate_urlsはポート番号を含む():

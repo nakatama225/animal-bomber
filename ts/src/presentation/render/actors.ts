@@ -19,7 +19,7 @@ const SCATTERED_BLINK = secondsToTicks(3.5);
  * 床に置かれる自律物を、爆弾より下に描く。
  *
  * Renderer はすべての自律物についてこれを呼ぶ。床に置かれないものは何も描かずに返す。
- * 落とし穴もここでは描かない。見えていると誰も踏まないので、仕掛けた本人にも見せない。
+ * 落とし穴もここでは描かない。見えていると誰も踏まないので、仕掛けたプレイヤー自身にも見せない。
  */
 export function drawGroundActor(frame: Frame, actor: WorldActor): void {
   if (!(actor instanceof ScatteredActor)) return;

@@ -20,7 +20,7 @@ const LIFETIME: Tick = tick(3600);
 /**
  * 撒かれた障害物。
  *
- * ⚠️ 爆風では消えない。**撒いた本人だけは踏んでも効かない**ので、
+ * ⚠️ 爆風では消えない。**撒いたプレイヤー自身だけは踏んでも効かない**ので、
  * 自分の周りに壁を作って立てこもる使い方ができる。
  * 爆風で消えると、この使い方が成り立たない。
  */
@@ -41,7 +41,7 @@ export class ScatteredActor implements WorldActor {
   tick(world: WorldState): { events: SimEvent[]; done: boolean } {
     this.#remaining = tick(this.#remaining - 1);
 
-    // 撒いた本人以外が踏んだら効く。
+    // 撒いたプレイヤー以外が踏んだら効く。
     for (const player of world.players) {
       if (player.id === this.owner || !isAlive(player)) continue;
       if (!sameCell(cellOf(player.position), this.cell)) continue;

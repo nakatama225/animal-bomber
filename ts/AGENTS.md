@@ -44,7 +44,7 @@ CPU の戦い方も同じ形です。`src/ai/tactics/` に戦い方を1つ書き
 
 ⛔ 共通の処理（`domain/systems/` `domain/mutations/` `domain/query/` `domain/negibon/` `ai/` 直下 `ai/behaviors/`）に
 動物の名前を書かないでください。**コメントも含みます。** 書くと
-`tests/boundary/guards.test.ts` が落ちます。
+`tests/boundary/guards.test.ts` が失敗します。
 
 ## プレイヤーの状態（`src/domain/state/Life.ts`）
 
@@ -70,7 +70,7 @@ CPU が永久に爆弾を置かなくなります（原型で実際に起きま�
 
 - メッセージの約束（`src/net/protocol.ts`）を変えるときは、中継サーバの
   `server/src/animal_bomber_server/protocol.py` も同じく変えてください。
-  片方だけ変えると `server/tests/test_protocol_sync.py` が落ちます
+  片方だけ変えると `server/tests/test_protocol_sync.py` が失敗します
 - ⛔ 通信と操作の記録の時刻に `world.now` を使わないでください。ラウンドごとに 0 へ戻り、決着のあとの待ちの間は
   止まります。試合通算の tick（`MatchClock` の形。`GameSession.elapsed` と `LockstepDriver.elapsed`）を使います
 - 自分の端末のプレイヤーも `NetworkInputSource` を通します。キーボードを直接繋ぐと、自分の手元でだけ
@@ -89,7 +89,7 @@ MEASURE=1 npx vitest run tests/ai/balance.test.ts
 - 試合の状態は読むだけにしてください。書き換えると、画面を出したときだけ試合が変わります
 - 見た目の乱数は `CosmeticRng` を使い、`Math.random` を直接呼ばないでください
 - ファイルの一番外側（関数の外）で `window` `document` `AudioContext` に触れないでください。
-  テストは node で走るので、読み込んだ時点で落ちます
+  テストは node で走るので、読み込んだ時点でテストが失敗します
 - 描画のテストで使う偽の canvas（`tests/presentation/fakeCanvas.ts`）は、ブラウザが例外を出す
   呼び方（負の半径など）で同じく例外を出します。**この検査を緩めないでください**
 

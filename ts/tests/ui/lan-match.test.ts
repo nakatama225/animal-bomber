@@ -77,7 +77,7 @@ describe('通信対戦の配線', () => {
     expect(start.config.match.seed).toBe(42);
     expect(match.world).toBeNull();
 
-    // 中継が、その時点の参加者を添えて全員へ配り直す（ホスト本人にも）。
+    // 中継が、その時点の参加者を添えて全員へ配り直す（ホスト自身にも）。
     deliver(relay, { t: 'start', seats: [0], config: start.config, match: 1 });
     expect(match.world).not.toBeNull();
     expect(match.hud?.roster).toEqual([

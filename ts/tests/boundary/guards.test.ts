@@ -21,7 +21,7 @@ import { afterEach, describe, expect, it } from 'vitest';
  * 4. 書き出したファイルを消す（`afterEach`）
  *
  * この確認は、検査の設定を変えたときに意味を持つ。設定を緩めると、
- * ここが落ちる。
+ * ここが失敗する。
  */
 
 const ROOT = join(import.meta.dirname, '..', '..');
@@ -37,7 +37,7 @@ function listTs(dir: string): string[] {
 const VIOLATION = join(ROOT, 'src', 'domain', 'core', '__boundary_probe__.ts');
 const AI_VIOLATION = join(ROOT, 'src', 'ai', '__boundary_probe__.ts');
 
-/** 検査を1つ走らせ、落ちたかどうかと出力を返す。 */
+/** 検査を1つ走らせ、失敗したかどうかと出力を返す。 */
 function run(command: string, args: readonly string[]): { failed: boolean; output: string } {
   try {
     const stdout = execFileSync(command, args, { cwd: ROOT, encoding: 'utf8', stdio: 'pipe' });
@@ -56,7 +56,7 @@ afterEach(() => {
 describe('境界を守る仕組み', () => {
   it('違反が無ければ、3つの検査はいずれも通る', () => {
     // 使い捨てのファイルを書き出す前に、同じコマンドがエラーなく終わることを確かめる。
-    // ここが赤いと、下のテストが落ちたときに、原因が書き出したファイルなのか
+    // ここが赤いと、下のテストが失敗したときに、原因が書き出したファイルなのか
     // もともとあった別の違反なのかが区別できなくなる。
     expect(run('npx', ['tsc', '-p', 'tsconfig.domain.json']).failed).toBe(false);
     expect(run('npx', ['eslint', 'src/domain', 'src/ai']).failed).toBe(false);
@@ -65,21 +65,21 @@ describe('境界を守る仕組み', () => {
     ).toBe(false);
   }, 120_000);
 
-  it('ルールの層でブラウザ API を使うと型検査が落ちる', () => {
+  it('ルールの層でブラウザ API を使うと型検査が失敗する', () => {
     writeFileSync(VIOLATION, 'export const width = document.body.clientWidth;\n');
     const result = run('npx', ['tsc', '-p', 'tsconfig.domain.json']);
     expect(result.failed).toBe(true);
     expect(result.output).toContain('document');
   }, 60_000);
 
-  it('ルールの層で Math.random を呼ぶと lint が落ちる', () => {
+  it('ルールの層で Math.random を呼ぶと lint が失敗する', () => {
     writeFileSync(VIOLATION, 'export const roll = (): number => Math.random();\n');
     const result = run('npx', ['eslint', VIOLATION]);
     expect(result.failed).toBe(true);
     expect(result.output).toContain('no-restricted-properties');
   }, 60_000);
 
-  it('CPU の思考の層で Math.random を呼ぶと lint が落ちる', () => {
+  it('CPU の思考の層で Math.random を呼ぶと lint が失敗する', () => {
     // CPU の判断も種から決まる必要がある。通信対戦では各端末が同じ CPU を
     // 動かすので、1台だけ違う乱数を引くと、その端末でだけ別の手を指す。
     writeFileSync(AI_VIOLATION, 'export const roll = (): number => Math.random();\n');
@@ -88,7 +88,7 @@ describe('境界を守る仕組み', () => {
     expect(result.output).toContain('no-restricted-properties');
   }, 60_000);
 
-  it('interface の関数をメソッドの形で書くと lint が落ちる', () => {
+  it('interface の関数をメソッドの形で書くと lint が失敗する', () => {
     // メソッドの形だと、引数を狭めた実装を渡しても型エラーにならない（variance.test.ts）。
     writeFileSync(
       VIOLATION,
@@ -99,14 +99,14 @@ describe('境界を守る仕組み', () => {
     expect(result.output).toContain('method-signature-style');
   }, 60_000);
 
-  it('CPU の思考の層でブラウザ API を使うと型検査が落ちる', () => {
+  it('CPU の思考の層でブラウザ API を使うと型検査が失敗する', () => {
     writeFileSync(AI_VIOLATION, 'export const width = window.innerWidth;\n');
     const result = run('npx', ['tsc', '-p', 'tsconfig.domain.json']);
     expect(result.failed).toBe(true);
     expect(result.output).toContain('window');
   }, 60_000);
 
-  it('ルールの層から上の層を import すると依存の検査が落ちる', () => {
+  it('ルールの層から上の層を import すると依存の検査が失敗する', () => {
     writeFileSync(
       VIOLATION,
       "import '../../presentation/CosmeticRng.js';\nexport const broken = true;\n",
@@ -116,7 +116,7 @@ describe('境界を守る仕組み', () => {
     expect(result.output).toContain('domain-は-上の層を使わない');
   }, 60_000);
 
-  it('CPU の思考の層から上の層を import すると依存の検査が落ちる', () => {
+  it('CPU の思考の層から上の層を import すると依存の検査が失敗する', () => {
     writeFileSync(
       AI_VIOLATION,
       "import '../presentation/Presenter.js';\nexport const broken = true;\n",
@@ -140,7 +140,7 @@ describe('境界を守る仕組み', () => {
  * 戦い方（`ai/tactics/`）として差し込む。
  *
  * ⚠️ この検査はファイルの文字列をそのまま見ていて、コードとコメントを区別しない。
- * コメントに動物の名前を書くだけでも落ちる。原型の逸話を書くときも動物の名前は出さず、
+ * コメントに動物の名前を書くだけでも失敗する。原型の逸話を書くときも動物の名前は出さず、
  * 「一列に並べる動物」「ブロックを通り抜ける動物」のように能力で書く。
  */
 describe('動物の追加が閉じていること', () => {

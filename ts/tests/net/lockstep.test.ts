@@ -385,7 +385,7 @@ describe('抜けた人', () => {
     runTogether(relay, peers, 200);
 
     relay.leave(2);
-    // 抜けた直後の数 tick は、届いていた本人の操作で動く。CPU に替わってから控える。
+    // 抜けた直後の数 tick は、届いていたそのプレイヤーの操作で動く。CPU に替わってから控える。
     runTogether(relay, [host, guest], INPUT_DELAY + 1);
     const before = { ...host.session.world.players[2]!.position };
     runTogether(relay, [host, guest], 400 - INPUT_DELAY - 1);
@@ -490,7 +490,7 @@ describe('抜けた人', () => {
     driver.receive({ t: 'peer_left', seat: 1, lastTick: 10 });
     expect(() => driver.receive({ t: 'peer_left', seat: 1, lastTick: 20 })).not.toThrow();
     expect(driver.log.departedAfter(1)).toBe(10);
-    // 自分の知らせ。本物の中継は抜けた本人には送らないが、届いても自分を CPU に替えない。
+    // 自分の知らせ。本物の中継は抜けた端末には送らないが、届いても自分を CPU に替えない。
     driver.receive({ t: 'peer_left', seat: 0, lastTick: 5 });
     // 人間の一覧にいない人は、始まる前に入りかけていた接続。試合には関係ない。
     driver.receive({ t: 'peer_left', seat: 2, lastTick: -1 });

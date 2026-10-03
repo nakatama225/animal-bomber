@@ -73,7 +73,7 @@ describe('うさぎ', () => {
     expect(world.actors.filter((a) => a.kind === 'scattered').length).toBeGreaterThan(0);
   });
 
-  it('撒いた本人は踏んでも効かない', () => {
+  it('撒いたプレイヤー自身は踏んでも効かない', () => {
     // 自分の周りに壁を作って立てこもる使い方が成り立たなくなる。
     const world = worldWith('rabbit');
     const player = world.players[0]!;
@@ -101,7 +101,7 @@ describe('もぐら', () => {
     );
   });
 
-  it('他人の爆弾の隣のブロックは通れない', () => {
+  it('ほかのプレイヤーの爆弾の隣のブロックは通れない', () => {
     // これが無いと、爆弾で追い込んでも毎回壁抜けで逃げられ、
     // 追い詰めるという行為が成立しなくなる。
     const world = worldWith('mole');
@@ -129,7 +129,7 @@ describe('もぐら', () => {
     expect(other.effects.has('stun')).toBe(true);
   });
 
-  it('掘った本人は自分の穴で止まらない', () => {
+  it('掘ったプレイヤーは自分の穴で止まらない', () => {
     const world = worldWith('mole');
     const mole = world.players[0]!;
     hold(world, 'mole');

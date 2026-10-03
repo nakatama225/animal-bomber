@@ -41,8 +41,8 @@ export function placeBombAt(
   if (world.board.at(cell) !== 'empty') return undefined;
   if (bombAt(world, cell) !== undefined) return undefined;
 
-  // ⚠️ 置いた本人だけでなく、そのマスに重なっている全員を通す。
-  // 本人だけにすると、足元へ置かれた側がその場から動けなくなる。
+  // ⚠️ 置いたプレイヤー自身だけでなく、そのマスに重なっている全員を通す。
+  // 置いたプレイヤー自身だけにすると、足元へ置かれた側がその場から動けなくなる。
   const passThrough = new Set<PlayerId>();
   for (const other of world.players) {
     if (!isAlive(other)) continue;

@@ -113,7 +113,7 @@ class Room:
         `reserve_host_seat` が立っているとき、ホストの0番は `prefer_host` の
         接続だけのために空けておく。**単に優先するだけでは足りない**のがここの肝で、
         「早い者勝ちだが希望者は優先」だと、希望者より先によその端末が0番を取った時点で
-        元の混乱（サーバを立てた本人がゲストになる）がそのまま戻る。
+        元の混乱（サーバを立てた端末がゲストになる）がそのまま戻る。
         """
         if prefer_host and HOST_SEAT not in self.seats:
             return HOST_SEAT

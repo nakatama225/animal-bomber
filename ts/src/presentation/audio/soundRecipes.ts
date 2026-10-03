@@ -28,7 +28,7 @@ const place: Recipe = (v) => {
 /**
  * SoundName ごとの作り方。原型の効果音の表から、数値をそのまま写している。
  *
- * `Record` にしてあるので、SoundName を足して作り方を書き忘れると型検査で落ちる。
+ * `Record` にしてあるので、SoundName を足して作り方を書き忘れると型検査が失敗する。
  */
 export const SOUND_RECIPES: Readonly<Record<SoundName, Recipe>> = {
   place,

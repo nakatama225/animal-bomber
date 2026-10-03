@@ -6,7 +6,7 @@ import type { PlayerState } from '../../domain/state/PlayerState.js';
  * かかっている状態ごとの、足元に出す絵文字。
  *
  * 状態の種類（`EffectKind`）を鍵にした表なので、種類が増えたのに
- * ここへ足し忘れると型検査で落ちる。
+ * ここへ足し忘れると型検査が失敗する。
  */
 export const EFFECT_ICONS: Readonly<Record<EffectKind, string>> = {
   slide: '🍌',

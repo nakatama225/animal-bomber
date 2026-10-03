@@ -32,7 +32,7 @@ import type { ItemKind } from '../rules/items.js';
  *
  * `type` の値で分岐すると、型検査が「まだ扱っていない種類」を見つける。
  * イベントを1種類足したとき、対応を書き忘れた場所が
- * `assertNever` で落ちる（`Presenter` を参照）。
+ * `assertNever` のところで型検査が失敗する（`Presenter` を参照）。
  */
 export type SimEvent =
   | { readonly type: 'bombPlaced'; readonly cell: Cell; readonly owner: PlayerId }

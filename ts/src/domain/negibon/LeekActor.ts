@@ -88,7 +88,7 @@ export class LeekActor implements WorldActor {
       if (Math.abs(player.position.x - this.#position.x) >= LEEK_HIT) continue;
       if (Math.abs(player.position.y - this.#position.y) >= LEEK_HIT) continue;
       const shooter = world.players[this.owner];
-      // 撃った本人がもう外周にいなければ、入れ替わる相手がいない。葱だけ消える。
+      // 撃ったプレイヤーがもう外周にいなければ、入れ替わる相手がいない。葱だけ消える。
       if (shooter === undefined || shooter.life.kind !== 'negibon') return [];
       return swapPlaces(world, shooter, player);
     }

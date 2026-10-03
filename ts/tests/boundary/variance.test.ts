@@ -21,7 +21,7 @@ import type { WorldState } from '../../src/domain/state/WorldState.js';
  * 引数を狭めた実装が型エラーになることを確かめる。
  *
  * ⚠️ 本体は型の検査（`tsc --noEmit`）。`@ts-expect-error` の行でエラーが出なくなると
- * （interface をメソッドの形に戻すと）、tsc が「使われていない `@ts-expect-error`」として落ちる。
+ * （interface をメソッドの形に戻すと）、tsc が「使われていない `@ts-expect-error`」として失敗する。
  * 実行時の `expect` は、組み立てた値が使えることを見ているだけ。
  *
  * ⚠️ 狭めた型は、元の型に項目を足したもの（`元の型 & { … }`）で作る。元の型と無関係な型だと、

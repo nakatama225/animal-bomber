@@ -17,7 +17,7 @@
  * tick 数を表す整数。
  *
  * 単なる `number` と混ざらないよう別の型にしてある。座標や体力を
- * 誤って渡したときに型検査で落ちる。値としては普通の整数。
+ * 誤って渡したときに型検査が失敗する。値としては普通の整数。
  */
 export type Tick = number & { readonly __tick: unique symbol };
 
