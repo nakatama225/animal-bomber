@@ -1,4 +1,4 @@
-"""盤面のマス目と、試合の始めの盤面の作り方。"""
+"""盤面のマス目と、ラウンドの始まりの盤面の作り方。"""
 
 from collections.abc import Iterator, Sequence
 from enum import Enum
@@ -105,7 +105,7 @@ class Board:
 
 
 def build_board(rng: Rng, spawns: Sequence[Cell]) -> Board:
-    """試合の始めの盤面を作る。
+    """ラウンドの始まりの盤面を作る。
 
     壊せない壁は外周と、列も行も偶数のマスに並ぶ柱。柱があるので通路が格子状になる。
     残りの空きマスに、壊せるブロックを確率で置く。開始位置とそのまわりには置かない

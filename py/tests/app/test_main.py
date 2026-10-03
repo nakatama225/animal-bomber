@@ -95,11 +95,13 @@ def test_フレームごとに_決めた数だけ試合を進めて描く() -> N
 def test_押してすぐ離した爆弾のキーは_1_tick_だけ押したことにする() -> None:
     """1回の描画の間に押して離した爆弾のキーで、爆弾を1つ置く。
 
-    次の tick からは押していない（`end_tick` で忘れる）。最初の 1 tick は何も押さずに
-    進める（ラウンドの始まりは爆弾のボタンを押していた扱いなので）。
+    同じフレームの次の tick からは押していない（`end_tick` を tick ごとに呼ぶ）。
+    押してすぐ離したフレームで止めて、最後の tick の前の入力を見る。描画ごとに忘れる形
+    だと、そのフレームの3 tick とも押したことになり、前の入力が爆弾のままになる。
+    最初の 1 tick は何も押さずに進める（ラウンドの始まりは爆弾を押していた扱いなので）。
     """
-    result = _run([(0, "none"), (1, "none"), (3, "tap_bomb"), (2, "none")])
-    assert result["elapsed"] == 6
+    result = _run([(0, "none"), (1, "none"), (3, "tap_bomb")])
+    assert result["elapsed"] == 4
     assert result["bombs"] == 1
     assert result["previous"] == 0
 

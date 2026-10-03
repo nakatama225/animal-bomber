@@ -170,7 +170,8 @@ def test_実物の読み取りは_窓を開かずに呼べる() -> None:
 # 1台目（1P のパッド）を外す。"swap" では、読む前に3台目を繋いで B を押す（数は同じ）。
 # 窓は開かない（dummy ドライバ・set_mode を呼ばない）。SDL の関数は pygame に同梱の
 # ライブラリから ctypes で呼ぶ。置き場所は macOS の wheel のもので、無ければ SKIP と
-# 出す。
+# 出す。実機のパッドが繋がっていれば、それが先に並んで割り当てが変わるので SKIP-REAL と
+# 出す（テストが見たいのは番号の扱いで、実機の有無ではない）。
 VIRTUAL_PADS = """
 import ctypes, json, sys
 from pathlib import Path
@@ -203,6 +204,10 @@ def press(index, button):
 
 pygame.display.init()
 controller.init()
+pygame.event.pump()
+if controller.get_count() > 0:
+    print("SKIP-REAL")  # 実機のパッドが先に並び、割り当てが変わる
+    sys.exit(0)
 reader = ControllerReader()
 first, second = attach(), attach()
 press(second, 0)  # A
@@ -232,6 +237,8 @@ def _virtual_pads(scenario: str) -> dict[str, list[int]]:
         pytest.skip(
             "SDL のライブラリが pygame の中に見つからない（macOS の wheel でない）"
         )
+    if last == "SKIP-REAL":
+        pytest.skip("実機のパッドが繋がっている（仮想パッドの割り当ての前提が崩れる）")
     result: dict[str, list[int]] = json.loads(last)
     return result
 

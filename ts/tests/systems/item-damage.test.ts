@@ -329,6 +329,34 @@ describe('被弾', () => {
     expect(events).toContainEqual(expect.objectContaining({ type: 'playerHurt', target: 1, by: 0 }));
   });
 
+  it('誘爆された自分の爆弾のマスでも、兄弟の爆弾の腕が届くと、伸ばす向きの順で当てたプレイヤーが決まる', () => {
+    // A（1P）が上の B（2P）と下の C（1P）を誘爆し、C の上の腕が B のマスまで届く。
+    // この版は B を先に積むので、B のマスの最後の爆風は C の腕（1P）。原型は C を先に
+    // 積むので B の中心（2P。自爆）になる。揃えるかは決めていない。今の答えを書き留める。
+    const world = makeWorld();
+    clearBoard(world);
+    const [first, second] = world.players;
+    first!.maxBombs = 2;
+    first!.power = 1;
+    first!.position = centerOf({ col: 5, row: 5 });
+    const trigger = placeBomb(world, first!)!;
+    first!.power = 2;
+    first!.position = centerOf({ col: 5, row: 6 });
+    placeBomb(world, first!);
+    second!.power = 1;
+    second!.position = centerOf({ col: 5, row: 4 });
+    placeBomb(world, second!);
+    first!.position = centerOf({ col: 1, row: 1 });
+    detonate(world, trigger);
+    const owners = world.blasts
+      .filter((blast) => blast.cell.col === 5 && blast.cell.row === 4)
+      .map((blast) => blast.owner);
+    expect(owners).toEqual([0, 1, 0]);
+
+    const events = new DamageSystem().step(world);
+    expect(events).toContainEqual(expect.objectContaining({ type: 'playerHurt', target: 1, by: 0 }));
+  });
+
   it('爆風に当たると体力が減る', () => {
     const world = makeWorld();
     const player = world.players[0]!;

@@ -484,6 +484,30 @@ class Test被弾:
         assert owners == [1, 0]
         assert PlayerHurt(target=1, by=0, amount=BLAST_DAMAGE) in step_damage(world)
 
+    def test_誘爆された自分の爆弾のマスでも_兄弟の腕が届くと_伸ばす向きの順で決まる(
+        self,
+    ) -> None:
+        """A（1P）が上の B（2P）と下の C（1P）を誘爆し、C の上の腕が B のマスまで届く。
+
+        この版は B を先に積むので、B のマスの最後の爆風は C の腕（1P）。原型は C を先に
+        積むので B の中心（2P。自爆）になる。揃えるかは決めていない。今の答えを書き
+        留める。TypeScript 版の「誘爆された自分の爆弾のマスでも…」のテストと同じ場面。
+        """
+        world = make_world()
+        clear_board(world)
+        first, second = world.players
+        first.max_bombs = 2
+        first.power = 1
+        trigger = put_bomb(world, first, Cell(5, 5))
+        first.power = 2
+        put_bomb(world, first, Cell(5, 6))
+        put_bomb(world, second, Cell(5, 4))
+        first.position = Cell(1, 1).center()
+        detonate(world, trigger)
+        owners = [blast.owner for blast in world.blasts if blast.cell == Cell(5, 4)]
+        assert owners == [0, 1, 0]
+        assert PlayerHurt(target=1, by=0, amount=BLAST_DAMAGE) in step_damage(world)
+
     def test_被弾するとアイテムを1つ吐き出す(self) -> None:
         world = make_world()
         player = world.players[0]
