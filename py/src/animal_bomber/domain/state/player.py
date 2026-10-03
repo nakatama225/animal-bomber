@@ -5,24 +5,29 @@
 誰が操作するかは、入力の出どころ（`domain/input/sources.py` の窓口）の違いだけに
 なっている。
 
-いまは段階 2 までで使うもの（位置・向き・生死・靴の段数・火力・同時に置ける爆弾の数・
-盤面に出ている爆弾の数・前の tick の入力）だけを持つ。体力は使う段階 3 で足す。使わない
-項目を先に置くと、値が正しいかを確かめるテストが無いまま状態の要約に混ざる。
+いまは段階 3 までで使うものだけを持つ。動物ごとの能力の状態は、使う段階 5 で足す。
+使わない項目を先に置くと、値が正しいかを確かめるテストが無いまま状態の要約に混ざる。
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Final, Literal
 
 from animal_bomber.domain.core.coord import Direction, Point
+from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.tuning import (
     BASE_POWER,
     BASE_SPEED,
     MAX_SPEED,
+    RUNAWAY_SPEED_FLOOR_RATIO,
     SHOE_STEP,
+    SLOW_FACTOR,
     START_BOMBS,
+    STARTING_HP,
+    WEAKENED_POWER,
 )
+from animal_bomber.domain.state.effects import EffectBag, EffectKind
 
 PlayerId = Literal[0, 1, 2, 3]
 """プレイヤー番号。0 から 3。"""
@@ -80,6 +85,20 @@ class PlayerState:
     に失われる。状態の一部として持つので、リプレイと通信対戦で「押した瞬間」まで
     一致する。
     """
+    hp: int = STARTING_HP
+    """体力（半分の単位の整数。爆風1回で `BLAST_DAMAGE` 減る）。0 で倒れる。"""
+    invulnerable_until: Tick = Tick(0)
+    """無敵が切れる盤面の時刻。それより前は爆風に当たらない。"""
+    effects: EffectBag = field(default_factory=EffectBag)
+    """かかっている一時的な状態。"""
+    special_charges: int = 0
+    """溜めてあるとくぎの回数。チキンを拾うと増える（とくぎは段階 5）。"""
+    last_hit_by: PlayerId | None = None
+    """最後に自分を傷つけた爆風を出した爆弾を置いたプレイヤー（自分なら自分の番号）。
+
+    ⚠️ 倒れた時点で爆風を置いたプレイヤーを引き直さない。その頃には爆風が消えている
+    ことがあり、誰に倒されたか分からなくなる。当たった瞬間に控える。
+    """
 
 
 def just_pressed(
@@ -95,5 +114,33 @@ def speed_of(player: PlayerState) -> float:
     靴の段数だけ速くなり、上限で止まる。原型は、靴を足す前の基本の速さ（`BASE_SPEED`）に
     動物ごとの倍率を掛ける（原型の getSpeed）。倍率は動物のデータを作る段階 5 で掛ける。
     いまは全員が倍率 1。
+
+    「超スロー」は速さに倍率を掛け、「とまれない」は速さに下限を敷く。⚠️ 下限にも
+    超スローの倍率を掛ける（`RUNAWAY_SPEED_FLOOR_RATIO`）。掛けないと、超スローを
+    踏んだあとに「とまれない」を踏んだプレイヤーが速くなる。
     """
-    return min(MAX_SPEED, BASE_SPEED + player.shoes * SHOE_STEP)
+    speed = min(MAX_SPEED, BASE_SPEED + player.shoes * SHOE_STEP)
+    slow = player.effects.has(EffectKind.SLOW)
+    if slow:
+        speed *= SLOW_FACTOR
+    if player.effects.has(EffectKind.RUNAWAY):
+        floor = MAX_SPEED * RUNAWAY_SPEED_FLOOR_RATIO * (SLOW_FACTOR if slow else 1)
+        speed = max(speed, floor)
+    return speed
+
+
+def power_of(player: PlayerState) -> int:
+    """そのプレイヤーがいま置く爆弾の火力。「爆風1マス」がかかっていると下がる。"""
+    if player.effects.has(EffectKind.WEAK):
+        return WEAKENED_POWER
+    return player.power
+
+
+def is_frozen(player: PlayerState) -> bool:
+    """動けない状態か（たまねぎで泣いている）。"""
+    return player.effects.has(EffectKind.STUN)
+
+
+def is_invulnerable(player: PlayerState, now: Tick) -> bool:
+    """盤面の時刻 `now` に、無敵の最中か。"""
+    return now < player.invulnerable_until

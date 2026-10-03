@@ -59,8 +59,16 @@ from animal_bomber.domain.rules.tuning import (
     ALIGN_RATE_WHEN_MOVING,
     MOVE_SUBSTEP_DISTANCE,
     PLAYER_RADIUS,
+    SLIDE_SPEED_RATIO,
 )
-from animal_bomber.domain.state.player import Life, PlayerId, PlayerState, speed_of
+from animal_bomber.domain.state.effects import EffectKind
+from animal_bomber.domain.state.player import (
+    Life,
+    PlayerId,
+    PlayerState,
+    is_frozen,
+    speed_of,
+)
 from animal_bomber.domain.state.world import WorldState
 
 
@@ -78,24 +86,45 @@ def _axis(player_input: PlayerInput, plus: PlayerInput, minus: PlayerInput) -> i
 
 
 def _move(world: WorldState, player: PlayerState, player_input: PlayerInput) -> None:
+    # 泣いている間は、どの入力も通らない。
+    if is_frozen(player):
+        return
     dx = _axis(player_input, PlayerInput.RIGHT, PlayerInput.LEFT)
     dy = _axis(player_input, PlayerInput.DOWN, PlayerInput.UP)
+    # 「そうさ反転」がかかっていると、押した向きと逆へ進む。
+    if player.effects.has(EffectKind.REVERSE):
+        dx, dy = -dx, -dy
+    # 「滑る」「とまれない」は、手を離していても向いている方向へ進み続ける。
+    # 速さを上げるのは滑っているときだけ（とまれないは速さの下限で効く。`speed_of`）。
+    sliding = False
     if dx == 0 and dy == 0:
-        return
+        if not (
+            player.effects.has(EffectKind.SLIDE)
+            or player.effects.has(EffectKind.RUNAWAY)
+        ):
+            return
+        dx, dy = player.facing.delta
+        sliding = player.effects.has(EffectKind.SLIDE)
     # 斜めに押したら横を優先し、1つの軸に丸める（原型と同じ）。斜めに進めると、
     # 格子状の通路では壁に沿って滑る動きになる。
     if dx != 0:
         dy = 0
     player.facing = Direction((dx, dy))
 
-    speed = speed_of(player)
+    speed = speed_of(player) * SLIDE_SPEED_RATIO if sliding else speed_of(player)
     substeps = max(1, math.ceil(speed / MOVE_SUBSTEP_DISTANCE))
     per_step = speed / substeps
+    moved_any = False
     for _ in range(substeps):
         moved = _try_move(world, player, dx * per_step, dy * per_step)
+        moved_any = moved_any or moved
         # 進めたときは寄せる幅を少し弱める（原型と同じ倍率）。
         rate = per_step * ALIGN_RATE_WHEN_MOVING if moved else per_step
         _align_to_corridor(world, player, horizontal=dx != 0, rate=rate)
+    # 壁にぶつかったら滑りは終わる。ぶつかっても滑り続けると、壁ぎわで向きを
+    # 変えられないまま爆風を待つことになる。
+    if sliding and not moved_any:
+        player.effects.clear(EffectKind.SLIDE)
 
 
 def _try_move(world: WorldState, player: PlayerState, mx: float, my: float) -> bool:

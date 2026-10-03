@@ -25,27 +25,46 @@
 3. 導火線の尽きた爆弾を連鎖ごと爆発させ、爆風の残り時間を進める（`blast.py`）。置いた
    tick にも導火線を進めるので、置いた tick を1つ目と数えて `BOMB_FUSE` 個目の tick に
    爆発する
-4. この tick の入力を、次の tick の「押した瞬間」の判定のために、前の入力として残す。
+4. 足元のアイテムを拾う（`items.py`）。爆発のあと。逆にすると、この tick の爆風で
+   焼けるはずのアイテムを、同じ tick に拾えてしまう
+5. 爆風に触れたプレイヤーの体力を減らす（`damage.py`）。爆発のあとなので、この tick に
+   出た爆風にも当たる。拾うのより後。逆にすると、被弾して足元へ吐き出したアイテムを、
+   同じ tick にそのまま拾い直す
+6. 一時的な状態の時間を進める（`effects.py`）。状態の作用を見る処理（1. と 2.）の
+   あと。4. でこの tick にかかった状態も、ここで 1 tick 進む（TypeScript 版と同じ）
+7. この tick の入力を、次の tick の「押した瞬間」の判定のために、前の入力として残す。
    すべての処理が終わったあとに残す。途中で残すと、そのあとの処理から見て「押した
    瞬間」が消える（いま押した瞬間を見るのは 2. だけなので、3. の前に動かしても結果は
    変わらないが、押した瞬間を見る処理を足すときに崩れないよう最後に置く）
 
-アイテムと被弾は、作る段階 3 でこの並びへ足す。
+## 起きたことを戻り値で返す
+
+`step()` は音も鳴らさず、画面にも触らない。この tick に起きたこと（爆発した・拾った・
+倒れた、など）を `SimEvent` の list で返すだけで、どう見せるかは受け取った側
+（`presentation/presenter.py`）が決める。画面を出さずに試合を回すとき（テスト・強さの
+計測）は、受け取らなければよい。そのための設定や「音を鳴らさない」ための分岐を、ルールの
+層に持たずに済む。
+
+並びは起きた順（上の処理の順、各処理の中では処理した順）。
 """
 
 from collections.abc import Mapping
 
 from animal_bomber.domain.core.tick import Tick
+from animal_bomber.domain.events import SimEvent
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems.blast import step_blasts
 from animal_bomber.domain.systems.bomb import step_bombs
+from animal_bomber.domain.systems.damage import step_damage
+from animal_bomber.domain.systems.effects import step_effects
+from animal_bomber.domain.systems.items import step_items
 from animal_bomber.domain.systems.movement import move_players
 
 
-def step(world: WorldState, inputs: Mapping[PlayerId, PlayerInput]) -> None:
-    """試合を 1 tick 進める。
+def step(world: WorldState, inputs: Mapping[PlayerId, PlayerInput]) -> list[SimEvent]:
+    """試合を 1 tick 進め、この tick に起きたことを起きた順に返す。
 
     Args:
         world: 進める状態。この関数が書き換える。
@@ -53,11 +72,16 @@ def step(world: WorldState, inputs: Mapping[PlayerId, PlayerInput]) -> None:
             流し直す記録）は問わない。盤面にいる全員の分が要る（`InputGatherer.gather`
             が返すもの）。
     """
+    events: list[SimEvent] = []
     move_players(world, inputs)
-    step_bombs(world, inputs)
-    step_blasts(world)
+    events.extend(step_bombs(world, inputs))
+    events.extend(step_blasts(world))
+    events.extend(step_items(world))
+    events.extend(step_damage(world))
+    step_effects(world)
     _remember_inputs(world, inputs)
     world.now = Tick(world.now + 1)
+    return events
 
 
 def _remember_inputs(world: WorldState, inputs: Mapping[PlayerId, PlayerInput]) -> None:

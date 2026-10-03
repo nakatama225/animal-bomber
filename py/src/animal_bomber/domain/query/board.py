@@ -8,6 +8,7 @@
 from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.bomb import Blast, Bomb
+from animal_bomber.domain.state.item import Item
 from animal_bomber.domain.state.player import Life, PlayerId, PlayerState
 from animal_bomber.domain.state.world import WorldState
 
@@ -20,6 +21,11 @@ def bomb_at(world: WorldState, cell: Cell) -> Bomb | None:
 def blast_at(world: WorldState, cell: Cell) -> Blast | None:
     """そのマスに乗っている爆風（いちばん先に置かれたもの）。無ければ None。"""
     return next((blast for blast in world.blasts if blast.cell == cell), None)
+
+
+def item_at(world: WorldState, cell: Cell) -> Item | None:
+    """そのマスに落ちているアイテム（いちばん先に落ちたもの）。無ければ None。"""
+    return next((item for item in world.items if item.cell == cell), None)
 
 
 def players_on(world: WorldState, cell: Cell) -> list[PlayerState]:

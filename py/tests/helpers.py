@@ -2,10 +2,14 @@
 
 from collections.abc import Mapping, Sequence
 
+from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.input.player_input import PlayerInput
-from animal_bomber.domain.state.player import PlayerId
+from animal_bomber.domain.state.board import Tile
+from animal_bomber.domain.state.bomb import Bomb
+from animal_bomber.domain.state.player import PlayerId, PlayerState
 from animal_bomber.domain.state.world import WorldState, create_world
 from animal_bomber.domain.systems import simulation
+from animal_bomber.domain.systems.bomb import place_bomb
 
 
 def make_world(
@@ -31,3 +35,18 @@ def advance(
     """同じ入力のまま `ticks` 回進める。"""
     for _ in range(ticks):
         simulation.step(world, inputs)
+
+
+def clear_board(world: WorldState) -> None:
+    """壊せるブロックを全部取り除く。爆風の伸び方や動きを確かめやすくするため。"""
+    for cell, tile in list(world.board.cells()):
+        if tile is Tile.SOFT:
+            world.board.put(cell, Tile.EMPTY)
+
+
+def put_bomb(world: WorldState, player: PlayerState, cell: Cell) -> Bomb:
+    """そのマスへプレイヤーを動かし、爆弾を置く。置けなければテストの誤り。"""
+    player.position = cell.center()
+    bomb = place_bomb(world, player)
+    assert bomb is not None, f"{cell} に置けなかった"
+    return bomb

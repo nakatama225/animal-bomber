@@ -55,7 +55,7 @@ class Bomb:
     導火線が尽きて爆発する、連鎖の始めの1つにも立てる。積まれた爆弾はその tick の
     うちに盤面から取り除かれるので、tick の終わりに盤面にある爆弾ではいつも False。
     それでも状態と要約に入れておくのは、TypeScript 版と状態の形を揃え、
-    `tests/systems/test_bomb_ts.py` で比べるため。
+    `tests/systems/test_simulation_ts.py` で比べるため。
     """
 
 

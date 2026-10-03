@@ -147,6 +147,23 @@ set の反復は、import でも構文木でも止められません。`tests/de
 - `docs/` の Markdown に書いた REPL の例（`>>>` の行）は、pytest が走らせて値を確かめます。
   ルールを変えて値が変わったら、例の値も直してください
 
+## イベント（`domain/events.py`）
+
+- ルールの層から音・画面・通知を呼ばないでください。起きたことは `SimEvent` の種類に足して
+  `step()` の戻り値で返し、音と通知に変えるのは `presentation/presenter.py` です
+- 種類を足すと、`presentation/presenter.py` の `match` と、TypeScript 版と比べるテストの
+  `event_row`（`tests/systems/test_simulation_ts.py`）が mypy で失敗します。扱いを書いてから
+  完了としてください。`case _:` には `assert_never` だけを置きます
+- `tests/systems/test_simulation_ts.py` の固定値は、TypeScript 版の段階 3（f95d2a5）に、
+  7825fac と同じ直し（壊れたブロックの一覧に同じマスを1回だけ入れる）を当て、同じ台本を流して
+  出したものです。段階を進めて出し直すときも、TypeScript 版のその段階のコミットに同じ直しを
+  当ててから流してください（段階のコミットはどれも 7825fac より前で、直しが入っていません。
+  爆発の処理は段階 4 までは `systems/BlastSystem.ts`、段階 5a からは `mutations/explode.ts`）。
+  どのコミットに何を当てて出したかを、テストの説明に書いてください
+- `tests/systems/test_match_invariants.py` は、試合を通して崩れない約束（同じマスにアイテムが
+  2つ並ばない）を毎 tick 確かめます。約束を崩す仕組みを足すときは、約束のほうから決め直して
+  ください
+
 ## 動物の能力を追加するとき
 
 能力と行動中の状態は、取りうる種類を閉じた union で定義します（段階 5 で作ります）。

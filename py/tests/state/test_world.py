@@ -8,9 +8,12 @@ from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.core.entity_id import EntityId
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.input.player_input import PlayerInput
-from animal_bomber.domain.rules.tuning import SPAWN_CELLS
+from animal_bomber.domain.rules.items import ItemKind
+from animal_bomber.domain.rules.tuning import SPAWN_CELLS, STARTING_HP
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.bomb import Blast, Bomb
+from animal_bomber.domain.state.effects import EffectKind
+from animal_bomber.domain.state.item import Item
 from animal_bomber.domain.state.player import Life
 from animal_bomber.domain.state.world import WorldState, create_world, hash_world
 from tests.helpers import make_world
@@ -39,6 +42,15 @@ class Test始めの状態:
         ]
         assert all(p.previous_input is PlayerInput.IDLE for p in world.players)
         assert (world.bombs, world.blasts, world.ids.issued) == ([], [], 0)
+
+    def test_体力は満タンで_状態もアイテムも無く始まる(self) -> None:
+        world = create_world(1, ["rabbit", "elephant"])
+        for player in world.players:
+            assert player.hp == STARTING_HP
+            assert player.invulnerable_until == 0
+            assert player.effects.active() == []
+            assert (player.special_charges, player.last_hit_by) == (0, None)
+        assert world.items == []
 
     @pytest.mark.parametrize("count", [0, 5])
     def test_参加する数が1から4でなければ作れない(self, count: int) -> None:
@@ -117,6 +129,27 @@ def _issue_id(world: WorldState) -> None:
     world.ids.take()
 
 
+def _hp(world: WorldState) -> None:
+    world.players[1].hp -= 1
+
+
+def _invulnerable(world: WorldState) -> None:
+    world.players[1].invulnerable_until = Tick(30)
+
+
+def _effect(world: WorldState) -> None:
+    world.players[1].effects.add(EffectKind.SLOW, Tick(10), Tick(30))
+
+
+def _special_charges(world: WorldState) -> None:
+    world.players[1].special_charges = 1
+
+
+def _last_hit_by(world: WorldState) -> None:
+    # 始めは None。番号 0 と取り違えない（要約では None を -1 として混ぜる）。
+    world.players[1].last_hit_by = 0
+
+
 def _with_bomb_and_blast(world: WorldState) -> WorldState:
     """爆弾と爆風を1つずつ置いた状態。爆弾と爆風の中身を変える確かめの土台。"""
     world.bombs.append(
@@ -191,6 +224,24 @@ def _blast_remaining(world: WorldState) -> None:
     world.blasts[0].remaining = Tick(4)
 
 
+def _with_item(world: WorldState) -> WorldState:
+    """アイテムを1つ置いた状態。アイテムの中身を変える確かめの土台。"""
+    world.items.append(Item(id=world.ids.take(), cell=Cell(3, 1), kind=ItemKind.FIRE))
+    return world
+
+
+def _item_id(world: WorldState) -> None:
+    world.items[0].id = EntityId(world.items[0].id + 100)
+
+
+def _item_cell(world: WorldState) -> None:
+    world.items[0].cell = Cell(1, 3)
+
+
+def _item_kind(world: WorldState) -> None:
+    world.items[0].kind = ItemKind.BOMB
+
+
 class Test状態の要約:
     def test_同じ種から作れば同じ値になる(self) -> None:
         assert hash_world(make_world(9)) == hash_world(make_world(9))
@@ -216,6 +267,11 @@ class Test状態の要約:
             _active_bombs,
             _previous_input,
             _issue_id,
+            _hp,
+            _invulnerable,
+            _effect,
+            _special_charges,
+            _last_hit_by,
         ],
     )
     def test_結果を左右するものが1つ変われば_値が変わる(
@@ -250,6 +306,23 @@ class Test状態の要約:
         before = hash_world(world)
         change(world)
         assert hash_world(world) != before
+
+    @pytest.mark.parametrize("change", [_item_id, _item_cell, _item_kind])
+    def test_アイテムの中身が1つ変われば_値が変わる(
+        self, change: Callable[[WorldState], None]
+    ) -> None:
+        world = _with_item(make_world())
+        before = hash_world(world)
+        change(world)
+        assert hash_world(world) != before
+
+    def test_同じ長さでも_かかっている状態の種類が違えば_値が変わる(self) -> None:
+        """残り時間を種類の定義の順に並べて混ぜるので、どの種類かも値に効く。"""
+        slow = make_world()
+        reverse = make_world()
+        slow.players[0].effects.add(EffectKind.SLOW, Tick(10), Tick(30))
+        reverse.players[0].effects.add(EffectKind.REVERSE, Tick(10), Tick(30))
+        assert hash_world(slow) != hash_world(reverse)
 
     def test_爆弾の並びの順が変われば_値が変わる(self) -> None:
         """並びの順は、同じ tick に導火線の尽きた爆弾の爆発する順を決める。"""

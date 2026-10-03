@@ -1,35 +1,19 @@
 """爆弾を置く・導火線・爆発・誘爆・ブロック破壊・爆風の寿命の検査。"""
 
 from animal_bomber.domain.core.coord import Cell, Point
+from animal_bomber.domain.events import BlockDestroyed
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.query.board import blast_at, bomb_at, is_solid_for
 from animal_bomber.domain.rules.tuning import BLAST_DURATION, BOMB_FUSE
 from animal_bomber.domain.state.board import Tile
-from animal_bomber.domain.state.bomb import Bomb
-from animal_bomber.domain.state.player import Life, PlayerState
-from animal_bomber.domain.state.world import WorldState
+from animal_bomber.domain.state.player import Life
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.blast import add_blast, detonate
 from animal_bomber.domain.systems.bomb import place_bomb, remove_bomb
-from tests.helpers import advance, make_world, only_for
+from tests.helpers import advance, clear_board, make_world, only_for, put_bomb
 
 IDLE = PlayerInput.IDLE
 BOMB = PlayerInput.BOMB
-
-
-def clear_board(world: WorldState) -> None:
-    """壊せるブロックを全部取り除く。爆風の伸び方を確かめやすくするため。"""
-    for cell, tile in list(world.board.cells()):
-        if tile is Tile.SOFT:
-            world.board.put(cell, Tile.EMPTY)
-
-
-def put_bomb(world: WorldState, player: PlayerState, cell: Cell) -> Bomb:
-    """そのマスへプレイヤーを動かし、爆弾を置く。置けなければテストの誤り。"""
-    player.position = cell.center()
-    bomb = place_bomb(world, player)
-    assert bomb is not None, f"{cell} に置けなかった"
-    return bomb
 
 
 class Test爆弾を置く:
@@ -263,7 +247,7 @@ class Test爆発:
         爆弾と連鎖する。(3, 7) の爆風は右へ (4, 7)・(5, 7) と伸び、(5, 7) で止まる。
         途中で壊す形にすると、(3, 7) を処理するときには (5, 7) がもう空いていて、
         (6, 7) まで伸びる（壊れるのが連鎖の何番目かで、爆風の伸び方が変わる）。
-        2つの爆風が同じブロックに届くので、壊れた位置には (5, 7) が2回入る
+        2つの爆風が同じブロックに届いても、壊れた位置に (5, 7) は1回だけ入る
         （`Detonation.destroyed`）。
         """
         world = make_world()
@@ -278,9 +262,35 @@ class Test爆発:
         put_bomb(world, player, Cell(3, 7))
         result = detonate(world, first)
         assert result.exploded == 3
-        assert result.destroyed == (Cell(5, 7), Cell(5, 7))
+        assert result.destroyed == (Cell(5, 7),)
         assert blast_at(world, Cell(5, 7)) is not None
         assert blast_at(world, Cell(6, 7)) is None
+
+    def test_2つの爆弾の爆風が同じブロックに届いても_壊すのは1回(self) -> None:
+        """並んだ (5, 5) と (5, 6) の爆弾（火力 3）の爆風が、どちらも (5, 8) で止まる。
+
+        壊すたびにアイテムの抽選を引くので、2回壊すと同じマスにアイテムが2つ出うる。
+        TypeScript 版は段階 3 から 2026-10-04 まで、そうなっていた。原型は、ブロックを
+        壊す関数の入口で「もう壊れていれば帰る」ので1回だけ。
+        """
+        world = make_world()
+        clear_board(world)
+        player = world.players[0]
+        player.power = 3
+        player.max_bombs = 2
+        first = put_bomb(world, player, Cell(5, 5))
+        put_bomb(world, player, Cell(5, 6))
+        world.board.put(Cell(5, 8), Tile.SOFT)
+        before = world.rng.calls
+        result = detonate(world, first)
+        assert result.exploded == 2
+        assert result.destroyed == (Cell(5, 8),)
+        broken = [e for e in result.events if isinstance(e, BlockDestroyed)]
+        assert broken == [BlockDestroyed(cell=Cell(5, 8))]
+        # 抽選1回で引くのは、出るかで1回、出るなら種類で1回まで（2回引くと、この
+        # 種では3回になる）。
+        assert world.rng.calls - before <= 2
+        assert len([item for item in world.items if item.cell == Cell(5, 8)]) <= 1
 
     def test_盤面の外には爆風を置かない(self) -> None:
         world = make_world()
@@ -364,7 +374,10 @@ class Test誘爆:
         """(5, 5) の爆風（火力 2）が、同じ tick に導火線の尽きる (7, 5) の爆弾に届く。
 
         (7, 5) は先の連鎖の中で爆発し、自分の番が来たときにはもう盤面に無いので飛ばす。
-        期待する爆風の並びは、TypeScript 版の段階 2（9c89418）に同じ配置を流して出した。
+        期待する値は、TypeScript 版の段階 3（f95d2a5 に、壊れたブロックの一覧に同じ
+        マスを1回だけ入れる直しを当てたもの）に同じ配置を流して出した。爆風の並びは
+        段階 2 と同じ。2匹とも爆弾の上で被弾してアイテムを1つずつ吐き出すので、識別子は
+        段階 2 より2つ多い。
         """
         world = make_world(animals=("rabbit", "elephant"))
         clear_board(world)
@@ -393,8 +406,11 @@ class Test誘爆:
             (15, 7, 6, 1, False),
             (16, 6, 5, 1, False),
         ]
-        assert world.ids.issued == 16
+        assert world.ids.issued == 18
         assert [p.active_bombs for p in world.players] == [0, 0]
+        assert [p.hp for p in world.players] == [4, 4]
+        items = [(i.id, i.cell.col, i.cell.row, i.kind.value) for i in world.items]
+        assert items == [(17, 5, 5, "shoe"), (18, 9, 5, "bomb")]
 
     def test_同じtickの別々の連鎖では_先の連鎖が壊したブロックの先へ伸びる(
         self,
@@ -403,7 +419,10 @@ class Test誘爆:
 
         A は (5, 7) のブロックを壊す。A が先なら、B の爆風は空いた (5, 7) を抜け、
         (5, 4) のブロックまで届いて壊す。B が先なら、B の爆風は (5, 7) で止まり、
-        (5, 4) は残る。期待する値は TypeScript 版の段階 2 に同じ配置を流して出した。
+        (5, 4) は残る。期待する値は、TypeScript 版の段階 3（f95d2a5 に、壊れたブロックの
+        一覧に同じマスを1回だけ入れる直しを当てたもの）に同じ配置を流して出した
+        （識別子の数は、壊れたブロックから落ちたアイテムと、被弾して吐き出した
+        アイテムを含む）。
         """
         results = []
         for a_first in (True, False):
@@ -421,7 +440,7 @@ class Test誘爆:
             results.append(
                 (world.board.at(Cell(5, 4)), len(world.blasts), world.ids.issued)
             )
-        assert results == [(Tile.EMPTY, 23, 25), (Tile.SOFT, 20, 22)]
+        assert results == [(Tile.EMPTY, 23, 28), (Tile.SOFT, 20, 24)]
 
 
 class Test爆風の寿命:

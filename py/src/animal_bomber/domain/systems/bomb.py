@@ -11,6 +11,7 @@
 from collections.abc import Mapping
 
 from animal_bomber.domain.core.tick import Tick
+from animal_bomber.domain.events import BombPlaced, SimEvent
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.query.board import (
     bomb_at,
@@ -21,29 +22,55 @@ from animal_bomber.domain.query.board import (
 from animal_bomber.domain.rules.tuning import BOMB_FUSE
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.bomb import Bomb
+from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.player import (
     Life,
     PlayerId,
     PlayerState,
     just_pressed,
+    power_of,
 )
 from animal_bomber.domain.state.world import WorldState
 
 
-def step_bombs(world: WorldState, inputs: Mapping[PlayerId, PlayerInput]) -> None:
+def step_bombs(
+    world: WorldState, inputs: Mapping[PlayerId, PlayerInput]
+) -> list[SimEvent]:
     """爆弾を置き、導火線を進め、マスから出たプレイヤーを通り抜けの対象から外す。"""
-    _place(world, inputs)
+    events = _place(world, inputs)
     _advance_fuses(world)
     _release_pass_through(world)
+    return events
 
 
-def _place(world: WorldState, inputs: Mapping[PlayerId, PlayerInput]) -> None:
-    """爆弾のボタンを押した瞬間に、1つ置く。プレイヤー番号の順に置く。"""
+def _place(world: WorldState, inputs: Mapping[PlayerId, PlayerInput]) -> list[SimEvent]:
+    """爆弾のボタンを押した瞬間に、1つ置く。プレイヤー番号の順に置く。
+
+    ⚠️ 「勝手に設置」がかかっていると、押していなくても毎 tick 置こうとし、「爆弾
+    おけない」にも勝つ。2つの悪い状態が重なったときにどちらが勝つかを決めておかないと、
+    組み合わせで振る舞いが読めなくなる（原型の 3.0.2 で決めた順）。
+
+    ⚠️ 原型は「勝手に設置」で置こうとするのを 0.5 秒に1回にしている（置けなくても、
+    次は 0.5 秒後）。この版と TypeScript 版の段階 3 は毎 tick 置こうとするので、同時に
+    置ける数が2つ以上あると、歩いたマスに続けて置き、爆発で手持ちが戻った次の tick に
+    置き直す。2026-10-04 に見つかった違いで、合わせるかはまだ決めていない。合わせる
+    ときは、間隔を数える値を `PlayerState` と状態の要約に持たせる（記録から戻せる
+    ように）。
+    """
+    events: list[SimEvent] = []
     for player in world.players:
         if player.life is not Life.ALIVE:
             continue
-        if just_pressed(player, inputs[player.id], PlayerInput.BOMB):
-            place_bomb(world, player)
+        forced = player.effects.has(EffectKind.AUTOBOMB)
+        if not forced:
+            if player.effects.has(EffectKind.NOBOMB):
+                continue
+            if not just_pressed(player, inputs[player.id], PlayerInput.BOMB):
+                continue
+        bomb = place_bomb(world, player)
+        if bomb is not None:
+            events.append(BombPlaced(cell=bomb.cell, owner=bomb.owner))
+    return events
 
 
 def _advance_fuses(world: WorldState) -> None:
@@ -83,7 +110,7 @@ def place_bomb(world: WorldState, player: PlayerState) -> Bomb | None:
         id=world.ids.take(),
         cell=cell,
         owner=player.id,
-        power=player.power,
+        power=power_of(player),
         fuse=BOMB_FUSE,
         pass_through={other.id for other in players_on(world, cell)},
     )

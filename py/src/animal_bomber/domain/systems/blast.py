@@ -21,8 +21,8 @@
   爆風の届く範囲と盤面も変える
 
 識別子（`world.ids`）はこの順に発番されるので、順を変えると識別子も状態の要約も変わる。
-TypeScript 版の段階 2 と同じ順にしてある。順のそれぞれは `tests/systems/test_bomb.py`
-の順のテストが、全体は TypeScript 版と同じ台本を流す `tests/systems/test_bomb_ts.py` が
+TypeScript 版と同じ順にしてある。順のそれぞれは `tests/systems/test_bomb.py` の順の
+テストが、全体は TypeScript 版と同じ台本を流す `tests/systems/test_simulation_ts.py` が
 確かめる。
 """
 
@@ -31,50 +31,62 @@ from dataclasses import dataclass
 
 from animal_bomber.domain.core.coord import Cell, Direction
 from animal_bomber.domain.core.tick import Tick
-from animal_bomber.domain.query.board import bomb_at
+from animal_bomber.domain.events import (
+    BlockDestroyed,
+    Exploded,
+    ItemBurned,
+    SimEvent,
+)
+from animal_bomber.domain.query.board import blast_at, bomb_at
 from animal_bomber.domain.rules.tuning import BLAST_DURATION
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.bomb import Blast, Bomb
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems.bomb import remove_bomb
+from animal_bomber.domain.systems.items import roll_drop
 
 
 @dataclass(frozen=True, slots=True)
 class Detonation:
-    """1つの爆弾から始まった連鎖の結果。
-
-    いまはテストが連鎖の数と壊れたブロックを確かめるために返す（段階 3 で、起きた
-    イベントを返す形の土台にする）。
-    """
+    """1つの爆弾から始まった連鎖の結果。"""
 
     exploded: int
     """この連鎖で爆発した爆弾の数（始めの1つを含む）。"""
     destroyed: tuple[Cell, ...]
-    """爆風が届いた、壊せるブロックの位置。届いた順に並ぶ。
+    """壊れたブロックの位置。初めて爆風が届いた順に並び、同じマスは1回だけ入る。
 
-    ⚠️ 1つの連鎖の中で、別々の爆弾の爆風が同じブロックに届くと、そのマスは届いた
-    回数だけ入る（TypeScript 版の段階 2 と同じ）。いまは同じマスを二度空けても害は
-    無い。段階 3 で、壊したブロックからアイテムを落とす抽選を足すときに、1ブロックに
-    1回にするか（原型）、入った回数だけ引くか（TypeScript 版）を決める。
+    ⚠️ 1つの連鎖の中で、別々の爆弾の爆風が同じブロックに届いても、1回だけ入れる。
+    壊れたブロックごとにアイテムを落とす抽選を引くので、重なると同じマスにアイテムが
+    2つ出うる。原型は、ブロックを壊す関数（destroySoft）の入口で「もう壊れていれば
+    帰る」ので1回だけ。この版は一覧に入れるときに除く（TypeScript 版も同じ。段階 3
+    から 2026-10-04 まで重なって入り、抽選を2回引いていた）。
     """
+    events: tuple[SimEvent, ...]
+    """この連鎖で起きたイベント（焼けたアイテム・壊れたブロック・落ちたアイテム）。"""
 
 
-def step_blasts(world: WorldState) -> None:
+def step_blasts(world: WorldState) -> list[SimEvent]:
     """導火線の尽きた爆弾を連鎖ごと爆発させ、爆風の残り時間を進める。"""
-    _detonate_expired(world)
+    events = _detonate_expired(world)
     _expire_blasts(world)
+    return events
 
 
-def _detonate_expired(world: WorldState) -> None:
+def _detonate_expired(world: WorldState) -> list[SimEvent]:
     # 爆発させると world.bombs が変わるので、対象を先に決めておく。
     # `not bomb.chained` は、tick の始めにはいつも成り立つ（`Bomb.chained`）。
     # TypeScript 版と同じ形に揃えて残す。
     expired = [bomb for bomb in world.bombs if bomb.fuse <= 0 and not bomb.chained]
+    events: list[SimEvent] = []
     for bomb in expired:
         # 先に起きた連鎖に巻き込まれて、もう盤面から消えていることがある。
-        if bomb in world.bombs:
-            detonate(world, bomb)
+        if bomb not in world.bombs:
+            continue
+        result = detonate(world, bomb)
+        events.append(Exploded(cell=bomb.cell, owner=bomb.owner, count=result.exploded))
+        events.extend(result.events)
+    return events
 
 
 def _expire_blasts(world: WorldState) -> None:
@@ -107,15 +119,40 @@ def detonate(world: WorldState, first: Bomb) -> Detonation:
                 if reached is not None and not reached.chained:
                     reached.chained = True
                     queue.append(reached)
-                # 壊せるブロックは、そのマスまで爆風が届いて止まる。
+                # 壊せるブロックは、そのマスまで爆風が届いて止まる。別の爆弾の爆風が
+                # もう届いていれば入れない（`Detonation.destroyed`）。
                 if tile is Tile.SOFT:
-                    destroyed.append(cell)
+                    if cell not in destroyed:
+                        destroyed.append(cell)
                     break
 
-    # ⚠️ ブロックを壊すのは、この連鎖をすべて処理し終えたあと（モジュールの説明）。
+    # ⚠️ 順が2つの意味で効く。
+    # 1. 爆風に触れたアイテムを焼くのが先、ブロックを壊すのがあと。逆にすると、いま
+    #    壊したブロックから出たアイテムを同じ爆風ですぐ焼いてしまい、アイテムが
+    #    出てこなくなる。
+    # 2. ブロックを壊すのは、この連鎖をすべて処理し終えたあと（モジュールの説明）。
+    events = _burn_items(world)
     for cell in destroyed:
         world.board.put(cell, Tile.EMPTY)
-    return Detonation(exploded=exploded, destroyed=tuple(destroyed))
+        events.append(BlockDestroyed(cell=cell))
+        events.extend(roll_drop(world, cell))
+    return Detonation(
+        exploded=exploded, destroyed=tuple(destroyed), events=tuple(events)
+    )
+
+
+def _burn_items(world: WorldState) -> list[SimEvent]:
+    """爆風（いま出ているすべて）の乗ったマスのアイテムを焼く。
+
+    後ろから順に見て焼く（TypeScript 版と同じ順。イベントもこの順に並ぶ）。
+    """
+    events: list[SimEvent] = []
+    for item in reversed(world.items):
+        if blast_at(world, item.cell) is None:
+            continue
+        world.items.remove(item)
+        events.append(ItemBurned(cell=item.cell, kind=item.kind))
+    return events
 
 
 def add_blast(

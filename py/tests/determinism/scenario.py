@@ -1,8 +1,9 @@
 """決定性の検査で共通に流す、台本どおりの試合。
 
 人間の代わりに台本が操作する。4人とも違う周期で向きを替え、ときどき斜めに押し、
-爆弾と技のボタンも押す（爆弾は置かれて爆発し、ブロックを壊す。技はまだ何も起きないが、
-記録には残る）。
+ときどき向きのボタンを全部離し、爆弾と技のボタンも押す（爆弾は置かれて爆発し、ブロックを
+壊し、プレイヤーに当たる。技はまだ何も起きないが、記録には残る）。盤面にはアイテムを
+並べておく（拾う・効果をかける・悪い状態で動く・焼ける、を通すため）。
 
 ルールの層に処理を足したら、台本がその処理を通るようにする（`test_hashseed.py` は、
 台本が通らない処理の set の反復を見つけられない）。
@@ -16,7 +17,9 @@ from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.core.tick import MatchTick
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.input.sources import InputGatherer, InputSource
+from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.state.board import Tile
+from animal_bomber.domain.state.item import Item
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState, create_world
 from animal_bomber.domain.systems import simulation
@@ -26,7 +29,13 @@ from animal_bomber.net.input_log import (
     ReplayInputSource,
 )
 
-SEED = 4649
+SEED = 4658
+"""盤面と試合の乱数の種。
+
+段階 3 で 4649 から替えた。4640〜4680 を試し、悪い状態が8つともかかり、チキンを拾い、
+手を離しても滑る・とまれないで進む・壁で滑りが終わる・反転して進む、をどれも通る種の
+うち、壊れるブロックがいちばん多いものを選んだ。
+"""
 ANIMALS = ("rabbit", "elephant", "mole", "fox")
 TICKS = 600
 SHOES = (0, 3, 9, 13)
@@ -43,6 +52,25 @@ POWERS = (1, 3, 2, 4)
 
 _TURNS = (PlayerInput.RIGHT, PlayerInput.DOWN, PlayerInput.LEFT, PlayerInput.UP)
 _PERIODS = (37, 23, 29, 41)
+_DIRECTIONS = PlayerInput.UP | PlayerInput.DOWN | PlayerInput.LEFT | PlayerInput.RIGHT
+_PLACED_KINDS = (
+    ItemKind.POOP,
+    ItemKind.BANANA,
+    ItemKind.POOP,
+    ItemKind.ONION,
+    ItemKind.POOP,
+    ItemKind.CHICKEN,
+    ItemKind.POOP,
+    ItemKind.BOMB,
+    ItemKind.POOP,
+    ItemKind.FIRE,
+    ItemKind.POOP,
+    ItemKind.SHOE,
+)
+"""並べるアイテムの種類（この順にくり返す）。
+
+うんこでかかる状態は乱数で決まるので、うんこを多めにする。
+"""
 
 
 def scripted(player_id: PlayerId, tick: MatchTick) -> PlayerInput:
@@ -51,6 +79,9 @@ def scripted(player_id: PlayerId, tick: MatchTick) -> PlayerInput:
     player_input = _TURNS[(tick // period + player_id) % len(_TURNS)]
     if tick % 50 < 5:
         player_input |= PlayerInput.DOWN | PlayerInput.RIGHT
+    # 向きのボタンを全部離す間。滑る・とまれないで、手を離しても進む動きを通す。
+    if (tick + 7 * player_id) % 61 < 15:
+        player_input &= ~_DIRECTIONS
     if tick % 70 == 0:
         player_input |= PlayerInput.BOMB
     if tick % 90 < 3:
@@ -75,6 +106,9 @@ def new_world(seed: int = SEED) -> WorldState:
     プレイヤーごとに変えてある。ブロックを全部残すと、開始位置のまわりから出られず、
     ほとんど動かない（動かないと、操作が違っても同じ状態になり、記録を読んでいるかを
     確かめられない）。全部取り除くと、爆風がブロックを壊す処理を通らない。
+
+    空いたマスのうち、列と行の和が偶数のマスにアイテムを置く（左上から順に、
+    `_PLACED_KINDS` の種類をくり返す）。
     """
     world = create_world(seed, ANIMALS)
     for cell, tile in list(world.board.cells()):
@@ -82,6 +116,14 @@ def new_world(seed: int = SEED) -> WorldState:
             world.board.put(cell, Tile.EMPTY)
         if tile is not Tile.HARD and _kept_soft(cell):
             world.board.put(cell, Tile.SOFT)
+    open_cells = [
+        cell
+        for cell, tile in world.board.cells()
+        if tile is Tile.EMPTY and (cell.col + cell.row) % 2 == 0
+    ]
+    for n, cell in enumerate(open_cells):
+        kind = _PLACED_KINDS[n % len(_PLACED_KINDS)]
+        world.items.append(Item(id=world.ids.take(), cell=cell, kind=kind))
     for player, shoes, max_bombs, power in zip(
         world.players, SHOES, MAX_BOMBS, POWERS, strict=True
     ):

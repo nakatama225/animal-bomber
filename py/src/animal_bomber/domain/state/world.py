@@ -11,6 +11,7 @@ from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.tuning import SPAWN_CELLS
 from animal_bomber.domain.state.board import Board, build_board
 from animal_bomber.domain.state.bomb import Blast, Bomb
+from animal_bomber.domain.state.item import Item
 from animal_bomber.domain.state.player import PLAYER_IDS, PlayerState
 
 
@@ -25,7 +26,7 @@ class WorldState:
     足すと、通信対戦で突き合わせるものが無駄に増える。左右するものを足したら、
     `hash_world` にも足す（足さないと、その値がずれても気づけない）。
 
-    いまは段階 2 までで使うものだけを持つ。
+    いまは段階 3 までで使うものだけを持つ。
     """
 
     now: Tick
@@ -46,8 +47,10 @@ class WorldState:
     """
     blasts: list[Blast] = field(default_factory=list)
     """いま出ている爆風。置かれた順に並ぶ。"""
+    items: list[Item] = field(default_factory=list)
+    """盤面に落ちているアイテム。落ちた順に並ぶ。"""
     ids: IdSource = field(default_factory=IdSource)
-    """盤面に置かれるもの（爆弾・爆風）の識別子を発番する。"""
+    """盤面に置かれるもの（爆弾・爆風・アイテム）の識別子を発番する。"""
 
 
 def create_world(seed: int, animals: Sequence[str]) -> WorldState:
@@ -111,6 +114,11 @@ def hash_world(world: WorldState) -> int:
             .add_int(player.max_bombs)
             .add_int(player.active_bombs)
             .add_int(player.previous_input)
+            .add_int(player.hp)
+            .add_int(player.invulnerable_until)
+            .add_text(player.effects.encode())
+            .add_int(player.special_charges)
+            .add_int(-1 if player.last_hit_by is None else player.last_hit_by)
         )
     # 並びの順も混ぜる。並びが違えば、導火線の尽きた爆弾の爆発する順が変わる。
     for bomb in world.bombs:
@@ -137,5 +145,12 @@ def hash_world(world: WorldState) -> int:
             .add_int(blast.owner)
             .add_bool(blast.is_center)
             .add_int(blast.remaining)
+        )
+    for item in world.items:
+        (
+            hasher.add_int(item.id)
+            .add_int(item.cell.col)
+            .add_int(item.cell.row)
+            .add_text(item.kind.value)
         )
     return hasher.value
