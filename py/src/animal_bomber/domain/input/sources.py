@@ -64,6 +64,37 @@ class IdleSource:
         return PlayerInput.IDLE
 
 
+@dataclass(frozen=True, slots=True)
+class EitherSource:
+    """同じプレイヤーの窓口をいくつか合わせる。どれかで押していれば、押したことにする。
+
+    1人がキーボードとゲームパッドのどちらでも遊べるようにするため。
+    """
+
+    player_id: PlayerId
+    sources: tuple[InputSource, ...]
+
+    def __post_init__(self) -> None:
+        """合わせる窓口が、どれも同じプレイヤーの窓口かを確かめる。
+
+        Raises:
+            ValueError: ほかのプレイヤーの窓口が混ざっているとき。混ざったまま
+                合わせると、2人の操作で1人が動く。
+        """
+        others = [s.player_id for s in self.sources if s.player_id != self.player_id]
+        if others:
+            raise ValueError(
+                f"プレイヤー {self.player_id} の窓口に、ほかのプレイヤー {others} の"
+                "窓口が混ざっている"
+            )
+
+    def next_input(self, world: WorldState, tick: MatchTick) -> PlayerInput:
+        player_input = PlayerInput.IDLE
+        for source in self.sources:
+            player_input |= source.next_input(world, tick)
+        return player_input
+
+
 class InputGatherer:
     """窓口を集めて、1 tick ぶんの入力をまとめて取り出す。
 

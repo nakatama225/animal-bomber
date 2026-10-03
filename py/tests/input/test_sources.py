@@ -6,7 +6,7 @@ import pytest
 
 from animal_bomber.domain.core.tick import MatchTick
 from animal_bomber.domain.input.player_input import PlayerInput
-from animal_bomber.domain.input.sources import IdleSource, InputGatherer
+from animal_bomber.domain.input.sources import EitherSource, IdleSource, InputGatherer
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.net.input_log import InputLog, RecordingInputSource
@@ -92,3 +92,29 @@ class Test入力を集める:
             gatherer.gather(world, MatchTick(0))
         # 途中まで聞いていたら、記録する窓口が記録を残すはず。記録が空であることを見る。
         assert log.encode() == ""
+
+
+class Test窓口を合わせる:
+    def test_どれかで押していれば_押したことにする(self) -> None:
+        world = make_world()
+        either = EitherSource(
+            0, (Fixed(0, PlayerInput.UP), Fixed(0, PlayerInput.UP | PlayerInput.BOMB))
+        )
+        assert (
+            either.next_input(world, MatchTick(0)) == PlayerInput.UP | PlayerInput.BOMB
+        )
+
+    def test_どれも押していなければ_何も押していない(self) -> None:
+        world = make_world()
+        either = EitherSource(0, (IdleSource(0), IdleSource(0)))
+        assert either.next_input(world, MatchTick(0)) is PlayerInput.IDLE
+
+    def test_合わせた窓口のどれにも_同じ_tick_を渡す(self) -> None:
+        world = make_world()
+        first, second = Fixed(1, PlayerInput.IDLE), Fixed(1, PlayerInput.IDLE)
+        EitherSource(1, (first, second)).next_input(world, MatchTick(7))
+        assert first.asked == second.asked == [MatchTick(7)]
+
+    def test_ほかのプレイヤーの窓口が混ざっていれば作れない(self) -> None:
+        with pytest.raises(ValueError, match=r"ほかのプレイヤー \[1\]"):
+            EitherSource(0, (IdleSource(0), IdleSource(1)))
