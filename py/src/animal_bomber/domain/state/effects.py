@@ -31,7 +31,7 @@ class EffectKind(Enum):
     WEAK = "weak"
     """爆風1マス。置く爆弾の火力が下がる。"""
     AUTOBOMB = "autobomb"
-    """勝手に設置。押していなくても、毎 tick 置こうとする。"""
+    """勝手に設置。押していなくても、0.5 秒に1回置こうとする（`AUTOBOMB_INTERVAL`）。"""
     SLOW = "slow"
     """超スロー。極端に遅くなる。"""
 

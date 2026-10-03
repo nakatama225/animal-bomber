@@ -23,6 +23,15 @@ def blast_at(world: WorldState, cell: Cell) -> Blast | None:
     return next((blast for blast in world.blasts if blast.cell == cell), None)
 
 
+def last_blast_at(world: WorldState, cell: Cell) -> Blast | None:
+    """そのマスに乗っている爆風のうち、いちばんあとに置かれたもの。無ければ None。
+
+    爆風は置いた順に並んでいる（`systems/blast.py` の `add_blast` が末尾に足し、
+    消すときも並びを保つ）。
+    """
+    return next((blast for blast in reversed(world.blasts) if blast.cell == cell), None)
+
+
 def item_at(world: WorldState, cell: Cell) -> Item | None:
     """そのマスに落ちているアイテム（いちばん先に落ちたもの）。無ければ None。"""
     return next((item for item in world.items if item.cell == cell), None)

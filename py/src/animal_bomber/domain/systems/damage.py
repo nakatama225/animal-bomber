@@ -13,7 +13,7 @@ import math
 from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import PlayerDown, PlayerHurt, SimEvent
-from animal_bomber.domain.query.board import blast_at
+from animal_bomber.domain.query.board import last_blast_at
 from animal_bomber.domain.rules.tuning import BLAST_DAMAGE, BLAST_HITBOX, INVULNERABLE
 from animal_bomber.domain.state.player import (
     Life,
@@ -41,14 +41,15 @@ def step_damage(world: WorldState) -> list[SimEvent]:
 def _blast_owner_touching(world: WorldState, player: PlayerState) -> PlayerId | None:
     """体（半径 `BLAST_HITBOX`）に触れている爆風を出した爆弾を置いたプレイヤー。
 
-    重なるマスを、上の行から、各行は左から順に見て、最初に見つかった爆風で決める
-    （TypeScript 版と同じ順）。触れていなければ None。
+    重なるマスを、上の行から、各行は左から順に見て、最初に爆風が見つかったマスで決める
+    （原型・TypeScript 版と同じ順）。触れていなければ None。
 
-    ⚠️ 1つのマスに別々のプレイヤーの爆風が重なっているときは、先に置かれた爆風で
-    決める（`blast_at`。TypeScript 版も同じ）。原型はあとに置かれた爆風で決める（爆風の
-    持ち主の表を、置くたびに上書きする）。誘爆させられた自分の爆弾の上で当たると、原型
-    では自分、この版では誘爆させたプレイヤーになる。2026-10-04 に見つかった違いで、
-    合わせるかはまだ決めていない。
+    ⚠️ 1つのマスに別々のプレイヤーの爆風が重なっているときは、あとから置かれた爆風で
+    決める（原型と同じ。原型は爆風の持ち主の表を、置くたびに上書きする）。相手の爆風に
+    誘爆された自分の爆弾のマスで当たると、自爆として数える。先に置かれた爆風で決めると
+    相手の手柄になり、自爆の割合の数え方が原型と変わる（原型が持ち主を控えていたのは、
+    自爆の割合を測るため）。爆風はどれも同じ長さで残るので、あとから置いた爆風が先に
+    消えることは無い。TypeScript 版は 32bf68b で合わせた。
     """
     position = player.position
     cols = range(
@@ -59,7 +60,7 @@ def _blast_owner_touching(world: WorldState, player: PlayerState) -> PlayerId | 
     )
     for row in rows:
         for col in cols:
-            blast = blast_at(world, Cell(col, row))
+            blast = last_blast_at(world, Cell(col, row))
             if blast is not None:
                 return blast.owner
     return None

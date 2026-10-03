@@ -26,6 +26,7 @@ from animal_bomber.domain.rules.items import (
     ItemKind,
 )
 from animal_bomber.domain.rules.tuning import (
+    AUTOBOMB_INTERVAL,
     BLAST_DAMAGE,
     INVULNERABLE,
     MAX_BOMBS,
@@ -270,6 +271,67 @@ class Test悪い状態の作用:
         assert len(world.bombs) == 1
         assert BombPlaced(cell=Cell(1, 1), owner=0) in events
 
+    def test_勝手に設置は_半秒に1回だけ置こうとする(self) -> None:
+        """毎 tick 置こうとすると、歩きながら隣り合うマスに続けて置く。
+
+        原型は 0.5 秒に1回で、素の速さで歩くと1マスおきに並ぶ。
+        """
+        world = make_world()
+        clear_board(world)
+        player = world.players[0]
+        player.max_bombs = 3
+        _add(player, EffectKind.AUTOBOMB, 4)
+        placed = []
+        for tick in range(70):
+            events = simulation.step(world, only_for(world, 0, RIGHT))
+            if any(isinstance(event, BombPlaced) for event in events):
+                placed.append(tick)
+        assert placed == [0, AUTOBOMB_INTERVAL, AUTOBOMB_INTERVAL * 2]
+        cells = [bomb.cell for bomb in world.bombs]
+        assert cells == [Cell(1, 1), Cell(3, 1), Cell(5, 1)]
+
+    def test_勝手に設置は_手持ちが戻っても次の拍まで置き直さない(self) -> None:
+        """毎 tick 置こうとすると、爆発で手持ちが戻った次の tick に置き直す。"""
+        world = make_world()
+        clear_board(world)
+        player = world.players[0]
+        player.hp = 100
+        _add(player, EffectKind.AUTOBOMB, 4)
+        placed = []
+        for tick in range(200):
+            events = simulation.step(world, only_for(world, 0, IDLE))
+            if any(isinstance(event, BombPlaced) for event in events):
+                placed.append(tick)
+        assert len(placed) >= 2
+        assert all(tick % AUTOBOMB_INTERVAL == 0 for tick in placed), placed
+
+    def test_勝手に設置の拍の合間でも_ボタンを押せば置ける(self) -> None:
+        """原型も、ボタンで置く処理と勝手に設置は別々に置こうとする。"""
+        world = make_world()
+        clear_board(world)
+        player = world.players[0]
+        player.max_bombs = 3
+        _add(player, EffectKind.AUTOBOMB, 4)
+        simulation.step(world, only_for(world, 0, IDLE))
+        # 隣のマスへ歩く。次の拍より手前で止める。
+        advance(world, only_for(world, 0, RIGHT), 20)
+        events = simulation.step(world, only_for(world, 0, RIGHT | PlayerInput.BOMB))
+        assert [event for event in events if isinstance(event, BombPlaced)] == [
+            BombPlaced(cell=Cell(2, 1), owner=0)
+        ]
+        assert len(world.bombs) == 2
+
+    def test_勝手に設置が切れても_待ちは残る(self) -> None:
+        """待ちを 0 に戻すのはラウンドの始まりだけ（原型と同じ）。"""
+        world = make_world()
+        clear_board(world)
+        player = world.players[0]
+        _add(player, EffectKind.AUTOBOMB, 4)
+        simulation.step(world, only_for(world, 0, IDLE))
+        player.effects.clear(EffectKind.AUTOBOMB)
+        advance(world, only_for(world, 0, IDLE), 10)
+        assert player.autobomb_wait == AUTOBOMB_INTERVAL
+
     def test_爆風1マスの状態では_置く爆弾の火力が下がる(self) -> None:
         world = make_world()
         player = world.players[0]
@@ -376,6 +438,28 @@ class Test被弾:
         other.position = Cell(21, 15).center()
         advance(world, only_for(world, 0, IDLE), 200)
         assert target.last_hit_by == 1
+
+    def test_爆風が重なったマスでは_あとから置かれた爆風の持ち主が当てたことになる(
+        self,
+    ) -> None:
+        """相手の爆風に誘爆された自分の爆弾のマスで当たったら、自爆として数える。
+
+        原型が爆風の持ち主を控えていたのは、自爆の割合を測るため。3つの台本
+        （`test_simulation_ts.py`）は、別々のプレイヤーの爆風が重なったマスで当たる場面を
+        通らないので、ここで確かめる（TypeScript 版の同じ名前のテストと同じ場面）。
+        """
+        world = make_world()
+        clear_board(world)
+        first, second = world.players
+        first.power = 2
+        trigger = put_bomb(world, first, Cell(5, 5))
+        put_bomb(world, second, Cell(7, 5))
+        first.position = Cell(1, 1).center()
+        detonate(world, trigger)
+        owners = [blast.owner for blast in world.blasts if blast.cell == Cell(7, 5)]
+        assert owners == [0, 1]
+        assert PlayerHurt(target=1, by=1, amount=BLAST_DAMAGE) in step_damage(world)
+        assert second.last_hit_by == 1
 
     def test_被弾するとアイテムを1つ吐き出す(self) -> None:
         world = make_world()

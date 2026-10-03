@@ -50,6 +50,7 @@ class Test始めの状態:
             assert player.invulnerable_until == 0
             assert player.effects.active() == []
             assert (player.special_charges, player.last_hit_by) == (0, None)
+            assert player.autobomb_wait == 0
         assert world.items == []
 
     @pytest.mark.parametrize("count", [0, 5])
@@ -148,6 +149,10 @@ def _special_charges(world: WorldState) -> None:
 def _last_hit_by(world: WorldState) -> None:
     # 始めは None。番号 0 と取り違えない（要約では None を -1 として混ぜる）。
     world.players[1].last_hit_by = 0
+
+
+def _autobomb_wait(world: WorldState) -> None:
+    world.players[1].autobomb_wait = Tick(5)
 
 
 def _with_bomb_and_blast(world: WorldState) -> WorldState:
@@ -272,6 +277,7 @@ class Test状態の要約:
             _effect,
             _special_charges,
             _last_hit_by,
+            _autobomb_wait,
         ],
     )
     def test_結果を左右するものが1つ変われば_値が変わる(

@@ -155,10 +155,12 @@ set の反復は、import でも構文木でも止められません。`tests/de
   `event_row`（`tests/systems/test_simulation_ts.py`）が mypy で失敗します。扱いを書いてから
   完了としてください。`case _:` には `assert_never` だけを置きます
 - `tests/systems/test_simulation_ts.py` の固定値は、TypeScript 版の段階 3（f95d2a5）に、
-  7825fac と同じ直し（壊れたブロックの一覧に同じマスを1回だけ入れる）を当て、同じ台本を流して
-  出したものです。段階を進めて出し直すときも、TypeScript 版のその段階のコミットに同じ直しを
-  当ててから流してください（段階のコミットはどれも 7825fac より前で、直しが入っていません。
-  爆発の処理は段階 4 までは `systems/BlastSystem.ts`、段階 5a からは `mutations/explode.ts`）。
+  あとから TypeScript 版を原型に合わせた直しを当て、同じ台本を流して出したものです。
+  当てる直しは、7825fac（壊れたブロックの一覧に同じマスを1回だけ入れる）と、32bf68b
+  （「勝手に設置」は 0.5 秒に1回だけ置こうとする・重なった爆風はあとから置かれた爆風の持ち主）。
+  段階を進めて出し直すときも、TypeScript 版のその段階のコミットに同じ直しを当ててから
+  流してください（段階のコミットはどれも直しより前です。爆発の処理は段階 4 までは
+  `systems/BlastSystem.ts`、段階 5a からは `mutations/explode.ts`）。
   どのコミットに何を当てて出したかを、テストの説明に書いてください
 - `tests/systems/test_match_invariants.py` は、試合を通して崩れない約束（同じマスにアイテムが
   2つ並ばない）を毎 tick 確かめます。約束を崩す仕組みを足すときは、約束のほうから決め直して

@@ -19,7 +19,7 @@ from animal_bomber.domain.query.board import (
     player_by_id,
     players_on,
 )
-from animal_bomber.domain.rules.tuning import BOMB_FUSE
+from animal_bomber.domain.rules.tuning import AUTOBOMB_INTERVAL, BOMB_FUSE
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.bomb import Bomb
 from animal_bomber.domain.state.effects import EffectKind
@@ -44,33 +44,42 @@ def step_bombs(
 
 
 def _place(world: WorldState, inputs: Mapping[PlayerId, PlayerInput]) -> list[SimEvent]:
-    """爆弾のボタンを押した瞬間に、1つ置く。プレイヤー番号の順に置く。
+    """爆弾のボタンを押した瞬間と、「勝手に設置」の拍に、1つ置く。番号の順に置く。
 
-    ⚠️ 「勝手に設置」がかかっていると、押していなくても毎 tick 置こうとし、「爆弾
-    おけない」にも勝つ。2つの悪い状態が重なったときにどちらが勝つかを決めておかないと、
-    組み合わせで振る舞いが読めなくなる（原型の 3.0.2 で決めた順）。
-
-    ⚠️ 原型は「勝手に設置」で置こうとするのを 0.5 秒に1回にしている（置けなくても、
-    次は 0.5 秒後）。この版と TypeScript 版の段階 3 は毎 tick 置こうとするので、同時に
-    置ける数が2つ以上あると、歩いたマスに続けて置き、爆発で手持ちが戻った次の tick に
-    置き直す。2026-10-04 に見つかった違いで、合わせるかはまだ決めていない。合わせる
-    ときは、間隔を数える値を `PlayerState` と状態の要約に持たせる（記録から戻せる
-    ように）。
+    ⚠️ 「勝手に設置」がかかっていると、「爆弾おけない」にも勝つ。2つの悪い状態が
+    重なったときにどちらが勝つかを決めておかないと、組み合わせで振る舞いが読めなく
+    なる（原型の 3.0.2 で決めた順）。拍の合間にボタンで置くこともできる（原型と同じ）。
     """
     events: list[SimEvent] = []
     for player in world.players:
         if player.life is not Life.ALIVE:
             continue
+        beat = _autobomb_beat(player)
         forced = player.effects.has(EffectKind.AUTOBOMB)
-        if not forced:
-            if player.effects.has(EffectKind.NOBOMB):
-                continue
-            if not just_pressed(player, inputs[player.id], PlayerInput.BOMB):
-                continue
+        if not forced and player.effects.has(EffectKind.NOBOMB):
+            continue
+        if not beat and not just_pressed(player, inputs[player.id], PlayerInput.BOMB):
+            continue
         bomb = place_bomb(world, player)
         if bomb is not None:
             events.append(BombPlaced(cell=bomb.cell, owner=bomb.owner))
     return events
+
+
+def _autobomb_beat(player: PlayerState) -> bool:
+    """「勝手に設置」が置こうとする拍か。かかっている間だけ、待ちを1 tick 進める。
+
+    前にかかったときの待ちが残っていなければ、かかった次の tick が最初の拍になり、
+    そのあとは `AUTOBOMB_INTERVAL` ごと。置けなかった拍も、次は1拍あと（原型と同じ）。
+    """
+    if not player.effects.has(EffectKind.AUTOBOMB):
+        return False
+    wait = max(0, player.autobomb_wait - 1)
+    if wait > 0:
+        player.autobomb_wait = Tick(wait)
+        return False
+    player.autobomb_wait = AUTOBOMB_INTERVAL
+    return True
 
 
 def _advance_fuses(world: WorldState) -> None:

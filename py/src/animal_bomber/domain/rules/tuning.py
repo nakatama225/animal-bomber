@@ -203,3 +203,14 @@ SLIDE_SPEED_RATIO: Final = 1.25
 
 WEAKENED_POWER: Final = 1
 """「爆風1マス」がかかっているときの火力。"""
+
+AUTOBOMB_INTERVAL_SECONDS: Final = 0.5
+"""「勝手に設置」が爆弾を置こうとする間隔（秒）。置けなかった拍も、次は1拍あと。
+
+⚠️ 毎 tick 置こうとしない。毎 tick だと、歩きながら隣り合うマスに続けて置き、爆発で
+手持ちが戻った次の tick に置き直す。原型は 0.5 秒に1回で、素の速さで歩くと1マス
+おきに並ぶ（TypeScript 版も 32bf68b で合わせた）。
+"""
+
+AUTOBOMB_INTERVAL: Final = seconds_to_ticks(AUTOBOMB_INTERVAL_SECONDS)
+"""「勝手に設置」が爆弾を置こうとする間隔（tick）。30。"""
