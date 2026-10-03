@@ -62,8 +62,10 @@ class Board:
     def at(self, cell: Cell) -> Tile:
         """そのマスの中身。盤面の外は壊せない壁として返す。
 
-        外を壁として返すので、当たり判定や、のちに作る爆風の伸び方は、範囲の確認を
-        しなくてよい。このゲームでは、盤面の外へは何も出られないので、それで正しい。
+        外を壁として返すので、当たり判定や爆風の伸び方は、範囲の確認をしなくてよい。
+        このゲームでは、盤面の外へは何も出られないので、それで正しい。通れるかどうかは
+        爆弾や、どのプレイヤーが見るかでも変わるので、`query/board.py` の
+        `is_solid_for` で見る。
         """
         if not self.contains(cell):
             return Tile.HARD
@@ -83,10 +85,6 @@ class Board:
         if not self.contains(cell):
             raise ValueError(f"盤面の外は書き換えられない: {cell}")
         self._tiles[cell.row * self._cols + cell.col] = tile
-
-    def is_blocked(self, cell: Cell) -> bool:
-        """そのマスが通れないか（盤面の外も通れない）。"""
-        return self.at(cell) is not Tile.EMPTY
 
     def cells(self) -> Iterator[tuple[Cell, Tile]]:
         """全マスを、左上から行ごとに順に返す。"""

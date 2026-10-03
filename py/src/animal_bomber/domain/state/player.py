@@ -1,8 +1,13 @@
 """プレイヤー1人ぶんの状態。
 
-いまは段階 1 で使うもの（位置・向き・生死・靴の段数）だけを持つ。体力や爆弾の数は、
-使う段階で足す。使わない項目を先に置くと、値が正しいかを確かめるテストが無いまま
-状態の要約に混ざる。
+「プレイヤー」は、盤面にいる動物1匹を指す（1試合に最大4匹。番号は `PlayerId` の
+0〜3）。人間が操作していても CPU が操作していても同じ型で、ルールの層は区別しない。
+誰が操作するかは、入力の出どころ（`domain/input/sources.py` の窓口）の違いだけに
+なっている。
+
+いまは段階 2 までで使うもの（位置・向き・生死・靴の段数・火力・同時に置ける爆弾の数・
+盤面に出ている爆弾の数・前の tick の入力）だけを持つ。体力は使う段階 3 で足す。使わない
+項目を先に置くと、値が正しいかを確かめるテストが無いまま状態の要約に混ざる。
 """
 
 from dataclasses import dataclass
@@ -10,7 +15,14 @@ from enum import Enum
 from typing import Final, Literal
 
 from animal_bomber.domain.core.coord import Direction, Point
-from animal_bomber.domain.rules.tuning import BASE_SPEED, MAX_SPEED, SHOE_STEP
+from animal_bomber.domain.input.player_input import PlayerInput
+from animal_bomber.domain.rules.tuning import (
+    BASE_POWER,
+    BASE_SPEED,
+    MAX_SPEED,
+    SHOE_STEP,
+    START_BOMBS,
+)
 
 PlayerId = Literal[0, 1, 2, 3]
 """プレイヤー番号。0 から 3。"""
@@ -48,6 +60,33 @@ class PlayerState:
     life: Life = Life.ALIVE
     shoes: int = 0
     """靴を取った段数。"""
+    power: int = BASE_POWER
+    """火力（置いた爆弾の爆風が各方向へ届くマス数）。"""
+    max_bombs: int = START_BOMBS
+    """同時に置ける爆弾の数。"""
+    active_bombs: int = 0
+    """いま盤面に出ている、このプレイヤーの爆弾の数。
+
+    手持ち（あと置ける数）は `max_bombs - active_bombs`。
+    """
+    previous_input: PlayerInput = PlayerInput.IDLE
+    """前の tick に押していたボタン。
+
+    「押した瞬間」（前の tick は押していなくて、この tick に押したこと）を見分ける
+    ために持つ（`just_pressed`）。爆弾は押しっぱなしで連射せず、押した瞬間に1つだけ
+    置かれる。
+
+    ⚠️ これを `systems/` のモジュールの変数として持つと、記録から状態を作り直したとき
+    に失われる。状態の一部として持つので、リプレイと通信対戦で「押した瞬間」まで
+    一致する。
+    """
+
+
+def just_pressed(
+    player: PlayerState, player_input: PlayerInput, button: PlayerInput
+) -> bool:
+    """`button` をこの tick に押した瞬間か（押しっぱなしは含まない）。"""
+    return button in player_input and button not in player.previous_input
 
 
 def speed_of(player: PlayerState) -> float:

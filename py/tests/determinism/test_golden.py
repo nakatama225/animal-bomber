@@ -20,8 +20,11 @@ from animal_bomber.domain.state.world import hash_world
 from .scenario import play_and_record, replay
 
 # 台本どおりに 600 tick 進めたあとの要約（`StateHasher.hex` と同じ 8 桁）。
-# 2026-10-02 に Python 3.12 で出し、3.11 でも同じ値になることを確かめた。
-GOLDEN = "8202cc6e"
+# 2026-10-04 に Python 3.12 で出し、3.11 でも同じ値になることを確かめた。段階 2 で、
+# 爆弾・爆風・発番した識別子の数と、プレイヤーごとの火力・同時に置ける爆弾の数・盤面に
+# 出ている爆弾の数・前の tick の入力を要約に足し、台本の盤面に壊せるブロックを置いた
+# ので、2026-10-02 の値（8202cc6e）から変わった。
+GOLDEN = "89535742"
 
 
 def test_台本どおりの試合は_決めておいた要約に行き着く() -> None:

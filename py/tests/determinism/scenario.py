@@ -1,13 +1,18 @@
 """決定性の検査で共通に流す、台本どおりの試合。
 
 人間の代わりに台本が操作する。4人とも違う周期で向きを替え、ときどき斜めに押し、
-爆弾と技のボタンも押す（いまはまだ何も起きないが、記録には残る）。
+爆弾と技のボタンも押す（爆弾は置かれて爆発し、ブロックを壊す。技はまだ何も起きないが、
+記録には残る）。
+
+ルールの層に処理を足したら、台本がその処理を通るようにする（`test_hashseed.py` は、
+台本が通らない処理の set の反復を見つけられない）。
 
 `test_hashseed.py` は、この台本を別のプロセスで走らせる（`python -c` で import する）。
 """
 
 from dataclasses import dataclass
 
+from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.core.tick import MatchTick
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.input.sources import InputGatherer, InputSource
@@ -25,7 +30,16 @@ SEED = 4649
 ANIMALS = ("rabbit", "elephant", "mole", "fox")
 TICKS = 600
 SHOES = (0, 3, 9, 13)
-"""プレイヤーごとの靴の段数。移動を分ける回数が1回の人と2回の人が両方いるようにする。"""
+"""プレイヤーごとの靴の段数。
+
+移動を分ける回数が1回のプレイヤーと2回のプレイヤーが両方いるようにする。
+"""
+MAX_BOMBS = (1, 2, 3, 4)
+POWERS = (1, 3, 2, 4)
+"""プレイヤーごとの、同時に置ける爆弾の数と火力。
+
+同じプレイヤーの爆弾が2つ以上同時に出て、誘爆するようにする。
+"""
 
 _TURNS = (PlayerInput.RIGHT, PlayerInput.DOWN, PlayerInput.LEFT, PlayerInput.UP)
 _PERIODS = (37, 23, 29, 41)
@@ -57,17 +71,29 @@ class ScriptedSource:
 def new_world(seed: int = SEED) -> WorldState:
     """台本を流す前の状態。
 
-    壊せるブロックを取り除き、靴の段数をプレイヤーごとに変えてある。爆弾がまだ無いので、
-    ブロックを残すと、開始位置のまわりから出られず、ほとんど動かない（動かないと、
-    操作が違っても同じ状態になり、記録を読んでいるかを確かめられない）。
+    壊せるブロックを、通路の交わるマスの一部（`_kept_soft`）だけに減らし、靴の段数を
+    プレイヤーごとに変えてある。ブロックを全部残すと、開始位置のまわりから出られず、
+    ほとんど動かない（動かないと、操作が違っても同じ状態になり、記録を読んでいるかを
+    確かめられない）。全部取り除くと、爆風がブロックを壊す処理を通らない。
     """
     world = create_world(seed, ANIMALS)
     for cell, tile in list(world.board.cells()):
         if tile is Tile.SOFT:
             world.board.put(cell, Tile.EMPTY)
-    for player, shoes in zip(world.players, SHOES, strict=True):
+        if tile is not Tile.HARD and _kept_soft(cell):
+            world.board.put(cell, Tile.SOFT)
+    for player, shoes, max_bombs, power in zip(
+        world.players, SHOES, MAX_BOMBS, POWERS, strict=True
+    ):
         player.shoes = shoes
+        player.max_bombs = max_bombs
+        player.power = power
     return world
+
+
+def _kept_soft(cell: Cell) -> bool:
+    """壊せるブロックを置くマス。列も行も 4 で割って 3 余る、通路の交わるマス。"""
+    return cell.col % 4 == 3 and cell.row % 4 == 3
 
 
 def run(world: WorldState, sources: list[InputSource], ticks: int = TICKS) -> None:

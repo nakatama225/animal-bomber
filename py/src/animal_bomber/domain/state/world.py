@@ -1,14 +1,16 @@
 """試合のいまの状態すべてと、その作り方・要約の仕方。"""
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from animal_bomber.domain.core.coord import Direction
+from animal_bomber.domain.core.entity_id import IdSource
 from animal_bomber.domain.core.rng import Rng
 from animal_bomber.domain.core.statehash import StateHasher
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.tuning import SPAWN_CELLS
 from animal_bomber.domain.state.board import Board, build_board
+from animal_bomber.domain.state.bomb import Blast, Bomb
 from animal_bomber.domain.state.player import PLAYER_IDS, PlayerState
 
 
@@ -23,8 +25,7 @@ class WorldState:
     足すと、通信対戦で突き合わせるものが無駄に増える。左右するものを足したら、
     `hash_world` にも足す（足さないと、その値がずれても気づけない）。
 
-    いまは段階 1 で使うものだけを持つ。盤面に置かれるもの（爆弾など）の識別子を発番する
-    `core/entity_id.py` の `IdSource` は、爆弾を作る段階 2 で足す。
+    いまは段階 2 までで使うものだけを持つ。
     """
 
     now: Tick
@@ -37,6 +38,16 @@ class WorldState:
     """プレイヤー番号の順に並ぶ。"""
     rng: Rng
     """結果に影響する乱数。見た目の乱数はここに入れない。"""
+    bombs: list[Bomb] = field(default_factory=list)
+    """盤面に置かれている爆弾。置かれた順に並ぶ。
+
+    ⚠️ 並びの順も結果の一部。導火線が同じ tick に尽きた爆弾は、この順に爆発させる
+    （`systems/blast.py`）。
+    """
+    blasts: list[Blast] = field(default_factory=list)
+    """いま出ている爆風。置かれた順に並ぶ。"""
+    ids: IdSource = field(default_factory=IdSource)
+    """盤面に置かれるもの（爆弾・爆風）の識別子を発番する。"""
 
 
 def create_world(seed: int, animals: Sequence[str]) -> WorldState:
@@ -86,6 +97,7 @@ def hash_world(world: WorldState) -> int:
     hasher.add_int(world.now)
     hasher.add_text(world.board.encode())
     hasher.add_int(world.rng.state).add_int(world.rng.calls)
+    hasher.add_int(world.ids.issued)
     for player in world.players:
         (
             hasher.add_int(player.id)
@@ -95,5 +107,35 @@ def hash_world(world: WorldState) -> int:
             .add_text(player.facing.name)
             .add_text(player.life.name)
             .add_int(player.shoes)
+            .add_int(player.power)
+            .add_int(player.max_bombs)
+            .add_int(player.active_bombs)
+            .add_int(player.previous_input)
+        )
+    # 並びの順も混ぜる。並びが違えば、導火線の尽きた爆弾の爆発する順が変わる。
+    for bomb in world.bombs:
+        (
+            hasher.add_int(bomb.id)
+            .add_int(bomb.cell.col)
+            .add_int(bomb.cell.row)
+            .add_int(bomb.owner)
+            .add_int(bomb.power)
+            .add_int(bomb.fuse)
+            .add_bool(bomb.chained)
+            .add_int(len(bomb.pass_through))
+        )
+        # 誰が通り抜けられるか。いまの移動には効かないが、段階 5・6 で通れるかを
+        # 尋ねる処理が読む（`Bomb.pass_through`）。set は取り出す順が決まらないので、
+        # 並べ替えてから混ぜる。
+        for player_id in sorted(bomb.pass_through):
+            hasher.add_int(player_id)
+    for blast in world.blasts:
+        (
+            hasher.add_int(blast.id)
+            .add_int(blast.cell.col)
+            .add_int(blast.cell.row)
+            .add_int(blast.owner)
+            .add_bool(blast.is_center)
+            .add_int(blast.remaining)
         )
     return hasher.value

@@ -5,8 +5,8 @@
 `legacy/animal-bomber-notes.md`）にあるものを持ってきた。原型に理由が書かれていない
 値は、そう書いてある。
 
-いまは段階 1 で使うもの（盤面と移動）だけを置いている。爆弾や体力の値は、使う段階で
-足す。
+いまは段階 2 までで使うもの（盤面・移動・爆弾）だけを置いている。体力やアイテムの
+値は、使う段階で足す。
 
 1秒あたりで書いた値は、1 tick あたりに直した値もここで持つ。読むときは秒のほうが
 分かりやすく、計算に使うのは tick のほうなので、直すのをここ1か所にまとめる。
@@ -17,7 +17,7 @@ IEEE 754 が正確な丸めを求めているので、どの環境でも同じ�
 from typing import Final
 
 from animal_bomber.domain.core.coord import Cell
-from animal_bomber.domain.core.tick import TICKS_PER_SECOND
+from animal_bomber.domain.core.tick import TICKS_PER_SECOND, seconds_to_ticks
 
 # ------------------------------------------------------------------ 盤面
 
@@ -83,10 +83,10 @@ MAX_SPEED_PER_SECOND: Final = 9.4
 
 原型の注記は、靴の上限を上げるときは、移動を細かく分ける回数の計算を見るように求めて
 いる。1回で大きく動かすと、行き先を1回見るだけの当たり判定が壁を飛び越えるため。原型は
-分ける回数を 16 で打ち切るので、最も速い人が毎秒およそ 14 マスを超えると（経過秒数の
-上限 0.045 秒・倍速 3 のとき）、1回の移動が 0.12 マスを超える。この版は回数に上限が
-無いので、速さの上限を上げても1回の移動は `MOVE_SUBSTEP_DISTANCE` を超えない（決め方の
-違いは `systems/movement.py`）。
+分ける回数を 16 で打ち切るので、最も速いプレイヤーが毎秒およそ 14 マスを超えると
+（経過秒数の上限 0.045 秒・倍速 3 のとき）、1回の移動が 0.12 マスを超える。この版は
+回数に上限が無いので、速さの上限を上げても1回の移動は `MOVE_SUBSTEP_DISTANCE` を
+超えない（決め方の違いは `systems/movement.py`）。
 """
 
 MAX_SPEED: Final = MAX_SPEED_PER_SECOND / TICKS_PER_SECOND
@@ -120,4 +120,28 @@ MOVE_SUBSTEP_DISTANCE: Final = 0.12
 ⚠️ 細かく分けるのは移動の当たり判定だけ。原型は時間を進める処理ごと分けていたため、
 導火線の進みも入力の読み取りも一緒に分かれ、倍速にすると1回のキー入力が2〜3回と
 して処理された。
+"""
+
+# ------------------------------------------------------------------ 爆弾
+
+BOMB_FUSE_SECONDS: Final = 2.4
+"""置いてから爆発するまで（秒）。原型の値で、選んだ理由の記録は無い。"""
+
+BOMB_FUSE: Final = seconds_to_ticks(BOMB_FUSE_SECONDS)
+"""置いてから爆発するまで（tick）。144。"""
+
+BLAST_DURATION_SECONDS: Final = 0.46
+"""爆風が残る時間（秒）。原型の値で、選んだ理由の記録は無い。"""
+
+BLAST_DURATION: Final = seconds_to_ticks(BLAST_DURATION_SECONDS)
+"""爆風が残る時間（tick）。0.46 × 60 = 27.6 を切り上げて 28。"""
+
+BASE_POWER: Final = 1
+"""爆風が届く始めのマス数。原型の値。"""
+
+START_BOMBS: Final = 1
+"""始めに同時に置ける爆弾の数。
+
+原型は 1 に動物ごとの上乗せを足す（`1 + bombBonus`）。上乗せは動物のデータを作る
+段階 5 で足す。いまは全員が 1。
 """

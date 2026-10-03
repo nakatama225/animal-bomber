@@ -10,6 +10,7 @@ from animal_bomber.domain.rules.tuning import (
 )
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.player import Life, speed_of
+from animal_bomber.domain.systems.bomb import place_bomb
 from animal_bomber.domain.systems.movement import collides
 from tests.helpers import advance, make_world, only_for
 
@@ -101,7 +102,7 @@ class Test移動:
         assert abs(player.position.y - 1.5) < 0.2
 
     def test_倒れているプレイヤーは動かず_ほかのプレイヤーは動く(self) -> None:
-        # 倒れた人を飛ばすとき、そのあとの人まで止めてしまわないこと。
+        # 倒れたプレイヤーを飛ばすとき、そのあとのプレイヤーまで止めてしまわないこと。
         world = make_world()
         fallen, other = world.players
         fallen.life = Life.DEAD
@@ -141,17 +142,39 @@ class Test速さ:
 class Test当たり判定:
     def test_いま体が重なっているマスは_行き先の判定で見ない(self) -> None:
         # 足元のマスがあとから通れなくなっても、閉じ込められないように。
-        board = make_world().board
-        board.put(Cell(3, 3), Tile.SOFT)
-        assert not collides(board, Point(3.5, 3.5), Point(3.52, 3.5))
+        world = make_world()
+        world.board.put(Cell(3, 3), Tile.SOFT)
+        player = world.players[0]
+        assert not collides(world, player, Point(3.5, 3.5), Point(3.52, 3.5))
 
     def test_出たあとは_そのマスへ戻れない(self) -> None:
-        board = make_world().board
-        board.put(Cell(3, 3), Tile.SOFT)
-        assert collides(board, Point(4.5, 3.5), Point(3.9, 3.5))
+        world = make_world()
+        world.board.put(Cell(3, 3), Tile.SOFT)
+        player = world.players[0]
+        assert collides(world, player, Point(4.5, 3.5), Point(3.9, 3.5))
 
     def test_空いたマスへは動ける(self) -> None:
-        board = make_world().board
-        board.put(Cell(3, 3), Tile.EMPTY)
-        board.put(Cell(4, 3), Tile.EMPTY)
-        assert not collides(board, Point(3.5, 3.5), Point(3.9, 3.5))
+        world = make_world()
+        world.board.put(Cell(3, 3), Tile.EMPTY)
+        world.board.put(Cell(4, 3), Tile.EMPTY)
+        player = world.players[0]
+        assert not collides(world, player, Point(3.5, 3.5), Point(3.9, 3.5))
+
+    def test_爆弾のマスは_通り抜けの対象のプレイヤーにだけ通れる(self) -> None:
+        """`collides` が `is_solid_for` にプレイヤーを渡していることの検査。
+
+        動く前の位置（3.5, 3.5）は、置いたプレイヤーの実際の位置ではない。実際の試合
+        では、通り抜けの対象にいる間は体が爆弾のマスにかかっていて、`collides` はその
+        マスを見ないので、対象かどうかで答えは変わらない（`Bomb.pass_through`）。そこで
+        動く前の位置をわざと爆弾のマスの外に置き、対象にいるかどうかで答えが変わること
+        だけを見る。
+        """
+        world = make_world()
+        world.board.put(Cell(3, 3), Tile.EMPTY)
+        world.board.put(Cell(4, 3), Tile.EMPTY)
+        owner, other = world.players
+        owner.position = Cell(4, 3).center()
+        bomb = place_bomb(world, owner)
+        assert bomb is not None
+        assert not collides(world, owner, Point(3.5, 3.5), Point(3.9, 3.5))
+        assert collides(world, other, Point(3.5, 3.5), Point(3.9, 3.5))

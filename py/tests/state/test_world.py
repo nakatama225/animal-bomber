@@ -5,9 +5,12 @@ from collections.abc import Callable
 import pytest
 
 from animal_bomber.domain.core.coord import Cell, Direction, Point
+from animal_bomber.domain.core.entity_id import EntityId
 from animal_bomber.domain.core.tick import Tick
+from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.tuning import SPAWN_CELLS
 from animal_bomber.domain.state.board import Tile
+from animal_bomber.domain.state.bomb import Blast, Bomb
 from animal_bomber.domain.state.player import Life
 from animal_bomber.domain.state.world import WorldState, create_world, hash_world
 from tests.helpers import make_world
@@ -27,6 +30,15 @@ class Test始めの状態:
         assert all(p.facing is Direction.DOWN for p in world.players)
         assert all(p.life is Life.ALIVE and p.shoes == 0 for p in world.players)
         assert world.now == 0
+
+    def test_爆弾は1つ_火力は1で始まり_盤面に爆弾も爆風も無い(self) -> None:
+        world = create_world(1, ["rabbit", "elephant"])
+        assert [(p.max_bombs, p.power, p.active_bombs) for p in world.players] == [
+            (1, 1, 0),
+            (1, 1, 0),
+        ]
+        assert all(p.previous_input is PlayerInput.IDLE for p in world.players)
+        assert (world.bombs, world.blasts, world.ids.issued) == ([], [], 0)
 
     @pytest.mark.parametrize("count", [0, 5])
     def test_参加する数が1から4でなければ作れない(self, count: int) -> None:
@@ -85,6 +97,100 @@ def _animal(world: WorldState) -> None:
     world.players[1].animal = "fox"
 
 
+def _power(world: WorldState) -> None:
+    world.players[1].power = 2
+
+
+def _max_bombs(world: WorldState) -> None:
+    world.players[1].max_bombs = 2
+
+
+def _active_bombs(world: WorldState) -> None:
+    world.players[1].active_bombs = 1
+
+
+def _previous_input(world: WorldState) -> None:
+    world.players[1].previous_input = PlayerInput.BOMB
+
+
+def _issue_id(world: WorldState) -> None:
+    world.ids.take()
+
+
+def _with_bomb_and_blast(world: WorldState) -> WorldState:
+    """爆弾と爆風を1つずつ置いた状態。爆弾と爆風の中身を変える確かめの土台。"""
+    world.bombs.append(
+        Bomb(
+            id=world.ids.take(),
+            cell=Cell(1, 1),
+            owner=0,
+            power=1,
+            fuse=Tick(10),
+            pass_through={0},
+        )
+    )
+    world.blasts.append(
+        Blast(
+            id=world.ids.take(),
+            cell=Cell(3, 1),
+            owner=1,
+            is_center=False,
+            remaining=Tick(5),
+        )
+    )
+    return world
+
+
+def _bomb_id(world: WorldState) -> None:
+    world.bombs[0].id = EntityId(world.bombs[0].id + 100)
+
+
+def _blast_id(world: WorldState) -> None:
+    world.blasts[0].id = EntityId(world.blasts[0].id + 100)
+
+
+def _bomb_cell(world: WorldState) -> None:
+    world.bombs[0].cell = Cell(1, 2)
+
+
+def _bomb_owner(world: WorldState) -> None:
+    world.bombs[0].owner = 1
+
+
+def _bomb_power(world: WorldState) -> None:
+    world.bombs[0].power = 2
+
+
+def _bomb_fuse(world: WorldState) -> None:
+    world.bombs[0].fuse = Tick(9)
+
+
+def _bomb_chained(world: WorldState) -> None:
+    world.bombs[0].chained = True
+
+
+def _bomb_pass_through(world: WorldState) -> None:
+    # 数が同じでも、誰が通れるかが違えば値が変わる（いまの移動には効かないが、
+    # 段階 5・6 で通れるかを尋ねる処理が読む）。
+    world.bombs[0].pass_through = {1}
+
+
+def _blast_cell(world: WorldState) -> None:
+    world.blasts[0].cell = Cell(3, 2)
+
+
+def _blast_owner(world: WorldState) -> None:
+    world.blasts[0].owner = 0
+
+
+def _blast_center(world: WorldState) -> None:
+    world.blasts[0].is_center = True
+
+
+def _blast_remaining(world: WorldState) -> None:
+    world.blasts[0].remaining = Tick(4)
+
+
 class Test状態の要約:
     def test_同じ種から作れば同じ値になる(self) -> None:
         assert hash_world(make_world(9)) == hash_world(make_world(9))
@@ -105,6 +211,11 @@ class Test状態の要約:
             _life,
             _shoes,
             _animal,
+            _power,
+            _max_bombs,
+            _active_bombs,
+            _previous_input,
+            _issue_id,
         ],
     )
     def test_結果を左右するものが1つ変われば_値が変わる(
@@ -114,6 +225,48 @@ class Test状態の要約:
         before = hash_world(world)
         change(world)
         assert hash_world(world) != before
+
+    @pytest.mark.parametrize(
+        "change",
+        [
+            _bomb_id,
+            _bomb_cell,
+            _bomb_owner,
+            _bomb_power,
+            _bomb_fuse,
+            _bomb_chained,
+            _bomb_pass_through,
+            _blast_id,
+            _blast_cell,
+            _blast_owner,
+            _blast_center,
+            _blast_remaining,
+        ],
+    )
+    def test_爆弾と爆風の中身が1つ変われば_値が変わる(
+        self, change: Callable[[WorldState], None]
+    ) -> None:
+        world = _with_bomb_and_blast(make_world())
+        before = hash_world(world)
+        change(world)
+        assert hash_world(world) != before
+
+    def test_爆弾の並びの順が変われば_値が変わる(self) -> None:
+        """並びの順は、同じ tick に導火線の尽きた爆弾の爆発する順を決める。"""
+        base = _with_bomb_and_blast(make_world())
+        other = _with_bomb_and_blast(make_world())
+        for world in (base, other):
+            world.bombs.append(
+                Bomb(
+                    id=world.ids.take(),
+                    cell=Cell(5, 5),
+                    owner=1,
+                    power=1,
+                    fuse=Tick(10),
+                )
+            )
+        other.bombs.reverse()
+        assert hash_world(base) != hash_world(other)
 
     def test_プレイヤーの数が違えば値が変わる(self) -> None:
         one = create_world(4649, ["rabbit"])

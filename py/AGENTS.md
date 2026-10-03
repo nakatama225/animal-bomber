@@ -76,6 +76,14 @@ app → shell → presentation → net → ai → content → domain
 ルールと同じく結果を決める層（`content`・`ai`）を作ったときは、「ルールの層は乱数・実時間・
 描画・環境で結果が違いうる計算を import しない」の `source_modules` にも足してください。
 
+`domain/` の中の向きは検査していません。次の2つは守ってください。
+
+- `domain/query/` は読むだけです。状態を書き換えず、`domain/systems/` を import しません
+  （CPU の判断（段階 6）も同じ問い合わせを使うため）
+- 1 tick の処理は `domain/systems/` に処理ごとのモジュールとして置き、`simulation.py` の
+  `step()` に順に並べます。並べる順の理由は `simulation.py` のモジュールの説明に、並びと
+  同じ番号で書いてください
+
 ## `domain/` の中で使ってはいけないもの
 
 - **import**：`pygame` / `random` / `secrets` / `uuid` / `time` / `datetime` / `numpy` / `cmath`。

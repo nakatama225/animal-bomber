@@ -16,22 +16,36 @@
 
 ## 原型と違えた所：分ける回数の決め方と、動かす順
 
-原型は分ける回数を「生きている全員のうち最も速い人の速さ」から1つ決め、細分の1回ごとに
-全員を動かす。この版はプレイヤーごとに、その人の速さから回数を決め、1人ずつ全部の細分を
-済ませる（TypeScript 版の段階 1 と同じ）。
+原型は分ける回数を「生きている全員のうち最も速いプレイヤーの速さ」から1つ決め、細分の
+1回ごとに全員を動かす。この版はプレイヤーごとに、そのプレイヤーの速さから回数を決め、
+1人ずつ全部の細分を済ませる（TypeScript 版の段階 1 と同じ）。
 
 原型が全員で1つの回数を使ったのは、時間を進める処理ごと分けていたので、回数が全員に
 掛かるしかなかったため。原型の注記が求めているのは、1回の移動を 0.12 マス以下に抑える
 ことと、平常時（誰も靴を取っていないとき）に余計な回数を掛けないことで、プレイヤーごとに
 決めてもどちらも満たす。
-全員で1つにすると、ある人が壁の手前で止まる位置が、別の人の靴の段数で変わってしまう。
+全員で1つにすると、あるプレイヤーが壁の手前で止まる位置が、別のプレイヤーの靴の段数で
+変わってしまう。
 
-⚠️ そのため、速さの違う人が同じ盤面にいると、原型とは位置がずれる（速い人がいると、
-原型では遅い人も2回に分けて動き、壁の手前で止まる位置が変わる）。動物ごとの速さの倍率が
-1 のとき（原型を 60 Hz・倍速 1 で回したとき）、1人ずつ動かした位置は、原型とも小数の
-ビットまで一致する（倍率は段階 5 で掛ける）。動かす順は、段階 1 では人どうしが
-ぶつからないので位置に効かない。段階 2 で爆弾の通り抜けを足すときに（原型は細分ごとに
-更新する）、順を決め直す。
+⚠️ そのため、速さの違うプレイヤーが同じ盤面にいると、原型とは位置がずれる（速い
+プレイヤーがいると、原型では遅いプレイヤーも2回に分けて動き、壁の手前で止まる位置が
+変わる）。動物ごとの速さの倍率が 1 のとき（原型を 60 Hz・倍速 1 で回したとき）、1人ずつ
+動かした位置は、原型とも小数のビットまで一致する（倍率は段階 5 で掛ける）。
+
+プレイヤーどうしはぶつからないので、動かす順は位置に効かない。
+
+爆弾の通り抜け（`Bomb.pass_through`。置かれた瞬間に体の中心がそのマスにあった
+プレイヤーは、そこから出るまで通れる）は、原型は細分の1回ごとに、体がマスから離れたら
+外す。この版は全員が動き終わったあと、爆弾を置く処理（`systems/bomb.py`）の中で
+1 tick に1回、体の中心がマスを出たら外す（TypeScript 版と同じ）。外す時と条件が
+違っても位置は変わらない。通り抜けの対象にいるプレイヤーは、体の中心が爆弾のマスに
+あり、1 tick の移動（最大 0.157 マス）は体の半径（0.36）より短いので、その tick の
+あいだ体が爆弾のマスにかかったままでいる。`collides` は体の重なっているマスを見ない
+ので、通り抜けの対象かどうかは、そもそも移動の結果に効かない。
+
+⚠️ 通り抜けの対象を読む判定（`is_solid_for` に尋ねる処理。段階 5 のもぐらの「爆弾の
+となりのブロック」、段階 6 の CPU）を足したら、外す時と条件の違いが結果に効かないかを
+確かめ直す。
 """
 
 import math
@@ -39,13 +53,13 @@ from collections.abc import Mapping
 
 from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.input.player_input import PlayerInput
+from animal_bomber.domain.query.board import is_solid_for
 from animal_bomber.domain.rules.tuning import (
     ALIGN_EPSILON,
     ALIGN_RATE_WHEN_MOVING,
     MOVE_SUBSTEP_DISTANCE,
     PLAYER_RADIUS,
 )
-from animal_bomber.domain.state.board import Board
 from animal_bomber.domain.state.player import Life, PlayerId, PlayerState, speed_of
 from animal_bomber.domain.state.world import WorldState
 
@@ -55,7 +69,7 @@ def move_players(world: WorldState, inputs: Mapping[PlayerId, PlayerInput]) -> N
     for player in world.players:
         if player.life is not Life.ALIVE:
             continue
-        _move(world.board, player, inputs[player.id])
+        _move(world, player, inputs[player.id])
 
 
 def _axis(player_input: PlayerInput, plus: PlayerInput, minus: PlayerInput) -> int:
@@ -63,7 +77,7 @@ def _axis(player_input: PlayerInput, plus: PlayerInput, minus: PlayerInput) -> i
     return int(plus in player_input) - int(minus in player_input)
 
 
-def _move(board: Board, player: PlayerState, player_input: PlayerInput) -> None:
+def _move(world: WorldState, player: PlayerState, player_input: PlayerInput) -> None:
     dx = _axis(player_input, PlayerInput.RIGHT, PlayerInput.LEFT)
     dy = _axis(player_input, PlayerInput.DOWN, PlayerInput.UP)
     if dx == 0 and dy == 0:
@@ -78,23 +92,23 @@ def _move(board: Board, player: PlayerState, player_input: PlayerInput) -> None:
     substeps = max(1, math.ceil(speed / MOVE_SUBSTEP_DISTANCE))
     per_step = speed / substeps
     for _ in range(substeps):
-        moved = _try_move(board, player, dx * per_step, dy * per_step)
+        moved = _try_move(world, player, dx * per_step, dy * per_step)
         # 進めたときは寄せる幅を少し弱める（原型と同じ倍率）。
         rate = per_step * ALIGN_RATE_WHEN_MOVING if moved else per_step
-        _align_to_corridor(board, player, horizontal=dx != 0, rate=rate)
+        _align_to_corridor(world, player, horizontal=dx != 0, rate=rate)
 
 
-def _try_move(board: Board, player: PlayerState, mx: float, my: float) -> bool:
-    """1回ぶん動かす。壁に当たって動けなければ動かさずに False。"""
+def _try_move(world: WorldState, player: PlayerState, mx: float, my: float) -> bool:
+    """1回ぶん動かす。通れないマスに当たって動けなければ動かさずに False。"""
     target = Point(player.position.x + mx, player.position.y + my)
-    if collides(board, player.position, target):
+    if collides(world, player, player.position, target):
         return False
     player.position = target
     return True
 
 
 def _align_to_corridor(
-    board: Board, player: PlayerState, *, horizontal: bool, rate: float
+    world: WorldState, player: PlayerState, *, horizontal: bool, rate: float
 ) -> None:
     """進む向きと直角に、通路の中央へ `rate` マスまで寄せる。
 
@@ -112,12 +126,18 @@ def _align_to_corridor(
         if abs(gap) <= ALIGN_EPSILON:
             return
         target = Point(position.x + math.copysign(min(abs(gap), rate), gap), position.y)
-    if not collides(board, position, target):
+    if not collides(world, player, position, target):
         player.position = target
 
 
-def collides(board: Board, origin: Point, target: Point) -> bool:
-    """`origin` から `target` へ動いたとき、体が通れないマスに重なるか。
+def collides(
+    world: WorldState, player: PlayerState, origin: Point, target: Point
+) -> bool:
+    """`origin` から `target` へ動いたとき、体がそのプレイヤーの通れないマスに重なるか。
+
+    何が通れないかはプレイヤーによって違う（爆弾の通り抜け、のちに動物ごとの能力）。
+    その判断は `query/board.py` の `is_solid_for` にまとめてあり、ここは体の形の計算
+    だけを持つ。
 
     ⚠️ **いま体が重なっているマスは見ない**（原型と同じ）。足元のマスがあとから通れなく
     なっても、閉じ込められないようにするため。そのマスから完全に出たあとは見る対象に
@@ -131,7 +151,7 @@ def collides(board: Board, origin: Point, target: Point) -> bool:
         for col in target_cols:
             if col in origin_cols and row in origin_rows:
                 continue
-            if board.is_blocked(Cell(col, row)):
+            if is_solid_for(world, Cell(col, row), player):
                 return True
     return False
 

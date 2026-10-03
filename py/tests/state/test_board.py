@@ -83,7 +83,7 @@ class Test盤面:
         assert board.at(Cell(-1, 0)) is Tile.HARD
         assert board.at(Cell(0, -5)) is Tile.HARD
         assert board.at(Cell(COLS, 3)) is Tile.HARD
-        assert board.is_blocked(Cell(999, 999))
+        assert board.at(Cell(999, 999)) is Tile.HARD
 
     def test_盤面の外を書き換えようとしたら止まる(self) -> None:
         board = build_board(Rng(1), SPAWN_CELLS)
@@ -99,8 +99,7 @@ class Test盤面:
         board.put(Cell(2, 1), Tile.SOFT)
         assert board.encode() == ".....o"
         assert board.at(Cell(2, 1)) is Tile.SOFT
-        assert board.is_blocked(Cell(2, 1))
-        assert not board.is_blocked(Cell(1, 1))
+        assert board.at(Cell(1, 1)) is Tile.EMPTY
 
     def test_作るときに渡した一覧をあとで書き換えても_盤面は変わらない(self) -> None:
         tiles = [Tile.EMPTY, Tile.EMPTY]
