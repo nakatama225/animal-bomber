@@ -213,6 +213,82 @@ describe('悪い状態の作用', () => {
     expect(world.bombs).toHaveLength(2);
   });
 
+  it('勝手に設置は、その tick に動く前のマスに置く', () => {
+    // 原型は効果の処理の中で全員ぶんの勝手に設置を済ませてから、各プレイヤーを動かす。
+    // 拍の tick にマスの境目をまたいでも、置くのは今までいたマス。
+    const world = makeWorld();
+    clearBoard(world);
+    const player = world.players[0]!;
+    player.position = { x: 1.99, y: 1.5 };
+    player.effects.add('autobomb', itemEffectTicks(4), itemEffectTicks(12));
+    const events = new Simulation().step(world, onlyFor(world, 0, press({ right: true })));
+    expect(player.position.x).toBeGreaterThan(2);
+    expect(events).toContainEqual({ type: 'bombPlaced', cell: { col: 1, row: 1 }, owner: 0 });
+  });
+
+  it('ボタンで置く爆弾は、その tick に動いたあとのマスに置く', () => {
+    // 原型の humanUpdate も、動いてから爆弾のボタンを見る。違うのは勝手に設置だけ。
+    // 直す前から通る対照（ボタンの爆弾を移動の前へ動かす変更を捕まえる）。
+    const world = makeWorld();
+    clearBoard(world);
+    const player = world.players[0]!;
+    player.position = { x: 1.99, y: 1.5 };
+    const events = new Simulation().step(world, onlyFor(world, 0, press({ right: true, bomb: true })));
+    expect(events).toContainEqual({ type: 'bombPlaced', cell: { col: 2, row: 1 }, owner: 0 });
+  });
+
+  it('勝手に設置の拍の tick にボタンも押すと、動く前と動いたあとのマスに1つずつ置く', () => {
+    // 原型も、効果の処理で勝手に設置を置いたあと、humanUpdate でボタンの爆弾を置く。
+    const world = makeWorld();
+    clearBoard(world);
+    const player = world.players[0]!;
+    player.position = { x: 1.99, y: 1.5 };
+    player.maxBombs = 2;
+    player.effects.add('autobomb', itemEffectTicks(4), itemEffectTicks(12));
+    const events = new Simulation().step(world, onlyFor(world, 0, press({ right: true, bomb: true })));
+    expect(events.filter((event) => event.type === 'bombPlaced')).toEqual([
+      { type: 'bombPlaced', cell: { col: 1, row: 1 }, owner: 0 },
+      { type: 'bombPlaced', cell: { col: 2, row: 1 }, owner: 0 },
+    ]);
+  });
+
+  it('勝手に設置がかかっていれば、爆弾おけないでも拍の合間にボタンで置ける', () => {
+    // ボタンの爆弾の側でも、勝手に設置が爆弾おけないに勝つ（BombSystem の forced）。
+    const world = makeWorld();
+    clearBoard(world);
+    const player = world.players[0]!;
+    player.position = centerOf({ col: 1, row: 1 });
+    player.maxBombs = 3;
+    player.effects.add('nobomb', itemEffectTicks(6), itemEffectTicks(18));
+    player.effects.add('autobomb', itemEffectTicks(4), itemEffectTicks(12));
+    const sim = new Simulation();
+    sim.step(world, onlyFor(world, 0, press({})));
+    expect(world.bombs).toHaveLength(1);
+    // 隣のマスへ歩く。次の拍より手前で止める。
+    advance(world, onlyFor(world, 0, press({ right: true })), 20, sim);
+    const events = sim.step(world, onlyFor(world, 0, press({ right: true, bomb: true })));
+    expect(events.filter((event) => event.type === 'bombPlaced')).toHaveLength(1);
+    expect(world.bombs).toHaveLength(2);
+  });
+
+  it('同じ tick では、全員の勝手に設置をボタンの爆弾より先に置く', () => {
+    // 原型は効果の処理で全員ぶんの勝手に設置を済ませてから、入力の処理でボタンを見る。
+    // 番号の小さいプレイヤーがボタンで置いても、拍のプレイヤーの爆弾が先に並ぶ（識別子も先）。
+    // 誰も動かない場面でも、並び（同じ tick に導火線が尽きたときの爆発の順）が変わる。
+    const world = makeWorld();
+    clearBoard(world);
+    const [first, second] = world.players;
+    first!.position = centerOf({ col: 3, row: 1 });
+    second!.position = centerOf({ col: 5, row: 3 });
+    second!.effects.add('autobomb', itemEffectTicks(4), itemEffectTicks(12));
+    new Simulation().step(world, onlyFor(world, 0, press({ bomb: true })));
+    expect(world.bombs.map((bomb) => [bomb.owner, bomb.cell])).toEqual([
+      [1, { col: 5, row: 3 }],
+      [0, { col: 3, row: 1 }],
+    ]);
+    expect(world.bombs[0]!.id).toBeLessThan(world.bombs[1]!.id);
+  });
+
   it('勝手に設置が切れても、待ちは残る', () => {
     // 待ちを 0 に戻すのはラウンドの始まりだけ（原型と同じ）。
     const world = makeWorld();
@@ -301,10 +377,10 @@ describe('被弾', () => {
     expect(second!.lastHitBy).toBe(1);
   });
 
-  it('兄弟の爆弾の腕が交わるマスでは、爆風を伸ばす向きの順で当てたプレイヤーが決まる', () => {
-    // 同じ爆弾に誘爆された2つの爆弾は、伸ばす向きの順（上・右・下・左）に待ち行列へ積む。
-    // 原型は右・左・下・上の順なので、この場面では原型と逆になる（原型は 1）。
-    // 揃えるかは決めていない。今の答えを書き留める（変えるときに、意図して変えたことになる）。
+  it('兄弟の爆弾の腕が交わるマスでは、原型と同じく右・左・下・上の順で当てたプレイヤーが決まる', () => {
+    // 同じ爆弾に誘爆された2つの爆弾は、爆風を伸ばす向きの順（右・左・下・上）に待ち行列へ積む。
+    // 右の (7,5)（1P）を先に、上の (5,3)（2P）をあとに積むので、(7,3) の最後の爆風は 2P。
+    // 期待値は原型を画面なしで動かして実測した答え（blastOwner が 1）。
     const world = makeWorld();
     clearBoard(world);
     const [first, second] = world.players;
@@ -323,16 +399,16 @@ describe('被弾', () => {
     const owners = world.blasts
       .filter((blast) => blast.cell.col === 7 && blast.cell.row === 3)
       .map((blast) => blast.owner);
-    expect(owners).toEqual([1, 0]);
+    expect(owners).toEqual([0, 1]);
 
     const events = new DamageSystem().step(world);
-    expect(events).toContainEqual(expect.objectContaining({ type: 'playerHurt', target: 1, by: 0 }));
+    expect(events).toContainEqual(expect.objectContaining({ type: 'playerHurt', target: 1, by: 1 }));
   });
 
-  it('誘爆された自分の爆弾のマスでも、兄弟の爆弾の腕が届くと、伸ばす向きの順で当てたプレイヤーが決まる', () => {
+  it('下の兄弟を先に積むので、誘爆された上の自分の爆弾のマスは自爆になる', () => {
     // A（1P）が上の B（2P）と下の C（1P）を誘爆し、C の上の腕が B のマスまで届く。
-    // この版は B を先に積むので、B のマスの最後の爆風は C の腕（1P）。原型は C を先に
-    // 積むので B の中心（2P。自爆）になる。揃えるかは決めていない。今の答えを書き留める。
+    // 下の C を先に積むので、B のマスの最後の爆風は B の中心（2P。自爆）。
+    // 期待値は原型を画面なしで動かして実測した答え（持ち主の並び [0,0,1]、blastOwner が 1）。
     const world = makeWorld();
     clearBoard(world);
     const [first, second] = world.players;
@@ -350,6 +426,35 @@ describe('被弾', () => {
     detonate(world, trigger);
     const owners = world.blasts
       .filter((blast) => blast.cell.col === 5 && blast.cell.row === 4)
+      .map((blast) => blast.owner);
+    expect(owners).toEqual([0, 0, 1]);
+
+    const events = new DamageSystem().step(world);
+    expect(events).toContainEqual(expect.objectContaining({ type: 'playerHurt', target: 1, by: 1 }));
+  });
+
+  it('上下を返すと、誘爆された下の自分の爆弾のマスは、あとから積んだ兄弟の腕の持ち主になる', () => {
+    // A（1P）が下の B（2P）と上の C（1P）を誘爆し、C の下の腕が B のマスまで届く。
+    // 下の B を先に、上の C をあとに積むので、B のマスの最後の爆風は C の腕（1P）で、
+    // 自爆にならない。誘爆された自分の爆弾のマスがいつも自爆になるのではなく、順で決まる。
+    // 期待値は原型を画面なしで動かして実測した答え（持ち主の並び [0,1,0]、blastOwner が 0）。
+    const world = makeWorld();
+    clearBoard(world);
+    const [first, second] = world.players;
+    first!.maxBombs = 2;
+    first!.power = 1;
+    first!.position = centerOf({ col: 5, row: 5 });
+    const trigger = placeBomb(world, first!)!;
+    second!.power = 1;
+    second!.position = centerOf({ col: 5, row: 6 });
+    placeBomb(world, second!);
+    first!.power = 2;
+    first!.position = centerOf({ col: 5, row: 4 });
+    placeBomb(world, first!);
+    first!.position = centerOf({ col: 1, row: 1 });
+    detonate(world, trigger);
+    const owners = world.blasts
+      .filter((blast) => blast.cell.col === 5 && blast.cell.row === 6)
       .map((blast) => blast.owner);
     expect(owners).toEqual([0, 1, 0]);
 

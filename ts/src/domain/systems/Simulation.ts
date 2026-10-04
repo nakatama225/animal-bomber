@@ -5,6 +5,7 @@ import type { WorldState } from '../state/WorldState.js';
 import type { SimEvent } from '../events/SimEvent.js';
 import { ActionSystem } from './ActionSystem.js';
 import { ActorSystem } from './ActorSystem.js';
+import { AutobombSystem } from './AutobombSystem.js';
 import { BlastSystem } from './BlastSystem.js';
 import { BombSystem } from './BombSystem.js';
 import { DamageSystem } from './DamageSystem.js';
@@ -42,6 +43,7 @@ import { NegibonSystem } from './NegibonSystem.js';
 export class Simulation {
   readonly #actions = new ActionSystem();
   readonly #actors = new ActorSystem();
+  readonly #autobomb = new AutobombSystem();
   readonly #movement = new MovementSystem();
   readonly #negibon = new NegibonSystem();
   readonly #bombs = new BombSystem();
@@ -63,7 +65,12 @@ export class Simulation {
     // あとから移動の入力を当てると1 tick ぶん食い違う。
     events.push(...this.#actions.step(world, playerInputs));
 
-    // 動いてから置く。置いてから動く形にすると、置いた瞬間に
+    // 「勝手に設置」は入力で動く前に置く。原型は効果の処理の中で全員ぶんを済ませてから
+    // 各プレイヤーを入力で動かすので、拍の tick にマスの境目をまたいでも今までいたマスに置く。
+    // ⚠️ 技（上の ActionSystem）とは原型と順が違う（`AutobombSystem` の説明）。
+    events.push(...this.#autobomb.step(world));
+
+    // ボタンの爆弾は動いてから置く。置いてから動く形にすると、置いた瞬間に
     // そのマスから出られてしまい、通り抜けの扱いが1 tick ずれる。
     this.#movement.step(world, playerInputs);
     // 外周の葱ボンは盤面の外を動く。盤面の上の移動とは互いに影響しない。

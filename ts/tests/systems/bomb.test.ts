@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { centerOf } from '../../src/domain/core/Coord.js';
+import { blastReach } from '../../src/domain/query/BlastReach.js';
 import { bombAt, blastAt, isSolidFor } from '../../src/domain/query/BoardQuery.js';
 import { BOMB_FUSE, BLAST_DURATION } from '../../src/domain/rules/tuning.js';
 import { detonate } from '../../src/domain/mutations/explode.js';
@@ -110,6 +111,20 @@ describe('爆発', () => {
     advance(world, onlyFor(world, 0, press({})), BOMB_FUSE + 1);
     expect(world.bombs).toHaveLength(0);
     expect(blastAt(world, { col: 1, row: 1 })).toBeDefined();
+  });
+
+  it('爆風は原型と同じく右・左・下・上の順に伸ばす', () => {
+    // この順が爆風の識別子の順と、誘爆した爆弾を積む順を決め、爆風が重なったマスで
+    // 当てたプレイヤーを決める（DamageSystem）。4つの向きの位置を全部留める。
+    const world = makeWorld();
+    clearBoard(world);
+    const reach = blastReach(world, { col: 5, row: 5 }, 1);
+    expect(reach.arms.map((arm) => arm.cell)).toEqual([
+      { col: 6, row: 5 },
+      { col: 4, row: 5 },
+      { col: 5, row: 6 },
+      { col: 5, row: 4 },
+    ]);
   });
 
   it('爆発すると手持ちが戻る', () => {

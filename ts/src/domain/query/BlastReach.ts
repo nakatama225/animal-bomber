@@ -1,5 +1,15 @@
-import { DIRECTIONS, step, type Cell } from '../core/Coord.js';
+import { step, type Cell, type Direction } from '../core/Coord.js';
 import type { WorldState } from '../state/WorldState.js';
+
+/**
+ * 爆風を伸ばす向きの順。原型（`legacy/animal-bomber.html` の `DIRS`）と同じ右・左・下・上。
+ *
+ * ⚠️ 移動や経路探しが使う `DIRECTIONS`（上・右・下・左）とは別に持つ。`DIRECTIONS` を
+ * 並べ替えると、CPU の経路の選び方や、乱数で向きを選ぶ処理の答えまで変わる。
+ * 爆風の順だけを原型に合わせるのは、この順が爆風が重なったマスで当てたプレイヤーを
+ * 決めるため（自爆の割合の数え方が原型と同じになる）。
+ */
+const BLAST_DIRECTIONS: readonly Direction[] = ['right', 'left', 'down', 'up'];
 
 /**
  * 爆弾が爆発したとき、爆風がどのマスまで届くか。
@@ -22,7 +32,7 @@ export interface BlastReach {
   /** 爆弾が置かれていたマス。 */
   readonly center: Cell;
   /**
-   * 中心から伸びた先のマス。方向ごとに、近い順に並ぶ。
+   * 中心から伸びた先のマス。方向ごとに（`BLAST_DIRECTIONS` の順）、近い順に並ぶ。
    *
    * ⚠️ 並び順は爆風を置く順番そのもので、爆風の識別子の発番順を決める。
    * 並びを変えると状態の要約が変わる。誘爆した爆弾を待ち行列に積む順と、爆風が
@@ -45,7 +55,7 @@ export interface ReachedCell {
  */
 export function blastReach(world: Readonly<WorldState>, center: Cell, power: number): BlastReach {
   const arms: ReachedCell[] = [];
-  for (const direction of DIRECTIONS) {
+  for (const direction of BLAST_DIRECTIONS) {
     for (let distance = 1; distance <= power; distance += 1) {
       const cell = step(center, direction, distance);
       const tile = world.board.at(cell);

@@ -4,6 +4,7 @@ import { abilityOf } from '../../src/domain/abilities/registry.js';
 import { centerOf } from '../../src/domain/core/Coord.js';
 import { placeBomb } from '../../src/domain/mutations/bombs.js';
 import { hurt } from '../../src/domain/mutations/damage.js';
+import { itemEffectTicks } from '../../src/domain/rules/items.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
 import { advance, makeWorld, onlyFor, press } from '../helpers.js';
 
@@ -157,6 +158,22 @@ describe('突進中の被弾', () => {
     const before = world.bombs.length;
     advance(world, onlyFor(world, 0, press({ bomb: true })), 3);
     expect(world.bombs.length).toBe(before);
+  });
+
+  it('突進中は、勝手に設置の拍が来ても置かない（拍は進む）', () => {
+    // 原型の canPlaceBomb は突進の最中を止め、勝手に設置もこの確かめを通る。
+    const world = elephantWorld();
+    const player = world.players[0]!;
+    const sim = new Simulation();
+    triggerCharge(world, sim);
+    player.effects.add('autobomb', itemEffectTicks(4), itemEffectTicks(12));
+    const before = world.bombs.length;
+    advance(world, onlyFor(world, 0, press({})), 3, sim);
+    // 突進が先に終わって置かなかっただけ、を除くため、まだ突進中であることも見る。
+    expect(player.action?.kind).toBe('charge');
+    expect(world.bombs.length).toBe(before);
+    // 置けなかった拍も進むので、次の拍までの待ちが残っている。
+    expect(player.autobombWait).toBeGreaterThan(0);
   });
 });
 

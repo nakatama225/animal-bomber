@@ -3,8 +3,7 @@ import { tick } from '../core/Tick.js';
 import type { SimEvent } from '../events/SimEvent.js';
 import type { PlayerInput } from '../input/PlayerInput.js';
 import { placeBomb } from '../mutations/bombs.js';
-import { AUTOBOMB_INTERVAL } from '../rules/tuning.js';
-import type { PlayerId, PlayerState } from '../state/PlayerState.js';
+import type { PlayerId } from '../state/PlayerState.js';
 import { isAlive, justPressed } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 
@@ -23,13 +22,16 @@ export class BombSystem {
     return events;
   }
 
-  /** 押し下げた瞬間と、「勝手に設置」の拍に1つ置く。 */
+  /**
+   * 爆弾のボタンを押し下げた瞬間に1つ置く。
+   *
+   * 「勝手に設置」の拍に置くのは `AutobombSystem`（移動の前）。こちらは移動のあとで、
+   * 置くのは動いたあとのマス（原型の humanUpdate と同じ）。
+   */
   #place(world: WorldState, playerInputs: ReadonlyMap<PlayerId, PlayerInput>): SimEvent[] {
     const events: SimEvent[] = [];
     for (const player of world.players) {
       if (!isAlive(player)) continue;
-      // 拍は、このあと置けずに飛ばす場合も進める。原型も、置けなかった拍の次は1拍あと。
-      const autobombBeat = this.#autobombBeat(player);
       const playerInput = playerInputs.get(player.id);
       if (playerInput === undefined) continue;
 
@@ -41,34 +43,13 @@ export class BombSystem {
       // 組み合わせで挙動が読めなくなる。拍の合間にボタンで置くこともできる。
       const forced = player.effects.has('autobomb');
       if (!forced && player.effects.has('nobomb')) continue;
-      if (!autobombBeat && !justPressed(player, playerInput, 'bomb')) continue;
+      if (!justPressed(player, playerInput, 'bomb')) continue;
       const bomb = placeBomb(world, player);
       if (bomb !== undefined) {
         events.push({ type: 'bombPlaced', cell: bomb.cell, owner: bomb.owner });
       }
     }
     return events;
-  }
-
-  /**
-   * 「勝手に設置」が置こうとする拍か。かかっている間だけ、待ちを1 tick 進める。
-   *
-   * 前にかかったときの待ちが残っていなければ、かかった次の tick が最初の拍になり、
-   * そのあとは `AUTOBOMB_INTERVAL` ごと。
-   *
-   * ⚠️ 置くマスは、その tick に動いたあとのマス（`Simulation` は移動のあとに爆弾を置く）。
-   * 原型は効果の時間を進める処理の中で、動く前に置く。拍の tick にマスの境目をまたぐと、
-   * 原型より1マス先に置く。揃えるかは決めていない。
-   */
-  #autobombBeat(player: PlayerState): boolean {
-    if (!player.effects.has('autobomb')) return false;
-    const wait = Math.max(0, player.autobombWait - 1);
-    if (wait > 0) {
-      player.autobombWait = tick(wait);
-      return false;
-    }
-    player.autobombWait = AUTOBOMB_INTERVAL;
-    return true;
   }
 
   /** 導火線を1 tick 進める。 */
