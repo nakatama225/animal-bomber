@@ -36,6 +36,7 @@ export class BombSystem {
       if (playerInput === undefined) continue;
 
       // 乗っ取り中に置けるかは、その振る舞いが決める。
+      // ⚠️ 落とし穴にはまっている間も置ける。原型は置かせない（`PitActor` の説明）。
       if (player.action !== null && !player.action.canPlaceBomb) continue;
 
       // ⚠️ 「勝手に設置」がかかっていると、「爆弾おけない」を上書きする。

@@ -35,6 +35,7 @@ export class AutobombSystem {
       if (player.action !== null && !player.action.canPlaceBomb) continue;
       // 「爆弾おけない」は見ない。勝手に設置がかかっていると、爆弾おけないを上書きする
       // （`BombSystem` の説明）。
+      // ⚠️ 落とし穴にはまっている間も置く。原型は置かせない（`PitActor` の説明）。
       const bomb = placeBomb(world, player);
       if (bomb !== undefined) {
         events.push({ type: 'bombPlaced', cell: bomb.cell, owner: bomb.owner });

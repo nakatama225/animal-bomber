@@ -71,6 +71,10 @@ export class ScatterAction implements ActiveAction {
   readonly drivesMovement = false;
   readonly damageCap = null;
   readonly untouchable = false;
+  /**
+   * ⚠️ 原型は撒いている間も爆弾を置ける（canPlaceBomb は撒いている状態を見ない。
+   * 勝手に設置もボタンも置く）。ここでは止めている。止める理由の記録は無い。
+   */
   readonly canPlaceBomb = false;
 
   #elapsed: Tick = tick(0);

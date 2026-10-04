@@ -25,6 +25,12 @@ const PIT_LIFETIME: Tick = tick(3600);
  *
  * 掘ったプレイヤー自身には発動しない。自分の穴で自分が止まると、掘る判断が
  * そもそも成り立たなくなる。
+ *
+ * ⚠️ 落ちたプレイヤーには、たまねぎと同じ 'stun' をかける。原型は落とし穴を別の状態
+ * （effects.pitfall）で持ち、はまっている間は爆弾を置かせない（canPlaceBomb。勝手に設置
+ * でもボタンでも）。たまねぎで泣いている間は原型でも置ける。ここでは2つを見分けられない
+ * ので、はまっている間も `AutobombSystem`・`BombSystem` が爆弾を置く（原型と違う。
+ * 理由の記録は無い）。
  */
 export class PitActor implements WorldActor {
   readonly kind = 'pit';
