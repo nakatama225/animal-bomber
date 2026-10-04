@@ -19,7 +19,7 @@ from animal_bomber.domain.query.board import (
     player_by_id,
     players_on,
 )
-from animal_bomber.domain.rules.tuning import AUTOBOMB_INTERVAL, BOMB_FUSE
+from animal_bomber.domain.rules.tuning import BOMB_FUSE
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.bomb import Bomb
 from animal_bomber.domain.state.effects import EffectKind
@@ -44,46 +44,31 @@ def step_bombs(
 
 
 def _place(world: WorldState, inputs: Mapping[PlayerId, PlayerInput]) -> list[SimEvent]:
-    """爆弾のボタンを押した瞬間と、「勝手に設置」の拍に、1つ置く。番号の順に置く。
+    """爆弾のボタンを押した瞬間に、1つ置く。番号の順に置く。
+
+    置くのは動いたあとのマス（原型の humanUpdate と同じ）。「勝手に設置」の拍に置くのは
+    `systems/autobomb.py` で、動く前に置く。
 
     ⚠️ 「勝手に設置」がかかっていると、「爆弾おけない」にも勝つ。2つの悪い状態が
     重なったときにどちらが勝つかを決めておかないと、組み合わせで振る舞いが読めなく
     なる（原型の 3.0.2 で決めた順）。拍の合間にボタンで置くこともできる（原型と同じ）。
+
+    ⚠️ 段階 5（動物の技）で、技の最中に置けるかの確かめと、落とし穴にはまっている間は
+    置かない確かめを足す（`systems/autobomb.py` にも同じものが要る。そちらの説明）。
     """
     events: list[SimEvent] = []
     for player in world.players:
         if player.life is not Life.ALIVE:
             continue
-        beat = _autobomb_beat(player)
         forced = player.effects.has(EffectKind.AUTOBOMB)
         if not forced and player.effects.has(EffectKind.NOBOMB):
             continue
-        if not beat and not just_pressed(player, inputs[player.id], PlayerInput.BOMB):
+        if not just_pressed(player, inputs[player.id], PlayerInput.BOMB):
             continue
         bomb = place_bomb(world, player)
         if bomb is not None:
             events.append(BombPlaced(cell=bomb.cell, owner=bomb.owner))
     return events
-
-
-def _autobomb_beat(player: PlayerState) -> bool:
-    """「勝手に設置」が置こうとする拍か。かかっている間だけ、待ちを1 tick 進める。
-
-    前にかかったときの待ちが残っていなければ、かかった次の tick が最初の拍になり、
-    そのあとは `AUTOBOMB_INTERVAL` ごと。置けなかった拍も、次は1拍あと（原型と同じ）。
-
-    ⚠️ 置くマスは、その tick に動いたあとのマス（`simulation.step` は動いてから爆弾を
-    置く）。原型は効果の時間を進める処理の中で、動く前に置く。拍の tick にマスの境目を
-    またぐと、原型より1マス先に置く（TypeScript 版も同じ）。揃えるかは決めていない。
-    """
-    if not player.effects.has(EffectKind.AUTOBOMB):
-        return False
-    wait = max(0, player.autobomb_wait - 1)
-    if wait > 0:
-        player.autobomb_wait = Tick(wait)
-        return False
-    player.autobomb_wait = AUTOBOMB_INTERVAL
-    return True
 
 
 def _advance_fuses(world: WorldState) -> None:

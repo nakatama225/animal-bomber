@@ -18,24 +18,26 @@
 順は結果を左右するので、並べ替えるときは何が変わるかを確かめる。なぜその順かは、下の
 一覧に、`step()` の並びと同じ番号で書く。
 
-1. 動く（`movement.py`）
-2. 爆弾を置き、導火線を進める（`bomb.py`）。動いてから置く。逆にすると、押した tick に
-   マスの境目をまたいだとき、動く前のマスに置かれる（通り抜けの対象から外すのも
-   1 tick 遅れるが、位置には効かない）。ボタンで置くときは原型も動いてから置く。
-   ⚠️「勝手に設置」で置くときは、原型は動く前に置く（`bomb.py` の `_autobomb_beat`）
-3. 導火線の尽きた爆弾を連鎖ごと爆発させ、爆風の残り時間を進める（`blast.py`）。置いた
+1. 「勝手に設置」の拍に爆弾を置く（`autobomb.py`）。動く前に置く。原型は効果の時間を
+   進める処理の中で全員ぶんの勝手に設置を済ませてから、各プレイヤーを動かすので、
+   拍の tick にマスの境目をまたいでも、今までいたマスに置く（TypeScript 版と同じ）
+2. 動く（`movement.py`）
+3. ボタンの爆弾を置き、導火線を進める（`bomb.py`）。動いてから置く。逆にすると、押した
+   tick にマスの境目をまたいだとき、動く前のマスに置かれる（通り抜けの対象から外すのも
+   1 tick 遅れるが、位置には効かない）。原型も、ボタンで置くときは動いてから置く
+4. 導火線の尽きた爆弾を連鎖ごと爆発させ、爆風の残り時間を進める（`blast.py`）。置いた
    tick にも導火線を進めるので、置いた tick を1つ目と数えて `BOMB_FUSE` 個目の tick に
    爆発する
-4. 足元のアイテムを拾う（`items.py`）。爆発のあと。逆にすると、この tick の爆風で
+5. 足元のアイテムを拾う（`items.py`）。爆発のあと。逆にすると、この tick の爆風で
    焼けるはずのアイテムを、同じ tick に拾えてしまう
-5. 爆風に触れたプレイヤーの体力を減らす（`damage.py`）。爆発のあとなので、この tick に
+6. 爆風に触れたプレイヤーの体力を減らす（`damage.py`）。爆発のあとなので、この tick に
    出た爆風にも当たる。拾うのより後。逆にすると、被弾して足元へ吐き出したアイテムを、
    同じ tick にそのまま拾い直す
-6. 一時的な状態の時間を進める（`effects.py`）。状態の作用を見る処理（1. と 2.）の
-   あと。4. でこの tick にかかった状態も、ここで 1 tick 進む（TypeScript 版と同じ）
-7. この tick の入力を、次の tick の「押した瞬間」の判定のために、前の入力として残す。
+7. 一時的な状態の時間を進める（`effects.py`）。状態の作用を見る処理（1.〜3.）の
+   あと。5. でこの tick にかかった状態も、ここで 1 tick 進む（TypeScript 版と同じ）
+8. この tick の入力を、次の tick の「押した瞬間」の判定のために、前の入力として残す。
    すべての処理が終わったあとに残す。途中で残すと、そのあとの処理から見て「押した
-   瞬間」が消える（いま押した瞬間を見るのは 2. だけなので、3. の前に動かしても結果は
+   瞬間」が消える（いま押した瞬間を見るのは 3. だけなので、4. の前に動かしても結果は
    変わらないが、押した瞬間を見る処理を足すときに崩れないよう最後に置く）
 
 ## 起きたことを戻り値で返す
@@ -56,6 +58,7 @@ from animal_bomber.domain.events import SimEvent
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState
+from animal_bomber.domain.systems.autobomb import step_autobomb
 from animal_bomber.domain.systems.blast import step_blasts
 from animal_bomber.domain.systems.bomb import step_bombs
 from animal_bomber.domain.systems.damage import step_damage
@@ -74,6 +77,7 @@ def step(world: WorldState, inputs: Mapping[PlayerId, PlayerInput]) -> list[SimE
             が返すもの）。
     """
     events: list[SimEvent] = []
+    events.extend(step_autobomb(world))
     move_players(world, inputs)
     events.extend(step_bombs(world, inputs))
     events.extend(step_blasts(world))

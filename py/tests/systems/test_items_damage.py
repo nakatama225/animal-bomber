@@ -321,6 +321,94 @@ class Test悪い状態の作用:
         ]
         assert len(world.bombs) == 2
 
+    def test_勝手に設置は_動く前のマスに置く(self) -> None:
+        """拍の tick にマスの境目をまたいでも、置くのは今までいたマス。
+
+        原型は効果の処理の中で全員ぶんの勝手に設置を済ませてから、各プレイヤーを動かす
+        （TypeScript 版の「勝手に設置は、その tick に動く前のマスに置く」と同じ場面）。
+        """
+        world = make_world()
+        clear_board(world)
+        player = world.players[0]
+        player.position = Point(1.99, 1.5)
+        _add(player, EffectKind.AUTOBOMB, 4)
+        events = simulation.step(world, only_for(world, 0, RIGHT))
+        assert player.position.x > 2
+        assert BombPlaced(cell=Cell(1, 1), owner=0) in events
+
+    def test_ボタンで置く爆弾は_動いたあとのマスに置く(self) -> None:
+        """原型の humanUpdate も、動いてから爆弾のボタンを見る。
+
+        ボタンの爆弾と違って動く前に置くのは、勝手に設置だけ（原型と同じ）。直す前から
+        通る対照（ボタンの爆弾を動く前へ移す変更を捕まえる）。
+        """
+        world = make_world()
+        clear_board(world)
+        player = world.players[0]
+        player.position = Point(1.99, 1.5)
+        events = simulation.step(world, only_for(world, 0, RIGHT | PlayerInput.BOMB))
+        assert BombPlaced(cell=Cell(2, 1), owner=0) in events
+
+    def test_拍のtickにボタンも押すと_動く前と動いたあとのマスに1つずつ置く(
+        self,
+    ) -> None:
+        """原型も、効果の処理で勝手に設置を置いたあと、ボタンの爆弾を置く。
+
+        原型はボタンの爆弾を humanUpdate で置く。TypeScript 版の「勝手に設置の拍の
+        tick にボタンも押すと…」と同じ場面。
+        """
+        world = make_world()
+        clear_board(world)
+        player = world.players[0]
+        player.position = Point(1.99, 1.5)
+        player.max_bombs = 2
+        _add(player, EffectKind.AUTOBOMB, 4)
+        events = simulation.step(world, only_for(world, 0, RIGHT | PlayerInput.BOMB))
+        assert [event for event in events if isinstance(event, BombPlaced)] == [
+            BombPlaced(cell=Cell(1, 1), owner=0),
+            BombPlaced(cell=Cell(2, 1), owner=0),
+        ]
+
+    def test_勝手に設置がかかっていれば_爆弾おけないでも拍の合間にボタンで置ける(
+        self,
+    ) -> None:
+        """ボタンの爆弾の側でも、勝手に設置が爆弾おけないに勝つ（`bomb.py`）。"""
+        world = make_world()
+        clear_board(world)
+        player = world.players[0]
+        player.max_bombs = 3
+        _add(player, EffectKind.NOBOMB, 6)
+        _add(player, EffectKind.AUTOBOMB, 4)
+        simulation.step(world, only_for(world, 0, IDLE))
+        assert len(world.bombs) == 1
+        # 隣のマスへ歩く。次の拍より手前で止める。
+        advance(world, only_for(world, 0, RIGHT), 20)
+        events = simulation.step(world, only_for(world, 0, RIGHT | PlayerInput.BOMB))
+        assert [event for event in events if isinstance(event, BombPlaced)] == [
+            BombPlaced(cell=Cell(2, 1), owner=0)
+        ]
+        assert len(world.bombs) == 2
+
+    def test_同じtickでは_全員の勝手に設置をボタンの爆弾より先に置く(self) -> None:
+        """番号の小さいプレイヤーがボタンで置いても、拍のプレイヤーの爆弾が先に並ぶ。
+
+        原型は効果の処理で全員ぶんの勝手に設置を済ませてから、入力の処理でボタンを見る。
+        誰も動かない場面でも、並び（同じ tick に導火線が尽きたときの爆発の順）と識別子が
+        変わる（TypeScript 版の同じ名前のテストと同じ場面）。
+        """
+        world = make_world()
+        clear_board(world)
+        first, second = world.players
+        first.position = Cell(3, 1).center()
+        second.position = Cell(5, 3).center()
+        _add(second, EffectKind.AUTOBOMB, 4)
+        simulation.step(world, only_for(world, 0, PlayerInput.BOMB))
+        assert [(bomb.owner, bomb.cell) for bomb in world.bombs] == [
+            (1, Cell(5, 3)),
+            (0, Cell(3, 1)),
+        ]
+        assert world.bombs[0].id < world.bombs[1].id
+
     def test_勝手に設置が切れても_待ちは残る(self) -> None:
         """待ちを 0 に戻すのはラウンドの始まりだけ（原型と同じ）。"""
         world = make_world()
@@ -461,13 +549,14 @@ class Test被弾:
         assert PlayerHurt(target=1, by=1, amount=BLAST_DAMAGE) in step_damage(world)
         assert second.last_hit_by == 1
 
-    def test_兄弟の爆弾の腕が交わるマスでは_伸ばす向きの順で当てたプレイヤーが決まる(
+    def test_兄弟の腕が交わるマスでは_原型と同じプレイヤーが当てる(
         self,
     ) -> None:
-        """同じ爆弾に誘爆された2つの爆弾は、伸ばす向きの順（上・右・下・左）に積む。
+        """同じ爆弾に誘爆された2つの爆弾は、爆風を伸ばす向きの順に積む。
 
-        原型は右・左・下・上の順なので、この場面では原型と逆になる（原型は 1）。揃える
-        かは決めていない。今の答えを書き留める（変えるときに、意図して変えたことになる）。
+        向きの順は右・左・下・上。右の (7,5)（1P）を先に、上の (5,3)（2P）をあとに
+        積むので、(7,3) の最後の爆風は 2P。期待値は原型を画面なしで動かして実測した答え
+        （blastOwner が 1）。
         TypeScript 版の「兄弟の爆弾の腕が交わるマスでは…」のテストと同じ場面。
         """
         world = make_world()
@@ -481,17 +570,15 @@ class Test被弾:
         first.position = Cell(1, 1).center()
         detonate(world, trigger)
         owners = [blast.owner for blast in world.blasts if blast.cell == Cell(7, 3)]
-        assert owners == [1, 0]
-        assert PlayerHurt(target=1, by=0, amount=BLAST_DAMAGE) in step_damage(world)
+        assert owners == [0, 1]
+        assert PlayerHurt(target=1, by=1, amount=BLAST_DAMAGE) in step_damage(world)
 
-    def test_誘爆された自分の爆弾のマスでも_兄弟の腕が届くと_伸ばす向きの順で決まる(
-        self,
-    ) -> None:
+    def test_下の兄弟を先に積むので_上の自分の爆弾のマスは自爆になる(self) -> None:
         """A（1P）が上の B（2P）と下の C（1P）を誘爆し、C の上の腕が B のマスまで届く。
 
-        この版は B を先に積むので、B のマスの最後の爆風は C の腕（1P）。原型は C を先に
-        積むので B の中心（2P。自爆）になる。揃えるかは決めていない。今の答えを書き
-        留める。TypeScript 版の「誘爆された自分の爆弾のマスでも…」のテストと同じ場面。
+        下の C を先に積むので、B のマスの最後の爆風は B の中心（2P。自爆）。期待値は
+        原型を画面なしで動かして実測した答え（持ち主の並び [0,0,1]、blastOwner が 1）。
+        TypeScript 版の「下の兄弟を先に積むので…」のテストと同じ場面。
         """
         world = make_world()
         clear_board(world)
@@ -505,6 +592,29 @@ class Test被弾:
         first.position = Cell(1, 1).center()
         detonate(world, trigger)
         owners = [blast.owner for blast in world.blasts if blast.cell == Cell(5, 4)]
+        assert owners == [0, 0, 1]
+        assert PlayerHurt(target=1, by=1, amount=BLAST_DAMAGE) in step_damage(world)
+
+    def test_上下を返すと_下の自分の爆弾のマスは兄弟の腕の持ち主になる(self) -> None:
+        """A（1P）が下の B（2P）と上の C（1P）を誘爆し、C の下の腕が B のマスまで届く。
+
+        下の B を先に、上の C をあとに積むので、B のマスの最後の爆風は C の腕（1P）で、
+        自爆にならない。誘爆された自分の爆弾のマスがいつも自爆になるのではなく、順で
+        決まる。期待値は原型を画面なしで動かして実測した答え（持ち主の並び [0,1,0]、
+        blastOwner が 0）。TypeScript 版の「上下を返すと…」のテストと同じ場面。
+        """
+        world = make_world()
+        clear_board(world)
+        first, second = world.players
+        first.max_bombs = 2
+        first.power = 1
+        trigger = put_bomb(world, first, Cell(5, 5))
+        put_bomb(world, second, Cell(5, 6))
+        first.power = 2
+        put_bomb(world, first, Cell(5, 4))
+        first.position = Cell(1, 1).center()
+        detonate(world, trigger)
+        owners = [blast.owner for blast in world.blasts if blast.cell == Cell(5, 6)]
         assert owners == [0, 1, 0]
         assert PlayerHurt(target=1, by=0, amount=BLAST_DAMAGE) in step_damage(world)
 

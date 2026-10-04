@@ -160,7 +160,9 @@ set の反復は、import でも構文木でも止められません。`tests/de
   7825fac（壊れたブロックの一覧に同じマスを1回だけ入れる）・32bf68b（「勝手に設置」は
   0.5 秒に1回だけ置こうとする・重なった爆風はあとから置かれた爆風の持ち主）・bcb1567
   （ラウンドの始まりは爆弾のボタンを押していた扱い）・2人は対角から始める（HEAD の
-  `DUEL_SPAWN_ORDER`）・c391fa1（決着のあと 120 tick 待ってから次のラウンド）。
+  `DUEL_SPAWN_ORDER`）・c391fa1（決着のあと 120 tick 待ってから次のラウンド）・爆風を
+  右・左・下・上の順に伸ばす（HEAD の `query/BlastReach.ts` の `BLAST_DIRECTIONS`）・
+  「勝手に設置」の拍に置くのは動く前（HEAD の `systems/AutobombSystem.ts`）。
   段階を進めて出し直すときも、その段階のコミットに同じ直しを当ててから流してください
   （段階のコミットはどれも直しより前です。爆発の処理は段階 4 までは `systems/BlastSystem.ts`、
   段階 5a からは `mutations/explode.ts`）。どのコミットに何を当てて出したかを、テストの

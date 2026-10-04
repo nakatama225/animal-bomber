@@ -12,8 +12,9 @@
 
 - 導火線が同じ tick に尽きた爆弾は、置かれた順（`world.bombs` の並び）に爆発させる。
   先に爆発した爆弾の連鎖に巻き込まれたものは、そこで処理済みになる
-- 連鎖の中では、待ち行列に積んだ順（先に積んだものから）に処理する。爆風は上・右・
-  下・左の順に伸ばす（`Direction` の定義順）
+- 連鎖の中では、待ち行列に積んだ順（先に積んだものから）に処理する。爆風は右・左・
+  下・上の順に伸ばす（`BLAST_DIRECTIONS`。原型と同じ）。この順で、誘爆した爆弾を
+  積む順と、爆風が重なったマスで当てたプレイヤー（`systems/damage.py`）が決まる
 - 壊せるブロックを壊すのは、1つの連鎖をすべて処理し終えたあと。そのため1つの連鎖の
   中では、ブロックの先へ爆風が伸びるかは処理の順に左右されない。⚠️ 同じ tick の
   別々の連鎖のあいだでは、先に爆発した連鎖が壊したブロックは、あとの連鎖からは
@@ -28,6 +29,7 @@ TypeScript 版と同じ順にしてある。順のそれぞれは `tests/systems
 
 from collections import deque
 from dataclasses import dataclass
+from typing import Final
 
 from animal_bomber.domain.core.coord import Cell, Direction
 from animal_bomber.domain.core.tick import Tick
@@ -45,6 +47,24 @@ from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems.bomb import remove_bomb
 from animal_bomber.domain.systems.items import roll_drop
+
+BLAST_DIRECTIONS: Final = (
+    Direction.RIGHT,
+    Direction.LEFT,
+    Direction.DOWN,
+    Direction.UP,
+)
+"""爆風を伸ばす向きの順。原型と同じ右・左・下・上。
+
+原型は `legacy/animal-bomber.html` の `DIRS`。
+
+⚠️ `Direction` の定義順（上・右・下・左）とは別に持つ。`Direction` の順は
+TypeScript 版の `DIRECTIONS` と揃えてあり、TypeScript 版では CPU の経路探しや、
+乱数で向きを選ぶ処理が使う（Python 版では段階 5・6 で使う。いまは開始位置の周りを
+空ける処理だけが使い、順は答えに効かない）。爆風の順だけを原型に合わせるのは、この順が
+爆風の重なったマスで当てたプレイヤーを決めるため（自爆の割合の数え方が原型と同じに
+なる。TypeScript 版の `BLAST_DIRECTIONS` も同じ）。
+"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,7 +127,7 @@ def detonate(world: WorldState, first: Bomb) -> Detonation:
         exploded += 1
         remove_bomb(world, bomb)
         add_blast(world, bomb.cell, bomb.owner, is_center=True)
-        for direction in Direction:
+        for direction in BLAST_DIRECTIONS:
             for distance in range(1, bomb.power + 1):
                 cell = bomb.cell.step(direction, distance)
                 tile = world.board.at(cell)
