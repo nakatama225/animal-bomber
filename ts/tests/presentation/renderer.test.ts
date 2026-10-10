@@ -32,7 +32,9 @@ describe('描画', () => {
     // 現れるものが変わるので、下の確認が失敗したら種を選び直す。
     // 2026-10-04 に 18 から選び直した（壊れたブロックからアイテムを落とす抽選を1ブロック
     // 1回に直し、乱数の引き方が変わった）。0〜79 のうち、すべて現れる種で試合がいちばん短いもの。
-    const seed = 39;
+    // 2026-10-11 に 39 から 12 へ選び直した（撒いている間も爆弾を置けるようにして試合の流れが
+    // 変わり、39 では突進が1度も出なくなった）。選び方は同じで、0〜79 のうち 30 種がすべて現れる。
+    const seed = 12;
     const animals = ['rabbit', 'frog', 'elephant', 'fox'];
     const game = new GameSession({ ...defaultMatchConfig(seed, animals), winsToTake: 2 });
     game.world.players.forEach((player) =>

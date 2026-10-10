@@ -2,6 +2,7 @@ import { cellOf, step } from '../../core/Coord.js';
 import { secondsToTicks, tick } from '../../core/Tick.js';
 import { placeBombAt } from '../../mutations/bombs.js';
 import { INVULNERABLE } from '../../rules/tuning.js';
+import { canPlaceBomb } from '../../state/PlayerState.js';
 import type { Ability } from '../Ability.js';
 import { NEUTRAL_ABILITY } from '../Ability.js';
 import { FoxfireActor } from './FoxfireActor.js';
@@ -26,9 +27,13 @@ export const FOX: Ability = {
    *
    * ⚠️ 足元ではなく「1マス前」から並べる。足元から置くと自分が列の
    * 先頭に埋まって逃げ場を失う。前から置けば後ろへ下がれる。
+   *
+   * 爆弾を置けない状態（「爆弾おけない」で「勝手に設置」が無い、など）なら並べない。
+   * ボタンの爆弾と同じ確かめ（`canPlaceBomb`）を通す。原型の foxLineShot も入口で見ていた。
    */
   onTap(world, player) {
     if (player.abilityCooldown > 0) return { action: null, events: [] };
+    if (!canPlaceBomb(player)) return { action: null, events: [] };
 
     const events = [];
     const origin = cellOf(player.position);
