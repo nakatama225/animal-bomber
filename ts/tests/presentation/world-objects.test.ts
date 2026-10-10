@@ -5,8 +5,10 @@ import { SlimeBombActor } from '../../src/domain/abilities/frog/SlimeBombActor.j
 import { PitActor } from '../../src/domain/abilities/mole/PitAction.js';
 import { ScatteredActor } from '../../src/domain/abilities/rabbit/ScatterAction.js';
 import type { WorldActor } from '../../src/domain/abilities/WorldActor.js';
+import { centerOf } from '../../src/domain/core/Coord.js';
 import { tick } from '../../src/domain/core/Tick.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
+import { IDLE_INPUT } from '../../src/domain/input/PlayerInput.js';
 import { placeBombAt } from '../../src/domain/mutations/bombs.js';
 import { detonate } from '../../src/domain/mutations/explode.js';
 import { enterSuddenDeath } from '../../src/domain/mutations/suddenDeath.js';
@@ -16,6 +18,7 @@ import { BLAST_DURATION, BOMB_FUSE } from '../../src/domain/rules/tuning.js';
 import type { Blast, Bomb } from '../../src/domain/state/Bomb.js';
 import type { Tile } from '../../src/domain/state/Board.js';
 import type { WorldState } from '../../src/domain/state/WorldState.js';
+import { Simulation } from '../../src/domain/systems/Simulation.js';
 import { CosmeticRng } from '../../src/presentation/CosmeticRng.js';
 import { drawAirActor, drawGroundActor } from '../../src/presentation/render/actors.js';
 import { drawTile } from '../../src/presentation/render/board.js';
@@ -24,7 +27,7 @@ import { ParticleField } from '../../src/presentation/render/ParticleField.js';
 import type { Frame } from '../../src/presentation/render/Frame.js';
 import { drawItem } from '../../src/presentation/render/items.js';
 import { layoutFor, screenX } from '../../src/presentation/render/Layout.js';
-import { makeWorld } from '../helpers.js';
+import { clearBoard, makeWorld } from '../helpers.js';
 import { fakeCanvas, type FakeCanvas } from './fakeCanvas.js';
 
 /**
@@ -249,6 +252,51 @@ describe('粒子と画面の揺れ', () => {
     const field = new ParticleField(new CosmeticRng());
     observeNew(field, world, new PitActor({ col: 5, row: 5 }, 0));
     expect(paintedParticles(field)).toBe(0);
+  });
+
+  it('落とし穴は、誰かが落ちて消えたときだけ揺らす（落ちない相手が乗ったまま時間切れになっても揺らさない）', () => {
+    // そのマスに誰かいるかで決めると、落ちない相手（ほかのもぐら）が乗ったまま時間切れになったとき、
+    // 見えないはずの穴の位置を見せてしまう。
+    const untilPitGoes = (animal: string): { shake: number; ticks: number } => {
+      const world = makeWorld(1, ['mole', animal]);
+      clearBoard(world);
+      const field = new ParticleField(new CosmeticRng());
+      const sim = new Simulation();
+      const idle = new Map(world.players.map((player) => [player.id, IDLE_INPUT]));
+      world.players[1]!.position = centerOf({ col: 5, row: 5 });
+      observeNew(field, world, new PitActor({ col: 5, row: 5 }, 0));
+      let ticks = 0;
+      while (world.actors.some((actor) => actor instanceof PitActor)) {
+        field.onEvents(sim.step(world, idle), world);
+        ticks += 1;
+      }
+      return { shake: field.shake, ticks };
+    };
+    const onMole = untilPitGoes('mole');
+    // 片付け（延長戦）で消えたのではなく、時間切れまで乗り続けたことを確かめる。
+    expect(onMole.ticks).toBe(3600);
+    expect(onMole.shake).toBe(0);
+    expect(untilPitGoes('rabbit').shake).toBeGreaterThan(0);
+  });
+
+  it('落とし穴の寿命の最後の tick に落ちても、落ちたものとして揺らす', () => {
+    // 落ちた tick には残りを減らさない（`PitActor.tick`）。減らしてから落とすと、最後の tick に
+    // 落ちた穴は残りが 0 になり、時間切れと見分けられない。
+    const world = makeWorld(1, ['mole', 'rabbit']);
+    clearBoard(world);
+    const field = new ParticleField(new CosmeticRng());
+    const sim = new Simulation();
+    const idle = new Map(world.players.map((player) => [player.id, IDLE_INPUT]));
+    const rabbit = world.players[1]!;
+    rabbit.position = centerOf({ col: 9, row: 9 });
+    const pit = new PitActor({ col: 5, row: 5 }, 0);
+    observeNew(field, world, pit);
+    while (pit.remaining > 1) field.onEvents(sim.step(world, idle), world);
+    rabbit.position = centerOf({ col: 5, row: 5 });
+    field.onEvents(sim.step(world, idle), world);
+    expect(rabbit.effects.has('pitfall')).toBe(true);
+    expect(world.actors).not.toContain(pit);
+    expect(field.shake).toBeGreaterThan(0);
   });
 
   it('撒かれた障害物が置かれると、煙を出す', () => {

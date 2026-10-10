@@ -16,8 +16,11 @@ import { advance, clearBoard, makeWorld, onlyFor, press, sameForAll } from '../h
 
 /*
  * 落とし穴を原型（legacy/animal-bomber.html の startDigPit・updateDigging・pitfallCheck）に合わせる。
- * 期待値は原型を画面なしで動かして測った値。原型は秒の小数で数え、この版は tick で数えるので、
- * 動けない長さは2 tick ほど違う（原型の 181 フレームがこの版では 179 tick）。幅を持たせて比べる。
+ * 期待値は原型を画面なしで動かして測った値（c5b/oracle/legacy_pit.json）。
+ * tick の終わりに止まっているかを数えると、原型 181 フレーム・この版 179 tick で2つ違う。
+ * 1つは原型の秒の小数の残り（1/60 秒ずつ 3 秒を引くと、181 回目で 0 を切る）。もう1つは減らす位置で、
+ * この版は動けない最後の tick の終わりに状態を消すので、その tick が数に入らない。
+ * 動けるようになるのは原型 181 フレーム目・この版 180 tick 目。幅を持たせて比べる。
  */
 
 const MOLE_HOLD = abilityOf('mole').holdTicks;
@@ -77,6 +80,9 @@ describe('掘る（原型 startDigPit・updateDigging）', () => {
     holdSpecial(world, 0, sim);
     advance(world, onlyFor(world, 0, press({})), 100, sim);
     holdSpecial(world, 0, sim);
+    // 2回目は掘り始めない（原型の digging2: false）。掘り終わりの確かめだけに任せると、
+    // 何も生まない「掘る」で 90 tick 動けなくなる。
+    expect(mole.action).toBeNull();
     advance(world, onlyFor(world, 0, press({})), 100, sim);
     expect(mole.specialCharges).toBe(0);
     expect(pitCells(world)).toEqual(['5,5']);
@@ -135,6 +141,41 @@ describe('掘る（原型 startDigPit・updateDigging）', () => {
     expect(mole.action).toBeNull();
     advance(world, onlyFor(world, 0, press({})), 100, sim);
     expect(pitCells(world)).toEqual([]);
+  });
+
+  it('掘っている途中に同じマスへ爆弾を置かれても、掘り終わりに穴ができ、爆発のあとも残る', () => {
+    // 原型の掘り終わり（updateDigging）が確かめ直すのはマスと穴だけで、爆弾は見ない。
+    // 原型の答え（dig_bombPlacedAt5/30/85）：どれも掘り終わりに (5,5) に穴が1つ、爆発のあとも残り、踏むと落ちる。
+    for (const at of [5, 30, 85]) {
+      const world = arena(['mole', 'rabbit']);
+      const [mole, rabbit] = world.players as [PlayerState, PlayerState];
+      place(mole, { col: 5, row: 5 });
+      place(rabbit, { col: 19, row: 13 });
+      mole.specialCharges = 1;
+      const sim = new Simulation();
+      holdSpecial(world, 0, sim);
+      expect(mole.action?.kind).toBe('dig');
+      for (let t = 0; t < 100; t += 1) {
+        if (t === at) {
+          place(rabbit, { col: 5, row: 5 });
+          sim.step(world, onlyFor(world, 1, press({ bomb: true })));
+          expect(world.bombs.map((bomb) => [bomb.cell.col, bomb.cell.row, bomb.owner])).toEqual([[5, 5, 1]]);
+          place(rabbit, { col: 19, row: 13 });
+          continue;
+        }
+        sim.step(world, sameForAll(world, press({})));
+      }
+      expect(pitCells(world)).toEqual(['5,5']);
+
+      place(mole, { col: 1, row: 1 });
+      advance(world, sameForAll(world, press({})), 300, sim);
+      expect(world.bombs).toEqual([]);
+      expect(pitCells(world)).toEqual(['5,5']);
+      place(rabbit, { col: 5, row: 5 });
+      advance(world, sameForAll(world, press({})), 1, sim);
+      expect(rabbit.effects.has('pitfall')).toBe(true);
+      expect(pitCells(world)).toEqual([]);
+    }
   });
 
   it('対照：押し出されなければ掘り終わり、足元に穴ができる', () => {
@@ -217,6 +258,9 @@ describe('落ちる（原型 pitfallCheck）', () => {
     world.actors.push(new PitActor({ col: 7, row: 5 }, mole.id), new PitActor({ col: 8, row: 5 }, mole.id));
     const frozen = countFrozen(world, rabbit, 800, (t) => {
       if (t === 31) place(rabbit, { col: 8, row: 5 });
+      // はまっている間は2つ目の穴に落ちず、穴は残る（原型の A2_S1 は f100 に穴が1つ）。
+      // 止まる長さの合計だけでは、移した直後に落ちて泣きが足された場合と見分けられない。
+      if (t === 100) expect(pitCells(world)).toEqual(['8,5']);
     });
     expect(frozen).toBeGreaterThanOrEqual(355);
     expect(frozen).toBeLessThanOrEqual(365);
@@ -341,5 +385,20 @@ describe('はまっている間の爆弾（原型 canPlaceBomb の !p.effects.pi
     sim.step(world, sameForAll(world, press({})));
     sim.step(world, onlyFor(world, 0, press({ bomb: true })));
     expect(world.bombs.map((bomb) => [bomb.cell.col, bomb.cell.row, bomb.owner])).toEqual([[7, 5, 0]]);
+  });
+
+  it('対照：たまねぎで泣いているだけなら、「勝手に設置」の拍でも置ける', () => {
+    // 原型の答え（B1_onion_autobomb）：(7,5) に置き、泣きはそのまま続く。
+    const world = arena(['rabbit', 'mole']);
+    const [rabbit, mole] = world.players as [PlayerState, PlayerState];
+    place(rabbit, { col: 7, row: 5 });
+    place(mole, { col: 1, row: 3 });
+    applyItem(world, rabbit, 'onion');
+    const sim = new Simulation();
+    sim.step(world, sameForAll(world, press({})));
+    rabbit.effects.add('autobomb', itemEffectTicks(4), itemEffectTicks(12));
+    sim.step(world, sameForAll(world, press({})));
+    expect(world.bombs.map((bomb) => [bomb.cell.col, bomb.cell.row, bomb.owner])).toEqual([[7, 5, 0]]);
+    expect(rabbit.effects.has('stun')).toBe(true);
   });
 });

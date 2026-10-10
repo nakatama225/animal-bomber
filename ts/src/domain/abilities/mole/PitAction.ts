@@ -15,7 +15,12 @@ const DIG_TIME: Tick = tick(90);
 /** 落ちた相手が動けない長さ。 */
 const HOLD_TIME: Tick = tick(180);
 
-/** 穴が残る長さ。 */
+/**
+ * 穴が残る長さ。
+ *
+ * ⚠️ 原型の穴に寿命は無い。踏まれるか、ラウンドが始まり直す（延長戦も含む）まで残る。
+ * 60 秒で消すのはこの版だけの決め事で、理由は記録に残っていない。
+ */
 const PIT_LIFETIME: Tick = tick(3600);
 
 /** 穴を掘れる動物。掘れる側は、誰の穴にも落ちない。 */
@@ -52,9 +57,12 @@ export class PitActor implements WorldActor {
     readonly owner: PlayerId,
   ) {}
 
-  tick(world: WorldState): { events: SimEvent[]; done: boolean } {
-    this.#remaining = tick(this.#remaining - 1);
+  /** 穴が残る長さの残り。描画のためだけに読む（踏まれて消えたか、時間切れで消えたかを見分ける）。 */
+  get remaining(): Tick {
+    return this.#remaining;
+  }
 
+  tick(world: WorldState): { events: SimEvent[]; done: boolean } {
     for (const player of world.players) {
       if (player.animal === DIGGER || !isAlive(player)) continue;
       // ⚠️ 落とし穴の印だけを見る。泣いている（'stun'）かは見ない。泣いている相手は原型でも落ちる。
@@ -62,6 +70,9 @@ export class PitActor implements WorldActor {
       if (!sameCell(cellOf(player.position), this.cell)) continue;
       return { events: this.#trap(world, player), done: true };
     }
+    // 残りを減らすのは、誰も落ちなかった tick だけ。踏まれて消えた穴は残りが 1 以上のままなので、
+    // 描画は残りの有無で時間切れと見分けられる。
+    this.#remaining = tick(this.#remaining - 1);
     return { events: [], done: this.#remaining <= 0 };
   }
 
@@ -72,7 +83,7 @@ export class PitActor implements WorldActor {
     // 滑っている最中でも止まる。滑りを残すと、穴が切れたとたんに滑り出す。
     player.effects.clear('slide');
     const events: SimEvent[] = [{ type: 'effectApplied', target: player.id, effect: 'pitfall' }];
-    // 位置を決める振る舞い（掘る・舌・突き進む技）は打ち切る。穴は無敵でも避けられない。
+    // 位置を決める振る舞い（掘る・舌・突進）は打ち切る。穴は無敵でも避けられない。
     // 打ち切るときも後始末は呼ぶ（抱えていたものを撒く、など。`ActiveAction.finish`）。
     // 動きを乗っ取らない振る舞い（撒きながら歩く、など）は続く。原型も、穴に落ちて止めるのは
     // 掘る・舌・突進だけだった。
@@ -90,10 +101,11 @@ export class PitActor implements WorldActor {
 }
 
 /**
- * そのマスに穴を掘れるか（原型の startDigPit）。
+ * そのマスに穴を掘り始められるか（原型の startDigPit）。
  *
  * 掘れないのは3つ。マスが空いていない（壊せるブロックの中）、すでに穴がある、爆弾がある。
  * ⚠️ 撒いたものやアイテムの上には掘れる。原型が見るのもこの3つだけ。
+ * ⚠️ 掘り始めの確かめで、掘り終わりには使わない。掘り終わりは爆弾を見ない（`PitAction.finish`）。
  */
 export function canDigAt(world: Readonly<WorldState>, cell: Cell): boolean {
   if (world.board.at(cell) !== 'empty') return false;
@@ -139,7 +151,9 @@ export class PitAction implements ActiveAction {
   finish(world: WorldState, player: PlayerState): SimEvent[] {
     if (this.#remaining > 0) return [];
     // 掘り終わりにも確かめ直す。2匹が同じマスを同時に掘ると、先に掘り終えた側の穴がもうある。
-    if (!canDigAt(world, this.cell)) return [];
+    // ⚠️ 確かめ直すのはマスと穴の2つだけで、爆弾は見ない（原型の updateDigging）。掘っている間に
+    // 同じマスへ爆弾を置かれても、その下に穴ができる。爆弾を見るのは掘り始め（`canDigAt`）だけ。
+    if (world.board.at(this.cell) !== 'empty' || pitAt(world, this.cell) !== undefined) return [];
     world.actors.push(new PitActor(this.cell, player.id));
     return [];
   }

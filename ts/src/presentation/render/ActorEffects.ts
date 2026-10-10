@@ -2,8 +2,7 @@ import type { WorldActor } from '../../domain/abilities/WorldActor.js';
 import { FoxfireActor } from '../../domain/abilities/fox/FoxfireActor.js';
 import { PitActor } from '../../domain/abilities/mole/PitAction.js';
 import { ScatteredActor } from '../../domain/abilities/rabbit/ScatterAction.js';
-import { cellOf, sameCell } from '../../domain/core/Coord.js';
-import { isAlive } from '../../domain/state/PlayerState.js';
+import { cellOf } from '../../domain/core/Coord.js';
 import type { WorldState } from '../../domain/state/WorldState.js';
 import type { CosmeticRng } from '../CosmeticRng.js';
 import { glow, puff, type Particle } from './particles.js';
@@ -58,7 +57,7 @@ export class ActorEffects {
       if (!this.#seen.has(actor)) this.#appeared(actor, out, rng);
     }
     for (const actor of this.#seen) {
-      if (!current.has(actor)) shake = Math.max(shake, this.#vanished(world, actor, out, rng));
+      if (!current.has(actor)) shake = Math.max(shake, this.#vanished(actor, out, rng));
     }
     this.#seen = current;
     return shake;
@@ -69,7 +68,7 @@ export class ActorEffects {
   }
 
   /** @returns 画面の揺れ */
-  #vanished(world: Readonly<WorldState>, actor: WorldActor, out: Particle[], rng: CosmeticRng): number {
+  #vanished(actor: WorldActor, out: Particle[], rng: CosmeticRng): number {
     if (actor instanceof ScatteredActor) {
       // 残り時間があるうちに消えたなら、誰かが踏んだ。
       if (actor.remaining > 0) puff(out, rng, actor.cell, '#b98a5a', '💩');
@@ -81,12 +80,11 @@ export class ActorEffects {
       return 0;
     }
     if (actor instanceof PitActor) {
-      // 時間切れで消えた穴は、最後まで見せない。踏まれたときだけ出す。
-      const stepped = world.players.some(
-        (player) =>
-          player.id !== actor.owner && isAlive(player) && sameCell(cellOf(player.position), actor.cell),
-      );
-      if (!stepped) return 0;
+      // 時間切れで消えた穴は、最後まで見せない。誰かが落ちたときだけ出す。
+      // 落ちたかは残り時間で見分ける（踏まれた tick には残りを減らさない。`PitActor.tick`）。
+      // そのマスに誰かがいるかで見分けると、落ちない相手（掘れる動物・はまっている最中の
+      // プレイヤー）が乗ったまま時間切れになったとき、穴の位置を見せてしまう。
+      if (actor.remaining <= 0) return 0;
       puff(out, rng, actor.cell, '#8a5a2a', '🕳️');
       return PIT_SHAKE;
     }
