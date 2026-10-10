@@ -2,7 +2,7 @@ import { sameCell } from '../domain/core/Coord.js';
 import { bombAt } from '../domain/query/BoardQuery.js';
 import { DangerMap, type HypotheticalBomb } from '../domain/query/DangerMap.js';
 import { BOMB_FUSE } from '../domain/rules/tuning.js';
-import { powerOf, speedOf } from '../domain/state/PlayerState.js';
+import { canPlaceBomb, powerOf, speedOf } from '../domain/state/PlayerState.js';
 import { ButtonMacro } from './ButtonMacro.js';
 import type { CpuContext } from './CpuContext.js';
 import {
@@ -58,7 +58,9 @@ export function canEscapeAfter(ctx: CpuContext, option: BombOption): boolean {
 /** いまいるマスに、そもそも爆弾を置ける状態か。 */
 export function canPlaceHere(ctx: CpuContext): boolean {
   const { me, world, here } = ctx;
-  if (me.effects.has('nobomb')) return false;
+  // ゲームの側と同じ確かめを通す（原型の CPU も canPlaceBomb を見る）。爆弾おけないだけを見ると、
+  // 「勝手に設置」が重なって置ける間も、CPU だけが置かなくなる。
+  if (!canPlaceBomb(me)) return false;
   if (me.activeBombs >= me.maxBombs) return false;
   if (bombAt(world, here) !== undefined) return false;
   // 壊せるブロックの中に潜っているときは置けない。

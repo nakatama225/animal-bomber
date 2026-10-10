@@ -12,6 +12,7 @@ import { FLEE } from '../../src/ai/behaviors/Flee.js';
 import { OUT_OF_BOMBS_BAN, SAME_SPOT_BAN, UNSAFE_SPOT_BAN } from '../../src/ai/margins.js';
 import { directionAlong } from '../../src/ai/PathFollower.js';
 import { abilityOf } from '../../src/domain/abilities/registry.js';
+import { ScatterAction } from '../../src/domain/abilities/rabbit/ScatterAction.js';
 import { cellOf, centerOf, type Cell } from '../../src/domain/core/Coord.js';
 import { Rng } from '../../src/domain/core/Rng.js';
 import { secondsToTicks, tick } from '../../src/domain/core/Tick.js';
@@ -22,6 +23,7 @@ import { placeBomb, placeBombAt } from '../../src/domain/mutations/bombs.js';
 import { enterSuddenDeath } from '../../src/domain/mutations/suddenDeath.js';
 import { DangerMap } from '../../src/domain/query/DangerMap.js';
 import { findPath } from '../../src/domain/query/PathFinder.js';
+import { itemEffectTicks } from '../../src/domain/rules/items.js';
 import { BLAST_DURATION, BOMB_FUSE } from '../../src/domain/rules/tuning.js';
 import { isAlive, type PlayerId } from '../../src/domain/state/PlayerState.js';
 import { hashWorld, type WorldState } from '../../src/domain/state/WorldState.js';
@@ -236,6 +238,21 @@ describe('爆弾を置いてよいかの判断', () => {
     expect(decideBomb(ctx, [footBomb(ctx)])).not.toBeNull();
   });
 
+  it('爆弾おけないだけなら置かず、「勝手に設置」が重なっている間は置く（ゲームの側の canPlaceBomb と同じ）', () => {
+    // 原型の答え（c5b/oracle/legacy_rabbit_fox.json の cpu_canPlaceBomb_*）：原型の CPU は cpuUpdate で
+    // canPlaceBomb を見る。爆弾おけないだけなら false、勝手に設置が重なっていれば true。
+    const decide = (withAutobomb: boolean) => {
+      const world = makeWorld(3);
+      clearBoard(world);
+      world.players[0]!.effects.add('nobomb', itemEffectTicks(6), itemEffectTicks(18));
+      if (withAutobomb) world.players[0]!.effects.add('autobomb', itemEffectTicks(4), itemEffectTicks(12));
+      const { ctx } = context(world);
+      return decideBomb(ctx, [footBomb(ctx)]);
+    };
+    expect(decide(false)).toBeNull();
+    expect(decide(true)).not.toBeNull();
+  });
+
   it('自分の爆弾が多すぎるときは、短く待つだけにする', () => {
     const world = makeWorld(3);
     clearBoard(world);
@@ -350,6 +367,42 @@ describe('技の最中と技の出し方', () => {
     const hp = cpu.hp;
     game.run(BOMB_FUSE + BLAST_DURATION + 10);
     expect(cpu.hp).toBe(hp);
+  });
+
+  it('爆弾を置ける技の最中は、技の無いときと同じく爆弾を置く（置けない技の最中は置かない）', () => {
+    // うさぎの撒く技は、撒きながら爆弾も置ける（原型の答え：c5b/oracle/legacy_rabbit_fox.json の
+    // c3_scatter_*）。CPU も撒いている間に置く。置けるかは技の canPlaceBomb が決める。
+    const firstBombWhile = (kind: 'scatter' | 'probe'): number | null => {
+      const world = makeWorld(1, ['rabbit', 'frog']);
+      const rabbit = world.players[0]!;
+      let left = 120;
+      rabbit.action =
+        kind === 'scatter'
+          ? new ScatterAction(cellOf(rabbit.position))
+          : {
+              kind: 'probe',
+              drivesMovement: false,
+              damageCap: null,
+              untouchable: false,
+              canPlaceBomb: false,
+              sweepsItems: false,
+              tick: () => {
+                left -= 1;
+                return { events: [], done: left <= 0 };
+              },
+            };
+      const source = new CpuInputSource(0, CPU_LEVELS.oni, 1);
+      const sim = new Simulation();
+      for (let t = 0; t < 120; t += 1) {
+        // 置いた tick の前に技が続いていたかを見る。技が終わってから置いたのでは確かめにならない。
+        const during = rabbit.action?.kind === kind;
+        const events = sim.step(world, new Map([[0, source.next(world)], [1, IDLE_INPUT]]));
+        if (events.some((e) => e.type === 'bombPlaced' && e.owner === 0)) return during ? t : null;
+      }
+      return null;
+    };
+    expect(firstBombWhile('scatter')).not.toBeNull();
+    expect(firstBombWhile('probe')).toBeNull();
   });
 
   it('押して離すだけの技は、途中で危なくなっても向きを変えずに出し切る', () => {
