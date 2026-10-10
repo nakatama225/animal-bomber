@@ -63,12 +63,11 @@ export class Simulation {
 
     // 乗っ取り中の振る舞いを先に進める。位置を決めるのがそちらなので、
     // あとから移動の入力を当てると1 tick ぶん食い違う。
-    events.push(...this.#actions.step(world, playerInputs));
-
-    // 「勝手に設置」は入力で動く前に置く。原型は効果の処理の中で全員ぶんを済ませてから
-    // 各プレイヤーを入力で動かすので、拍の tick にマスの境目をまたいでも今までいたマスに置く。
-    // ⚠️ 技（上の ActionSystem）とは原型と順が違う（`AutobombSystem` の説明）。
-    events.push(...this.#autobomb.step(world));
+    // 「勝手に設置」は、そのプレイヤーの振る舞いを進めた直後に1人ずつ置く。新しく技を始めるのと
+    // 入力で動くのは、全員ぶん置いたあと（原型の update と同じ順。`AutobombSystem` の説明）。
+    events.push(
+      ...this.#actions.step(world, playerInputs, (player) => this.#autobomb.step(world, player)),
+    );
 
     // ボタンの爆弾は動いてから置く。置いてから動く形にすると、置いた瞬間に
     // そのマスから出られてしまい、通り抜けの扱いが1 tick ずれる。
@@ -87,6 +86,8 @@ export class Simulation {
     events.push(...this.#items.step(world));
     events.push(...this.#damage.step(world));
 
+    // ⚠️ 一時的な状態の残りを減らすのは最後。原型はプレイヤーごとに、技を進める前に減らす。
+    // 切れる tick が1 tick 遅れるだけなので、並びは変えていない。
     this.#effects.step(world);
 
     // ⚠️ この tick の入力を控えるのは、すべての System が終わったあと。

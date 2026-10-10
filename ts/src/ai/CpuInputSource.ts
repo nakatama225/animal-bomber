@@ -130,9 +130,13 @@ export class CpuInputSource implements InputSource {
     const inDanger = this.#noticeDanger(touching.some((cell) => !danger.isSafe(cell)));
     const ctx = new CpuContext(world, me, here, danger, inDanger, this.#level, memory, this.#rng);
 
-    // 泣いて動けない間も、押している途中のボタンは押し続ける。
-    // 離すと、長押しの途中で別の技（押して離す技）に化ける。
-    if (isFrozen(me)) return compose(me, takeStep(memory), null);
+    // 泣いている・落とし穴にはまっている間は何もしない（原型の CPU も同じ）。押している途中の
+    // ボタンも離し、手順は捨てる。動けない間に離しても通常技は出ない（`ActionSystem` の説明）ので、
+    // 離して別の技に化けることはない。動けるようになったら考え直す。
+    if (isFrozen(me)) {
+      memory.macro = null;
+      return IDLE_INPUT;
+    }
 
     this.#keepSafeWhileHolding(ctx);
     // ⚠️ 技のボタンが「離されて数え直された」状態（押している長さが 0）のときだけ

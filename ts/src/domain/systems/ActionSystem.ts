@@ -3,7 +3,7 @@ import { tick } from '../core/Tick.js';
 import type { SimEvent } from '../events/SimEvent.js';
 import type { PlayerInput } from '../input/PlayerInput.js';
 import type { PlayerId, PlayerState } from '../state/PlayerState.js';
-import { isAlive } from '../state/PlayerState.js';
+import { isAlive, isFrozen } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 
 /**
@@ -29,26 +29,64 @@ import type { WorldState } from '../state/WorldState.js';
  * 開始時は「ロックされた」状態にしておき、**一度離したときに解除**する。
  * キーボード側も同じだけ安全になる。
  *
+ * ## 動けない間（泣いている・落とし穴にはまっている）は技を出さない
+ *
+ * 原型は押した瞬間に通常技を、しきい値に届いた瞬間にとくぎを出し、どちらも動けなければ
+ * 何もせずに帰る。その押し方の分は捨てる（あとから遅れて出ない。チキンも減らない）。
+ * この版は離した瞬間に通常技を出すので、次の3か所で見る。
+ *
+ * - 押し始めた tick に動けなければ、その押し方では通常技を出さない（`tapVoided`）
+ * - しきい値に届いた tick に動けなければ、とくぎを出さない（その押し方のとくぎはそれきり）
+ * - 離した tick に動けなければ、通常技を出さない
+ *
+ * ⚠️ 3つ目は原型と揃わない。原型は押した瞬間（動けるうち）に通常技を出し終えている。
+ * この版で出すと泣いたまま技が出る（跳んで逃げる、など）ので、出さないことにした。
+ * 押し始めに動けなくても、動けるようになってからしきい値に届けば、とくぎは出る（原型と同じ）。
+ *
+ * ## 進めるのと始めるのを分ける
+ *
+ * 続いている振る舞いを進めるのを先に全員ぶん済ませ、ボタンを見て新しく始めるのはそのあと。
+ * 原型も、効果の処理の中で全員の技を進め、そのあとの入力の処理で技を始める。
+ * 進めるときは1人ずつ、そのプレイヤーの「あとで呼ぶ処理」（`Simulation` が「勝手に設置」を
+ * 渡す）をすぐに呼ぶ。原型はプレイヤーごとに「技を進める → 勝手に設置」と回すので、番号の
+ * 大きいプレイヤーの技が番号の小さいプレイヤーの爆弾を押しのけたり起爆したりする順まで同じになる。
+ *
+ * ⚠️ この tick に振る舞いを進めたプレイヤーは、同じ tick には新しく始めない（終わった tick でも）。
+ * 原型は、技が終わったフレームのうちに次の技を始められる。1 tick の違いで、今までの形のままにしてある。
+ *
  * ## この System は動物の種類を知らない
  *
  * 何の技かは `Ability` が決め、始まった振る舞いは `ActiveAction` が
  * 自分で進める。ここは押した長さを数えて呼び分けるだけ。
  */
 export class ActionSystem {
-  step(world: WorldState, playerInputs: ReadonlyMap<PlayerId, PlayerInput>): SimEvent[] {
+  /**
+   * @param afterAdvance 1人ぶんの振る舞いを進めた直後に呼ぶ処理。番号の順に全員ぶん呼ぶ
+   *   （振る舞いが無いプレイヤーも、入力が無いプレイヤーも）
+   */
+  step(
+    world: WorldState,
+    playerInputs: ReadonlyMap<PlayerId, PlayerInput>,
+    afterAdvance: (player: PlayerState) => SimEvent[] = () => [],
+  ): SimEvent[] {
     const events: SimEvent[] = [];
+    const advanced = new Set<PlayerId>();
+    for (const player of world.players) {
+      if (playerInputs.has(player.id)) {
+        if (player.abilityCooldown > 0) {
+          player.abilityCooldown = tick(player.abilityCooldown - 1);
+        }
+        if (player.action !== null) {
+          advanced.add(player.id);
+          events.push(...this.#advance(world, player));
+        }
+      }
+      events.push(...afterAdvance(player));
+    }
+
     for (const player of world.players) {
       const playerInput = playerInputs.get(player.id);
-      if (playerInput === undefined) continue;
-
-      if (player.abilityCooldown > 0) {
-        player.abilityCooldown = tick(player.abilityCooldown - 1);
-      }
-
-      if (player.action !== null) {
-        events.push(...this.#advance(world, player));
-        continue;
-      }
+      if (playerInput === undefined || advanced.has(player.id)) continue;
       if (!isAlive(player)) continue;
       events.push(...this.#watchButton(world, player, playerInput));
     }
@@ -86,11 +124,16 @@ export class ActionSystem {
     }
 
     const ability = abilityOf(player.animal);
+    const frozen = isFrozen(player);
 
     if (playerInput.action) {
       player.actionHeld = tick(player.actionHeld + 1);
+      // 押し始めに動けなければ、この押し方では通常技を出さない（離すまで覚えておく）。
+      if (player.actionHeld === 1) player.tapVoided = frozen;
       // 長押しがしきい値に届いた瞬間に1回だけ出す。
       if (player.actionHeld === ability.holdTicks && player.specialCharges > 0) {
+        // 動けなければ出さない。チキンは減らさず、この押し方のとくぎはそれきり。
+        if (frozen) return [];
         if (ability.onHold === undefined) return [];
         player.specialCharges -= 1;
         const result = ability.onHold(world, player);
@@ -104,6 +147,8 @@ export class ActionSystem {
     const held = player.actionHeld;
     player.actionHeld = tick(0);
     if (held <= 0 || held >= ability.holdTicks) return [];
+    // 動けない間に離した押し方と、動けない間に押し始めた押し方は捨てる。
+    if (frozen || player.tapVoided) return [];
     if (ability.onTap === undefined) return [];
     const cooldownBefore = player.abilityCooldown;
     const result = ability.onTap(world, player);

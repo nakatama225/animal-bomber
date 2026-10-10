@@ -184,6 +184,7 @@ export function createWorld(config: WorldSeed): WorldState {
       // 一度離すまで技が出ない。パッドは次の tick で押下が戻るため、
       // これが無いと開始 0.5 秒でとくぎが暴発する。
       actionHeld: tick(-1),
+      tapVoided: false,
       abilityCooldown: tick(0),
       autobombWait: tick(0),
       lastHitBy: null,
@@ -244,6 +245,7 @@ export function hashWorld(world: WorldState): number {
       .int(player.specialCharges)
       .text(player.action?.kind ?? '')
       .int(player.actionHeld)
+      .bool(player.tapVoided)
       .int(player.abilityCooldown)
       .int(player.autobombWait)
       .int(player.lastHitBy ?? -1);
