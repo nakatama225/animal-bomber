@@ -4,7 +4,7 @@ import type { SimEvent } from '../events/SimEvent.js';
 import type { PlayerInput } from '../input/PlayerInput.js';
 import { placeBomb } from '../mutations/bombs.js';
 import type { PlayerId } from '../state/PlayerState.js';
-import { isAlive, justPressed } from '../state/PlayerState.js';
+import { canPlaceBomb, isAlive, justPressed } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 
 /**
@@ -35,15 +35,9 @@ export class BombSystem {
       const playerInput = playerInputs.get(player.id);
       if (playerInput === undefined) continue;
 
-      // 乗っ取り中に置けるかは、その振る舞いが決める。
-      // ⚠️ 落とし穴にはまっている間も置ける。原型は置かせない（`PitActor` の説明）。
-      if (player.action !== null && !player.action.canPlaceBomb) continue;
-
-      // ⚠️ 「勝手に設置」がかかっていると、「爆弾おけない」を上書きする。
-      // 2つの悪い状態が重なったときにどちらが勝つかを決めておかないと、
-      // 組み合わせで挙動が読めなくなる。拍の合間にボタンで置くこともできる。
-      const forced = player.effects.has('autobomb');
-      if (!forced && player.effects.has('nobomb')) continue;
+      // 置けない状態（落とし穴・置けない振る舞いの最中・「爆弾おけない」）は `canPlaceBomb` が見る。
+      // 「勝手に設置」がかかっていれば「爆弾おけない」より勝つので、拍の合間にボタンでも置ける。
+      if (!canPlaceBomb(player)) continue;
       if (!justPressed(player, playerInput, 'bomb')) continue;
       const bomb = placeBomb(world, player);
       if (bomb !== undefined) {

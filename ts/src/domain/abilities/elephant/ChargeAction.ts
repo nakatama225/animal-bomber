@@ -55,7 +55,7 @@ const CARRY_LIMIT = 6;
  * 突進は移動・破壊・取得・被弾の4つに同時に割り込むが、
  * `src/domain/systems/` には「突進」という言葉が1つも無い。
  * System が見るのは `drivesMovement` `damageCap` `untouchable`
- * `canPlaceBomb` の4つの性質だけで、何の振る舞いかは知らない。
+ * `canPlaceBomb` `sweepsItems` の5つの性質だけで、何の振る舞いかは知らない。
  */
 export class ChargeAction implements ActiveAction {
   readonly kind = 'charge';
@@ -64,6 +64,8 @@ export class ChargeAction implements ActiveAction {
   /** 体当たりは当たらないが、爆風は通る。 */
   readonly untouchable = true;
   readonly canPlaceBomb = false;
+  /** 通り道のアイテムは自分で扱う（下の「通り道のアイテムの扱い」）。 */
+  readonly sweepsItems = true;
 
   #remaining: Tick = CHARGE_DURATION;
   readonly #direction: Direction;

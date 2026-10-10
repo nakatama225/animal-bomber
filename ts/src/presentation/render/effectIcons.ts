@@ -17,6 +17,7 @@ export const EFFECT_ICONS: Readonly<Record<EffectKind, string>> = {
   weak: '🕯️',
   autobomb: '🎰',
   slow: '🐌',
+  pitfall: '🕳️',
 };
 
 /**

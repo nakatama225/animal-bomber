@@ -21,6 +21,8 @@ export const EFFECT_LABELS: Readonly<Record<EffectKind, EffectLabel>> = {
   weak: { emoji: '🕯️', label: '爆風1マス' },
   autobomb: { emoji: '🎰', label: '勝手に設置' },
   slow: { emoji: '🐌', label: '超スロー' },
+  // 原型は状態の表ではなく、名札の行で「🕳️落とし穴 3.0秒」と出していた。
+  pitfall: { emoji: '🕳️', label: '落とし穴' },
 };
 
 /** 絵文字と呼び方をつないだもの（「🍌すべる」）。 */

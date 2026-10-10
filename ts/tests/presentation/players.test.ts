@@ -66,7 +66,7 @@ const CASES: readonly Case[] = [
   {
     name: '穴を掘っている',
     setup: (w, p) => {
-      const action = new PitAction();
+      const action = new PitAction(cellOf(p.position));
       for (let i = 0; i < 45; i += 1) action.tick(w, p);
       p.action = action;
     },
@@ -193,7 +193,7 @@ describe('描画のために読む値', () => {
   it('穴掘りの進みは 0 から 1 まで進む', () => {
     const world = makeWorld(7, ['mole']);
     const player = world.players[0]!;
-    const action = new PitAction();
+    const action = new PitAction(cellOf(player.position));
     expect(action.progress).toBe(0);
     for (let i = 0; i < 45; i += 1) action.tick(world, player);
     expect(action.progress).toBeCloseTo(0.5);

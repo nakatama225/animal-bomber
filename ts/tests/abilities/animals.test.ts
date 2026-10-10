@@ -126,7 +126,7 @@ describe('もぐら', () => {
     // 相手が同じマスへ来ると止まる。
     other.position = { ...mole.position };
     advance(world, onlyFor(world, 0, press({})), 2);
-    expect(other.effects.has('stun')).toBe(true);
+    expect(other.effects.has('pitfall')).toBe(true);
   });
 
   it('掘ったプレイヤーは自分の穴で止まらない', () => {
@@ -134,7 +134,7 @@ describe('もぐら', () => {
     const mole = world.players[0]!;
     hold(world, 'mole');
     advance(world, onlyFor(world, 0, press({})), 120);
-    expect(mole.effects.has('stun')).toBe(false);
+    expect(mole.effects.has('pitfall')).toBe(false);
   });
 });
 

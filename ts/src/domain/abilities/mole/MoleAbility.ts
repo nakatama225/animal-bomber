@@ -1,9 +1,9 @@
-import { DIRECTIONS, step } from '../../core/Coord.js';
+import { cellOf, DIRECTIONS, step } from '../../core/Coord.js';
 import { secondsToTicks } from '../../core/Tick.js';
 import { bombAt } from '../../query/BoardQuery.js';
 import type { Ability } from '../Ability.js';
 import { NEUTRAL_ABILITY } from '../Ability.js';
-import { PitAction } from './PitAction.js';
+import { canDigAt, PitAction } from './PitAction.js';
 
 /**
  * もぐら。壊せるブロックを通り抜けられる。
@@ -36,7 +36,16 @@ export const MOLE: Ability = {
     return true;
   },
 
-  onHold() {
-    return { action: new PitAction(), events: [] };
+  /**
+   * 足元に穴を掘り始める。
+   *
+   * 壊せるブロックの中・すでに穴があるマス・爆弾のマスでは掘らない（`canDigAt`）。
+   * ⚠️ 掘らなくてもチキンは減る（呼び出し側が先に減らす）。原型も、とくぎを使った時点で
+   * 減らしてから掘れるかを見ていた。
+   */
+  onHold(world, player) {
+    const cell = cellOf(player.position);
+    if (!canDigAt(world, cell)) return { action: null, events: [] };
+    return { action: new PitAction(cell), events: [] };
   },
 };

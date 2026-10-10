@@ -153,9 +153,14 @@ export class Presenter {
   }
 }
 
-/** 悪い状態にかかったときの音。滑る・泣くは専用の音、うんこの効果はまとめて1つ。 */
+/**
+ * 悪い状態にかかったときの音。滑る・泣くは専用の音、うんこの効果はまとめて1つ。
+ *
+ * ⚠️ 落とし穴は泣くのと同じ音にしている。原型は専用の音（SE.pitFall）を鳴らすが、この版の
+ * 音の表にはまだ無い。
+ */
 function effectSound(effect: string): SoundName {
   if (effect === 'slide') return 'slip';
-  if (effect === 'stun') return 'cry';
+  if (effect === 'stun' || effect === 'pitfall') return 'cry';
   return 'poop';
 }

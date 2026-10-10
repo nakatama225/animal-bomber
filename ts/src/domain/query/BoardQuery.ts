@@ -1,4 +1,5 @@
-import { cellOf, sameCell, type Cell } from '../core/Coord.js';
+import { cellOf, sameCell, type Cell, type Point } from '../core/Coord.js';
+import { PLAYER_RADIUS } from '../rules/tuning.js';
 import type { Blast, Bomb } from '../state/Bomb.js';
 import type { PlayerId, PlayerState } from '../state/PlayerState.js';
 import { isAlive } from '../state/PlayerState.js';
@@ -70,6 +71,47 @@ export function isSolidFor(
   // 置かれた時点で重なっていた者は、降りるまで通り抜けられる。
   if (player !== undefined && bomb.passThrough.has(player.id)) return false;
   return true;
+}
+
+/**
+ * 体を `from` から `to` へ動かしたとき、通れないマスに重なるか。
+ *
+ * ⚠️ **いま体が重なっているマスは判定から外す。** これが無いと、足元のマスが後から壁に
+ * なったときに閉じ込められる。爆弾を置いた直後にその上から離れる、といった場面で起きる。
+ * 完全に出たあとは判定の対象へ戻るため、いったん出たら戻れない。これは意図した挙動で、
+ * 「置いた爆弾をすり抜けて逃げ続ける」ことを防ぐ。
+ *
+ * 歩く処理（`MovementSystem`）と、技で押しのけられる先の確かめが同じ判定を使う。
+ * 別々に書くと、押しのけだけ壁の中へ入れてしまう、といった食い違いが出る。
+ *
+ * @param passesThrough 壊せるブロックを抜けられるかの判定（`isSolidFor` と同じ理由で引数で受ける）
+ */
+export function bodyCollides(
+  world: Readonly<WorldState>,
+  player: PlayerState,
+  from: Point,
+  to: Point,
+  passesThrough?: PassesThrough,
+): boolean {
+  const fromCol0 = Math.floor(from.x - PLAYER_RADIUS);
+  const fromCol1 = Math.floor(from.x + PLAYER_RADIUS);
+  const fromRow0 = Math.floor(from.y - PLAYER_RADIUS);
+  const fromRow1 = Math.floor(from.y + PLAYER_RADIUS);
+
+  const col0 = Math.floor(to.x - PLAYER_RADIUS);
+  const col1 = Math.floor(to.x + PLAYER_RADIUS);
+  const row0 = Math.floor(to.y - PLAYER_RADIUS);
+  const row1 = Math.floor(to.y + PLAYER_RADIUS);
+
+  for (let row = row0; row <= row1; row += 1) {
+    for (let col = col0; col <= col1; col += 1) {
+      const alreadyOverlapping =
+        col >= fromCol0 && col <= fromCol1 && row >= fromRow0 && row <= fromRow1;
+      if (alreadyOverlapping) continue;
+      if (isSolidFor(world, { col, row }, player, passesThrough)) return true;
+    }
+  }
+  return false;
 }
 
 /** そのプレイヤーが、まだその爆弾の上に乗っているか。 */

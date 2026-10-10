@@ -3,7 +3,7 @@ import type { SimEvent } from '../events/SimEvent.js';
 import { placeBomb } from '../mutations/bombs.js';
 import { AUTOBOMB_INTERVAL } from '../rules/tuning.js';
 import type { PlayerState } from '../state/PlayerState.js';
-import { isAlive } from '../state/PlayerState.js';
+import { canPlaceBomb, isAlive } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 
 /**
@@ -31,11 +31,9 @@ export class AutobombSystem {
       if (!isAlive(player)) continue;
       // 拍は、このあと置けずに飛ばす場合も進める。原型も、置けなかった拍の次は1拍あと。
       if (!this.#beat(player)) continue;
-      // 乗っ取り中に置けるかは、その振る舞いが決める。
-      if (player.action !== null && !player.action.canPlaceBomb) continue;
-      // 「爆弾おけない」は見ない。勝手に設置がかかっていると、爆弾おけないを上書きする
-      // （`BombSystem` の説明）。
-      // ⚠️ 落とし穴にはまっている間も置く。原型は置かせない（`PitActor` の説明）。
+      // 落とし穴にはまっている間と、置けない振る舞いの最中は置かない（`canPlaceBomb`）。
+      // 「爆弾おけない」には止められない。勝手に設置がかかっている間は、そちらが勝つ。
+      if (!canPlaceBomb(player)) continue;
       const bomb = placeBomb(world, player);
       if (bomb !== undefined) {
         events.push({ type: 'bombPlaced', cell: bomb.cell, owner: bomb.owner });

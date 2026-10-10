@@ -20,7 +20,7 @@ import type { WorldState } from '../state/WorldState.js';
  *
  * ## System は種類を知らない
  *
- * 各 System が見るのは下の4つの性質だけで、**何の振る舞いかは見ない**。
+ * 各 System が見るのは下の5つの性質だけで、**何の振る舞いかは見ない**。
  * 動物を追加しても `src/domain/systems/` には1行も足さない。
  * これが守られているかは `tests/boundary/guards.test.ts` が見張る。
  */
@@ -50,6 +50,17 @@ export interface ActiveAction {
 
   /** 爆弾を置けるか。 */
   readonly canPlaceBomb: boolean;
+
+  /**
+   * true の間、足元のアイテムをふつうの拾い（`ItemSystem`）では拾わない。通り道のアイテムは
+   * この振る舞いが自分で扱う。
+   *
+   * ⚠️ 自分で扱う振る舞いがふつうの拾いも通すと、自分の拾いのあとに同じ tick のうちに
+   * 足元へ来たアイテム（ほかの振る舞いが撒いた・押しのけられた先にあった）を、
+   * 自分の扱い方を通さずにそのまま効かせてしまう。原型も、突進の最中だけふつうの拾いを
+   * 飛ばしていた（update の `if (!p.effects.charge) pickupCheck(p);`）。
+   */
+  readonly sweepsItems: boolean;
 
   /**
    * 1 tick 進める。

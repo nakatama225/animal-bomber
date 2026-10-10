@@ -1,7 +1,7 @@
 import type { Point } from '../core/Coord.js';
 import type { PlayerInput } from '../input/PlayerInput.js';
 import { abilityOf } from '../abilities/registry.js';
-import { isSolidFor } from '../query/BoardQuery.js';
+import { bodyCollides } from '../query/BoardQuery.js';
 import type { PlayerId, PlayerState } from '../state/PlayerState.js';
 import { isAlive, speedOf } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
@@ -9,7 +9,6 @@ import {
   ALIGN_EPSILON,
   ALIGN_RATE_WHEN_MOVING,
   MOVE_SUBSTEP_DISTANCE,
-  PLAYER_RADIUS,
   SLIDE_SPEED_RATIO,
 } from '../rules/tuning.js';
 import { isFrozen } from '../state/PlayerState.js';
@@ -153,15 +152,8 @@ const STEP_OF: Readonly<Record<Direction, { dx: number; dy: number }>> = {
 /**
  * 移動先が壁と重なるか。
  *
- * ⚠️ **いま体が重なっているマスは判定から外す。** これが無いと、
- * 足元のマスが後から壁になったときに閉じ込められる。爆弾を置いた
- * 直後にその上から離れる、といった場面で起きる。
- *
- * 完全に出たあとは判定の対象へ戻るため、いったん出たら戻れない。
- * これは意図した挙動で、「置いた爆弾をすり抜けて逃げ続ける」ことを防ぐ。
- *
- * 何が固いかはプレイヤーによって違う（爆弾の通り抜け、動物ごとの能力）。
- * その判断は `isSolidFor` に集約してあり、ここは形の計算だけを持つ。
+ * 形の計算（いま重なっているマスを外す、など）は `bodyCollides` にある。ここは、
+ * 壊せるブロックを抜けられるかをその動物の能力から引いて渡すだけ。
  */
 export function collides(
   world: Readonly<WorldState>,
@@ -169,25 +161,5 @@ export function collides(
   from: Point,
   to: Point,
 ): boolean {
-  // 壊せるブロックを抜けられるかは、その動物の能力が決める。
-  const passesThrough = abilityOf(player.animal).passesThrough;
-  const fromCol0 = Math.floor(from.x - PLAYER_RADIUS);
-  const fromCol1 = Math.floor(from.x + PLAYER_RADIUS);
-  const fromRow0 = Math.floor(from.y - PLAYER_RADIUS);
-  const fromRow1 = Math.floor(from.y + PLAYER_RADIUS);
-
-  const col0 = Math.floor(to.x - PLAYER_RADIUS);
-  const col1 = Math.floor(to.x + PLAYER_RADIUS);
-  const row0 = Math.floor(to.y - PLAYER_RADIUS);
-  const row1 = Math.floor(to.y + PLAYER_RADIUS);
-
-  for (let row = row0; row <= row1; row += 1) {
-    for (let col = col0; col <= col1; col += 1) {
-      const alreadyOverlapping =
-        col >= fromCol0 && col <= fromCol1 && row >= fromRow0 && row <= fromRow1;
-      if (alreadyOverlapping) continue;
-      if (isSolidFor(world, { col, row }, player, passesThrough)) return true;
-    }
-  }
-  return false;
+  return bodyCollides(world, player, from, to, abilityOf(player.animal).passesThrough);
 }

@@ -25,7 +25,15 @@ export type EffectKind =
   /** 勝手に爆弾を置いてしまう。 */
   | 'autobomb'
   /** 極端に遅くなる。 */
-  | 'slow';
+  | 'slow'
+  /**
+   * 落とし穴にはまって動けない。
+   *
+   * ⚠️ たまねぎの 'stun' とは分けて持つ。どちらも動けないが、はまっている間は爆弾を
+   * 置けず、泣いている間は置ける（原型の canPlaceBomb が見るのは落とし穴だけ）。
+   * はまっている間は別の穴にも落ちない。1つにまとめると、この2つが見分けられない。
+   */
+  | 'pitfall';
 
 /** すべての種類を、いつも同じ順で並べたもの。 */
 export const EFFECT_KINDS: readonly EffectKind[] = [
@@ -37,6 +45,7 @@ export const EFFECT_KINDS: readonly EffectKind[] = [
   'weak',
   'autobomb',
   'slow',
+  'pitfall',
 ];
 
 /**

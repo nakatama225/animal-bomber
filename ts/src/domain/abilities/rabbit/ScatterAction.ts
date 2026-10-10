@@ -76,6 +76,7 @@ export class ScatterAction implements ActiveAction {
    * 勝手に設置もボタンも置く）。ここでは止めている。止める理由の記録は無い。
    */
   readonly canPlaceBomb = false;
+  readonly sweepsItems = false;
 
   #elapsed: Tick = tick(0);
   #placed = 0;

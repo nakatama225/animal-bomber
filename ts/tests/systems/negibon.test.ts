@@ -189,6 +189,7 @@ describe('倒れたら外周へ回る', () => {
       damageCap: null,
       untouchable: false,
       canPlaceBomb: false,
+      sweepsItems: false,
       tick: () => {
         ticked += 1;
         return { events: [], done: false };

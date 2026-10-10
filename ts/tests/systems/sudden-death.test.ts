@@ -154,7 +154,7 @@ describe('延長戦の準備', () => {
     player.position = centerOf({ col: 9, row: 9 });
     player.specialCharges = 2;
     player.effects.add('slow', tick(300), tick(300));
-    player.action = new PitAction();
+    player.action = new PitAction({ col: 9, row: 9 });
     enterSuddenDeath(world, [0, 2], 'allDown');
     // 開始位置は加わる者にプレイヤー番号の順で割り当てる。プレイヤー2は2番目。
     expect(player.position).toEqual(centerOf(SPAWN_CELLS[1]!));

@@ -157,9 +157,33 @@ export function isAlive(player: PlayerState): boolean {
   return player.life.kind === 'alive';
 }
 
-/** 動けない状態か。 */
+/**
+ * 動けない状態か。泣いている（たまねぎ）か、落とし穴にはまっている。
+ *
+ * 動けない間は、歩けず、技も出せない（原型の isFrozen と同じく2つとも見る）。
+ */
 export function isFrozen(player: PlayerState): boolean {
-  return player.effects.has('stun');
+  return player.effects.has('stun') || player.effects.has('pitfall');
+}
+
+/**
+ * いま爆弾を置ける状態か。ボタン・「勝手に設置」・技で並べる爆弾の、どれもがここを通る。
+ *
+ * 置けないのは3つ。
+ *
+ * - 落とし穴にはまっている。⚠️ 泣いている（たまねぎ）だけなら置ける。原型の canPlaceBomb が
+ *   見るのは落とし穴だけで、ここを `isFrozen` にすると、泣いている間に置けなくなる
+ * - 乗っ取り中の振る舞いが置けない形（`ActiveAction.canPlaceBomb`）
+ * - 「爆弾おけない」がかかっていて、「勝手に設置」がかかっていない。⚠️ 2つが重なったら
+ *   「勝手に設置」が勝つ。どちらが勝つかを決めておかないと、組み合わせで挙動が読めなくなる
+ *   （原型では、素直に書くと勝手に設置が完全に死に、2つ踏んでも損をしなかった）
+ *
+ * 手持ちの数・マスが空いているか・爆弾が既にあるかは、置く場所の話なので `placeBombAt` が見る。
+ */
+export function canPlaceBomb(player: PlayerState): boolean {
+  if (player.effects.has('pitfall')) return false;
+  if (player.action !== null && !player.action.canPlaceBomb) return false;
+  return !player.effects.has('nobomb') || player.effects.has('autobomb');
 }
 
 /** 無敵の最中か。 */

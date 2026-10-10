@@ -31,6 +31,9 @@ export function placeBomb(world: WorldState, player: PlayerState): Bomb | undefi
  * 指定したマスに爆弾を置く。
  *
  * 足元以外へ置く技のために、置く場所を引数で受け取る形を分けてある。
+ * 置けるか（手持ち・マス・爆弾の有無）を確かめてから `spawnBomb` を呼ぶ。
+ * プレイヤーが置ける状態か（落とし穴・「爆弾おけない」など）は見ない。それは呼ぶ側が
+ * `canPlaceBomb` で見る。
  */
 export function placeBombAt(
   world: WorldState,
@@ -40,7 +43,18 @@ export function placeBombAt(
   if (player.activeBombs >= player.maxBombs) return undefined;
   if (world.board.at(cell) !== 'empty') return undefined;
   if (bombAt(world, cell) !== undefined) return undefined;
+  return spawnBomb(world, player, cell);
+}
 
+/**
+ * 確かめずに、そのマスへ爆弾を1つ生やす。
+ *
+ * 技が爆発を起こすために使う。手持ちを使い切っていても爆発は起こる（原型の spawnBomb も
+ * 手持ちを見ない）。生やした爆弾は手持ちに数えるので、すぐ起爆して取り除けば
+ * 差し引きで手持ちは変わらない。
+ * ⚠️ 置けるかの確かめが要る場面（プレイヤーの操作で置く）では `placeBombAt` を使う。
+ */
+export function spawnBomb(world: WorldState, player: PlayerState, cell: Cell): Bomb {
   // ⚠️ 置いたプレイヤー自身だけでなく、そのマスに重なっている全員を通す。
   // 置いたプレイヤー自身だけにすると、足元へ置かれた側がその場から動けなくなる。
   const passThrough = new Set<PlayerId>();

@@ -181,6 +181,7 @@ describe('外周にいる CPU', () => {
       damageCap: null,
       untouchable: true,
       canPlaceBomb: false,
+      sweepsItems: false,
       tick: () => ({ events: [], done: false }),
     };
     const events = run(world, [cpuOf(), new IdleInputSource(1)], 300).flat();

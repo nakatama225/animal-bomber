@@ -27,6 +27,7 @@ export class TongueAction implements ActiveAction {
   readonly damageCap = null;
   readonly untouchable = false;
   readonly canPlaceBomb = false;
+  readonly sweepsItems = false;
 
   readonly #direction: Direction;
   #elapsed: Tick = tick(0);
