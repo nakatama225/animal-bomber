@@ -2,6 +2,7 @@ import { cellOf, sameCell, step, type Direction } from '../../core/Coord.js';
 import { tick, type Tick } from '../../core/Tick.js';
 import type { SimEvent } from '../../events/SimEvent.js';
 import { applyItem } from '../../mutations/items.js';
+import { bombAt, playersOn } from '../../query/BoardQuery.js';
 import type { PlayerState } from '../../state/PlayerState.js';
 import type { WorldState } from '../../state/WorldState.js';
 import type { ActiveAction } from '../ActiveAction.js';
@@ -62,6 +63,15 @@ export class TongueAction implements ActiveAction {
       const cell = step(cellOf(player.position), this.#direction, this.#reached);
       // 壁の向こうへは届かない。
       if (world.board.at(cell) !== 'empty') {
+        this.#caught = true;
+        break;
+      }
+      // 爆弾と、盤面の上のほかのプレイヤーでも止まる。その向こうのアイテムは取らない
+      // （原型の updateTongue と同じ順：マス → 爆弾 → プレイヤー → アイテム）。
+      if (
+        bombAt(world, cell) !== undefined ||
+        playersOn(world, cell).some((other) => other.id !== player.id)
+      ) {
         this.#caught = true;
         break;
       }

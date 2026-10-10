@@ -1,8 +1,9 @@
 import { cellOf, DIRECTIONS, step, type Cell } from '../../core/Coord.js';
 import { tick, type Tick } from '../../core/Tick.js';
 import type { SimEvent } from '../../events/SimEvent.js';
-import { detonate } from '../../mutations/explode.js';
-import { placeBombAt } from '../../mutations/bombs.js';
+import { addBlast, detonate } from '../../mutations/explode.js';
+import { spawnBomb } from '../../mutations/bombs.js';
+import { bombAt } from '../../query/BoardQuery.js';
 import type { PlayerState } from '../../state/PlayerState.js';
 import type { WorldState } from '../../state/WorldState.js';
 import type { WorldActor } from '../WorldActor.js';
@@ -90,25 +91,89 @@ export class SlimeBombActor implements WorldActor {
 
     if (this.#hopsLeft > 0) {
       this.#hopsLeft -= 1;
-      // 跳ぶ向きは乱数で選ぶ。盤面の外へは出ない。
-      const direction = world.rng.pick(DIRECTIONS);
-      const next = step(this.#cell, direction, HOP_DISTANCE);
-      if (world.board.inBounds(next)) this.#cell = next;
+      this.#hop(world);
       return { events: [], done: false };
     }
+    return { events: this.#burst(world), done: true };
+  }
 
-    // 落ちた場所で爆発する。爆弾として1つ置いてすぐ起こす。
-    const bomb = placeBombAt(world, this.owner, this.#cell);
-    if (bomb === undefined) return { events: [], done: true };
-    const result = detonate(world, bomb);
-    const events: SimEvent[] = [
-      { type: 'exploded', cell: this.#cell, owner: this.owner.id, chained: result.chained },
+  /**
+   * 乱数の順に向きを試し、跳べる最初の向きへ跳ぶ。どこにも跳べなければその場に留まる。
+   *
+   * 跳べるのは、内側のマス（外周の葱ボンの通り道ではない）で、爆弾が無いところ。柱の上にも乗る。
+   * ⚠️ 1つの向きだけを引いて、駄目なら留まる形にしない。爆弾や外周のそばでは留まってばかりになる。
+   * 原型も、向きを混ぜた順に試していた（updateSlimes）。
+   * ⚠️ 向きは縦横の4つ。原型は斜めも入れた8方向に跳ぶ（ここはまだ揃えていない）。
+   */
+  #hop(world: WorldState): void {
+    const order = [...DIRECTIONS];
+    world.rng.shuffle(order);
+    for (const direction of order) {
+      const next = step(this.#cell, direction, HOP_DISTANCE);
+      if (!isInner(world, next)) continue;
+      if (bombAt(world, next) !== undefined) continue;
+      this.#cell = next;
+      return;
+    }
+  }
+
+  /**
+   * いまのマスで爆発する。爆弾として1つ生やして、すぐ起こす。
+   *
+   * 空きでないマス（柱・壊せるブロック）や爆弾のマスで跳ね終わったら、まわりの8マスを決まった
+   * 順に見て、最初の降りられるマスへずれてから爆発する（柱の上のまま爆発すると、四方が塞がれて
+   * 中心の1マスしか燃えない）。どこにも降りられなければ、その場に中心の爆風だけを出す。
+   *
+   * 手持ちの数は見ない。とくぎの爆発なので、手持ちを出し切っていても起こる（`spawnBomb`）。
+   */
+  #burst(world: WorldState): SimEvent[] {
+    const blocked = (cell: Cell): boolean =>
+      world.board.at(cell) !== 'empty' || bombAt(world, cell) !== undefined;
+    let cell = this.#cell;
+    if (blocked(cell)) {
+      const landing = SHIFT_ORDER.map((d) => ({ col: cell.col + d.col, row: cell.row + d.row })).find(
+        (next) => !blocked(next),
+      );
+      if (landing === undefined) {
+        addBlast(world, cell, this.owner.id, true);
+        return [{ type: 'exploded', cell, owner: this.owner.id, chained: 1 }];
+      }
+      cell = landing;
+    }
+    const result = detonate(world, spawnBomb(world, this.owner, cell));
+    return [
+      { type: 'exploded', cell, owner: this.owner.id, chained: result.chained },
       ...result.events,
     ];
-    return { events, done: true };
   }
 
   encode(): string {
     return `${this.#cell.col},${this.#cell.row},${this.#hopsLeft},${this.#timer}`;
   }
+}
+
+/**
+ * 跳ね終わったマスが塞がっていたときに、ずれる先を試す順。右・左・下・上、そのあと斜め。
+ *
+ * 原型の SLIME_DIRS と同じ順にしてある。順が違うと、柱の上で跳ね終わったときに燃える場所が変わる。
+ */
+const SHIFT_ORDER: readonly Cell[] = [
+  { col: 1, row: 0 },
+  { col: -1, row: 0 },
+  { col: 0, row: 1 },
+  { col: 0, row: -1 },
+  { col: 1, row: 1 },
+  { col: 1, row: -1 },
+  { col: -1, row: 1 },
+  { col: -1, row: -1 },
+];
+
+/** 外周（葱ボンの通り道）を除いた、内側のマスか。 */
+function isInner(world: WorldState, cell: Cell): boolean {
+  return (
+    cell.col >= 1 &&
+    cell.row >= 1 &&
+    cell.col <= world.board.cols - 2 &&
+    cell.row <= world.board.rows - 2
+  );
 }
