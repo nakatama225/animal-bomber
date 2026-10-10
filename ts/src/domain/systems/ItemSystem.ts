@@ -10,13 +10,15 @@ import type { WorldState } from '../state/WorldState.js';
  * アイテムの抽選・配置・取得。
  *
  * 誰が拾ったかに応じた効果もここで適用する。動物ごとの違い
- * （効果が2倍になる、など）は段階5で能力として差し込む。
+ * （効果が2倍になる、など）は能力の倍率（`itemMultiplier`）で受け取る。
  */
 export class ItemSystem {
   step(world: WorldState): SimEvent[] {
     const events: SimEvent[] = [];
     for (const player of world.players) {
       if (!isAlive(player)) continue;
+      // 通り道のアイテムを自分で扱う振る舞いの最中は、ここでは拾わない（`ActiveAction.sweepsItems`）。
+      if (player.action?.sweepsItems === true) continue;
       const cell = cellOf(player.position);
       const index = world.items.findIndex((item) => sameCell(item.cell, cell));
       if (index < 0) continue;

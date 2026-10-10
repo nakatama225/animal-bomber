@@ -1,7 +1,7 @@
 import { cellOf, sameCell, type Direction } from '../../core/Coord.js';
 import { tick, type Tick } from '../../core/Tick.js';
 import type { SimEvent } from '../../events/SimEvent.js';
-import { bombAt } from '../../query/BoardQuery.js';
+import { bodyCollides, bombAt } from '../../query/BoardQuery.js';
 import { itemDefinition, type ItemKind } from '../../rules/items.js';
 import { MAX_SPEED } from '../../rules/tuning.js';
 import type { PlayerState } from '../../state/PlayerState.js';
@@ -9,8 +9,11 @@ import { isAlive } from '../../state/PlayerState.js';
 import type { WorldState } from '../../state/WorldState.js';
 import { hurt } from '../../mutations/damage.js';
 import { detonate } from '../../mutations/explode.js';
-import { applyItem } from '../../mutations/items.js';
+import { applyItem, rollDrop } from '../../mutations/items.js';
 import type { ActiveAction } from '../ActiveAction.js';
+// ⚠️ 能力は登録表（registry）からではなく Ability から引く。registry はこのファイルを読み込む
+// （ElephantAbility 経由）ので、registry を読むと循環になる。
+import { lookupAbility } from '../Ability.js';
 
 /** 突進が続く長さ。 */
 const CHARGE_DURATION: Tick = tick(300);
@@ -104,6 +107,9 @@ export class ChargeAction implements ActiveAction {
     if (tile === 'soft') {
       world.board.set(ahead, 'empty');
       events.push({ type: 'blockDestroyed', cell: ahead });
+      // 爆風で壊したときと同じく、アイテムの抽選を引く（原型の destroySoft）。出たアイテムは
+      // このあと通り道として掃く（良いものは吸い込み、悪いものは抱える）。
+      events.push(...rollDrop(world, ahead));
     }
 
     player.position = {
@@ -121,8 +127,17 @@ export class ChargeAction implements ActiveAction {
     return { events, done: this.#remaining <= 0 };
   }
 
-  /** 止まるときに、抱えていた悪いアイテムを左右へばら撒く。 */
+  /**
+   * 止まるときに、抱えていた悪いアイテムを左右へばら撒く。
+   *
+   * 倒れて盤面を離れたときは撒かない。抱えていたものは盤面に出ずに消える（原型は盤面に
+   * いるプレイヤーの突進だけを進めるので、倒れたあとは撒く処理を通らない）。
+   */
   finish(world: WorldState, player: PlayerState): SimEvent[] {
+    if (!isAlive(player)) {
+      this.#carried.length = 0;
+      return [];
+    }
     if (this.#carried.length === 0) return [];
     const events: SimEvent[] = [];
     const origin = cellOf(player.position);
@@ -196,10 +211,17 @@ export class ChargeAction implements ActiveAction {
       if (Math.abs(other.position.x - player.position.x) > CONTACT_RANGE) continue;
       if (Math.abs(other.position.y - player.position.y) > CONTACT_RANGE) continue;
 
-      other.position = {
+      // 押しのける先が通れないマス（壁・壊せるブロック・爆弾）なら、その場に残す。傷と、
+      // 抱えていたものをぶつけるのは押せなくても行う（原型の updateCharge も位置だけを止める）。
+      // 通れるかは押される側で決まる（壊せるブロックを抜けられる動物がいる）。
+      const pushed = {
         x: other.position.x + delta.dx * KNOCKBACK,
         y: other.position.y + delta.dy * KNOCKBACK,
       };
+      const passesThrough = lookupAbility(other.animal)?.passesThrough;
+      if (!bodyCollides(world, other, other.position, pushed, passesThrough)) {
+        other.position = pushed;
+      }
 
       if (this.#carried.length > 0) {
         for (const kind of this.#carried) events.push(...applyItem(world, other, kind));
