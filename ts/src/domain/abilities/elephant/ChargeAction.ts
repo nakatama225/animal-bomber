@@ -218,6 +218,8 @@ export class ChargeAction implements ActiveAction {
         x: other.position.x + delta.dx * KNOCKBACK,
         y: other.position.y + delta.dy * KNOCKBACK,
       };
+      // 未登録なら抜けられる特例なしで判定する。試合では、盤面を作るときに能力を引いて
+      // （動物ごとの初期の加算。`GameSession` の startingBonusOf）登録を済ませているので起きない。
       const passesThrough = lookupAbility(other.animal)?.passesThrough;
       if (!bodyCollides(world, other, other.position, pushed, passesThrough)) {
         other.position = pushed;

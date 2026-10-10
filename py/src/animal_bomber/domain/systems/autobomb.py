@@ -10,13 +10,13 @@
 tick に、別のプレイヤーの拍が来たときも）。
 
 ⚠️ 段階 5（動物の技）で足すことが3つある。①技の最中に置けるかは技が決める
-（TypeScript 版の `AutobombSystem` と `BombSystem` は `action.canPlaceBomb` を見る）。
-②技の処理との並べ方を原型に合わせる。原型はプレイヤーごとに「そのプレイヤーの技を
-進める → そのプレイヤーの勝手に設置」と回し、技を始めるのはそのあと（入力の処理）。
-TypeScript 版はいま全員の技を
-進めて始めてから勝手に設置を置くので、技を始める tick と拍が重なったときなどに原型と
-答えが違う（`AutobombSystem` の説明）。TypeScript 版を直したあとの形を写す。③落とし穴に
-はまっている間は置かない（原型の canPlaceBomb。泣いて動けない間は置ける）。
+（TypeScript 版は `PlayerState` の `canPlaceBomb` にまとめ、ボタン・勝手に設置・技で
+並べる爆弾がそこを通る）。②技の処理との並べ方を原型に合わせる。原型はプレイヤー
+ごとに「そのプレイヤーの技を進める → そのプレイヤーの勝手に設置」と回し、技を始める
+のはそのあと（入力の処理）。TypeScript 版はこの形に直した（技の処理が、技を進めた
+直後に1人ずつ勝手に設置を呼ぶ。`ActionSystem` の説明）。その形を写す。
+③落とし穴にはまっている間は置かない（原型の canPlaceBomb。泣いて動けない間は置ける。
+TypeScript 版は落とし穴を、泣くのとは別の状態 'pitfall' で持つ）。
 """
 
 from animal_bomber.domain.core.tick import Tick
