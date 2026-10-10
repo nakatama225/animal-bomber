@@ -45,7 +45,8 @@ describe('描画', () => {
 
     const seen = new Set<string>();
     let intermissions = 0;
-    // 試合の長さは種によって大きく変わる（この顔ぶれで 80 通りの種を試すと 7,093〜37,308 tick）。
+    // 試合の長さは種によって大きく変わる（この顔ぶれで 80 通りの種を試すと 6,967〜29,303 tick。
+    // 2026-10-11 に測った）。
     // 上限は余裕を見て大きくとる。
     for (let i = 0; i < 60000 && !game.match.finished; i += 1) {
       const world = game.world;

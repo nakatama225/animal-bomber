@@ -42,7 +42,7 @@ export class MovementSystem {
   }
 
   #movePlayer(world: WorldState, player: PlayerState, playerInput: PlayerInput): void {
-    // 泣いている間はどの入力も通らない。
+    // 泣いている・落とし穴にはまっている間（`isFrozen`）は、どの入力も通らない。
     if (isFrozen(player)) return;
 
     // 何かに乗っ取られている間は、その振る舞いが位置を決める。
