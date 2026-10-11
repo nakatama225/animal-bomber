@@ -100,6 +100,29 @@ export function scatter(out: Particle[], rng: CosmeticRng, at: Point, spec: Scat
   }
 }
 
+/**
+ * 水しぶき。マスの真ん中あたりから、向きの先へ水色の粒を4つ飛ばす（原型の elephantSnot の粒と同じ数・速さ）。
+ *
+ * @param toward 飛ばす向き（1マスぶんの差。右なら col 1・row 0）
+ */
+export function spray(out: Particle[], rng: CosmeticRng, cell: Cell, toward: Cell): void {
+  const { x, y } = centerOf(cell);
+  for (let i = 0; i < 4; i += 1) {
+    out.push({
+      x: x + rng.jitter(0.25),
+      y: y + rng.jitter(0.25),
+      vx: toward.col * 3 + rng.jitter(0.8),
+      vy: toward.row * 3 + rng.jitter(0.8),
+      life: 0.3,
+      color: '#9fd8ff',
+      size: rng.between(4, 8),
+      text: null,
+      spin: false,
+      glow: false,
+    });
+  }
+}
+
 /** 光の玉を1つ置く。 */
 export function glow(out: Particle[], at: Point): void {
   out.push({ x: at.x, y: at.y, vx: 0, vy: 0, life: GLOW_LIFE, color: '', size: 0, text: null, spin: false, glow: true });

@@ -15,8 +15,8 @@ const LEAP_TIME = secondsToTicks(1);
 /**
  * きつね。爆弾を最初から1個多く持つ。
  *
- * 通常技は正面へ一列に置くこと。とくぎは追いかける炎で、
- * 放つ瞬間に短い無敵がつく。
+ * 通常技は正面へ一列に置くこと。とくぎは追いかける炎で、放つときに 1 秒跳び上がり、
+ * その間は爆風・炎・体当たり・葱が当たらない（'leap'。被弾のあとの無敵とは別）。
  */
 export const FOX: Ability = {
   ...NEUTRAL_ABILITY,
@@ -57,13 +57,13 @@ export const FOX: Ability = {
    *
    * 跳んでいる 1 秒は、爆風・炎・体当たり・葱が当たらない（'leap'）。撃ったあと無防備になると、
    * 相手が近いほど使えない技になってしまう。被弾のあとの無敵とは別の状態で、点滅はしない。
-   * 盤面に相手が1人もいなければ、跳ぶだけで炎は出さない（原型の castFoxfire）。
+   * 盤面に相手が1人もいなければ、跳ぶだけで炎は出さない（原型の castFoxfire）。炎の音も、
+   * 炎を出したときだけ鳴らす（`chaserCast`）。
    */
   onHold(world, player) {
     player.effects.add('leap', LEAP_TIME, LEAP_TIME);
-    if (world.players.some((other) => other.id !== player.id && isAlive(other))) {
-      world.actors.push(new FoxfireActor(player.position, player.id));
-    }
-    return { action: null, events: [] };
+    if (!world.players.some((other) => other.id !== player.id && isAlive(other))) return { action: null, events: [] };
+    world.actors.push(new FoxfireActor(player.position, player.id));
+    return { action: null, events: [{ type: 'techniqueMoment', player: player.id, moment: 'chaserCast' }] };
   },
 };

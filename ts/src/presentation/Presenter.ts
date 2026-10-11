@@ -103,7 +103,8 @@ export class Presenter {
       case 'itemExpired':
       case 'itemWashed':
       case 'bombDoused':
-        // 原型も、これらには音を鳴らさない（煙だけ）。鼻水の音は技を使ったとき（techniqueUsed）に鳴らす。
+      case 'sprayed':
+        // 原型も、これらには音を鳴らさない（煙・しぶきだけ）。鼻水の音は技を使ったとき（techniqueUsed）に鳴らす。
         return;
       case 'effectApplied':
         this.sounds.play(effectSound(event.effect));

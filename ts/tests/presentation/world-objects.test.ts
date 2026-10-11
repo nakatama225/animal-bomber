@@ -328,6 +328,39 @@ describe('粒子と画面の揺れ', () => {
     }
   });
 
+  it('鼻水を吹くと、届いたマスごとに水しぶきを4つ出し、足元に土ぼこりは立てない（原型の elephantSnot）', () => {
+    /** 通常技をポン押しで出し、出た粒の色を数える。 */
+    const tapColors = (animal: string): Map<string, number> => {
+      const world = makeWorld(1, [animal, 'mole']);
+      clearBoard(world);
+      const player = world.players[0]!;
+      player.position = centerOf({ col: 3, row: 7 });
+      player.facing = 'right';
+      const field = new ParticleField(new CosmeticRng());
+      const sim = new Simulation();
+      const idle = new Map(world.players.map((p) => [p.id, IDLE_INPUT]));
+      const pressing = new Map(world.players.map((p) => [p.id, p.id === 0 ? { ...IDLE_INPUT, action: true } : IDLE_INPUT]));
+      field.onEvents([], world);
+      for (const inputs of [idle, pressing, idle]) field.onEvents(sim.step(world, inputs), world);
+      const canvas = fakeCanvas();
+      const colors = new Map<string, number>();
+      const fillRect = canvas.context.fillRect.bind(canvas.context);
+      canvas.context.fillRect = (...args: Parameters<CanvasRenderingContext2D['fillRect']>) => {
+        const color = String(canvas.context.fillStyle);
+        colors.set(color, (colors.get(color) ?? 0) + 1);
+        fillRect(...args);
+      };
+      field.draw(frameOn(canvas));
+      return colors;
+    };
+    const snot = tapColors('elephant');
+    // 正面の2マス（4,7）（5,7）に4つずつ。
+    expect(snot.get('#9fd8ff')).toBe(8);
+    expect(snot.has('#a6e06a')).toBe(false);
+    // 対照：うさぎの跳びは足元に土ぼこりを立てる。
+    expect(tapColors('rabbit').get('#a6e06a')).toBe(6);
+  });
+
   /** 光の玉の数。1つにつき放射状の塗りを1回使う。 */
   function glows(field: ParticleField): number {
     const canvas = fakeCanvas();

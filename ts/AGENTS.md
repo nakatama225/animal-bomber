@@ -42,7 +42,7 @@ CPU の戦い方も同じ形です。`src/ai/tactics/` に戦い方を1つ書き
 `src/ai/tactics/registry.ts` に登録の1行を足します。書かなくても、
 省略時の戦い方（足元に爆弾を置く・技は使わない）でその動物は戦えます。
 
-⛔ 共通の処理（`domain/systems/` `domain/mutations/` `domain/query/` `domain/negibon/` `ai/` 直下 `ai/behaviors/`）に
+⛔ 共通の処理（`domain/systems/` `domain/mutations/` `domain/query/` `domain/negibon/` `domain/events/` `ai/` 直下 `ai/behaviors/`）に
 動物の名前を書かないでください。**コメントも含みます。** 書くと
 `tests/boundary/guards.test.ts` が失敗します。
 

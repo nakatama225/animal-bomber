@@ -1,5 +1,5 @@
 import { lookOf } from '../../content/animals.js';
-import { cellKey, cellOf, centerOf, sameCell, type Point } from '../../domain/core/Coord.js';
+import { cellKey, cellOf, centerOf, sameCell, step, type Point } from '../../domain/core/Coord.js';
 import { SECONDS_PER_TICK } from '../../domain/core/Tick.js';
 import { assertNever, type SimEvent } from '../../domain/events/SimEvent.js';
 import { itemDefinition } from '../../domain/rules/items.js';
@@ -7,13 +7,21 @@ import type { WorldState } from '../../domain/state/WorldState.js';
 import type { CosmeticRng } from '../CosmeticRng.js';
 import type { Frame } from './Frame.js';
 import { ActorEffects } from './ActorEffects.js';
-import { drawParticle, puff, scatter, stepParticles, type Particle } from './particles.js';
+import { drawParticle, puff, scatter, spray, stepParticles, type Particle } from './particles.js';
 
 /** 画面の揺れが収まる速さ（ピクセル毎秒）。 */
 const SHAKE_DECAY = 38;
 
 /** 爆発の揺れの上限（ピクセル）。原型と同じ値。 */
 const SHAKE_MAX = 10;
+
+/**
+ * 通常技を使ったときに、足元に土ぼこりを立てる動物。
+ *
+ * ぞうは入れない。鼻水は吹いた先のマスに水しぶきを出すので（`sprayed`）、足元には何も出さない（原型と同じ）。
+ * 表に無い動物は土ぼこりを立てない。
+ */
+const TAP_DUST: ReadonlySet<string> = new Set(['rabbit', 'fox', 'frog']);
 
 /**
  * 粒子と画面の揺れ。
@@ -112,6 +120,11 @@ export class ParticleField {
         // 鼻水で消えた。水のしずく。
         puff(out, rng, event.cell, '#9fd8ff', '💧');
         return;
+      case 'sprayed': {
+        const toward = step({ col: 0, row: 0 }, event.facing);
+        for (const cell of event.cells) spray(out, rng, cell, toward);
+        return;
+      }
       case 'itemTaken': {
         const definition = itemDefinition(event.kind);
         puff(out, rng, event.cell, definition.harmful ? '#b98a5a' : '#ffd23f', definition.emoji);
@@ -144,11 +157,11 @@ export class ParticleField {
         this.#actors.reset(world);
         return;
       case 'techniqueUsed': {
-        // とくぎは、出したもの（炎・爆弾・障害物）がそのまま見えるので足さない。
+        // とくぎは、出したもの（炎・爆弾・撒いたうんこ）がそのまま見えるので足さない。
         // 落とし穴のように、見せてはいけないものもある。
         if (event.special) return;
         const player = world.players[event.player];
-        if (player === undefined) return;
+        if (player === undefined || !TAP_DUST.has(player.animal)) return;
         // 足元に土ぼこりを立てる。
         scatter(out, rng, { x: player.position.x, y: player.position.y + 0.3 }, {
           count: 6,

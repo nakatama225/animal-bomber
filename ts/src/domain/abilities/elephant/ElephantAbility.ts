@@ -1,4 +1,4 @@
-import { cellOf, sameCell, step } from '../../core/Coord.js';
+import { cellOf, sameCell, step, type Cell } from '../../core/Coord.js';
 import { secondsToTicks, tick } from '../../core/Tick.js';
 import type { SimEvent } from '../../events/SimEvent.js';
 import { removeBomb } from '../../mutations/bombs.js';
@@ -45,11 +45,13 @@ export const ELEPHANT: Ability = {
     if (player.abilityCooldown > 0) return { action: null, events: [] };
     player.abilityCooldown = tick(SNOT_COOLDOWN);
     const events: SimEvent[] = [];
+    const sprayedCells: Cell[] = [];
     const here = cellOf(player.position);
     for (let distance = 1; distance <= SNOT_RANGE; distance += 1) {
       const cell = step(here, player.facing, distance);
       const tile = world.board.at(cell);
       if (tile === 'hard') break;
+      sprayedCells.push(cell);
       const bomb = bombAt(world, cell);
       if (bomb !== undefined && !bomb.chained) {
         removeBomb(world, bomb);
@@ -63,6 +65,8 @@ export const ELEPHANT: Ability = {
       }
       if (tile === 'soft') break;
     }
+    // 水しぶきは届いたマスごとに出す（原型も、柱の手前で止まったマスには出さない）。
+    events.push({ type: 'sprayed', player: player.id, cells: sprayedCells, facing: player.facing });
     return { action: null, events };
   },
 

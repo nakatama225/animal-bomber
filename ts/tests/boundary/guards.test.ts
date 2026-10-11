@@ -150,22 +150,25 @@ describe('動物の追加が閉じていること', () => {
   it('共通の処理に動物の名前が現れない', () => {
     // CPU の思考（ai/）は下のフォルダまで全部見る。動物ごとの戦い方は ai/tactics/ に
     // 分けてあり、そこだけは動物の名前が出てよい。
+    // イベントの型（domain/events）は、どの動物の技も同じ型で知らせるので見張る。
     const files = [
       ...listTs('src/domain/systems'),
       ...listTs('src/domain/mutations'),
       ...listTs('src/domain/query'),
       ...listTs('src/domain/negibon'),
+      ...listTs('src/domain/events'),
       ...listTs('src/ai').filter((file) => !file.startsWith('src/ai/tactics/')),
     ];
     const offenders = files.filter((file) => ANIMAL_WORDS.test(readFileSync(join(ROOT, file), 'utf8')));
     expect(offenders).toEqual([]);
   });
 
-  it('見張る対象に、CPU の共通の判断と葱ボンが入っている', () => {
+  it('見張る対象に、CPU の共通の判断と葱ボンとイベントの型が入っている', () => {
     // 見張るファイルの一覧が空だと、上の確認は何も見ずに通る。
     expect(listTs('src/ai')).toContain('src/ai/behaviors/Flee.ts');
     expect(listTs('src/ai')).toContain('src/ai/CpuInputSource.ts');
     expect(listTs('src/domain/negibon')).toContain('src/domain/negibon/LeekActor.ts');
+    expect(listTs('src/domain/events')).toContain('src/domain/events/SimEvent.ts');
   });
 
   it('見張る言葉が、実際に動物のファイルには現れる', () => {

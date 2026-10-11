@@ -234,7 +234,7 @@ export class ChargeAction implements ActiveAction {
       // 被弾のあとの無敵の間と、跳び上がっている間は傷つけない（原型の updateCharge）。
       // ⚠️ 相手が突進中でも傷は入る（上限で減る）。突進どうしでぶつかると、どちらにも傷が入る。
       if (isInvulnerable(other, world.now) || isBlastProof(other)) continue;
-      events.push({ type: 'techniqueMoment', player: player.id, moment: 'chargeHit' });
+      events.push({ type: 'techniqueMoment', player: player.id, moment: 'rammed' });
       events.push(...hurt(world, other, player.id, 2));
     }
     return events;

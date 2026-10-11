@@ -7,19 +7,26 @@ import type { ItemKind } from '../rules/items.js';
  * 技の途中で起きたことの種類（`techniqueMoment` のイベント）。
  *
  * - `tongueCaught` … 舌がアイテムを掴んだ
+ * - `digStarted` … 穴を掘り始めた（掘れないマスでとくぎを使ったときは知らせない）
  * - `pitDug` … 穴を掘り終えた
  * - `slimeHopped` … 跳ね回る爆弾が跳ねた（跳べずにその場に留まったときも）
  * - `itemsSpat` … 体当たりで抱えていた悪いアイテムを、止まった所の左右へ撒き散らした
- * - `chargeHit` … 体当たりが相手に当たった
- * - `foxfireHit` … 追いかける炎が相手に当たった
+ * - `rammed` … 体当たりが相手に当たった
+ * - `chaserCast` … 追いかける炎を放った（盤面に相手がいなくて出さなかったときは知らせない）
+ * - `chaserHit` … 追いかける炎が相手に当たった
+ *
+ * 名前は動物ではなく技の働きで付ける。この型はどの動物も使う共通の型なので、
+ * 動物の名前を入れると、動物を足すたびに共通の型の意味が動物に縛られる。
  */
 export type TechniqueMoment =
   | 'tongueCaught'
+  | 'digStarted'
   | 'pitDug'
   | 'slimeHopped'
   | 'itemsSpat'
-  | 'chargeHit'
-  | 'foxfireHit';
+  | 'rammed'
+  | 'chaserCast'
+  | 'chaserHit';
 
 /**
  * 試合の中で起きたイベント。
@@ -76,6 +83,16 @@ export type SimEvent =
   | { readonly type: 'itemWashed'; readonly cell: Cell; readonly kind: ItemKind }
   /** 爆弾の火が消されて、爆弾ごと消えた。置いたプレイヤーの手持ちは戻る。 */
   | { readonly type: 'bombDoused'; readonly cell: Cell; readonly owner: PlayerId }
+  /**
+   * 正面のマスへ水を吹きかけた（見た目のための知らせ）。届いたマスを手前から順に運ぶ。
+   * 柱の手前で止まったマスは入らない。壊せるブロックのマスは入る（そこで止まる）。
+   */
+  | {
+      readonly type: 'sprayed';
+      readonly player: PlayerId;
+      readonly cells: readonly Cell[];
+      readonly facing: Direction;
+    }
   | {
       readonly type: 'effectApplied';
       readonly target: PlayerId;
