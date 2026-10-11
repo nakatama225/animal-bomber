@@ -3,10 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { ANIMAL_LOOKS } from '../../src/content/animals.js';
 import { abilityOf } from '../../src/domain/abilities/registry.js';
 import { ChargeAction } from '../../src/domain/abilities/elephant/ChargeAction.js';
-import { TongueAction } from '../../src/domain/abilities/frog/TongueAction.js';
+import { TONGUE_REACH, TongueAction } from '../../src/domain/abilities/frog/TongueAction.js';
 import { PitAction } from '../../src/domain/abilities/mole/PitAction.js';
 import { ScatterAction } from '../../src/domain/abilities/rabbit/ScatterAction.js';
-import { cellOf, DIRECTIONS } from '../../src/domain/core/Coord.js';
+import { cellOf, centerOf, DIRECTIONS } from '../../src/domain/core/Coord.js';
 import { tick } from '../../src/domain/core/Tick.js';
 import { EFFECT_KINDS } from '../../src/domain/state/EffectBag.js';
 import type { PlayerState } from '../../src/domain/state/PlayerState.js';
@@ -17,7 +17,7 @@ import { EFFECT_ICONS, statusIcons } from '../../src/presentation/render/effectI
 import type { Frame } from '../../src/presentation/render/Frame.js';
 import { layoutFor } from '../../src/presentation/render/Layout.js';
 import { drawPlayer } from '../../src/presentation/render/players.js';
-import { makeWorld } from '../helpers.js';
+import { clearBoard, makeWorld } from '../helpers.js';
 import { fakeCanvas, type FakeCanvas } from './fakeCanvas.js';
 
 /**
@@ -57,7 +57,7 @@ const CASES: readonly Case[] = [
   {
     name: '舌を伸ばしている',
     setup: (w, p) => {
-      const action = new TongueAction(p.facing);
+      const action = new TongueAction(cellOf(p.position), p.facing, TONGUE_REACH);
       for (let i = 0; i < 8; i += 1) action.tick(w, p);
       p.action = action;
     },
@@ -174,20 +174,28 @@ describe('足元の絵文字', () => {
 });
 
 describe('描画のために読む値', () => {
-  it('舌の長さは伸びてから縮み、最後は 0 に戻る', () => {
+  it('舌の長さは伸びてから縮み、伸びきる手前まで届いて、終わる直前には 0 近くまで戻る', () => {
+    // 何も無い所へ伸ばす。10 マス伸びて戻り、151 tick 目に終わる（`TongueAction`）。
     const world = makeWorld(7, ['frog']);
+    clearBoard(world);
     const player = world.players[0]!;
-    const action = new TongueAction(player.facing);
+    player.position = centerOf({ col: 3, row: 5 });
+    player.facing = 'right';
+    const action = new TongueAction(cellOf(player.position), player.facing, TONGUE_REACH);
     const lengths: number[] = [action.extent];
-    for (let i = 0; i < 48; i += 1) {
-      action.tick(world, player);
-      lengths.push(action.extent);
+    let done = false;
+    while (!done && lengths.length < 200) {
+      done = action.tick(world, player).done;
+      if (!done) lengths.push(action.extent);
     }
     expect(lengths[0]).toBe(0);
-    expect(Math.max(...lengths)).toBe(6);
-    expect(lengths[24]).toBe(6);
-    expect(lengths[36]).toBe(3);
-    expect(lengths[48]).toBe(0);
+    const peak = lengths.indexOf(Math.max(...lengths));
+    expect(Math.max(...lengths)).toBeGreaterThan(9.9);
+    expect(Math.max(...lengths)).toBeLessThanOrEqual(10);
+    // 頂点までは伸び続け、そのあとは縮み続ける。
+    for (let i = 1; i <= peak; i += 1) expect(lengths[i]!).toBeGreaterThanOrEqual(lengths[i - 1]!);
+    for (let i = peak + 1; i < lengths.length; i += 1) expect(lengths[i]!).toBeLessThanOrEqual(lengths[i - 1]!);
+    expect(lengths.at(-1)!).toBeLessThan(0.2);
   });
 
   it('穴掘りの進みは 0 から 1 まで進む', () => {

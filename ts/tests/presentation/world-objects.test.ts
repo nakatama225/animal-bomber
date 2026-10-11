@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { FoxfireActor } from '../../src/domain/abilities/fox/FoxfireActor.js';
 import { SlimeBombActor } from '../../src/domain/abilities/frog/SlimeBombActor.js';
+import { BurntTongueActor } from '../../src/domain/abilities/frog/TongueAction.js';
 import { PitActor } from '../../src/domain/abilities/mole/PitAction.js';
 import { ScatteredActor } from '../../src/domain/abilities/rabbit/ScatterAction.js';
 import type { WorldActor } from '../../src/domain/abilities/WorldActor.js';
@@ -131,6 +132,8 @@ describe('自律物', () => {
     { name: '追いかける炎', actor: new FoxfireActor({ x: 5.5, y: 5.5 }, 0), ground: false, air: true },
     { name: '跳ね回る爆弾', actor: new SlimeBombActor({ col: 5, row: 5 }, owner, 6), ground: false, air: true },
     { name: '飛んでいる葱', actor: new LeekActor({ x: 5.5, y: 5.5 }, 'down', 0), ground: false, air: true },
+    // 焼けた舌は盤面に描くものが無い（伸ばせる長さを覚えておくだけ）。
+    { name: '焼けた舌', actor: new BurntTongueActor(0, 3), ground: false, air: false },
   ];
 
   it.each(cases)('$name は描くべき層にだけ描かれ、状態は変わらない', ({ actor, ground, air }) => {

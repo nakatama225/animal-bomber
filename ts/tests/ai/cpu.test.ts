@@ -11,6 +11,8 @@ import { DEFAULT_CHAIN } from '../../src/ai/behaviors/DefaultChain.js';
 import { FLEE } from '../../src/ai/behaviors/Flee.js';
 import { OUT_OF_BOMBS_BAN, SAME_SPOT_BAN, UNSAFE_SPOT_BAN } from '../../src/ai/margins.js';
 import { directionAlong } from '../../src/ai/PathFollower.js';
+import { FROG_TACTIC } from '../../src/ai/tactics/FrogTactic.js';
+import { BurntTongueActor } from '../../src/domain/abilities/frog/TongueAction.js';
 import { abilityOf } from '../../src/domain/abilities/registry.js';
 import { ScatterAction } from '../../src/domain/abilities/rabbit/ScatterAction.js';
 import { cellOf, centerOf, type Cell } from '../../src/domain/core/Coord.js';
@@ -452,5 +454,28 @@ describe('技の最中と技の出し方', () => {
     const game = arena(world, [{ id: 0, level: 'hard' }]);
     const events = game.run(300);
     expect(events.some((e) => e.type === 'bombPlaced' && e.owner === 0)).toBe(true);
+  });
+});
+
+describe('かえるの舌', () => {
+  it('焼けて短くなった舌が届かないアイテムには、舌を伸ばさない（原型の CPU も今の長さを見る）', () => {
+    const decide = (burntTo: number | null): ButtonMacro | null => {
+      const world = makeWorld(3, ['frog', 'rabbit']);
+      clearBoard(world);
+      world.items = [];
+      const me = world.players[0]!;
+      me.position = centerOf({ col: 1, row: 1 });
+      me.facing = 'right';
+      world.items.push({ id: world.ids.take(), cell: { col: 6, row: 1 }, kind: 'fire' });
+      if (burntTo !== null) world.actors.push(new BurntTongueActor(me.id, burntTo));
+      const ctx = new CpuContext(
+        world, me, { col: 1, row: 1 }, DangerMap.of(world), false, CPU_LEVELS.hard, freshMemory(new Rng(1)), new Rng(1),
+      );
+      return FROG_TACTIC.reflex?.(ctx) ?? null;
+    };
+    // 5 マス先の火。焼けていなければ届くので伸ばし、3 マスまでに焼けていれば伸ばさない。
+    expect(decide(null)).not.toBeNull();
+    expect(decide(5)).not.toBeNull();
+    expect(decide(3)).toBeNull();
   });
 });

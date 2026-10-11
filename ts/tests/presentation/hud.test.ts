@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { GameSession } from '../../src/app/GameSession.js';
+import { BurntTongueActor } from '../../src/domain/abilities/frog/TongueAction.js';
 import { secondsToTicks, tick } from '../../src/domain/core/Tick.js';
 import { IdleInputSource } from '../../src/domain/input/InputSource.js';
 import { defaultMatchConfig } from '../../src/domain/rules/MatchConfig.js';
@@ -137,6 +138,18 @@ describe('名札の中身', () => {
     expect(first).toMatchObject({ stars: '★★☆', tag: '1P' });
     expect(first?.effects).toEqual(['💩うんこポロポロ×2', '🐌超スロー']);
     expect(second).toMatchObject({ state: 'out', condition: '💀 退場', stars: '☆☆☆' });
+  });
+
+  it('焼けた舌は、いま伸ばせる長さと次に戻るまでの秒数を出す（原型の名札と同じ形）', () => {
+    // 盤面には描くものが無いので、名札に出さないと短くなったことが分からない。
+    const session = new GameSession(defaultMatchConfig(5, ['frog', 'elephant']));
+    for (const player of session.world.players) session.attach(new IdleInputSource(player.id));
+    const burnt = new BurntTongueActor(0, 3);
+    for (let i = 0; i < 130; i += 1) burnt.tick();
+    session.world.actors.push(burnt);
+    const [frog, elephant] = describePlayers(hudOf(session));
+    expect(frog?.effects).toEqual(['👅🔥舌 3/10マス（8秒で+1）']);
+    expect(elephant?.effects).toEqual([]);
   });
 });
 

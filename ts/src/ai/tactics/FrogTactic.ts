@@ -1,5 +1,5 @@
 import { sameCell, step } from '../../domain/core/Coord.js';
-import { TONGUE_REACH } from '../../domain/abilities/frog/TongueAction.js';
+import { tongueReachOf } from '../../domain/abilities/frog/TongueAction.js';
 import { bombAt } from '../../domain/query/BoardQuery.js';
 import { itemDefinition } from '../../domain/rules/items.js';
 import { holdSpecial } from '../BombPlacement.js';
@@ -33,9 +33,10 @@ export const FROG_TACTIC: AnimalTactic = {
   },
 };
 
-/** 舌の届く範囲の正面に、損をしないアイテムがあるか。 */
+/** 舌の届く範囲（焼けていれば短い）の正面に、損をしないアイテムがあるか。 */
 function goodItemAhead(ctx: CpuContext): boolean {
-  for (let i = 1; i <= TONGUE_REACH; i += 1) {
+  const reach = tongueReachOf(ctx.world, ctx.me);
+  for (let i = 1; i <= reach; i += 1) {
     const cell = step(ctx.here, ctx.me.facing, i);
     if (ctx.world.board.at(cell) !== 'empty') return false;
     // 爆弾に舌を伸ばすのは避ける。その先は狙わない。

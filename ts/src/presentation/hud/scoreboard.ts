@@ -1,4 +1,5 @@
 import { lookOf } from '../../content/animals.js';
+import { BurntTongueActor, TONGUE_REACH } from '../../domain/abilities/frog/TongueAction.js';
 import { abilityOf } from '../../domain/abilities/registry.js';
 import { TICKS_PER_SECOND } from '../../domain/core/Tick.js';
 import type { MatchConfig } from '../../domain/rules/MatchConfig.js';
@@ -96,7 +97,7 @@ function describePlayer(source: HudSource, player: Readonly<PlayerState>): Playe
     state: player.life.kind,
     condition: conditionOf(player, maxHpOf(config, player)),
     stats: `💣${player.maxBombs} 🔥${powerOf(player)} 👟${player.shoes}`,
-    effects: effectsOf(player, look.special),
+    effects: effectsOf(source.world, player, look.special),
   };
 }
 
@@ -137,6 +138,7 @@ export function hearts(hp: number, maxHp: number): string {
  * とくぎの回数やかかっていた状態は試合の側で消されずに残る（もう使われない）。
  */
 function effectsOf(
+  world: Readonly<WorldState>,
   player: Readonly<PlayerState>,
   special: { readonly name: string; readonly emoji: string },
 ): string[] {
@@ -147,5 +149,13 @@ function effectsOf(
     effects.push(`${special.emoji}${special.name}${times}`);
   }
   for (const kind of player.effects.active()) effects.push(effectText(kind));
+  // 焼けた舌は盤面に描くものが無いので、ここで知らせる（原型の名札と同じ形）。
+  const burnt = world.actors.find(
+    (actor): actor is BurntTongueActor => actor instanceof BurntTongueActor && actor.owner === player.id,
+  );
+  if (burnt !== undefined) {
+    const seconds = Math.ceil(burnt.untilRegen / TICKS_PER_SECOND);
+    effects.push(`👅🔥舌 ${burnt.limit}/${TONGUE_REACH}マス（${seconds}秒で+1）`);
+  }
   return effects;
 }

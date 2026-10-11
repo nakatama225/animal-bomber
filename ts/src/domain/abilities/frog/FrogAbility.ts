@@ -1,8 +1,9 @@
+import { cellOf } from '../../core/Coord.js';
 import { secondsToTicks } from '../../core/Tick.js';
 import type { Ability } from '../Ability.js';
 import { NEUTRAL_ABILITY } from '../Ability.js';
 import { SlimeBombActor } from './SlimeBombActor.js';
-import { TongueAction } from './TongueAction.js';
+import { TongueAction, tongueReachOf } from './TongueAction.js';
 
 /**
  * かえる。アイテムの効果が2倍になる。
@@ -18,8 +19,11 @@ export const FROG: Ability = {
   itemMultiplier: 2,
   holdTicks: secondsToTicks(0.5),
 
-  onTap(_world, player) {
-    return { action: new TongueAction(player.facing), events: [] };
+  /** 舌を伸ばす。根元まで焼けていれば出せない（原型の startTongue）。 */
+  onTap(world, player) {
+    const reach = tongueReachOf(world, player);
+    if (reach <= 0) return { action: null, events: [] };
+    return { action: new TongueAction(cellOf(player.position), player.facing, reach), events: [] };
   },
 
   onHold(world, player) {

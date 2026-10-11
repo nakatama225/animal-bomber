@@ -205,7 +205,8 @@ describe('かえる', () => {
     world.items.push({ id: world.ids.take(), cell: { col: 4, row: 1 }, kind: 'fire' });
     const before = player.power;
     tap(world);
-    advance(world, onlyFor(world, 0, press({})), 40);
+    // 掴んだアイテムは舌が戻りきってから効く（3 マス先なら伸ばし始めて 46 tick 目）。
+    advance(world, onlyFor(world, 0, press({})), 60);
     expect(player.power).toBeGreaterThan(before);
     expect(world.items).toHaveLength(0);
   });

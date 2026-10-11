@@ -1,14 +1,21 @@
 import { describe, expect, it } from 'vitest';
 
 import { SlimeBombActor } from '../../src/domain/abilities/frog/SlimeBombActor.js';
+import {
+  BurntTongueActor,
+  TONGUE_REACH,
+  TongueAction,
+  tongueReachOf,
+} from '../../src/domain/abilities/frog/TongueAction.js';
 import { abilityOf } from '../../src/domain/abilities/registry.js';
-import { centerOf, type Cell } from '../../src/domain/core/Coord.js';
+import { cellOf, centerOf, type Cell } from '../../src/domain/core/Coord.js';
 import { tick } from '../../src/domain/core/Tick.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
 import { placeBombAt } from '../../src/domain/mutations/bombs.js';
 import { addBlast } from '../../src/domain/mutations/explode.js';
+import { enterSuddenDeath } from '../../src/domain/mutations/suddenDeath.js';
 import { OUT } from '../../src/domain/state/Life.js';
-import type { PlayerState } from '../../src/domain/state/PlayerState.js';
+import { isFrozen, type PlayerState } from '../../src/domain/state/PlayerState.js';
 import type { WorldState } from '../../src/domain/state/WorldState.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
 import { clearBoard, makeWorld, onlyFor, press, sameForAll } from '../helpers.js';
@@ -272,5 +279,148 @@ describe('舌が止まるもの（原型 updateTongue）', () => {
   it('対照：爆弾やプレイヤーの手前のアイテムは取る', () => {
     expect(tongue('bomb', 4)).toMatchObject({ gained: 2, items: [] });
     expect(tongue('player', 4)).toMatchObject({ gained: 2, items: [] });
+  });
+});
+
+describe('舌の長さと時間（原型 startTongue・updateTongue・tongueBurnCheck）', () => {
+  /*
+   * 原型を画面なしで動かし、技のボタンを押したフレームを 0 として数えた値と比べる。
+   * この版の舌は離した tick に始まり、次の tick から進む。ここでは舌の振る舞いを直に作って
+   * 1 tick ずつ進め、最初の tick を原型の 1 フレーム目に当てる。
+   */
+  function frogAt(): { world: WorldState; frog: PlayerState } {
+    const { world, frog } = arena();
+    frog.position = centerOf({ col: 3, row: 5 });
+    frog.facing = 'right';
+    return { world, frog };
+  }
+
+  function tongueOf(world: WorldState, frog: PlayerState): TongueAction {
+    return new TongueAction(cellOf(frog.position), frog.facing, tongueReachOf(world, frog));
+  }
+
+  /** 終わるまで進め、終わった tick を返す。onTick は各 tick のあとに呼ぶ。 */
+  function runTongue(
+    world: WorldState,
+    frog: PlayerState,
+    action: TongueAction,
+    onTick: (t: number) => void = () => {},
+  ): number {
+    for (let t = 1; t <= 300; t += 1) {
+      const done = action.tick(world, frog).done;
+      onTick(t);
+      if (done) return t;
+    }
+    throw new Error('舌が 300 tick たっても終わらない');
+  }
+
+  it('何も無ければ 10 マス伸びて戻り、151 tick 目に終わる（1マスに 7〜8 tick）', () => {
+    const { world, frog } = frogAt();
+    expect(runTongue(world, frog, tongueOf(world, frog))).toBe(151);
+  });
+
+  it('10 マス先のアイテムは取り、11 マス先は取らない', () => {
+    for (const [distance, gained] of [[10, 2], [11, 0]] as const) {
+      const { world, frog } = frogAt();
+      world.items.push({ id: world.ids.take(), cell: { col: 3 + distance, row: 5 }, kind: 'fire' });
+      const before = frog.power;
+      runTongue(world, frog, tongueOf(world, frog));
+      expect(frog.power - before, `${distance} マス先`).toBe(gained);
+    }
+  });
+
+  it('掴んだアイテムは 23 tick 目に盤面から消え、舌が戻りきった 46 tick 目に効く（3 マス先）', () => {
+    const { world, frog } = frogAt();
+    world.items.push({ id: world.ids.take(), cell: { col: 6, row: 5 }, kind: 'fire' });
+    const before = frog.power;
+    let removedAt: number | null = null;
+    let appliedAt: number | null = null;
+    const end = runTongue(world, frog, tongueOf(world, frog), (t) => {
+      if (removedAt === null && world.items.length === 0) removedAt = t;
+      if (appliedAt === null && frog.power !== before) appliedAt = t;
+    });
+    expect({ removedAt, appliedAt, end }).toEqual({ removedAt: 23, appliedAt: 46, end: 46 });
+    expect(frog.power - before).toBe(2);
+  });
+
+  it('3 マス先のブロックに当たったら引っ込め、38 tick 目に終わる', () => {
+    const { world, frog } = frogAt();
+    world.board.set({ col: 6, row: 5 }, 'soft');
+    expect(runTongue(world, frog, tongueOf(world, frog))).toBe(38);
+  });
+
+  it('伸びている舌に爆風が来ると焼き切れる：手前までに短くなり、泣き、10 秒ごとに1マス戻る', () => {
+    // 原型：40 フレームで 5 マス伸びた舌の 2 マス目に爆風を置くと、次のフレームで舌が消え、
+    // そのラウンドは 1 マスまで・3 秒泣く（動けないのは 181 フレーム）・10 秒たつごとに1マス戻る。
+    const { world, frog } = frogAt();
+    const action = tongueOf(world, frog);
+    for (let t = 1; t <= 40; t += 1) action.tick(world, frog);
+    addBlast(world, { col: 5, row: 5 }, 1, false);
+    expect(action.tick(world, frog).done).toBe(true);
+    expect(tongueReachOf(world, frog)).toBe(1);
+    expect(frog.effects.remaining('stun')).toBe(180);
+
+    const sim = new Simulation();
+    const reaches: number[] = [];
+    let frozen = 0;
+    for (let t = 1; t <= 1800; t += 1) {
+      sim.step(world, sameForAll(world, press({})));
+      if (isFrozen(frog)) frozen += 1;
+      reaches.push(tongueReachOf(world, frog));
+    }
+    expect(frozen).toBeGreaterThanOrEqual(175);
+    expect(frozen).toBeLessThanOrEqual(182);
+    // 戻るのは焼けてから 600 tick ごと（原型は 600 フレームごと）。
+    expect(reaches.indexOf(2) + 1).toBe(600);
+    expect(reaches.indexOf(3) + 1).toBe(1200);
+    expect(reaches.at(-1)).toBe(4);
+  });
+
+  it('焼き切れて泣く長さは、足すのではなく少なくとも 3 秒（原型は残りと 3 秒の長いほう）', () => {
+    for (const [before, after] of [[100, 180], [300, 300]] as const) {
+      const { world, frog } = frogAt();
+      frog.effects.add('stun', tick(before), tick(before));
+      const action = tongueOf(world, frog);
+      for (let t = 1; t <= 40; t += 1) action.tick(world, frog);
+      addBlast(world, { col: 5, row: 5 }, 1, false);
+      action.tick(world, frog);
+      expect(frog.effects.remaining('stun'), `前に ${before} tick`).toBe(after);
+    }
+  });
+
+  it('掴んで戻る途中で焼き切れると、掴んでいたものは焦げて効かない', () => {
+    const { world, frog } = frogAt();
+    world.items.push({ id: world.ids.take(), cell: { col: 7, row: 5 }, kind: 'fire' });
+    const before = frog.power;
+    const action = tongueOf(world, frog);
+    let t = 0;
+    while (world.items.length > 0 && t < 60) {
+      action.tick(world, frog);
+      t += 1;
+    }
+    expect(t).toBe(31);
+    addBlast(world, { col: 4, row: 5 }, 1, false);
+    expect(action.tick(world, frog).done).toBe(true);
+    expect(frog.power - before).toBe(0);
+    expect(world.items).toEqual([]);
+    expect(tongueReachOf(world, frog)).toBe(0);
+  });
+
+  it('根元まで焼けていれば、技のボタンを押しても舌は出ない', () => {
+    const { world, frog } = frogAt();
+    world.actors.push(new BurntTongueActor(frog.id, 0));
+    const sim = new Simulation();
+    sim.step(world, onlyFor(world, 0, press({})));
+    sim.step(world, onlyFor(world, 0, press({ action: true })));
+    sim.step(world, onlyFor(world, 0, press({})));
+    expect(frog.action).toBeNull();
+  });
+
+  it('焼けた長さは、延長戦に入ると元に戻る（原型もラウンドの始まりと延長戦で戻す）', () => {
+    const { world, frog } = frogAt();
+    world.actors.push(new BurntTongueActor(frog.id, 2));
+    expect(tongueReachOf(world, frog)).toBe(2);
+    enterSuddenDeath(world, [0, 1], 'timeUp');
+    expect(tongueReachOf(world, frog)).toBe(TONGUE_REACH);
   });
 });
