@@ -144,18 +144,27 @@ describe('自律物', () => {
     expect(actor.encode()).toBe(before);
   });
 
-  it('跳ね回る爆弾は、着地からの時間が進んでも描け、爆発が近いと輪を足す', () => {
+  it('跳ね回る爆弾は、着地からの時間が進んでも描け、残りの区切りが2以下だと輪を足す（飛んでいる間は足さない）', () => {
+    // 原型も、跳ねている間で残りが2以下のときだけ赤い輪で知らせる。
     const calm = new SlimeBombActor({ col: 5, row: 5 }, owner, 6);
-    const warned = new SlimeBombActor({ col: 5, row: 5 }, owner, 1);
-    for (let i = 0; i < 12; i += 1) {
+    const warned = new SlimeBombActor({ col: 5, row: 5 }, owner, 2);
+    const flying = new SlimeBombActor({ col: 5, row: 5 }, owner, 2, { x: 2.5, y: 5.5 });
+    // 30 tick なら、21 tick 目に着地して、まだ最初の区切り（19〜24 tick）の途中。
+    for (let i = 0; i < 30; i += 1) {
       calm.tick(world);
       warned.tick(world);
     }
+    for (let i = 0; i < 5; i += 1) flying.tick(world);
+    expect([calm.flight, warned.flight]).toEqual([null, null]);
+    expect(flying.flight).not.toBeNull();
     const a = fakeCanvas();
     drawAirActor(frameOn(a), calm);
     const b = fakeCanvas();
     drawAirActor(frameOn(b), warned);
+    const c = fakeCanvas();
+    drawAirActor(frameOn(c), flying);
     expect(count(b, 'ellipse')).toBe(count(a, 'ellipse') + 1);
+    expect(count(c, 'ellipse')).toBe(count(a, 'ellipse'));
   });
 
   it('撒かれた障害物は、消える間際でも描ける', () => {

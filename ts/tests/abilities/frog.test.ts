@@ -6,6 +6,7 @@ import { centerOf, type Cell } from '../../src/domain/core/Coord.js';
 import { tick } from '../../src/domain/core/Tick.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
 import { placeBombAt } from '../../src/domain/mutations/bombs.js';
+import { addBlast } from '../../src/domain/mutations/explode.js';
 import { OUT } from '../../src/domain/state/Life.js';
 import type { PlayerState } from '../../src/domain/state/PlayerState.js';
 import type { WorldState } from '../../src/domain/state/WorldState.js';
@@ -13,14 +14,12 @@ import { Simulation } from '../../src/domain/systems/Simulation.js';
 import { clearBoard, makeWorld, onlyFor, press, sameForAll } from '../helpers.js';
 
 /*
- * かえるの粘膜爆弾と舌を、原型（legacy/animal-bomber.html の slimeBurst・updateSlimes・updateTongue）に
+ * かえるの粘膜爆弾と舌を、原型（legacy/animal-bomber.html の frogSlime・slimeBurst・updateSlimes・updateTongue）に
  * 合わせる。期待値は原型を画面なしで動かして測った値。
  *
- * ⚠️ 跳ぶ向きは、この版は縦横の4方向（原型は斜めも入れた8方向）。この違いは今回の直しに含めていない。
+ * ⚠️ 跳ぶ向きの混ぜ方は原型と揃わない（原型は比較の関数に乱数を返す並べ替えで、並びが実行環境しだい）。
+ * 跳ぶ先は「どのマスに着地しうるか」の集まりで比べる。
  */
-
-/** 跳ねる間隔。SlimeBombActor の HOP_INTERVAL と同じ。 */
-const HOP_INTERVAL = 21;
 
 function arena(seed = 2468): { world: WorldState; frog: PlayerState; rabbit: PlayerState } {
   const world = makeWorld(seed, ['frog', 'rabbit']);
@@ -32,11 +31,15 @@ function arena(seed = 2468): { world: WorldState; frog: PlayerState; rabbit: Pla
   return { world, frog, rabbit };
 }
 
-/** 粘膜爆弾の actor だけを進める（ほかの System を通さない）。 */
-function runActor(world: WorldState, actor: SlimeBombActor, ticks: number): SimEvent[] {
+/** 粘膜爆弾の actor だけを、終わるまで進める（ほかの System を通さない。上限 200 tick）。 */
+function runUntilDone(world: WorldState, actor: SlimeBombActor): SimEvent[] {
   const events: SimEvent[] = [];
-  for (let i = 0; i < ticks; i += 1) events.push(...actor.tick(world).events);
-  return events;
+  for (let i = 0; i < 200; i += 1) {
+    const result = actor.tick(world);
+    events.push(...result.events);
+    if (result.done) return events;
+  }
+  throw new Error('粘膜爆弾が 200 tick たっても終わらない');
 }
 
 const blastCells = (world: WorldState): string[] =>
@@ -53,21 +56,21 @@ describe('粘膜爆弾が跳ね終わったとき（原型 slimeBurst）', () =>
   it('手持ちを出し切っていても爆発する', () => {
     const { world, frog } = arena();
     frog.activeBombs = frog.maxBombs;
-    const events = runActor(world, new SlimeBombActor({ col: 6, row: 7 }, frog, 0), HOP_INTERVAL);
+    const events = runUntilDone(world, new SlimeBombActor({ col: 6, row: 7 }, frog, 1));
     expect(events.some((e) => e.type === 'exploded')).toBe(true);
     expect(blastCells(world)).toEqual(['6,7C', '7,7', '5,7']);
   });
 
   it('柱の上で跳ね終わったら、隣の空きマスへずれて爆発する（原型の順で最初は右）', () => {
     const { world, frog } = arena();
-    runActor(world, new SlimeBombActor({ col: 8, row: 8 }, frog, 0), HOP_INTERVAL);
+    runUntilDone(world, new SlimeBombActor({ col: 8, row: 8 }, frog, 1));
     expect(blastCells(world)).toEqual(['9,8C', '9,9', '9,7']);
   });
 
   it('壊せるブロックの上なら、隣へずれて爆発し、そのブロックは爆風で壊れる', () => {
     const { world, frog } = arena();
     world.board.set({ col: 6, row: 7 }, 'soft');
-    runActor(world, new SlimeBombActor({ col: 6, row: 7 }, frog, 0), HOP_INTERVAL);
+    runUntilDone(world, new SlimeBombActor({ col: 6, row: 7 }, frog, 1));
     expect(blastCells(world)[0]).toBe('7,7C');
     expect(world.board.at({ col: 6, row: 7 })).toBe('empty');
   });
@@ -75,7 +78,7 @@ describe('粘膜爆弾が跳ね終わったとき（原型 slimeBurst）', () =>
   it('爆弾の上なら、隣へずれて爆発し、その爆弾も誘爆する', () => {
     const { world, frog, rabbit } = arena();
     bombWithLongFuse(world, rabbit, { col: 6, row: 7 });
-    runActor(world, new SlimeBombActor({ col: 6, row: 7 }, frog, 0), HOP_INTERVAL);
+    runUntilDone(world, new SlimeBombActor({ col: 6, row: 7 }, frog, 1));
     const centers = blastCells(world).filter((cell) => cell.endsWith('C'));
     expect(centers).toEqual(['7,7C', '6,7C']);
     expect(world.bombs).toEqual([]);
@@ -87,7 +90,7 @@ describe('粘膜爆弾が跳ね終わったとき（原型 slimeBurst）', () =>
       [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1],
     ].map(([dx, dy]) => ({ col: 8 + dx!, row: 8 + dy! }));
     for (const cell of around) world.board.set(cell, 'soft');
-    const events = runActor(world, new SlimeBombActor({ col: 8, row: 8 }, frog, 0), HOP_INTERVAL);
+    const events = runUntilDone(world, new SlimeBombActor({ col: 8, row: 8 }, frog, 1));
     expect(blastCells(world)).toEqual(['8,8C']);
     expect(around.every((cell) => world.board.at(cell) === 'soft')).toBe(true);
     expect(world.bombs).toEqual([]);
@@ -101,7 +104,7 @@ describe('粘膜爆弾が跳ね終わったとき（原型 slimeBurst）', () =>
     const { world, frog } = arena();
     bombWithLongFuse(world, frog, { col: 3, row: 13 });
     const before = frog.activeBombs;
-    runActor(world, new SlimeBombActor({ col: 6, row: 7 }, frog, 0), HOP_INTERVAL);
+    runUntilDone(world, new SlimeBombActor({ col: 6, row: 7 }, frog, 1));
     expect(blastCells(world)[0]).toBe('6,7C');
     expect(world.bombs.map((bomb) => `${bomb.cell.col},${bomb.cell.row}`)).toEqual(['3,13']);
     expect(frog.activeBombs).toBe(before);
@@ -109,19 +112,25 @@ describe('粘膜爆弾が跳ね終わったとき（原型 slimeBurst）', () =>
 });
 
 describe('粘膜爆弾の跳ぶ先（原型 updateSlimes）', () => {
-  /** 跳ねる回数5の粘膜爆弾を1回跳ばし、着地したマスと残りの回数を返す。 */
+  /** 区切り5の粘膜爆弾を、最初の区切りまで進め、着地したマスと残りの区切りを返す。 */
   function hopOnce(seed: number, from: Cell, setup: (world: WorldState, rabbit: PlayerState) => void = () => {}) {
     const { world, frog, rabbit } = arena(seed);
     setup(world, rabbit);
     const actor = new SlimeBombActor(from, frog, 5);
-    runActor(world, actor, HOP_INTERVAL);
+    for (let i = 0; i < 100 && actor.hopsLeft === 5; i += 1) actor.tick(world);
     return { cell: `${actor.cell.col},${actor.cell.row}`, hopsLeft: actor.hopsLeft };
   }
+
+  it('縦横斜めの8方向に跳ぶ（どれも2マス先）', () => {
+    const landed = new Set<string>();
+    for (let seed = 1; seed <= 200; seed += 1) landed.add(hopOnce(seed, { col: 9, row: 7 }).cell);
+    expect([...landed].sort()).toEqual(['11,5', '11,7', '11,9', '7,5', '7,7', '7,9', '9,5', '9,9']);
+  });
 
   it('外周（葱ボンの通り道）には乗らない', () => {
     const landed = new Set<string>();
     for (let seed = 1; seed <= 200; seed += 1) landed.add(hopOnce(seed, { col: 2, row: 3 }).cell);
-    expect([...landed].sort()).toEqual(['2,1', '2,5', '4,3']);
+    expect([...landed].sort()).toEqual(['2,1', '2,5', '4,1', '4,3', '4,5']);
   });
 
   it('爆弾のあるマスには乗らない', () => {
@@ -131,14 +140,15 @@ describe('粘膜爆弾の跳ぶ先（原型 updateSlimes）', () => {
         hopOnce(seed, { col: 1, row: 1 }, (world, rabbit) => bombWithLongFuse(world, rabbit, { col: 3, row: 1 })).cell,
       );
     }
-    expect([...landed]).toEqual(['1,3']);
+    expect([...landed].sort()).toEqual(['1,3', '3,3']);
   });
 
-  it('どこにも跳べなければその場に留まり、跳ねる回数は減る', () => {
+  it('どこにも跳べなければその場に留まり、区切りは減る', () => {
     for (let seed = 1; seed <= 50; seed += 1) {
       const result = hopOnce(seed, { col: 1, row: 1 }, (world, rabbit) => {
         bombWithLongFuse(world, rabbit, { col: 3, row: 1 });
         bombWithLongFuse(world, rabbit, { col: 1, row: 3 });
+        bombWithLongFuse(world, rabbit, { col: 3, row: 3 });
       });
       expect(result).toEqual({ cell: '1,1', hopsLeft: 4 });
     }
@@ -163,6 +173,57 @@ describe('粘膜爆弾の跳ぶ先（原型 updateSlimes）', () => {
       if (!exploded) misfired.push(seed);
     }
     expect(misfired).toEqual([]);
+  });
+});
+
+describe('粘膜爆弾の時間（原型 frogSlime・updateSlimes）', () => {
+  it('21 tick 飛んでから、19〜24 tick おきに跳ね、区切りの数より1回少なく跳ねて爆発する', () => {
+    // 原型（300 の種）：投げた回から数えて 21 フレーム目に着地し、最初に跳ぶのは 40〜45 フレーム目、
+    // 跳ねる間隔は 19〜24 フレーム。6〜8 を引いて、跳ねるのは 5〜7 回。
+    const firstHops = new Set<number>();
+    const intervals = new Set<number>();
+    for (let seed = 1; seed <= 300; seed += 1) {
+      const { world, frog } = arena(seed);
+      frog.position = centerOf({ col: 9, row: 7 });
+      frog.facing = 'right';
+      const actor = SlimeBombActor.launch(world, frog);
+      const regions = actor.hopsLeft;
+      let landedAt: number | null = null;
+      let last: number | null = null;
+      let hops = 0;
+      let done = false;
+      for (let t = 1; t <= 300 && !done; t += 1) {
+        const before = actor.hopsLeft;
+        done = actor.tick(world).done;
+        if (landedAt === null && actor.flight === null) landedAt = t;
+        if (!done && actor.hopsLeft !== before) {
+          hops += 1;
+          if (last === null) firstHops.add(t);
+          else intervals.add(t - last);
+          last = t;
+        }
+      }
+      expect(done, `種 ${seed}`).toBe(true);
+      expect(landedAt, `種 ${seed}`).toBe(21);
+      expect(hops, `種 ${seed}`).toBe(regions - 1);
+    }
+    expect([...firstHops].sort((a, b) => a - b)).toEqual([40, 41, 42, 43, 44, 45]);
+    expect([...intervals].sort((a, b) => a - b)).toEqual([19, 20, 21, 22, 23, 24]);
+  });
+
+  it('爆風に触れたら、飛んでいる間でもすぐ爆発する', () => {
+    // 原型：投げて1フレーム後（まだ飛んでいる）に着地するマスへ爆風を置くと、次のフレームで爆発して消える。
+    const { world, frog } = arena();
+    frog.position = centerOf({ col: 9, row: 7 });
+    frog.facing = 'right';
+    const actor = SlimeBombActor.launch(world, frog);
+    actor.tick(world);
+    expect(actor.flight).not.toBeNull();
+    expect(actor.cell).toEqual({ col: 12, row: 7 });
+    addBlast(world, { col: 12, row: 7 }, 1, false);
+    const result = actor.tick(world);
+    expect(result.done).toBe(true);
+    expect(result.events.some((event) => event.type === 'exploded' && event.owner === frog.id)).toBe(true);
   });
 });
 

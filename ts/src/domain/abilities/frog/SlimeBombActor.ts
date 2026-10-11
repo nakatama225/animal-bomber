@@ -1,4 +1,4 @@
-import { cellOf, DIRECTIONS, step, type Cell } from '../../core/Coord.js';
+import { centerOf, cellOf, sameCell, step, type Cell, type Point } from '../../core/Coord.js';
 import { tick, type Tick } from '../../core/Tick.js';
 import type { SimEvent } from '../../events/SimEvent.js';
 import { addBlast, detonate } from '../../mutations/explode.js';
@@ -8,16 +8,32 @@ import type { PlayerState } from '../../state/PlayerState.js';
 import type { WorldState } from '../../state/WorldState.js';
 import type { WorldActor } from '../WorldActor.js';
 
-/** 跳ねる間隔。 */
-const HOP_INTERVAL: Tick = tick(21);
+/**
+ * 投げてから着地するまでの長さ。
+ *
+ * 原型は 0.34 秒（SLIME_FLY）で、1/60 秒ずつ足して 21 回目に届く。投げた tick から数える。
+ */
+const FLY_TICKS: Tick = tick(21);
 
-/** 1回で跳ぶ距離（マス）。 */
+/**
+ * 跳ねる間隔の、いちばん短いものと長いもの（両端を含む）。
+ *
+ * 原型は 0.30〜0.40 秒の乱数（SLIME_HOP_MIN・SLIME_HOP_MAX）を引き、1/60 秒ずつ減らして 0 を切った回に跳ぶ。
+ * 0.30 + 0.10r 秒は 19〜24 回目に 0 を切る（r がちょうど 0 のときだけ 18 回目）ので、19〜24 tick から等しく引く。
+ */
+const HOP_INTERVAL_MIN = 19;
+const HOP_INTERVAL_MAX = 24;
+
+/** 1回で跳ぶ距離（マス）。斜めは縦にも横にもこの距離。 */
 const HOP_DISTANCE = 2;
 
 /** 投げたときに届く、いちばん遠いマス数。 */
 const THROW_DISTANCE = 3;
 
-/** 爆発するまでに跳ねる回数の下限と上限。 */
+/**
+ * 区切りの数の下限と上限。区切りごとに1つ減らし、0 になった区切りで爆発する。
+ * 跳ねるのはそれより1回少ない（原型も、6〜8 を引いて 5〜7 回跳ねる）。
+ */
 const HOP_MIN = 6;
 const HOP_MAX = 8;
 
@@ -29,35 +45,56 @@ const HOP_MAX = 8;
  *
  * 柱の上にも乗る。通れない場所を越えて飛んでいくのがこの技の
  * 面白さで、爆弾を置けない位置まで攻められる。
+ *
+ * 爆風に触れたら、飛んでいる間でもすぐに爆発する（原型の updateSlimes）。
  */
 export class SlimeBombActor implements WorldActor {
   readonly kind = 'slime';
   #cell: Cell;
+  readonly #from: Point;
   #hopsLeft: number;
-  #timer: Tick = HOP_INTERVAL;
+  /** 投げてから数えた tick。FLY_TICKS に届いたら着地。 */
+  #flown: Tick = tick(0);
+  /** 次の区切りまでの残り。着地するまでは使わない。 */
+  #timer: Tick = tick(0);
+  /** いまの間隔の長さ。着地の揺れの位相を出すためだけに持つ。 */
+  #interval: Tick = tick(0);
 
+  /**
+   * @param hops 区切りの数（1 なら着地して最初の区切りで爆発する）
+   * @param from 投げたときのプレイヤーの位置。飛んでいる間の絵にだけ使う
+   */
   constructor(
     start: Cell,
     private readonly owner: PlayerState,
     hops: number,
+    from: Point = centerOf(start),
   ) {
     this.#cell = start;
     this.#hopsLeft = hops;
+    this.#from = { ...from };
   }
 
-  /** いま乗っているマス。描画のために読むだけで、結果には関わらない。 */
+  /** いま乗っているマス（飛んでいる間は着地するマス）。描画のために読むだけで、結果には関わらない。 */
   get cell(): Cell {
     return this.#cell;
   }
 
-  /** 爆発するまでに残っている跳ねる回数。0 なら次の区切りで爆発する。 */
+  /** 爆発するまでに残っている区切りの数。1 なら次の区切りで爆発する。 */
   get hopsLeft(): number {
     return this.#hopsLeft;
   }
 
-  /** 最後に着地してから（跳ぶ前なら投げられてから）の tick 数。着地の揺れの位相に使う。 */
+  /** 飛んでいる間は、投げた位置と進んだ割合（0〜1）。着地したあとは null。描画のためだけに読む。 */
+  get flight(): { readonly from: Point; readonly progress: number } | null {
+    if (this.#flown >= FLY_TICKS) return null;
+    return { from: this.#from, progress: this.#flown / FLY_TICKS };
+  }
+
+  /** 最後に着地してからの tick 数（飛んでいる間は 0）。着地の揺れの位相に使う。 */
   get sinceLanding(): Tick {
-    return tick(HOP_INTERVAL - this.#timer);
+    if (this.#flown < FLY_TICKS) return tick(0);
+    return tick(this.#interval - this.#timer);
   }
 
   /**
@@ -81,35 +118,53 @@ export class SlimeBombActor implements WorldActor {
       }
     }
     const hops = world.rng.range(HOP_MIN, HOP_MAX + 1);
-    return new SlimeBombActor(landing, player, hops);
+    return new SlimeBombActor(landing, player, hops, player.position);
   }
 
   tick(world: WorldState): { events: SimEvent[]; done: boolean } {
-    this.#timer = tick(this.#timer - 1);
-    if (this.#timer > 0) return { events: [], done: false };
-    this.#timer = HOP_INTERVAL;
+    if (world.blasts.some((blast) => sameCell(blast.cell, this.#cell))) {
+      return { events: this.#burst(world), done: true };
+    }
 
-    if (this.#hopsLeft > 0) {
-      this.#hopsLeft -= 1;
-      this.#hop(world);
+    if (this.#flown < FLY_TICKS) {
+      this.#flown = tick(this.#flown + 1);
+      if (this.#flown >= FLY_TICKS) this.#startInterval(world);
       return { events: [], done: false };
     }
-    return { events: this.#burst(world), done: true };
+
+    this.#timer = tick(this.#timer - 1);
+    if (this.#timer > 0) return { events: [], done: false };
+
+    this.#hopsLeft -= 1;
+    if (this.#hopsLeft <= 0) return { events: this.#burst(world), done: true };
+    this.#hop(world);
+    this.#startInterval(world);
+    return { events: [], done: false };
+  }
+
+  /** 次の区切りまでの間隔を引く。 */
+  #startInterval(world: WorldState): void {
+    this.#interval = tick(world.rng.range(HOP_INTERVAL_MIN, HOP_INTERVAL_MAX + 1));
+    this.#timer = this.#interval;
   }
 
   /**
    * 乱数の順に向きを試し、跳べる最初の向きへ跳ぶ。どこにも跳べなければその場に留まる。
    *
-   * 跳べるのは、内側のマス（外周の葱ボンの通り道ではない）で、爆弾が無いところ。柱の上にも乗る。
+   * 向きは縦横斜めの8つ（原型の SLIME_DIRS）。跳べるのは、内側のマス（外周の葱ボンの通り道ではない）で、
+   * 爆弾が無いところ。柱の上にも乗る。
    * ⚠️ 1つの向きだけを引いて、駄目なら留まる形にしない。爆弾や外周のそばでは留まってばかりになる。
-   * 原型も、向きを混ぜた順に試していた（updateSlimes）。
-   * ⚠️ 向きは縦横の4つ。原型は斜めも入れた8方向に跳ぶ（ここはまだ揃えていない）。
+   * 原型も、向きを混ぜた順に試していた（updateSlimes）。原型の混ぜ方（比較の関数に乱数を返す並べ替え）は
+   * 並びが実行環境しだいなので、この版は種から決まる混ぜ方にしてある。
    */
   #hop(world: WorldState): void {
-    const order = [...DIRECTIONS];
+    const order = [...NEIGHBOUR_ORDER];
     world.rng.shuffle(order);
-    for (const direction of order) {
-      const next = step(this.#cell, direction, HOP_DISTANCE);
+    for (const delta of order) {
+      const next = {
+        col: this.#cell.col + delta.col * HOP_DISTANCE,
+        row: this.#cell.row + delta.row * HOP_DISTANCE,
+      };
       if (!isInner(world, next)) continue;
       if (bombAt(world, next) !== undefined) continue;
       this.#cell = next;
@@ -131,7 +186,7 @@ export class SlimeBombActor implements WorldActor {
       world.board.at(cell) !== 'empty' || bombAt(world, cell) !== undefined;
     let cell = this.#cell;
     if (blocked(cell)) {
-      const landing = SHIFT_ORDER.map((d) => ({ col: cell.col + d.col, row: cell.row + d.row })).find(
+      const landing = NEIGHBOUR_ORDER.map((d) => ({ col: cell.col + d.col, row: cell.row + d.row })).find(
         (next) => !blocked(next),
       );
       if (landing === undefined) {
@@ -148,16 +203,17 @@ export class SlimeBombActor implements WorldActor {
   }
 
   encode(): string {
-    return `${this.#cell.col},${this.#cell.row},${this.#hopsLeft},${this.#timer}`;
+    return `${this.#cell.col},${this.#cell.row},${this.#hopsLeft},${this.#flown},${this.#timer}`;
   }
 }
 
 /**
- * 跳ね終わったマスが塞がっていたときに、ずれる先を試す順。右・左・下・上、そのあと斜め。
+ * まわりの8つの向き。右・左・下・上、そのあと斜め（原型の SLIME_DIRS と同じ並び）。
  *
- * 原型の SLIME_DIRS と同じ順にしてある。順が違うと、柱の上で跳ね終わったときに燃える場所が変わる。
+ * 跳ねる向きは、これを混ぜた順に試す。跳ね終わったマスが塞がっていたときは、この順のまま
+ * ずれる先を試す。順が違うと、柱の上で跳ね終わったときに燃える場所が変わる。
  */
-const SHIFT_ORDER: readonly Cell[] = [
+const NEIGHBOUR_ORDER: readonly Cell[] = [
   { col: 1, row: 0 },
   { col: -1, row: 0 },
   { col: 0, row: 1 },

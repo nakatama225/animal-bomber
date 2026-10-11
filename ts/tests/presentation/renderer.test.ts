@@ -23,53 +23,54 @@ import { fakeCanvas, type FakeCanvas } from './fakeCanvas.js';
  *
  * CPU どうしの試合を、決着まで毎 tick 描く。舌・跳ね回る爆弾・突進・撒く技・
  * 追いかける炎・外周の葱ボンと葱が現れ、ラウンドの切り替わり（決着のあとの待ちと、
- * 盤面の作り直し）も通る。この種と顔ぶれで何が現れるかは、試合の中身が変わると変わるので、
+ * 盤面の作り直し）も通る。どの種で何が現れるかは、試合の中身が変わると変わるので、
  * 途中で現れたものを数えて確かめている。
  */
 describe('描画', () => {
   it('CPU どうしの試合を毎 tick 描いても例外が出ず、状態も変わらない', () => {
-    // 種は、すべての技と外周の葱ボン・葱が現れるものを選んである。CPU の判断を変えると
-    // 現れるものが変わるので、下の確認が失敗したら種を選び直す。
-    // 2026-10-04 に 18 から選び直した（壊れたブロックからアイテムを落とす抽選を1ブロック
-    // 1回に直し、乱数の引き方が変わった）。0〜79 のうち、すべて現れる種で試合がいちばん短いもの。
-    // 2026-10-11 に 39 から 12 へ選び直した（撒いている間も爆弾を置けるようにして試合の流れが
-    // 変わり、39 では突進が1度も出なくなった）。選び方は同じで、0〜79 のうち 30 種がすべて現れる。
-    const seed = 12;
+    // すべての技と外周の葱ボン・葱が現れるまで、種を順に替えて試合を回す（上限 8 試合）。現れたものは
+    // 試合をまたいで数える。種を1つに決め打ちすると、技や CPU の判断を直して試合の流れが変わるたびに
+    // 現れないものが出て、種を選び直すことになる（2026-10-04・10-11 に選び直した）。
+    // 12 から始めるのは、2026-10-11 の時点で1試合ですべて現れた種だったため。
     const animals = ['rabbit', 'frog', 'elephant', 'fox'];
-    const game = new GameSession({ ...defaultMatchConfig(seed, animals), winsToTake: 2 });
-    game.world.players.forEach((player) =>
-      game.attach(new CpuInputSource(player.id, CPU_LEVELS.oni, cpuSeed(seed, player.id))),
-    );
+    const wanted = ['tongue', 'slime', 'charge', 'scatter', 'foxfire', 'negibon', 'leek'];
     const canvas = fakeCanvas({ keepLog: false });
-    const renderer = new Renderer(canvas.context, 920, 680);
-
     const seen = new Set<string>();
-    let intermissions = 0;
-    // 試合の長さは種によって大きく変わる（この顔ぶれで 80 通りの種を試すと 6,967〜29,303 tick。
-    // 2026-10-11 に測った）。
-    // 上限は余裕を見て大きくとる。
-    for (let i = 0; i < 60000 && !game.match.finished; i += 1) {
-      const world = game.world;
-      renderer.beforeTick(world);
-      const events = game.tick();
-      renderer.afterTick(events, world);
-      if (game.betweenRounds) intermissions += 1;
-      for (const actor of game.world.actors) seen.add(actor.kind);
-      for (const player of game.world.players) {
-        if (player.action !== null) seen.add(player.action.kind);
-        if (player.life.kind === 'negibon') seen.add('negibon');
+    let matches = 0;
+    for (let seed = 12; seed < 20 && !wanted.every((kind) => seen.has(kind)); seed += 1) {
+      const game = new GameSession({ ...defaultMatchConfig(seed, animals), winsToTake: 2 });
+      game.world.players.forEach((player) =>
+        game.attach(new CpuInputSource(player.id, CPU_LEVELS.oni, cpuSeed(seed, player.id))),
+      );
+      const renderer = new Renderer(canvas.context, 920, 680);
+      let intermissions = 0;
+      // 試合の長さは種によって大きく変わる（この顔ぶれで 80 通りの種を試すと 6,967〜29,303 tick。
+      // 2026-10-11 に測った）。上限は余裕を見て大きくとる。
+      for (let i = 0; i < 60000 && !game.match.finished; i += 1) {
+        const world = game.world;
+        renderer.beforeTick(world);
+        const events = game.tick();
+        renderer.afterTick(events, world);
+        if (game.betweenRounds) intermissions += 1;
+        for (const actor of game.world.actors) seen.add(actor.kind);
+        for (const player of game.world.players) {
+          if (player.action !== null) seen.add(player.action.kind);
+          if (player.life.kind === 'negibon') seen.add('negibon');
+        }
+        const before = hashWorld(game.world);
+        renderer.draw(game.world, 0.5);
+        expect(hashWorld(game.world)).toBe(before);
       }
-      const before = hashWorld(game.world);
-      renderer.draw(game.world, 0.5);
-      expect(hashWorld(game.world)).toBe(before);
+      expect(game.match.finished, `種 ${seed}`).toBe(true);
+      expect(intermissions, `種 ${seed}`).toBeGreaterThan(0);
+      matches += 1;
     }
-    expect(game.match.finished).toBe(true);
-    expect(intermissions).toBeGreaterThan(0);
-    for (const kind of ['tongue', 'slime', 'charge', 'scatter', 'foxfire', 'negibon', 'leek']) {
+    expect(matches).toBeGreaterThan(0);
+    for (const kind of wanted) {
       expect(seen.has(kind), kind).toBe(true);
     }
     // 数万回の描画を偽の canvas に通すので、既定の制限時間では足りない。
-  }, 240_000);
+  }, 600_000);
 
   it('延長戦で開始位置へ飛び移ったプレイヤーを、前の位置との途中に描かない', () => {
     // 歩いた距離なら間を埋めると滑らかに見えるが、飛び移ったぶんを埋めると

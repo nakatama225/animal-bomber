@@ -35,7 +35,9 @@ export function drawGroundActor(frame: Frame, actor: WorldActor): void {
  */
 export function drawAirActor(frame: Frame, actor: WorldActor): void {
   if (actor instanceof FoxfireActor) drawFoxfire(frame, actor);
-  else if (actor instanceof SlimeBombActor) drawSlime(frame, actor.cell, actor.sinceLanding, actor.hopsLeft);
+  else if (actor instanceof SlimeBombActor) {
+    drawSlime(frame, actor.cell, actor.sinceLanding, actor.hopsLeft, actor.flight);
+  }
   else if (actor instanceof LeekActor) drawLeek(frame, actor.position, actor.facing);
 }
 
