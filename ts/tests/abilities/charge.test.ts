@@ -8,7 +8,7 @@ import type { SimEvent } from '../../src/domain/events/SimEvent.js';
 import { placeBomb, placeBombAt } from '../../src/domain/mutations/bombs.js';
 import { hurt } from '../../src/domain/mutations/damage.js';
 import { itemEffectTicks, type ItemKind } from '../../src/domain/rules/items.js';
-import { isAlive, type PlayerState } from '../../src/domain/state/PlayerState.js';
+import { isAlive, isBlastProof, isUntouchable, type PlayerState } from '../../src/domain/state/PlayerState.js';
 import type { WorldState } from '../../src/domain/state/WorldState.js';
 import { ItemSystem } from '../../src/domain/systems/ItemSystem.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
@@ -152,10 +152,12 @@ describe('突進中の被弾', () => {
     expect(before - player.hp).toBe(2);
   });
 
-  it('体当たりは当たらない状態になる', () => {
+  it('葱は当たらない状態になるが、爆風・追いかける炎・体当たりの傷は当たる（原型の isUntouchable と isBlastProof）', () => {
     const world = elephantWorld();
     triggerCharge(world);
-    expect(world.players[0]!.action?.untouchable).toBe(true);
+    const elephant = world.players[0]!;
+    expect(isUntouchable(elephant)).toBe(true);
+    expect(isBlastProof(elephant)).toBe(false);
   });
 
   it('突進中は爆弾を置けない', () => {

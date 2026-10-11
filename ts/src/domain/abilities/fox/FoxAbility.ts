@@ -1,7 +1,6 @@
 import { cellOf, step } from '../../core/Coord.js';
 import { secondsToTicks, tick } from '../../core/Tick.js';
 import { placeBombAt } from '../../mutations/bombs.js';
-import { INVULNERABLE } from '../../rules/tuning.js';
 import { canPlaceBomb } from '../../state/PlayerState.js';
 import type { Ability } from '../Ability.js';
 import { NEUTRAL_ABILITY } from '../Ability.js';
@@ -9,6 +8,9 @@ import { FoxfireActor } from './FoxfireActor.js';
 
 /** 一列に置いたあとの間隔。 */
 const LINE_COOLDOWN = secondsToTicks(1);
+
+/** とくぎを放つときに跳び上がっている長さ（原型の FOX_LEAP 1 秒）。 */
+const LEAP_TIME = secondsToTicks(1);
 
 /**
  * きつね。爆弾を最初から1個多く持つ。
@@ -50,10 +52,14 @@ export const FOX: Ability = {
     return { action: null, events };
   },
 
+  /**
+   * 跳び上がりながら、追いかける炎を放つ（原型の useSpecial のきつね）。
+   *
+   * 跳んでいる 1 秒は、爆風・炎・体当たり・葱が当たらない（'leap'）。撃ったあと無防備になると、
+   * 相手が近いほど使えない技になってしまう。被弾のあとの無敵とは別の状態で、点滅はしない。
+   */
   onHold(world, player) {
-    // 放つ瞬間に短い無敵がつく。撃ったあと無防備になると、
-    // 相手が近いほど使えない技になってしまう。
-    player.invulnerableUntil = tick(world.now + INVULNERABLE);
+    player.effects.add('leap', LEAP_TIME, LEAP_TIME);
     world.actors.push(new FoxfireActor(player.position, player.id));
     return { action: null, events: [] };
   },

@@ -13,7 +13,7 @@ import {
 import { bombAt } from '../domain/query/BoardQuery.js';
 import { LANE_SPEED, LEEK_HIT, LEEK_RANGE } from '../domain/rules/negibon.js';
 import type { Negibon } from '../domain/state/Life.js';
-import { isAlive, isInvulnerable, type PlayerState } from '../domain/state/PlayerState.js';
+import { isAlive, isInvulnerable, isUntouchable, type PlayerState } from '../domain/state/PlayerState.js';
 import type { WorldState } from '../domain/state/WorldState.js';
 
 /**
@@ -105,9 +105,9 @@ export class NegibonPilot {
   }
 }
 
-/** 葱が当たりうる相手か。無敵中と、乗っ取り中の振る舞いが触れられない間は、葱が通り抜ける。 */
+/** 葱が当たりうる相手か。無敵中と、葱が当たらない間（`isUntouchable`）は、葱が通り抜ける。 */
 function canBeHit(world: Readonly<WorldState>, player: PlayerState): boolean {
-  return isAlive(player) && !isInvulnerable(player, world.now) && player.action?.untouchable !== true;
+  return isAlive(player) && !isInvulnerable(player, world.now) && !isUntouchable(player);
 }
 
 /** 相手が射線の上にいて、射程の内で、間に葱を止めるものが無いか。 */

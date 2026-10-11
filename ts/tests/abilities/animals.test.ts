@@ -5,6 +5,7 @@ import { centerOf } from '../../src/domain/core/Coord.js';
 import { placeBomb } from '../../src/domain/mutations/bombs.js';
 import { applyItem } from '../../src/domain/mutations/items.js';
 import { isSolidFor } from '../../src/domain/query/BoardQuery.js';
+import { isBlastProof, isInvulnerable, isUntouchable } from '../../src/domain/state/PlayerState.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
 import { advance, clearBoard, makeWorld, onlyFor, press } from '../helpers.js';
 import { SlimeBombActor } from '../../src/domain/abilities/frog/SlimeBombActor.js';
@@ -170,11 +171,15 @@ describe('きつね', () => {
     expect(world.actors.some((a) => a.kind === 'foxfire')).toBe(true);
   });
 
-  it('放つ瞬間に無敵がつく', () => {
+  it('放つ瞬間に跳び上がり、その間は爆風が当たらない（被弾のあとの無敵とは別で、点滅しない）', () => {
     // 撃ったあと無防備になると、相手が近いほど使えない技になる。
     const world = worldWith('fox');
     hold(world, 'fox');
-    expect(world.players[0]!.invulnerableUntil).toBeGreaterThan(world.now);
+    const fox = world.players[0]!;
+    expect(fox.effects.has('leap')).toBe(true);
+    expect(isBlastProof(fox)).toBe(true);
+    expect(isUntouchable(fox)).toBe(true);
+    expect(isInvulnerable(fox, world.now)).toBe(false);
   });
 });
 

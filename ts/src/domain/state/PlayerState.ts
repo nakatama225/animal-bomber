@@ -198,9 +198,31 @@ export function canPlaceBomb(player: PlayerState): boolean {
   return !player.effects.has('nobomb') || player.effects.has('autobomb');
 }
 
-/** 無敵の最中か。 */
+/**
+ * 被弾のあとの無敵（点滅している間）か。爆風・追いかける炎・体当たり・葱のどれも当たらない。
+ *
+ * 技による「当たらない」は別に2つある（`isBlastProof`・`isUntouchable`）。原型も3つを分けていた。
+ */
 export function isInvulnerable(player: PlayerState, now: Tick): boolean {
   return now < player.invulnerableUntil;
+}
+
+/**
+ * 爆風・追いかける炎・体当たりの傷が当たらないか（原型の isBlastProof）。跳び上がっている間（'leap'）だけ。
+ *
+ * ⚠️ 突進中は入れない。突進は「止まらないが傷は入る」（上限つき。`ActiveAction.damageCap`）で、
+ * 爆風にも追いかける炎にも、ほかの突進の体当たりにも当たる。
+ */
+export function isBlastProof(player: PlayerState): boolean {
+  return player.effects.has('leap');
+}
+
+/**
+ * 葱が当たらないか（原型の isUntouchable）。跳び上がっている間と、体当たりを受け付けない振る舞いの最中
+ * （`ActiveAction.untouchable`。突進）。
+ */
+export function isUntouchable(player: PlayerState): boolean {
+  return player.effects.has('leap') || player.action?.untouchable === true;
 }
 
 /** 状態を複製する。試算に使う。 */

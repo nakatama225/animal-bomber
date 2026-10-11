@@ -23,6 +23,8 @@ export const EFFECT_LABELS: Readonly<Record<EffectKind, EffectLabel>> = {
   slow: { emoji: '🐌', label: '超スロー' },
   // 原型は状態の表ではなく、名札の行で「🕳️落とし穴 3.0秒」と出していた。
   pitfall: { emoji: '🕳️', label: '落とし穴' },
+  // 原型は名札に出さず、跳ぶ絵だけで見せていた。1 秒だけなので、出しても邪魔にならない。
+  leap: { emoji: '🦊', label: 'キツネ跳び' },
 };
 
 /** 絵文字と呼び方をつないだもの（「🍌すべる」）。 */

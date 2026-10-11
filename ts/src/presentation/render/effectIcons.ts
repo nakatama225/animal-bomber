@@ -18,6 +18,7 @@ export const EFFECT_ICONS: Readonly<Record<EffectKind, string>> = {
   autobomb: '🎰',
   slow: '🐌',
   pitfall: '🕳️',
+  leap: '🦊',
 };
 
 /**

@@ -2,7 +2,7 @@ import { lookOf } from '../../content/animals.js';
 import { abilityOf } from '../../domain/abilities/registry.js';
 import type { PlayerState } from '../../domain/state/PlayerState.js';
 import { drawAnimalBody } from './animals/body.js';
-import { NEUTRAL_POSE } from './animals/painters.js';
+import { NEUTRAL_POSE, type BodyPose } from './animals/painters.js';
 import { actionLookOf } from './animals/registry.js';
 import { statusIcons } from './effectIcons.js';
 import type { Frame } from './Frame.js';
@@ -52,7 +52,7 @@ export function drawPlayer(frame: Frame, view: PlayerView): void {
     facing: player.facing,
     walked: player.walked,
     moving: view.moving,
-    pose: action?.pose?.(frame) ?? NEUTRAL_POSE,
+    pose: action?.pose?.(frame) ?? leapPose(player) ?? NEUTRAL_POSE,
   });
   g.restore();
 
@@ -60,6 +60,19 @@ export function drawPlayer(frame: Frame, view: PlayerView): void {
   drawHoldGauge(g, tile, player, x, y);
   drawIcons(g, tile, statusIcons(player, action?.icon), x, y);
   g.restore();
+}
+
+/** 跳び上がっている（'leap'）長さ。ルールの層の長さ（きつねのとくぎで 1 秒）と揃える。 */
+const LEAP_TICKS = 60;
+
+/**
+ * 跳び上がっている間の姿勢。山なりに跳んで1回転する（原型のキツネ跳びの絵）。跳んでいなければ null。
+ */
+function leapPose(player: PlayerState): BodyPose | null {
+  const left = player.effects.remaining('leap');
+  if (left <= 0) return null;
+  const k = Math.min(1, Math.max(0, 1 - left / LEAP_TICKS));
+  return { drop: -Math.sin(k * Math.PI) * 0.62, tilt: k * FULL_TURN, squash: 1 };
 }
 
 /**

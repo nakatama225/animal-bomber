@@ -3,7 +3,7 @@ import { hurt } from '../mutations/damage.js';
 import { sameCell } from '../core/Coord.js';
 import { cellsTouchedBy } from '../query/Hitbox.js';
 import type { PlayerId, PlayerState } from '../state/PlayerState.js';
-import { isAlive, isInvulnerable } from '../state/PlayerState.js';
+import { isAlive, isBlastProof, isInvulnerable } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 import { BLAST_DAMAGE } from '../rules/tuning.js';
 
@@ -24,6 +24,8 @@ export class DamageSystem {
     for (const player of world.players) {
       if (!isAlive(player)) continue;
       if (isInvulnerable(player, world.now)) continue;
+      // 跳び上がっている間は当たらない（`isBlastProof`）。傷を減らす振る舞いの最中は当たる（傷は上限で減る）。
+      if (isBlastProof(player)) continue;
 
       const by = this.#blastOwnerTouching(world, player);
       if (by === null) continue;

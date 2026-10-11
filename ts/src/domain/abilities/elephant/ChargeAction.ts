@@ -5,7 +5,7 @@ import { bodyCollides, bombAt } from '../../query/BoardQuery.js';
 import { itemDefinition, type ItemKind } from '../../rules/items.js';
 import { MAX_SPEED } from '../../rules/tuning.js';
 import type { PlayerState } from '../../state/PlayerState.js';
-import { isAlive } from '../../state/PlayerState.js';
+import { isAlive, isBlastProof, isInvulnerable } from '../../state/PlayerState.js';
 import type { WorldState } from '../../state/WorldState.js';
 import { hurt } from '../../mutations/damage.js';
 import { detonate } from '../../mutations/explode.js';
@@ -64,7 +64,7 @@ export class ChargeAction implements ActiveAction {
   readonly kind = 'charge';
   readonly drivesMovement = true;
   readonly damageCap = CHARGE_DAMAGE_CAP;
-  /** 体当たりは当たらないが、爆風は通る。 */
+  /** 葱は当たらないが、爆風・追いかける炎・ほかの突進の体当たりは当たる（傷は上限で減る）。 */
   readonly untouchable = true;
   readonly canPlaceBomb = false;
   /** 通り道のアイテムは自分で扱う（下の「通り道のアイテムの扱い」）。 */
@@ -230,9 +230,9 @@ export class ChargeAction implements ActiveAction {
         this.#carried.length = 0;
       }
 
-      // 相手が当たらない状態なら傷つけない。
-      if (other.action?.untouchable === true) continue;
-      if (world.now < other.invulnerableUntil) continue;
+      // 被弾のあとの無敵の間と、跳び上がっている間は傷つけない（原型の updateCharge）。
+      // ⚠️ 相手が突進中でも傷は入る（上限で減る）。突進どうしでぶつかると、どちらにも傷が入る。
+      if (isInvulnerable(other, world.now) || isBlastProof(other)) continue;
       events.push(...hurt(world, other, player.id, 2));
     }
     return events;

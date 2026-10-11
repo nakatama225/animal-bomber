@@ -266,6 +266,17 @@ describe('葱が飛ぶ', () => {
     expect(isAlive(target)).toBe(true);
   });
 
+  it('跳び上がっている相手も通り抜ける（原型の isUntouchable はキツネ跳びを含む）', () => {
+    const { world, shooter, target } = shootingRange(5);
+    target.position = centerOf({ col: 5, row: 3 });
+    // 葱が届くまでの間に切れないよう、長めにかけておく。
+    target.effects.add('leap', tick(600), tick(600));
+    const events = throwAndWait(world);
+    expect(events.some((e) => e.type === 'revived')).toBe(false);
+    expect(shooter.life.kind).toBe('negibon');
+    expect(isAlive(target)).toBe(true);
+  });
+
   it('柱で砕ける', () => {
     // 6 列目は2行目に柱がある。
     const { world } = shootingRange(6);

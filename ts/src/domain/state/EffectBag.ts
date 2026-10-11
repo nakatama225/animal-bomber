@@ -33,7 +33,15 @@ export type EffectKind =
    * 置けず、泣いている間は置ける（動けない2つのうち、原型の canPlaceBomb が見るのは落とし穴だけ）。
    * はまっている間は別の穴にも落ちない。1つにまとめると、この2つが見分けられない。
    */
-  | 'pitfall';
+  | 'pitfall'
+  /**
+   * とくぎを放つ瞬間に跳び上がっている（原型の foxLeap）。爆風・追いかける炎・体当たりの傷が当たらず
+   * （`isBlastProof`）、葱も当たらない（`isUntouchable`）。動けて、爆弾も技も出せる。
+   *
+   * ⚠️ 被弾のあとの無敵（`invulnerableUntil`）とは分けて持つ。被弾のあとの無敵は点滅して見せ、
+   * こちらは跳んで見せる。長さも違う（被弾のあと 1.25 秒、跳ぶのは 1 秒）。
+   */
+  | 'leap';
 
 /** すべての種類を、いつも同じ順で並べたもの。 */
 export const EFFECT_KINDS: readonly EffectKind[] = [
@@ -46,6 +54,7 @@ export const EFFECT_KINDS: readonly EffectKind[] = [
   'autobomb',
   'slow',
   'pitfall',
+  'leap',
 ];
 
 /**

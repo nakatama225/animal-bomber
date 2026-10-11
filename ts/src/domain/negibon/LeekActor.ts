@@ -6,7 +6,7 @@ import { swapPlaces } from '../mutations/negibon.js';
 import { blastAt, bombAt } from '../query/BoardQuery.js';
 import { LEEK_HIT, LEEK_LIFETIME, LEEK_RANGE, LEEK_SPEED } from '../rules/negibon.js';
 import type { PlayerId } from '../state/PlayerState.js';
-import { isAlive, isInvulnerable } from '../state/PlayerState.js';
+import { isAlive, isInvulnerable, isUntouchable } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 
 /**
@@ -84,7 +84,7 @@ export class LeekActor implements WorldActor {
 
     for (const player of world.players) {
       if (player.id === this.owner || !isAlive(player)) continue;
-      if (isInvulnerable(player, world.now) || player.action?.untouchable === true) continue;
+      if (isInvulnerable(player, world.now) || isUntouchable(player)) continue;
       if (Math.abs(player.position.x - this.#position.x) >= LEEK_HIT) continue;
       if (Math.abs(player.position.y - this.#position.y) >= LEEK_HIT) continue;
       const shooter = world.players[this.owner];
