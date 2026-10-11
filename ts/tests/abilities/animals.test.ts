@@ -263,3 +263,14 @@ describe('飛び道具と撒く技の置き場所', () => {
     expect(world.actors.some((actor) => actor instanceof ScatteredActor)).toBe(true);
   });
 });
+
+describe('とくぎの長押しの長さ（原型 specialHoldOf）', () => {
+  it('ぞうだけ 1.5 秒、ほかは 0.5 秒', () => {
+    // 原型は動物の holdTime（ぞうだけ 1.5）か、無ければ SPECIAL_HOLD（0.5 秒）。
+    // 画面なしで押し続けると、ぞうは 91 フレーム目、うさぎ・きつねは 31 フレーム目に出る。
+    const ticks = Object.fromEntries(
+      ['rabbit', 'elephant', 'mole', 'fox', 'frog'].map((animal) => [animal, abilityOf(animal).holdTicks]),
+    );
+    expect(ticks).toEqual({ rabbit: 30, elephant: 90, mole: 30, fox: 30, frog: 30 });
+  });
+});

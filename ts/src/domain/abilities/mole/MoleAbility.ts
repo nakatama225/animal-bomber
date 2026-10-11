@@ -14,7 +14,7 @@ export const MOLE: Ability = {
   ...NEUTRAL_ABILITY,
   key: 'mole',
   speedMultiplier: 0.9,
-  holdTicks: secondsToTicks(1.5),
+  holdTicks: secondsToTicks(0.5),
 
   /**
    * 壊せるブロックだけ通り抜けられる。

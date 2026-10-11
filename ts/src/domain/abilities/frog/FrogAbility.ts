@@ -16,7 +16,7 @@ export const FROG: Ability = {
   ...NEUTRAL_ABILITY,
   key: 'frog',
   itemMultiplier: 2,
-  holdTicks: secondsToTicks(1.5),
+  holdTicks: secondsToTicks(0.5),
 
   onTap(_world, player) {
     return { action: new TongueAction(player.facing), events: [] };

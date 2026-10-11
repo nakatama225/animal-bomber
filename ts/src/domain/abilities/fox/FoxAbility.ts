@@ -20,7 +20,7 @@ export const FOX: Ability = {
   ...NEUTRAL_ABILITY,
   key: 'fox',
   bombBonus: 1,
-  holdTicks: secondsToTicks(1.5),
+  holdTicks: secondsToTicks(0.5),
 
   /**
    * 手持ちのぶんだけ、正面へ一列に置く。
