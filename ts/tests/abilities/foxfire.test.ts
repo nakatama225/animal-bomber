@@ -6,6 +6,7 @@ import { abilityOf } from '../../src/domain/abilities/registry.js';
 import { cellOf, centerOf, type Cell } from '../../src/domain/core/Coord.js';
 import { tick } from '../../src/domain/core/Tick.js';
 import { addBlast } from '../../src/domain/mutations/explode.js';
+import { OUT } from '../../src/domain/state/Life.js';
 import type { PlayerState } from '../../src/domain/state/PlayerState.js';
 import type { WorldState } from '../../src/domain/state/WorldState.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
@@ -124,6 +125,19 @@ describe('キツネ跳び（原型 useSpecial のきつね・isBlastProof）', (
       if (fox.effects.has('leap')) leaping += 1;
     }
     expect(leaping).toBe(59);
+  });
+
+  it('盤面に相手が1人もいなければ、跳ぶだけで炎は出さない（原型の castFoxfire。チキンは使う）', () => {
+    const { world, p0: fox, p1: rabbit } = arena(['fox', 'rabbit']);
+    place(fox, { col: 3, row: 7 });
+    rabbit.life = OUT;
+    fox.specialCharges = 1;
+    const sim = new Simulation();
+    sim.step(world, sameForAll(world, press({})));
+    for (let i = 0; i < abilityOf('fox').holdTicks; i += 1) sim.step(world, onlyFor(world, 0, press({ action: true })));
+    expect(fox.effects.has('leap')).toBe(true);
+    expect(fox.specialCharges).toBe(0);
+    expect(world.actors.some((actor) => actor instanceof FoxfireActor)).toBe(false);
   });
 
   it('跳んでいる間は爆風が当たらない（対照：跳び終わったあとは当たる）', () => {

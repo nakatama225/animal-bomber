@@ -102,7 +102,7 @@ describe('撒く順と時刻（原型 updatePoroporos）', () => {
 });
 
 describe('撒いたうんこ（原型の poro のアイテム）', () => {
-  it('撒いた本人は踏んでも効かず残る。ほかのプレイヤーは踏むと消えて、うんこの抽選がかかる', () => {
+  it('撒いたプレイヤー自身は踏んでも効かず残る。ほかのプレイヤーは踏むと消えて、うんこの抽選がかかる', () => {
     const { world, p0: rabbit, p1: frog } = arena(['rabbit', 'frog']);
     place(rabbit, { col: 3, row: 7 });
     scatteredPoop(world, { col: 3, row: 7 }, rabbit);

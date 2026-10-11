@@ -1,7 +1,7 @@
 import { cellOf, step } from '../../core/Coord.js';
 import { secondsToTicks, tick } from '../../core/Tick.js';
 import { placeBombAt } from '../../mutations/bombs.js';
-import { canPlaceBomb } from '../../state/PlayerState.js';
+import { canPlaceBomb, isAlive } from '../../state/PlayerState.js';
 import type { Ability } from '../Ability.js';
 import { NEUTRAL_ABILITY } from '../Ability.js';
 import { FoxfireActor } from './FoxfireActor.js';
@@ -57,10 +57,13 @@ export const FOX: Ability = {
    *
    * 跳んでいる 1 秒は、爆風・炎・体当たり・葱が当たらない（'leap'）。撃ったあと無防備になると、
    * 相手が近いほど使えない技になってしまう。被弾のあとの無敵とは別の状態で、点滅はしない。
+   * 盤面に相手が1人もいなければ、跳ぶだけで炎は出さない（原型の castFoxfire）。
    */
   onHold(world, player) {
     player.effects.add('leap', LEAP_TIME, LEAP_TIME);
-    world.actors.push(new FoxfireActor(player.position, player.id));
+    if (world.players.some((other) => other.id !== player.id && isAlive(other))) {
+      world.actors.push(new FoxfireActor(player.position, player.id));
+    }
     return { action: null, events: [] };
   },
 };
