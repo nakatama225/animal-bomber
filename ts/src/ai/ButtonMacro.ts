@@ -76,11 +76,6 @@ export class ButtonMacro {
     );
   }
 
-  /** 何もせず離すだけ。途中で打ち切るときに使う。 */
-  static release(): ButtonMacro {
-    return new ButtonMacro([]);
-  }
-
   /**
    * 先に1 tick だけ向きを変えてから、手順を行う。
    *
@@ -109,7 +104,8 @@ export class ButtonMacro {
    * 歩かない指定を外す。
    *
    * 危ないマスに立っているのに、手順のために立ち止まり続けると倒れる。
-   * 途中で離すと別の技に化ける動物では、押し続けたまま逃げる。
+   * 長押しを途中で離すと別の技に化ける（通常技のある動物は通常技、無い動物はとくぎ）ので、
+   * 押し続けたまま逃げる。
    */
   allowMovement(): void {
     this.#movementAllowed = true;

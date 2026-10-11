@@ -1,6 +1,6 @@
 import { sameCell } from '../../domain/core/Coord.js';
 import { PitActor } from '../../domain/abilities/mole/PitAction.js';
-import { holdSpecial } from '../BombPlacement.js';
+import { ButtonMacro } from '../ButtonMacro.js';
 import type { AnimalTactic } from './AnimalTactic.js';
 
 /** 相手が歩いてこの距離まで来られる場所に穴を掘る。 */
@@ -13,9 +13,10 @@ const PIT_RANGE = 12;
  * 届かないマスでだけ掘る。誰も来ない所に掘っても無駄なので、
  * 相手が歩いて来られる範囲で仕掛ける。
  *
- * 押している間は立ち止まる（長押しが決まった瞬間の足元を掘り始める）。
- * 途中で危なくなったら離す。もぐらには押して離す技が無いので、
- * 離しても別の技には化けない。
+ * もぐらには押して離す技が無いので、ポン押しでとくぎが出る（`ActionSystem`）。長押しはせず、
+ * 安全なマスに立ったその場で押して離す。原型の CPU も、安全なときに useSpecial を直に呼んで
+ * すぐ掘り始める。長押しして待つと、待っている間に危なくなったときに打ち切る手が無い
+ * （離すとその場でとくぎが出る）。
  *
  * 壊せるブロックを通り抜けられる点は、経路の探索が能力に従うので
  * ここで扱う必要がない。
@@ -32,6 +33,6 @@ export const MOLE_TACTIC: AnimalTactic = {
     if (alreadyDug) return null;
     if (ctx.foePathDistance(PIT_RANGE + 2) > PIT_RANGE) return null;
     if (!ctx.skillReady()) return null;
-    return holdSpecial(ctx, true);
+    return ButtonMacro.tap();
   },
 };

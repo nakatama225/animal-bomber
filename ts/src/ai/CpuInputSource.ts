@@ -10,7 +10,7 @@ import type { PlayerId, PlayerState } from '../domain/state/PlayerState.js';
 import { isAlive, isFrozen } from '../domain/state/PlayerState.js';
 import type { WorldState } from '../domain/state/WorldState.js';
 import { decideBomb, footBomb } from './BombPlacement.js';
-import { ButtonMacro, type MacroStep } from './ButtonMacro.js';
+import type { MacroStep } from './ButtonMacro.js';
 import { decide, type CpuBehavior } from './CpuBehavior.js';
 import { CpuContext } from './CpuContext.js';
 import type { CpuLevel } from './CpuLevel.js';
@@ -189,10 +189,10 @@ export class CpuInputSource implements InputSource {
   }
 
   /**
-   * 立ち止まって長押ししている最中に危なくなったら、立ち止まるのをやめる。
+   * 立ち止まって長押ししている最中に危なくなったら、立ち止まるのをやめ、押し続けたまま逃げる。
    *
-   * 押して離す技を持たない動物なら、離して打ち切る（離しても何も起きない）。
-   * 持っている動物は、離すとその技に化けるので、押し続けたまま逃げる。
+   * 長押しを途中で打ち切る安全な手は無い。離すと、押して離す技を持つ動物はその技が、
+   * 持たない動物はとくぎが出る（`ActionSystem`）。押し続ければ、しきい値に届いた所でとくぎが出る。
    *
    * ⚠️ 長押しのときだけ。押して離すだけの技は、次の tick に出し切る。
    * そこで歩かせると向きが変わり、技が逃げる向きへ出る（一列に並べる技なら、
@@ -201,8 +201,7 @@ export class CpuInputSource implements InputSource {
   #keepSafeWhileHolding(ctx: CpuContext): void {
     const macro = ctx.memory.macro;
     if (macro === null || !macro.isHold || !ctx.inDanger || !macro.holdsStill) return;
-    if (ctx.ability.onTap === undefined) ctx.memory.macro = ButtonMacro.release();
-    else macro.allowMovement();
+    macro.allowMovement();
   }
 
   /** 判断の間隔が来ていれば、次の計画を決める。 */

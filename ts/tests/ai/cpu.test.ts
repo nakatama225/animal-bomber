@@ -464,6 +464,59 @@ describe('技の最中と技の出し方', () => {
     expect(mine.every((bomb) => bomb.cell.row === 1)).toBe(true);
   });
 
+  it('安全なマスの CPU のもぐらは、長押しせずにその場で押して離して掘り始める（原型の CPU も安全なときに useSpecial を直に呼ぶ）', () => {
+    const world = makeWorld(3, ['mole', 'rabbit']);
+    clearBoard(world);
+    const mole = world.players[0]!;
+    mole.position = centerOf({ col: 5, row: 7 });
+    world.players[1]!.position = centerOf({ col: 11, row: 7 });
+    mole.specialCharges = 1;
+    const game = arena(world, [{ id: 0, level: 'hard' }]);
+    let dugAt: number | null = null;
+    for (let t = 1; t <= 60 && dugAt === null; t += 1) {
+      if (game.run(1).some((e) => e.type === 'techniqueUsed' && e.player === 0 && e.special)) dugAt = t;
+    }
+    // ラウンドの始まりのボタンのロックが外れる tick・押す tick・離す tick。長押し（30 tick）を待たない。
+    expect(dugAt).toBe(3);
+    expect(mole.action?.kind).toBe('dig');
+    expect(cellOf(mole.position)).toEqual({ col: 5, row: 7 });
+  });
+
+  it('立ち止まって長押ししている途中で危なくなったら、離さずに押し続けたまま歩いて逃げる（離すと別の技に化ける）', () => {
+    // 通常技の無い動物（もぐら）は離すととくぎが、ある動物（ぞう）は離すと通常技が出る（ActionSystem）。
+    // 危なくなってから、長押しのしきい値に届く前までを見る。
+    const holdThenDanger = (animal: string): { used: number; moved: boolean } => {
+      const world = makeWorld(3, [animal, 'rabbit']);
+      clearBoard(world);
+      const me = world.players[0]!;
+      const enemy = world.players[1]!;
+      me.position = centerOf({ col: 5, row: 7 });
+      enemy.position = centerOf({ col: 15, row: 7 });
+      me.actionHeld = tick(0);
+      me.specialCharges = 1;
+      const holdTicks = abilityOf(animal).holdTicks;
+      const source = new CpuInputSource(0, CPU_LEVELS.oni, 1);
+      const sim = new Simulation();
+      let used = 0;
+      const step = (): void => {
+        const events = sim.step(world, new Map([[0, source.next(world)], [1, IDLE_INPUT]]));
+        used += events.filter((e) => e.type === 'techniqueUsed' && e.player === 0).length;
+      };
+      step(); // 記憶を作る（盤面が変わった扱い）
+      (source.memory as CpuMemory).macro = ButtonMacro.hold(holdTicks, true);
+      for (let t = 0; t < 10; t += 1) step();
+      const start = cellOf(me.position);
+      enemy.maxBombs = 5;
+      enemy.power = 3;
+      placeBombAt(world, enemy, { col: 7, row: 7 });
+      for (let t = 0; t < holdTicks - 15; t += 1) step();
+      const now = cellOf(me.position);
+      return { used, moved: now.col !== start.col || now.row !== start.row };
+    };
+    expect(holdThenDanger('mole')).toEqual({ used: 0, moved: true });
+    expect(holdThenDanger('elephant')).toEqual({ used: 0, moved: true });
+  });
+
   it('立ち位置の指定がある動物も、ブロックの隣しか無ければ足元に置いて壊す', () => {
     // きつねは「1マス空けた手前」に立ちたいが、行き止まりにはその場所が無い。
     // 妥協して隣に立ったなら、そこで置かないと永久に出られない。
