@@ -13,7 +13,7 @@ import type { WorldState } from '../state/WorldState.js';
  *
  * ボタンを増やさずに2つの技を持たせるため、押した長さで分けている。
  *
- * - 押して離す … 通常技
+ * - 押して離す … 通常技（通常技の無い動物は、チキンがあればとくぎ。原型の doAction）
  * - 押し続ける … とくぎ（動物ごとに必要な長さが違う）
  *
  * どちらが何になるかは `abilities/` の各動物が決める。
@@ -134,11 +134,7 @@ export class ActionSystem {
       if (player.actionHeld === ability.holdTicks && player.specialCharges > 0) {
         // 動けなければ出さない。チキンは減らさず、この押し方のとくぎはそれきり。
         if (frozen) return [];
-        if (ability.onHold === undefined) return [];
-        player.specialCharges -= 1;
-        const result = ability.onHold(world, player);
-        if (result.action !== null) player.action = result.action;
-        return [{ type: 'techniqueUsed', player: player.id, special: true }, ...result.events];
+        return this.#special(world, player);
       }
       return [];
     }
@@ -149,7 +145,8 @@ export class ActionSystem {
     if (held <= 0 || held >= ability.holdTicks) return [];
     // 動けない間に離した押し方と、動けない間に押し始めた押し方は捨てる。
     if (frozen || player.tapVoided) return [];
-    if (ability.onTap === undefined) return [];
+    // 通常技の無い動物は、ポン押しでもとくぎが出る（チキンがあれば。原型の doAction）。
+    if (ability.onTap === undefined) return player.specialCharges > 0 ? this.#special(world, player) : [];
     const cooldownBefore = player.abilityCooldown;
     const result = ability.onTap(world, player);
     if (result.action !== null) player.action = result.action;
@@ -161,5 +158,15 @@ export class ActionSystem {
       player.abilityCooldown !== cooldownBefore;
     if (!fired) return result.events;
     return [{ type: 'techniqueUsed', player: player.id, special: false }, ...result.events];
+  }
+
+  /** とくぎを出す。チキンを1つ使う（出せる形かどうかは呼び出し側が見る）。 */
+  #special(world: WorldState, player: PlayerState): SimEvent[] {
+    const ability = abilityOf(player.animal);
+    if (ability.onHold === undefined) return [];
+    player.specialCharges -= 1;
+    const result = ability.onHold(world, player);
+    if (result.action !== null) player.action = result.action;
+    return [{ type: 'techniqueUsed', player: player.id, special: true }, ...result.events];
   }
 }

@@ -149,6 +149,35 @@ describe('もぐら', () => {
     expect(other.effects.has('pitfall')).toBe(true);
   });
 
+  it('ポン押しでも、チキンがあれば穴を掘り始める（通常技の無い動物。原型の doAction）', () => {
+    // 原型：もぐらでチキンを持って技のボタンを押すと、その場で掘り始める。
+    const world = worldWith('mole');
+    clearBoard(world);
+    const mole = world.players[0]!;
+    mole.specialCharges = 1;
+    const sim = new Simulation();
+    sim.step(world, onlyFor(world, 0, press({})));
+    sim.step(world, onlyFor(world, 0, press({ action: true })));
+    const events = sim.step(world, onlyFor(world, 0, press({})));
+    expect(mole.action?.kind).toBe('dig');
+    expect(mole.specialCharges).toBe(0);
+    expect(events).toContainEqual({ type: 'techniqueUsed', player: 0, special: true });
+  });
+
+  it('対照：チキンが無ければ、ポン押しでは何も起きない。泣いている間のポン押しでは掘らず、チキンも減らない', () => {
+    const tapWith = (charges: number, stunned: boolean): { action: string | null; charges: number } => {
+      const world = worldWith('mole');
+      clearBoard(world);
+      const mole = world.players[0]!;
+      mole.specialCharges = charges;
+      if (stunned) mole.effects.add('stun', tick(120), tick(120));
+      tap(world);
+      return { action: mole.action?.kind ?? null, charges: mole.specialCharges };
+    };
+    expect(tapWith(0, false)).toEqual({ action: null, charges: 0 });
+    expect(tapWith(1, true)).toEqual({ action: null, charges: 1 });
+  });
+
   it('掘ったプレイヤーは自分の穴で止まらない', () => {
     const world = worldWith('mole');
     const mole = world.players[0]!;
