@@ -296,7 +296,7 @@ describe('舌の長さと時間（原型 startTongue・updateTongue・tongueBurn
   }
 
   function tongueOf(world: WorldState, frog: PlayerState): TongueAction {
-    return new TongueAction(cellOf(frog.position), frog.facing, tongueReachOf(world, frog));
+    return new TongueAction(cellOf(frog.position), frog.facing);
   }
 
   /** 終わるまで進め、終わった tick を返す。onTick は各 tick のあとに呼ぶ。 */
@@ -422,5 +422,61 @@ describe('舌の長さと時間（原型 startTongue・updateTongue・tongueBurn
     expect(tongueReachOf(world, frog)).toBe(2);
     enterSuddenDeath(world, [0, 1], 'timeUp');
     expect(tongueReachOf(world, frog)).toBe(TONGUE_REACH);
+  });
+
+  it('もう一度焼けると、戻るまでの 10 秒を数え直す（原型 tongueBurnCheck の tongueRegen=TONGUE_REGEN）', () => {
+    const scar = new BurntTongueActor(0, 3);
+    for (let i = 0; i < 300; i += 1) scar.tick();
+    scar.burnTo(1);
+    let backAt: number | null = null;
+    for (let t = 1; t <= 700 && backAt === null; t += 1) {
+      scar.tick();
+      if (scar.limit === 2) backAt = t;
+    }
+    // 前の残り（300 tick）では戻らず、焼けてから 600 tick 目に戻る。
+    expect(backAt).toBe(600);
+  });
+
+  it('伸ばしている途中に焼けた舌が1マス戻れば、そのぶん伸びる（戻っている途中なら伸び直さない）', () => {
+    // 原型（legacy_p3_tongue_regen）：舌の長さ 3・4 マス先に fire。12 フレームで1マス戻るなら、
+    // 4 マス伸びて掴み、61 フレーム目に終わる。40 フレームで戻るなら（戻っている途中）3 マスで引っ込み、
+    // 46 フレーム目に終わってアイテムは残る。
+    const scenes = [
+      [12, { end: 61, gained: 2, items: 0 }],
+      [40, { end: 46, gained: 0, items: 1 }],
+    ] as const;
+    for (const [regenIn, expected] of scenes) {
+      const { world, frog } = frogAt();
+      const scar = new BurntTongueActor(frog.id, 3);
+      for (let i = 0; i < 600 - regenIn; i += 1) scar.tick();
+      world.actors.push(scar);
+      world.items.push({ id: world.ids.take(), cell: { col: 7, row: 5 }, kind: 'fire' });
+      const before = frog.power;
+      const end = runTongue(world, frog, tongueOf(world, frog), () => scar.tick());
+      expect({ end, gained: frog.power - before, items: world.items.length }, `${regenIn} tick で戻る`).toEqual(expected);
+    }
+  });
+
+  it('掴んだ瞬間に知らせるのは掴んだことだけで、拾ったこと（拾った音）は戻りきって効いた tick に知らせる', () => {
+    // 原型：掴んだところでは SE.tongueCatch だけ。拾った音（SE.item など）は、戻りきって applyItem したときに鳴る。
+    // 戻る途中で焼き切れたら、効かないので拾ったことも知らせない。
+    const run = (burn: boolean): string[] => {
+      const { world, frog } = frogAt();
+      world.items.push({ id: world.ids.take(), cell: { col: 6, row: 5 }, kind: 'fire' });
+      const action = tongueOf(world, frog);
+      const log: string[] = [];
+      for (let t = 1; t <= 60; t += 1) {
+        if (burn && t === 25) addBlast(world, { col: 4, row: 5 }, 1, false);
+        const { events, done } = action.tick(world, frog);
+        for (const event of events) {
+          if (event.type === 'techniqueMoment') log.push(`${t}:${event.moment}`);
+          if (event.type === 'itemTaken') log.push(`${t}:itemTaken(${event.cell === null ? 'null' : 'cell'})`);
+        }
+        if (done) break;
+      }
+      return log;
+    };
+    expect(run(false)).toEqual(['23:tongueCaught', '46:itemTaken(null)']);
+    expect(run(true)).toEqual(['23:tongueCaught']);
   });
 });

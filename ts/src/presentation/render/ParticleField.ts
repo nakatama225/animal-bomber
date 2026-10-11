@@ -126,6 +126,8 @@ export class ParticleField {
         return;
       }
       case 'itemTaken': {
+        // 引き寄せて手元で効いたもの（マスが無い）は煙を出さない（原型も出さない）。
+        if (event.cell === null) return;
         const definition = itemDefinition(event.kind);
         puff(out, rng, event.cell, definition.harmful ? '#b98a5a' : '#ffd23f', definition.emoji);
         return;

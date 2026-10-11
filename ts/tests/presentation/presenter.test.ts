@@ -4,7 +4,7 @@ import { ChargeAction } from '../../src/domain/abilities/elephant/ChargeAction.j
 import { abilityOf } from '../../src/domain/abilities/registry.js';
 import { FoxfireActor } from '../../src/domain/abilities/fox/FoxfireActor.js';
 import { SlimeBombActor } from '../../src/domain/abilities/frog/SlimeBombActor.js';
-import { TONGUE_REACH, TongueAction } from '../../src/domain/abilities/frog/TongueAction.js';
+import { TongueAction } from '../../src/domain/abilities/frog/TongueAction.js';
 import { PitAction } from '../../src/domain/abilities/mole/PitAction.js';
 import { cellOf, centerOf } from '../../src/domain/core/Coord.js';
 import { tick } from '../../src/domain/core/Tick.js';
@@ -105,7 +105,7 @@ describe('技の途中で起きたことを、ルールの層が知らせる', (
       const frog = world.players[0]!;
       frog.position = centerOf({ col: 3, row: 7 });
       frog.facing = 'right';
-      const tongue = new TongueAction(cellOf(frog.position), frog.facing, TONGUE_REACH);
+      const tongue = new TongueAction(cellOf(frog.position), frog.facing);
       for (let t = 0; t < 60; t += 1) collect(tongue.tick(world, frog).events);
     }
     // 穴（掘り始めたときと、掘り終えたとき）

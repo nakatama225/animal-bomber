@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { ANIMAL_LOOKS } from '../../src/content/animals.js';
 import { abilityOf } from '../../src/domain/abilities/registry.js';
 import { ChargeAction } from '../../src/domain/abilities/elephant/ChargeAction.js';
-import { TONGUE_REACH, TongueAction } from '../../src/domain/abilities/frog/TongueAction.js';
+import { TongueAction } from '../../src/domain/abilities/frog/TongueAction.js';
 import { PitAction } from '../../src/domain/abilities/mole/PitAction.js';
 import { cellOf, centerOf, DIRECTIONS } from '../../src/domain/core/Coord.js';
 import { tick } from '../../src/domain/core/Tick.js';
@@ -56,7 +56,7 @@ const CASES: readonly Case[] = [
   {
     name: '舌を伸ばしている',
     setup: (w, p) => {
-      const action = new TongueAction(cellOf(p.position), p.facing, TONGUE_REACH);
+      const action = new TongueAction(cellOf(p.position), p.facing);
       for (let i = 0; i < 8; i += 1) action.tick(w, p);
       p.action = action;
     },
@@ -185,7 +185,7 @@ describe('描画のために読む値', () => {
     const player = world.players[0]!;
     player.position = centerOf({ col: 3, row: 5 });
     player.facing = 'right';
-    const action = new TongueAction(cellOf(player.position), player.facing, TONGUE_REACH);
+    const action = new TongueAction(cellOf(player.position), player.facing);
     const lengths: number[] = [action.extent];
     let done = false;
     while (!done && lengths.length < 200) {

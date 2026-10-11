@@ -72,7 +72,11 @@ export type SimEvent =
   | { readonly type: 'itemDropped'; readonly cell: Cell; readonly kind: ItemKind }
   | {
       readonly type: 'itemTaken';
-      readonly cell: Cell;
+      /**
+       * 拾ったマス。離れた所から引き寄せて、手元に戻ってから効いたものは null
+       * （効いた瞬間にはどのマスにも無い）。null なら煙を出さない（原型も出さない）。
+       */
+      readonly cell: Cell | null;
       readonly kind: ItemKind;
       readonly taker: PlayerId;
     }

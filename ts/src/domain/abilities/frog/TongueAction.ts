@@ -93,7 +93,8 @@ export function tongueReachOf(world: Readonly<WorldState>, player: PlayerState):
  * 選べるようにすると、2倍という長所だけが残って短所が消える。
  *
  * 伸ばしている間は動けない。何かに当たるか伸びきったら、同じ速さで引っ込める。往復し終わるまで隙ができる。
- * 掴んだアイテムは、舌が戻りきったときに効く（原型の updateTongue）。
+ * 伸びきったかは1マス伸びるたびにその時の長さで見る（伸ばしている間に焼けた舌が1マス戻れば、そのぶん伸びる）。
+ * 掴んだアイテムは、舌が戻りきったときに効く（原型の updateTongue）。掴んだ瞬間は掴んだ音だけ、拾った音は効いたとき。
  *
  * 伸びている舌の上に爆風が来ると焼き切れる（原型の tongueBurnCheck）：掴んでいたものは焦げて消え、
  * 3 秒泣き、そのラウンドは焼けたマスの手前までしか伸びなくなる（`BurntTongueActor`）。
@@ -109,18 +110,15 @@ export class TongueAction implements ActiveAction {
   /** 伸ばし始めたマス。押されて動いても、舌の根元はここのまま（原型も伸ばし始めのマスを覚える）。 */
   readonly #origin: Cell;
   readonly #direction: Direction;
-  readonly #reach: number;
   #elapsed: Tick = tick(0);
   #steps = 0;
   #length = 0;
   #returning = false;
   #caught: ItemKind | null = null;
 
-  /** @param reach このとき伸ばせるマス数（焼けていれば短い。`tongueReachOf`） */
-  constructor(origin: Cell, direction: Direction, reach: number) {
+  constructor(origin: Cell, direction: Direction) {
     this.#origin = origin;
     this.#direction = direction;
-    this.#reach = reach;
   }
 
   /**
@@ -148,9 +146,12 @@ export class TongueAction implements ActiveAction {
       }
       this.#length -= 1;
       if (this.#length <= 0) {
-        // 戻りきった。掴んでいたものがあれば、ここで効く。倍率は能力が持つが、ここでは引かない。
-        // かえる自身の技なので 2 を直に書いてよい。共通の処理ではないため。
-        if (this.#caught !== null) events.push(...applyItem(world, player, this.#caught, 2));
+        // 戻りきった。掴んでいたものがあれば、ここで効く（拾った音もここ。原型も applyItem の中で鳴らす）。
+        // 倍率は能力が持つが、ここでは引かない。かえる自身の技なので 2 を直に書いてよい。共通の処理ではないため。
+        if (this.#caught !== null) {
+          events.push({ type: 'itemTaken', cell: null, kind: this.#caught, taker: player.id });
+          events.push(...applyItem(world, player, this.#caught, 2));
+        }
         return { events, done: true };
       }
     }
@@ -176,12 +177,10 @@ export class TongueAction implements ActiveAction {
       world.items.splice(index, 1);
       this.#caught = item.kind;
       this.#returning = true;
-      return [
-        { type: 'itemTaken', cell, kind: item.kind, taker: player.id },
-        { type: 'techniqueMoment', player: player.id, moment: 'tongueCaught' },
-      ];
+      return [{ type: 'techniqueMoment', player: player.id, moment: 'tongueCaught' }];
     }
-    if (this.#length >= this.#reach) this.#returning = true;
+    // その時の長さで見る（原型の updateTongue も1マスごとに tongueReach を読む）。
+    if (this.#length >= tongueReachOf(world, player)) this.#returning = true;
     return [];
   }
 
@@ -196,7 +195,7 @@ export class TongueAction implements ActiveAction {
 
   /** 焼き切れた。掴んでいたものは焦げて消え、泣き、そのラウンドは手前までしか伸びなくなる。 */
   #burn(world: WorldState, player: PlayerState, at: number): SimEvent[] {
-    const limit = Math.min(this.#reach, at - 1);
+    const limit = Math.min(tongueReachOf(world, player), at - 1);
     const scar = world.actors.find(
       (actor): actor is BurntTongueActor => actor instanceof BurntTongueActor && actor.owner === player.id,
     );

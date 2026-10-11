@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { SlimeBombActor } from '../../src/domain/abilities/frog/SlimeBombActor.js';
-import { TONGUE_REACH, TongueAction } from '../../src/domain/abilities/frog/TongueAction.js';
+import { TongueAction } from '../../src/domain/abilities/frog/TongueAction.js';
 import { PitActor } from '../../src/domain/abilities/mole/PitAction.js';
 import { ScatterActor } from '../../src/domain/abilities/rabbit/ScatterActor.js';
 import { abilityOf } from '../../src/domain/abilities/registry.js';
@@ -152,7 +152,7 @@ describe('撒いたうんこ（原型の poro のアイテム）', () => {
     place(frog, { col: 3, row: 7 });
     frog.facing = 'right';
     scatteredPoop(world, { col: 6, row: 7 }, rabbit);
-    const tongue = new TongueAction(cellOf(frog.position), frog.facing, TONGUE_REACH);
+    const tongue = new TongueAction(cellOf(frog.position), frog.facing);
     for (let t = 0; t < 60; t += 1) if (tongue.tick(world, frog).done) break;
     expect(world.items).toEqual([]);
     expect(POOP_EFFECTS.filter((kind) => frog.effects.has(kind))).toHaveLength(1);

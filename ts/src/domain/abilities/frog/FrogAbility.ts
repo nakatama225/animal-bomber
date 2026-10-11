@@ -21,9 +21,8 @@ export const FROG: Ability = {
 
   /** 舌を伸ばす。根元まで焼けていれば出せない（原型の startTongue）。 */
   onTap(world, player) {
-    const reach = tongueReachOf(world, player);
-    if (reach <= 0) return { action: null, events: [] };
-    return { action: new TongueAction(cellOf(player.position), player.facing, reach), events: [] };
+    if (tongueReachOf(world, player) <= 0) return { action: null, events: [] };
+    return { action: new TongueAction(cellOf(player.position), player.facing), events: [] };
   },
 
   onHold(world, player) {
