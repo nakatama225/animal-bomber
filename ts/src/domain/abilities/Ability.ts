@@ -58,7 +58,7 @@ export interface Ability {
   readonly passesThrough?: (world: Readonly<WorldState>, cell: Cell, player: PlayerState) => boolean;
 
   /**
-   * 技のボタンを押し下げた瞬間。通常技。
+   * 技のボタンを押して、長押しのしきい値に届く前に離した瞬間。通常技。
    *
    * @returns 始まった振る舞い（無ければ null）と、起きたイベント
    */
@@ -68,7 +68,8 @@ export interface Ability {
   ) => { action: ActiveAction | null; events: SimEvent[] };
 
   /**
-   * 技のボタンを長押しし切った瞬間。とくぎ。
+   * 技のボタンを長押ししてしきい値に届いた瞬間。とくぎ。onTap を書かない動物では、押して離したときも
+   * チキンがあればこちらを呼ぶ（原型の doAction）。
    *
    * とくぎはチキンを拾って溜めた回数ぶんだけ使える。回数の管理は
    * 呼び出し側が行うので、ここでは効果だけを書く。

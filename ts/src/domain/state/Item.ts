@@ -20,7 +20,7 @@ export interface Item {
   readonly expiresAt?: Tick;
   /**
    * 鼻水で流されて溶けている最中なら、消える tick（原型の melt）。溶けている間は盤面に残るが、
-   * 踏んでも拾わない（効かない）。舌で掴む・突進で抱えるのは、原型と同じく溶けていても止めない。
+   * 踏んでも拾わない（効かない）。舌で掴む・体当たりで抱えるのは、原型と同じく溶けていても止めない。
    */
   readonly meltingUntil?: Tick;
 }

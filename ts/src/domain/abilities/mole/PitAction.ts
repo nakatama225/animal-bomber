@@ -21,7 +21,7 @@ const DIGGER = 'mole';
 /** そのマスに掘られている落とし穴。無ければ undefined。 */
 export function pitAt(world: Readonly<WorldState>, cell: Cell): PitActor | undefined {
   // ⚠️ 型で探す。actor の encode の文字列の頭で探すと、同じ形の encode を持つ
-  // 別の actor（撒いたもの・跳ねる爆弾）まで穴と見なす。
+  // 別の actor（撒く本体・跳ねる爆弾）まで穴と見なす。
   return world.actors.find(
     (actor): actor is PitActor => actor instanceof PitActor && sameCell(actor.cell, cell),
   );
@@ -71,8 +71,8 @@ export class PitActor implements WorldActor {
     const events: SimEvent[] = [{ type: 'effectApplied', target: player.id, effect: 'pitfall' }];
     // 位置を決める振る舞い（掘る・舌・突進）は打ち切る。穴は無敵でも避けられない。
     // 打ち切るときも後始末は呼ぶ（抱えていたものを撒く、など。`ActiveAction.finish`）。
-    // 動きを乗っ取らない振る舞い（撒きながら歩く、など）は続く。原型も、穴に落ちて止めるのは
-    // 掘る・舌・突進だけだった。
+    // 動きを乗っ取らない振る舞いは続く（いまの動物には無い。撒くのは盤面の側の物なので、穴に落ちても続く）。
+    // 原型も、穴に落ちて止めるのは掘る・舌・突進だけだった。
     const aborted = player.action;
     if (aborted?.drivesMovement === true) {
       player.action = null;
@@ -90,7 +90,7 @@ export class PitActor implements WorldActor {
  * そのマスに穴を掘り始められるか（原型の startDigPit）。
  *
  * 掘れないのは3つ。マスが空いていない（壊せるブロックの中）、すでに穴がある、爆弾がある。
- * ⚠️ 撒いたものやアイテムの上には掘れる。原型が見るのもこの3つだけ。
+ * ⚠️ アイテム（とくぎで撒かれたうんこも）の上には掘れる。原型が見るのもこの3つだけ。
  * ⚠️ 掘り始めの確かめで、掘り終わりには使わない。掘り終わりは爆弾を見ない（`PitAction.finish`）。
  */
 export function canDigAt(world: Readonly<WorldState>, cell: Cell): boolean {

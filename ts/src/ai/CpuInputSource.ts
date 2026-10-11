@@ -116,8 +116,8 @@ export class CpuInputSource implements InputSource {
 
     // 技の最中は、技のボタンを押しても効かない（ゲームの側が見ていない）。
     // 移動まで乗っ取る技なら、何もせず終わるのを待つ。
-    // ⚠️ 移動を乗っ取らない技（撒きながら逃げる、など）の最中は歩ける。
-    // ここで一律に待つと、危ないマスで2秒固まって倒れる。
+    // ⚠️ 移動を乗っ取らない技（いまの動物には無い。作り物の振る舞いで tests/ai/cpu.test.ts が確かめる）の
+    // 最中は歩ける。ここで一律に待つと、危ないマスで技が終わるまで固まって倒れる。
     if (me.action !== null) {
       memory.macro = null;
       if (me.action.drivesMovement) return IDLE_INPUT;

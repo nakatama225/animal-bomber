@@ -210,16 +210,16 @@ export function isInvulnerable(player: PlayerState, now: Tick): boolean {
 /**
  * 爆風・追いかける炎・体当たりの傷が当たらないか（原型の isBlastProof）。跳び上がっている間（'leap'）だけ。
  *
- * ⚠️ 突進中は入れない。突進は「止まらないが傷は入る」（上限つき。`ActiveAction.damageCap`）で、
- * 爆風にも追いかける炎にも、ほかの突進の体当たりにも当たる。
+ * ⚠️ 体当たりで傷を減らす振る舞い（`ActiveAction.damageCap`）の最中は入れない。その振る舞いは
+ * 「止まらないが傷は入る」（上限つき）で、爆風にも追いかける炎にも、ほかの体当たりにも当たる。
  */
 export function isBlastProof(player: PlayerState): boolean {
   return player.effects.has('leap');
 }
 
 /**
- * 葱が当たらないか（原型の isUntouchable）。跳び上がっている間と、体当たりを受け付けない振る舞いの最中
- * （`ActiveAction.untouchable`。突進）。
+ * 葱が当たらないか（原型の isUntouchable）。跳び上がっている間と、葱が当たらない振る舞いの最中
+ * （`ActiveAction.untouchable`）。
  */
 export function isUntouchable(player: PlayerState): boolean {
   return player.effects.has('leap') || player.action?.untouchable === true;
