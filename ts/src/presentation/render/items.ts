@@ -1,4 +1,5 @@
 import type { Cell } from '../../domain/core/Coord.js';
+import { secondsToTicks, type Tick } from '../../domain/core/Tick.js';
 import { itemDefinition } from '../../domain/rules/items.js';
 import type { Item } from '../../domain/state/Item.js';
 import type { Frame } from './Frame.js';
@@ -10,7 +11,7 @@ import { roundRect } from './primitives.js';
  *
  * - `good` … 拾うと得をするもの。黄色の枠
  * - `harmful` … 拾うと損をするもの。赤い枠にして一目で避けられるようにする
- * - `scattered` … とくぎで撒かれた障害物。桃色の枠にして、ふつうの損をする
+ * - `scattered` … とくぎで撒かれたもの（`Item.scatteredBy`）。桃色の枠にして、ふつうの損をする
  *   アイテムと見分ける
  */
 export type BadgeTone = 'good' | 'harmful' | 'scattered';
@@ -56,17 +57,32 @@ const TONES: Readonly<Record<BadgeTone, ToneColors>> = {
   },
 };
 
-/** 盤面に落ちているアイテムを描く。 */
-export function drawItem(frame: Frame, item: Item): void {
+/** 撒かれたアイテムが、消える前に点滅を始める残り時間。原型と同じ値。 */
+const SCATTERED_BLINK = secondsToTicks(3.5);
+
+/**
+ * 盤面に落ちているアイテムを描く。
+ *
+ * とくぎで撒かれたものは桃色の枠にし、消える前の 3.5 秒は点滅させる（原型と同じ）。
+ *
+ * @param now いまの tick。撒かれたものの残り時間を出すのに使う
+ */
+export function drawItem(frame: Frame, item: Item, now: Tick): void {
   const definition = itemDefinition(item.kind);
-  drawBadge(frame, item.cell, definition.emoji, definition.harmful ? 'harmful' : 'good', 1);
+  if (item.scatteredBy === undefined) {
+    drawBadge(frame, item.cell, definition.emoji, definition.harmful ? 'harmful' : 'good', 1);
+    return;
+  }
+  const left = item.expiresAt === undefined ? Infinity : item.expiresAt - now;
+  const alpha = left < SCATTERED_BLINK ? 0.35 + 0.65 * Math.abs(Math.sin(frame.time * 9)) : 1;
+  drawBadge(frame, item.cell, definition.emoji, 'scattered', alpha);
 }
 
 /**
  * マスの上に、枠つきの札に載せた絵文字を描く。
  *
  * アイテムは床に埋もれやすいので、濃い下地・脈打つ太い枠・黒い縁取りの絵文字で
- * 床から浮かせる。床に置かれる自律物も同じ見た目で描くので、ここに切り出してある。
+ * 床から浮かせる。色分け（`BadgeTone`）だけを替えて、どのアイテムも同じ形で描く。
  *
  * @param alpha 札全体の不透明度。消える前の点滅に使う
  */

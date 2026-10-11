@@ -1,10 +1,21 @@
 import type { Cell } from '../core/Coord.js';
 import type { EntityId } from '../core/EntityId.js';
+import type { Tick } from '../core/Tick.js';
 import type { ItemKind } from '../rules/items.js';
+import type { PlayerId } from './PlayerState.js';
 
 /** 盤面に落ちているアイテム。 */
 export interface Item {
   readonly id: EntityId;
   readonly cell: Cell;
   readonly kind: ItemKind;
+  /**
+   * とくぎで撒かれたアイテムなら、撒いたプレイヤー（原型の poro と owner）。ふつうのアイテムは書かない。
+   *
+   * 撒かれたアイテムは、ふつうのアイテムと3つ違う：撒いたプレイヤー自身は踏んでも拾わない（効かず、残る）・
+   * 爆風で焼けない・`expiresAt` を過ぎると消える。ほかのプレイヤーが踏めば、ふつうのアイテムと同じく効いて消える。
+   */
+  readonly scatteredBy?: PlayerId;
+  /** この tick を過ぎたら盤面から消える（撒かれたアイテムだけ）。 */
+  readonly expiresAt?: Tick;
 }

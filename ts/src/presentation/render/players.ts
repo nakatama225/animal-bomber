@@ -1,8 +1,10 @@
 import { lookOf } from '../../content/animals.js';
+import { SCATTER_TIME } from '../../domain/abilities/rabbit/ScatterActor.js';
 import { abilityOf } from '../../domain/abilities/registry.js';
 import type { PlayerState } from '../../domain/state/PlayerState.js';
 import { drawAnimalBody } from './animals/body.js';
 import { NEUTRAL_POSE, type BodyPose } from './animals/painters.js';
+import { scatteringPose } from './animals/rabbit.js';
 import { actionLookOf } from './animals/registry.js';
 import { statusIcons } from './effectIcons.js';
 import type { Frame } from './Frame.js';
@@ -52,7 +54,7 @@ export function drawPlayer(frame: Frame, view: PlayerView): void {
     facing: player.facing,
     walked: player.walked,
     moving: view.moving,
-    pose: action?.pose?.(frame) ?? leapPose(player) ?? NEUTRAL_POSE,
+    pose: action?.pose?.(frame) ?? effectPose(frame, player) ?? NEUTRAL_POSE,
   });
   g.restore();
 
@@ -66,13 +68,20 @@ export function drawPlayer(frame: Frame, view: PlayerView): void {
 const LEAP_TICKS = 60;
 
 /**
- * 跳び上がっている間の姿勢。山なりに跳んで1回転する（原型のキツネ跳びの絵）。跳んでいなければ null。
+ * 一時的な状態がつくる姿勢。どちらも無ければ null。
+ *
+ * - 跳び上がっている（'leap'）… 山なりに跳んで1回転する（原型のキツネ跳びの絵）
+ * - 撒いている（'scattering'）… 腰を落として細かく震える（原型のブリブリ）
  */
-function leapPose(player: PlayerState): BodyPose | null {
-  const left = player.effects.remaining('leap');
-  if (left <= 0) return null;
-  const k = Math.min(1, Math.max(0, 1 - left / LEAP_TICKS));
-  return { drop: -Math.sin(k * Math.PI) * 0.62, tilt: k * FULL_TURN, squash: 1 };
+function effectPose(frame: Frame, player: PlayerState): BodyPose | null {
+  const leap = player.effects.remaining('leap');
+  if (leap > 0) {
+    const k = Math.min(1, Math.max(0, 1 - leap / LEAP_TICKS));
+    return { drop: -Math.sin(k * Math.PI) * 0.62, tilt: k * FULL_TURN, squash: 1 };
+  }
+  const scattering = player.effects.remaining('scattering');
+  if (scattering > 0) return scatteringPose(frame, Math.min(1, Math.max(0, 1 - scattering / SCATTER_TIME)));
+  return null;
 }
 
 /**

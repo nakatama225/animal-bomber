@@ -41,7 +41,12 @@ export type EffectKind =
    * ⚠️ 被弾のあとの無敵（`invulnerableUntil`）とは分けて持つ。被弾のあとの無敵は点滅して見せ、
    * こちらは跳んで見せる。長さも違う（被弾のあと 1.25 秒、跳ぶのは 1 秒）。
    */
-  | 'leap';
+  | 'leap'
+  /**
+   * 周りに撒いている最中の身ぶり（原型の poro）。見た目と状態の表示のためだけの状態で、何も止めない
+   * （歩けて、爆弾も技も出せる）。撒く本体は盤面の側の物が進めるので、これが切れても撒くのは続く。
+   */
+  | 'scattering';
 
 /** すべての種類を、いつも同じ順で並べたもの。 */
 export const EFFECT_KINDS: readonly EffectKind[] = [
@@ -55,6 +60,7 @@ export const EFFECT_KINDS: readonly EffectKind[] = [
   'slow',
   'pitfall',
   'leap',
+  'scattering',
 ];
 
 /**

@@ -52,6 +52,8 @@ export type SimEvent =
       readonly taker: PlayerId;
     }
   | { readonly type: 'itemBurned'; readonly cell: Cell; readonly kind: ItemKind }
+  /** 撒かれたアイテムが、残る長さを過ぎて消えた（`Item.expiresAt`）。 */
+  | { readonly type: 'itemExpired'; readonly cell: Cell; readonly kind: ItemKind }
   | {
       readonly type: 'effectApplied';
       readonly target: PlayerId;

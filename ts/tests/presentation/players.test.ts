@@ -5,7 +5,6 @@ import { abilityOf } from '../../src/domain/abilities/registry.js';
 import { ChargeAction } from '../../src/domain/abilities/elephant/ChargeAction.js';
 import { TONGUE_REACH, TongueAction } from '../../src/domain/abilities/frog/TongueAction.js';
 import { PitAction } from '../../src/domain/abilities/mole/PitAction.js';
-import { ScatterAction } from '../../src/domain/abilities/rabbit/ScatterAction.js';
 import { cellOf, centerOf, DIRECTIONS } from '../../src/domain/core/Coord.js';
 import { tick } from '../../src/domain/core/Tick.js';
 import { EFFECT_KINDS } from '../../src/domain/state/EffectBag.js';
@@ -72,7 +71,12 @@ const CASES: readonly Case[] = [
     },
     icons: true,
   },
-  { name: '周りを埋めている', setup: (_w, p) => (p.action = new ScatterAction(cellOf(p.position))), icons: true },
+  {
+    name: '周りを埋めている',
+    setup: (_w, p) => p.effects.add('scattering', tick(60), tick(120)),
+    icons: true,
+  },
+  { name: 'キツネ跳び', setup: (_w, p) => p.effects.add('leap', tick(30), tick(60)), icons: true },
 ];
 
 function frameOn(canvas: FakeCanvas, time = 0): Frame {

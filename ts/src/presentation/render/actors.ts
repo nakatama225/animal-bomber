@@ -1,37 +1,19 @@
 import type { WorldActor } from '../../domain/abilities/WorldActor.js';
 import { FoxfireActor } from '../../domain/abilities/fox/FoxfireActor.js';
 import { SlimeBombActor } from '../../domain/abilities/frog/SlimeBombActor.js';
-import { ScatteredActor } from '../../domain/abilities/rabbit/ScatterAction.js';
-import { secondsToTicks } from '../../domain/core/Tick.js';
 import { LeekActor } from '../../domain/negibon/LeekActor.js';
-import { itemDefinition } from '../../domain/rules/items.js';
 import type { Frame } from './Frame.js';
 import { FULL_TURN } from './Frame.js';
-import { drawBadge } from './items.js';
 import { screenX, screenY } from './Layout.js';
 import { drawLeek } from './negibon.js';
 import { drawSlime } from './slime.js';
-
-/** 撒かれた障害物が、消える前に点滅を始める残り時間。原型と同じ値。 */
-const SCATTERED_BLINK = secondsToTicks(3.5);
-
-/**
- * 床に置かれる自律物を、爆弾より下に描く。
- *
- * Renderer はすべての自律物についてこれを呼ぶ。床に置かれないものは何も描かずに返す。
- * 落とし穴もここでは描かない。見えていると誰も踏まないので、仕掛けたプレイヤー自身にも見せない。
- */
-export function drawGroundActor(frame: Frame, actor: WorldActor): void {
-  if (!(actor instanceof ScatteredActor)) return;
-  let alpha = 1;
-  if (actor.remaining < SCATTERED_BLINK) alpha = 0.35 + 0.65 * Math.abs(Math.sin(frame.time * 9));
-  drawBadge(frame, actor.cell, itemDefinition('poop').emoji, 'scattered', alpha);
-}
 
 /**
  * 宙を飛ぶ自律物を、プレイヤーより上に描く。
  *
  * Renderer はすべての自律物についてこれを呼ぶ。宙を飛ばないものは何も描かずに返す。
+ * 落とし穴は描かない。見えていると誰も踏まないので、仕掛けたプレイヤー自身にも見せない。
+ * 撒くとくぎ・焼けた舌も盤面に描くものが無い（撒かれたものはアイテムとして描く）。
  */
 export function drawAirActor(frame: Frame, actor: WorldActor): void {
   if (actor instanceof FoxfireActor) drawFoxfire(frame, actor);

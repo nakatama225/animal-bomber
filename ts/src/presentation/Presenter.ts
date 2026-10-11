@@ -100,6 +100,9 @@ export class Presenter {
       case 'itemBurned':
         this.sounds.play('burn');
         return;
+      case 'itemExpired':
+        // 原型も、撒かれたものが消えるときは音を鳴らさない（煙だけ）。
+        return;
       case 'effectApplied':
         this.sounds.play(effectSound(event.effect));
         this.notices.show(`${this.nameOf(event.target, world)}：${effectText(event.effect)}`);

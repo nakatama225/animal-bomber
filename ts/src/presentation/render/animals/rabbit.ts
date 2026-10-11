@@ -1,5 +1,6 @@
+import type { Frame } from '../Frame.js';
 import { outline } from '../primitives.js';
-import type { ActionLook, HeadPainter } from './painters.js';
+import type { BodyPose, HeadPainter } from './painters.js';
 import { drawEye, fillEllipse } from './parts.js';
 
 const INNER_EAR = '#ffb3cd';
@@ -70,22 +71,20 @@ export const drawRabbitHead: HeadPainter = (g, x, y, r, mode, colors) => {
   }
 };
 
-/** 撒いている最中に腰を落とす量（マス）。 */
-const SCATTER_DROP = 0.06;
+/** 撒いている最中に腰を落とす量のいちばん深いところ（マス）。 */
+const SCATTER_DROP = 0.07;
 /** 震えの速さ（ラジアン毎秒）。 */
 const SHIVER_SPEED = 34;
 
 /**
- * 周りを埋め尽くすとくぎの最中の見た目。腰を落として細かく震える。
+ * 周りに撒いている最中（'scattering'）の姿勢。腰を落として細かく震える（原型のブリブリ）。
  *
- * 原型は撒き始めからの進みに合わせて腰を落とし、また戻していた。
- * ここでは進みを読まず、落とす量を一定にしている。震えは時刻だけで
- * 決まるので、進みが分からなくても描ける。
+ * 腰は撒き始めからの進みに合わせて落とし、半分を過ぎたら戻す（原型と同じ）。
+ *
+ * @param progress 撒き始めからの進み（0〜1）
  */
-export const SCATTER_LOOK: ActionLook = {
-  icon: '💩',
-  pose(frame) {
-    const shiver = Math.sin(frame.time * SHIVER_SPEED);
-    return { drop: SCATTER_DROP, tilt: shiver * 0.09, squash: 1 + 0.06 * shiver };
-  },
-};
+export function scatteringPose(frame: Frame, progress: number): BodyPose {
+  const shiver = Math.sin(frame.time * SHIVER_SPEED);
+  const drop = SCATTER_DROP * (0.5 + 0.5 * Math.sin(progress * Math.PI));
+  return { drop, tilt: shiver * 0.09, squash: 1 + 0.06 * shiver };
+}

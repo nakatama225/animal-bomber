@@ -326,7 +326,7 @@ describe('落ちる（原型 pitfallCheck）', () => {
     expect(rabbit.position.x).toBe(x);
   });
 
-  it('撒いている最中に落ちても、撒くのは続く（原型 21 マス。動きを乗っ取らない振る舞いは打ち切らない）', () => {
+  it('撒いている最中に落ちても、撒くのは続く（原型 21 マス。撒くのは盤面の側の物が進める）', () => {
     for (const withPit of [false, true]) {
       const world = arena(['rabbit', 'mole']);
       const [rabbit, mole] = world.players as [PlayerState, PlayerState];
@@ -338,12 +338,12 @@ describe('落ちる（原型 pitfallCheck）', () => {
       for (let i = 0; i < abilityOf('rabbit').holdTicks; i += 1) {
         sim.step(world, onlyFor(world, 0, press({ action: true })));
       }
-      expect(rabbit.action?.kind).toBe('scatter');
+      expect(rabbit.effects.has('scattering')).toBe(true);
       if (withPit) world.actors.push(new PitActor({ col: 5, row: 5 }, mole.id));
       sim.step(world, sameForAll(world, press({})));
       expect(rabbit.effects.has('pitfall')).toBe(withPit);
       advance(world, sameForAll(world, press({})), 130, sim);
-      expect(world.actors.filter((actor) => actor.kind === 'scattered')).toHaveLength(21);
+      expect(world.items.filter((item) => item.scatteredBy === rabbit.id)).toHaveLength(21);
     }
   });
 

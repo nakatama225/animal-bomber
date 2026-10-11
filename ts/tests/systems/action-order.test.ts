@@ -65,7 +65,7 @@ function rabbitScene({ pressAt, releaseAt, stunAt, stunTicks }: RabbitScene) {
     hopAt,
     moved: rabbit.position.x - x0,
     charges: rabbit.specialCharges,
-    scattered: world.actors.filter((actor) => actor.kind === 'scattered').length,
+    scattered: world.items.filter((item) => item.scatteredBy !== undefined).length,
   };
 }
 

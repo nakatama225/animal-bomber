@@ -13,8 +13,8 @@ import { OUT_OF_BOMBS_BAN, SAME_SPOT_BAN, UNSAFE_SPOT_BAN } from '../../src/ai/m
 import { directionAlong } from '../../src/ai/PathFollower.js';
 import { FROG_TACTIC } from '../../src/ai/tactics/FrogTactic.js';
 import { BurntTongueActor } from '../../src/domain/abilities/frog/TongueAction.js';
+import type { ActiveAction } from '../../src/domain/abilities/ActiveAction.js';
 import { abilityOf } from '../../src/domain/abilities/registry.js';
-import { ScatterAction } from '../../src/domain/abilities/rabbit/ScatterAction.js';
 import { cellOf, centerOf, type Cell } from '../../src/domain/core/Coord.js';
 import { Rng } from '../../src/domain/core/Rng.js';
 import { secondsToTicks, tick } from '../../src/domain/core/Tick.js';
@@ -351,9 +351,46 @@ describe('経路の追従', () => {
 });
 
 describe('技の最中と技の出し方', () => {
+  /**
+   * 確かめのための作り物の振る舞い。ticks のあいだ続く。
+   *
+   * いまの動物の振る舞いは、どれも移動を乗っ取り、爆弾を置けない。CPU の側には「乗っ取らない振る舞い」
+   * 「置ける振る舞い」のときの決まりがあるので、その決まりは作り物で確かめる。
+   */
+  function probe(options: { drivesMovement: boolean; canPlaceBomb: boolean }, ticks = 120): ActiveAction {
+    let left = ticks;
+    return {
+      kind: 'probe',
+      drivesMovement: options.drivesMovement,
+      damageCap: null,
+      untouchable: false,
+      canPlaceBomb: options.canPlaceBomb,
+      sweepsItems: false,
+      tick: () => {
+        left -= 1;
+        return { events: [], done: left <= 0 };
+      },
+    };
+  }
+
   it('移動を乗っ取らない技の最中は、歩いて爆弾から逃げる', () => {
-    // うさぎのとくぎ（撒く）は、撒きながら歩ける技。技の最中を一律に
-    // 「動けない」と扱うと、足元に置かれた爆弾の前で2秒固まって当たる。
+    // 技の最中を一律に「動けない」と扱うと、足元に置かれた爆弾の前で固まって当たる。
+    const world = makeWorld(3, ['rabbit', 'elephant']);
+    clearBoard(world);
+    const cpu = world.players[0]!;
+    const foe = world.players[1]!;
+    foe.position = centerOf({ col: 4, row: 1 });
+    const game = arena(world, [{ id: 0, level: 'oni' }]);
+    cpu.action = probe({ drivesMovement: false, canPlaceBomb: false }, BOMB_FUSE + BLAST_DURATION + 30);
+    foe.maxBombs = 5;
+    placeBombAt(world, foe, cellOf(cpu.position));
+    const hp = cpu.hp;
+    game.run(BOMB_FUSE + BLAST_DURATION + 10);
+    expect(cpu.action?.kind).toBe('probe');
+    expect(cpu.hp).toBe(hp);
+  });
+
+  it('うさぎが撒いている間も、歩いて爆弾から逃げる（撒くのは盤面の側の物で、うさぎは乗っ取られない）', () => {
     const world = makeWorld(3, ['rabbit', 'elephant']);
     clearBoard(world);
     const cpu = world.players[0]!;
@@ -361,8 +398,9 @@ describe('技の最中と技の出し方', () => {
     cpu.specialCharges = 1;
     foe.position = centerOf({ col: 4, row: 1 });
     const game = arena(world, [{ id: 0, level: 'oni' }]);
-    for (let i = 0; i < 120 && cpu.action === null; i += 1) game.run(1);
-    expect(cpu.action?.drivesMovement).toBe(false);
+    for (let i = 0; i < 120 && !cpu.effects.has('scattering'); i += 1) game.run(1);
+    expect(cpu.effects.has('scattering')).toBe(true);
+    expect(cpu.action).toBeNull();
 
     foe.maxBombs = 5;
     placeBombAt(world, foe, cellOf(cpu.position));
@@ -372,34 +410,18 @@ describe('技の最中と技の出し方', () => {
   });
 
   it('爆弾を置ける技の最中は爆弾を置き、置けない技の最中はボタンを押さない', () => {
-    // うさぎの撒く技は、撒きながら爆弾も置ける（原型も、撒いている間にボタンでも勝手に設置でも置く）。
-    // CPU も撒いている間に置く。置けるかは技の canPlaceBomb が決める。
+    // 置けるかは技の canPlaceBomb が決める（ゲームの側の canPlaceBomb と同じ）。
     /** 技の最中に爆弾のボタンを押した回数と、技の最中に初めて置いた tick。 */
-    const whileAction = (kind: 'scatter' | 'probe'): { pressed: number; placedAt: number | null } => {
+    const whileAction = (canPlaceBomb: boolean): { pressed: number; placedAt: number | null } => {
       const world = makeWorld(1, ['rabbit', 'frog']);
       const rabbit = world.players[0]!;
-      let left = 120;
-      rabbit.action =
-        kind === 'scatter'
-          ? new ScatterAction(cellOf(rabbit.position))
-          : {
-              kind: 'probe',
-              drivesMovement: false,
-              damageCap: null,
-              untouchable: false,
-              canPlaceBomb: false,
-              sweepsItems: false,
-              tick: () => {
-                left -= 1;
-                return { events: [], done: left <= 0 };
-              },
-            };
+      rabbit.action = probe({ drivesMovement: false, canPlaceBomb });
       const source = new CpuInputSource(0, CPU_LEVELS.oni, 1);
       const sim = new Simulation();
       let pressed = 0;
       for (let t = 0; t < 120; t += 1) {
         // 技が続いている間だけを数える。技が終わってから置いたのでは確かめにならない。
-        const during = rabbit.action?.kind === kind;
+        const during = rabbit.action?.kind === 'probe';
         const input = source.next(world);
         if (during && input.bomb) pressed += 1;
         const events = sim.step(world, new Map([[0, input], [1, IDLE_INPUT]]));
@@ -409,10 +431,10 @@ describe('技の最中と技の出し方', () => {
       }
       return { pressed, placedAt: null };
     };
-    expect(whileAction('scatter').placedAt).not.toBeNull();
+    expect(whileAction(true).placedAt).not.toBeNull();
     // 置けない技の最中は、CPU の判断でボタンを押さない。置いたかだけを見ると、CPU が押しても
     // ゲームの側（BombSystem の canPlaceBomb）が止めるので、CPU の判断を確かめられない。
-    expect(whileAction('probe')).toEqual({ pressed: 0, placedAt: null });
+    expect(whileAction(false)).toEqual({ pressed: 0, placedAt: null });
   });
 
   it('押して離すだけの技は、途中で危なくなっても向きを変えずに出し切る', () => {

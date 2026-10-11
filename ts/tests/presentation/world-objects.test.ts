@@ -4,7 +4,7 @@ import { FoxfireActor } from '../../src/domain/abilities/fox/FoxfireActor.js';
 import { SlimeBombActor } from '../../src/domain/abilities/frog/SlimeBombActor.js';
 import { BurntTongueActor } from '../../src/domain/abilities/frog/TongueAction.js';
 import { PitActor } from '../../src/domain/abilities/mole/PitAction.js';
-import { ScatteredActor } from '../../src/domain/abilities/rabbit/ScatterAction.js';
+import { ScatterActor } from '../../src/domain/abilities/rabbit/ScatterActor.js';
 import type { WorldActor } from '../../src/domain/abilities/WorldActor.js';
 import { centerOf } from '../../src/domain/core/Coord.js';
 import { tick } from '../../src/domain/core/Tick.js';
@@ -21,7 +21,7 @@ import type { Tile } from '../../src/domain/state/Board.js';
 import type { WorldState } from '../../src/domain/state/WorldState.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
 import { CosmeticRng } from '../../src/presentation/CosmeticRng.js';
-import { drawAirActor, drawGroundActor } from '../../src/presentation/render/actors.js';
+import { drawAirActor } from '../../src/presentation/render/actors.js';
 import { drawTile } from '../../src/presentation/render/board.js';
 import { drawBlast, drawBomb } from '../../src/presentation/render/bombs.js';
 import { ParticleField } from '../../src/presentation/render/ParticleField.js';
@@ -82,9 +82,24 @@ describe('盤面のマス', () => {
 describe('アイテム', () => {
   it.each(ITEM_DEFINITIONS.map((definition) => definition.kind))('%s を描ける', (kind) => {
     const canvas = fakeCanvas();
-    drawItem(frameOn(canvas), { id: 1 as never, cell: { col: 4, row: 5 }, kind });
+    drawItem(frameOn(canvas), { id: 1 as never, cell: { col: 4, row: 5 }, kind }, tick(0));
     expect(count(canvas, 'fillText')).toBe(1);
     expect(count(canvas, 'stroke')).toBeGreaterThan(0);
+  });
+
+  it('撒かれたものは桃色で描き、消える前の 3.5 秒は点滅する（ふつうのアイテムは点滅しない）', () => {
+    // 偽の canvas は代入の最後の値を残す。札の不透明度は最初に1回だけ入れ、下地の色味は最後の塗りに残る。
+    // frameOn の時刻 0.5 秒では、点滅の sin が 1 から遠いので薄くなる。
+    const drawn = (item: Parameters<typeof drawItem>[1], now: number): { alpha: unknown; tint: unknown } => {
+      const canvas = fakeCanvas();
+      drawItem(frameOn(canvas), item, tick(now));
+      return { alpha: canvas.context.globalAlpha, tint: canvas.context.fillStyle };
+    };
+    const plain = { id: 1 as never, cell: { col: 4, row: 5 }, kind: 'poop' as const };
+    const scattered = { ...plain, scatteredBy: 0 as const, expiresAt: tick(3600) };
+    expect(drawn(scattered, 0)).toEqual({ alpha: 1, tint: 'rgba(255,150,200,.34)' });
+    expect(drawn(scattered, 3500).alpha).toBeLessThan(1);
+    expect(drawn(plain, 3500)).toEqual({ alpha: 1, tint: 'rgba(255,105,80,.34)' });
   });
 });
 
@@ -126,23 +141,20 @@ describe('自律物', () => {
   const owner = world.players[0];
   if (owner === undefined) throw new Error('プレイヤーがいない');
 
-  const cases: { name: string; actor: WorldActor; ground: boolean; air: boolean }[] = [
-    { name: '撒かれた障害物', actor: new ScatteredActor({ col: 5, row: 5 }, 0), ground: true, air: false },
-    { name: '落とし穴', actor: new PitActor({ col: 5, row: 5 }, 0), ground: false, air: false },
-    { name: '追いかける炎', actor: new FoxfireActor({ x: 5.5, y: 5.5 }, 0), ground: false, air: true },
-    { name: '跳ね回る爆弾', actor: new SlimeBombActor({ col: 5, row: 5 }, owner, 6), ground: false, air: true },
-    { name: '飛んでいる葱', actor: new LeekActor({ x: 5.5, y: 5.5 }, 'down', 0), ground: false, air: true },
-    // 焼けた舌は盤面に描くものが無い（伸ばせる長さを覚えておくだけ）。
-    { name: '焼けた舌', actor: new BurntTongueActor(0, 3), ground: false, air: false },
+  const cases: { name: string; actor: WorldActor; air: boolean }[] = [
+    { name: '落とし穴', actor: new PitActor({ col: 5, row: 5 }, 0), air: false },
+    { name: '追いかける炎', actor: new FoxfireActor({ x: 5.5, y: 5.5 }, 0), air: true },
+    { name: '跳ね回る爆弾', actor: new SlimeBombActor({ col: 5, row: 5 }, owner, 6), air: true },
+    { name: '飛んでいる葱', actor: new LeekActor({ x: 5.5, y: 5.5 }, 'down', 0), air: true },
+    // 撒くとくぎと焼けた舌は盤面に描くものが無い（撒かれたものはアイテムとして描く）。
+    { name: '撒くとくぎ', actor: new ScatterActor({ col: 5, row: 5 }, 0), air: false },
+    { name: '焼けた舌', actor: new BurntTongueActor(0, 3), air: false },
   ];
 
-  it.each(cases)('$name は描くべき層にだけ描かれ、状態は変わらない', ({ actor, ground, air }) => {
+  it.each(cases)('$name は描くものだけを描き、状態は変わらない', ({ actor, air }) => {
     const before = actor.encode();
-    const below = fakeCanvas();
-    drawGroundActor(frameOn(below), actor);
     const above = fakeCanvas();
     drawAirActor(frameOn(above), actor);
-    expect(below.calls.size > 0).toBe(ground);
     expect(above.calls.size > 0).toBe(air);
     expect(actor.encode()).toBe(before);
   });
@@ -170,14 +182,6 @@ describe('自律物', () => {
     expect(count(c, 'ellipse')).toBe(count(a, 'ellipse'));
   });
 
-  it('撒かれた障害物は、消える間際でも描ける', () => {
-    const actor = new ScatteredActor({ col: 5, row: 5 }, 0);
-    const empty = makeWorld();
-    for (let i = 0; i < 3590; i += 1) actor.tick(empty);
-    const canvas = fakeCanvas();
-    drawGroundActor(frameOn(canvas, 1.23), actor);
-    expect(count(canvas, 'fillText')).toBe(1);
-  });
 });
 
 describe('粒子と画面の揺れ', () => {
@@ -247,10 +251,10 @@ describe('粒子と画面の揺れ', () => {
   });
 
   it('延長戦で自律物が片付けられても、消えたときの煙を出さない', () => {
-    // 片付けは踏まれたのでも寿命でもない。
+    // 片付けは踏まれたのでも寿命でもない。追いかける炎は、消えると煙を出す自律物。
     const world = makeWorld();
     const field = new ParticleField(new CosmeticRng());
-    observeNew(field, world, new ScatteredActor({ col: 5, row: 5 }, 0));
+    observeNew(field, world, new FoxfireActor({ x: 5.5, y: 5.5 }, 0));
     field.onEvents([], world);
     const before = paintedParticles(field);
     const events = enterSuddenDeath(world, [0, 1], 'timeUp');
@@ -286,11 +290,19 @@ describe('粒子と画面の揺れ', () => {
     expect(onRabbit.shake).toBeGreaterThan(0);
   });
 
-  it('撒かれた障害物が置かれると、煙を出す', () => {
+  it('撒かれたうんこが置かれると煙を出し、残る長さを過ぎて消えても煙を出す', () => {
     const world = makeWorld();
-    const field = new ParticleField(new CosmeticRng());
-    observeNew(field, world, new ScatteredActor({ col: 5, row: 5 }, 0));
-    expect(paintedParticles(field)).toBeGreaterThan(0);
+    clearBoard(world);
+    world.items = [];
+    const placed = new ParticleField(new CosmeticRng());
+    const scatter = new ScatterActor({ col: 5, row: 5 }, 0);
+    placed.onEvents(scatter.tick(world).events, world);
+    expect(world.items.map((item) => item.scatteredBy)).toEqual([0]);
+    expect(paintedParticles(placed)).toBeGreaterThan(0);
+
+    const expired = new ParticleField(new CosmeticRng());
+    expired.onEvents([{ type: 'itemExpired', cell: { col: 5, row: 5 }, kind: 'poop' }], world);
+    expect(paintedParticles(expired)).toBeGreaterThan(0);
   });
 
   /** 光の玉の数。1つにつき放射状の塗りを1回使う。 */

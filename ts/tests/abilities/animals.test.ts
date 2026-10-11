@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import { abilityOf } from '../../src/domain/abilities/registry.js';
-import { centerOf } from '../../src/domain/core/Coord.js';
-import { placeBomb } from '../../src/domain/mutations/bombs.js';
+import { cellOf, centerOf, sameCell } from '../../src/domain/core/Coord.js';
+import { tick } from '../../src/domain/core/Tick.js';
+import { placeBomb, placeBombAt } from '../../src/domain/mutations/bombs.js';
 import { applyItem } from '../../src/domain/mutations/items.js';
 import { isSolidFor } from '../../src/domain/query/BoardQuery.js';
 import { isBlastProof, isInvulnerable, isUntouchable } from '../../src/domain/state/PlayerState.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
 import { advance, clearBoard, makeWorld, onlyFor, press } from '../helpers.js';
 import { SlimeBombActor } from '../../src/domain/abilities/frog/SlimeBombActor.js';
-import { ScatteredActor } from '../../src/domain/abilities/rabbit/ScatterAction.js';
 
 /** プレイヤー0をその動物にした世界。 */
 function worldWith(animal: string): ReturnType<typeof makeWorld> {
@@ -45,14 +45,31 @@ describe('うさぎ', () => {
     expect(player.position.x).toBeCloseTo(3.5);
   });
 
-  it('着地点が塞がっていれば跳ばない', () => {
-    const world = worldWith('rabbit');
-    const player = world.players[0]!;
-    player.facing = 'right';
-    world.board.set({ col: 3, row: 1 }, 'soft');
-    const before = { ...player.position };
-    tap(world);
-    expect(player.position).toEqual(before);
+  it('2マス先が塞がっていれば1マス先へ跳び、どちらも塞がっていれば跳ばない（原型の hop）', () => {
+    // 原型：(3,7) から右へ。2マス先が壊せるブロックか爆弾なら (4,7)、1マス先も塞がっていれば動かない。
+    const hopFrom = (setup: (world: ReturnType<typeof makeWorld>) => void): number => {
+      const world = worldWith('rabbit');
+      clearBoard(world);
+      const player = world.players[0]!;
+      player.position = centerOf({ col: 3, row: 7 });
+      player.facing = 'right';
+      setup(world);
+      tap(world);
+      return player.position.x;
+    };
+    expect(hopFrom(() => {})).toBe(5.5);
+    expect(hopFrom((world) => world.board.set({ col: 5, row: 7 }, 'soft'))).toBe(4.5);
+    expect(
+      hopFrom((world) => {
+        placeBombAt(world, world.players[1]!, { col: 5, row: 7 })!.fuse = tick(999);
+      }),
+    ).toBe(4.5);
+    expect(
+      hopFrom((world) => {
+        world.board.set({ col: 5, row: 7 }, 'soft');
+        world.board.set({ col: 4, row: 7 }, 'soft');
+      }),
+    ).toBe(3.5);
   });
 
   it('続けて跳べない', () => {
@@ -71,16 +88,18 @@ describe('うさぎ', () => {
     const world = worldWith('rabbit');
     hold(world, 'rabbit');
     advance(world, onlyFor(world, 0, press({})), 130);
-    expect(world.actors.filter((a) => a.kind === 'scattered').length).toBeGreaterThan(0);
+    expect(world.items.filter((item) => item.scatteredBy === 0).length).toBeGreaterThan(0);
   });
 
-  it('撒いたプレイヤー自身は踏んでも効かない', () => {
+  it('撒いたプレイヤー自身は踏んでも効かず、撒いたものも残る', () => {
     // 自分の周りに壁を作って立てこもる使い方が成り立たなくなる。
     const world = worldWith('rabbit');
     const player = world.players[0]!;
     hold(world, 'rabbit');
     advance(world, onlyFor(world, 0, press({})), 130);
-    expect(player.effects.has('slow')).toBe(false);
+    const harmful = ['reverse', 'nobomb', 'runaway', 'weak', 'autobomb', 'slow'] as const;
+    expect(harmful.filter((kind) => player.effects.has(kind))).toEqual([]);
+    expect(world.items.some((item) => sameCell(item.cell, cellOf(player.position)))).toBe(true);
   });
 });
 
@@ -262,11 +281,9 @@ describe('飛び道具と撒く技の置き場所', () => {
     world.items.push({ id: world.ids.take(), cell: { col: 4, row: 3 }, kind: 'fire' });
     hold(world, 'rabbit');
     advance(world, onlyFor(world, 0, press({})), 150);
-    const onItem = world.actors.filter(
-      (actor) => actor instanceof ScatteredActor && actor.cell.col === 4 && actor.cell.row === 3,
-    );
-    expect(onItem).toHaveLength(0);
-    expect(world.actors.some((actor) => actor instanceof ScatteredActor)).toBe(true);
+    const onItem = world.items.filter((item) => item.cell.col === 4 && item.cell.row === 3);
+    expect(onItem.map((item) => item.kind)).toEqual(['fire']);
+    expect(world.items.some((item) => item.scatteredBy !== undefined)).toBe(true);
   });
 });
 

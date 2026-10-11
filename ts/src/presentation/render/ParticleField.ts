@@ -1,5 +1,5 @@
 import { lookOf } from '../../content/animals.js';
-import { cellKey, cellOf, centerOf, type Point } from '../../domain/core/Coord.js';
+import { cellKey, cellOf, centerOf, sameCell, type Point } from '../../domain/core/Coord.js';
 import { SECONDS_PER_TICK } from '../../domain/core/Tick.js';
 import { assertNever, type SimEvent } from '../../domain/events/SimEvent.js';
 import { itemDefinition } from '../../domain/rules/items.js';
@@ -98,9 +98,15 @@ export class ParticleField {
       case 'itemDropped': {
         if (brokenCells.has(cellKey(event.cell))) return;
         const definition = itemDefinition(event.kind);
-        puff(out, rng, event.cell, definition.harmful ? '#c98a8a' : '#ffd23f', definition.emoji);
+        // とくぎで撒かれたものは桃色にする（原型と同じ）。
+        const scattered = world.items.some((item) => sameCell(item.cell, event.cell) && item.scatteredBy !== undefined);
+        const color = scattered ? '#f7a8c4' : definition.harmful ? '#c98a8a' : '#ffd23f';
+        puff(out, rng, event.cell, color, definition.emoji);
         return;
       }
+      case 'itemExpired':
+        puff(out, rng, event.cell, '#f7a8c4', '💨');
+        return;
       case 'itemTaken': {
         const definition = itemDefinition(event.kind);
         puff(out, rng, event.cell, definition.harmful ? '#b98a5a' : '#ffd23f', definition.emoji);

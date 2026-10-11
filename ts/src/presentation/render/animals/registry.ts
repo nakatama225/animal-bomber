@@ -5,7 +5,7 @@ import { drawFrogHead, TONGUE_LOOK } from './frog.js';
 import { DIG_LOOK, drawMoleHead } from './mole.js';
 import type { ActionLook, HeadPainter } from './painters.js';
 import { fillCircle } from './parts.js';
-import { drawRabbitHead, SCATTER_LOOK } from './rabbit.js';
+import { drawRabbitHead } from './rabbit.js';
 
 /**
  * 動物ごとの頭の描き方と、技の最中の見た目の登録表。
@@ -27,7 +27,6 @@ const HEADS: Readonly<Record<string, HeadPainter>> = {
 
 /** 乗っ取り中の振る舞いの `kind` ごとの見た目。 */
 const ACTIONS: Readonly<Record<string, ActionLook>> = {
-  scatter: SCATTER_LOOK,
   dig: DIG_LOOK,
   tongue: TONGUE_LOOK,
 };

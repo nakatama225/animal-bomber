@@ -3,7 +3,7 @@ import type { SimEvent } from '../../domain/events/SimEvent.js';
 import { isAlive, isInvulnerable } from '../../domain/state/PlayerState.js';
 import type { WorldState } from '../../domain/state/WorldState.js';
 import { CosmeticRng } from '../CosmeticRng.js';
-import { drawAirActor, drawGroundActor } from './actors.js';
+import { drawAirActor } from './actors.js';
 import { drawTile } from './board.js';
 import { drawBlast, drawBomb } from './bombs.js';
 import { ParticleField } from './ParticleField.js';
@@ -90,10 +90,7 @@ export class Renderer {
     if (shake > 0.2) g.translate(this.#cosmetic.jitter(shake / 2), this.#cosmetic.jitter(shake / 2));
 
     for (const { cell, tile } of world.board.cells()) drawTile(frame, tile, cell);
-    for (const item of world.items) drawItem(frame, item);
-    // 撒かれた障害物はアイテムより上に描く。同じマスにあるときは、踏むと損をする
-    // 障害物のほうを見せる。
-    for (const actor of world.actors) drawGroundActor(frame, actor);
+    for (const item of world.items) drawItem(frame, item, world.now);
     for (const bomb of world.bombs) drawBomb(frame, bomb);
     for (const blast of world.blasts) drawBlast(frame, blast);
 

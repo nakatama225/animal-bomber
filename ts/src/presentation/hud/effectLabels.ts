@@ -25,6 +25,8 @@ export const EFFECT_LABELS: Readonly<Record<EffectKind, EffectLabel>> = {
   pitfall: { emoji: '🕳️', label: '落とし穴' },
   // 原型は名札に出さず、跳ぶ絵だけで見せていた。1 秒だけなので、出しても邪魔にならない。
   leap: { emoji: '🦊', label: 'キツネ跳び' },
+  // 原型の名札の「💩ポロポロ中」。
+  scattering: { emoji: '💩', label: 'ポロポロ中' },
 };
 
 /** 絵文字と呼び方をつないだもの（「🍌すべる」）。 */

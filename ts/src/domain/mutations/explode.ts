@@ -73,6 +73,8 @@ export function detonate(
   for (let index = world.items.length - 1; index >= 0; index -= 1) {
     const item = world.items[index];
     if (item === undefined) continue;
+    // とくぎで撒かれたアイテムは爆風で焼けない（原型も、撒かれたものは爆風で動かず消えない）。
+    if (item.scatteredBy !== undefined) continue;
     if (!world.blasts.some((blast) => sameCell(blast.cell, item.cell))) continue;
     world.items.splice(index, 1);
     events.push({ type: 'itemBurned', cell: item.cell, kind: item.kind });
