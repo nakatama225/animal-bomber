@@ -15,14 +15,6 @@ const DIG_TIME: Tick = tick(90);
 /** 落ちた相手が動けない長さ。 */
 const HOLD_TIME: Tick = tick(180);
 
-/**
- * 穴が残る長さ。
- *
- * ⚠️ 原型の穴に寿命は無い。踏まれるか、ラウンドが始まり直す（延長戦も含む）まで残る。
- * 60 秒で消すのはこの版だけの決め事で、理由は記録に残っていない。
- */
-const PIT_LIFETIME: Tick = tick(3600);
-
 /** 穴を掘れる動物。掘れる側は、誰の穴にも落ちない。 */
 const DIGGER = 'mole';
 
@@ -47,20 +39,17 @@ export function pitAt(world: Readonly<WorldState>, cell: Cell): PitActor | undef
  * 落ちたプレイヤーには 'pitfall' をかける。たまねぎの 'stun' と同じく動けないが、
  * はまっている間は爆弾を置けない（`canPlaceBomb`）。泣いている間は置ける。
  * はまっている間は、別の穴の上を通っても落ちない。その穴は残る。
+ *
+ * 穴に寿命は無い。消えるのは誰かが落ちたときと、ラウンドが始まり直すとき（延長戦も含む）だけ
+ * （原型も同じ）。
  */
 export class PitActor implements WorldActor {
   readonly kind = 'pit';
-  #remaining: Tick = PIT_LIFETIME;
 
   constructor(
     readonly cell: Cell,
     readonly owner: PlayerId,
   ) {}
-
-  /** 穴が残る長さの残り。描画のためだけに読む（誰かが落ちて消えたか、時間切れで消えたかを見分ける）。 */
-  get remaining(): Tick {
-    return this.#remaining;
-  }
 
   tick(world: WorldState): { events: SimEvent[]; done: boolean } {
     for (const player of world.players) {
@@ -70,10 +59,7 @@ export class PitActor implements WorldActor {
       if (!sameCell(cellOf(player.position), this.cell)) continue;
       return { events: this.#trap(world, player), done: true };
     }
-    // 残りを減らすのは、誰も落ちなかった tick だけ。落ちて消えた穴は残りが 1 以上のままなので、
-    // 描画は残りの有無で時間切れと見分けられる。
-    this.#remaining = tick(this.#remaining - 1);
-    return { events: [], done: this.#remaining <= 0 };
+    return { events: [], done: false };
   }
 
   /** 落ちたプレイヤーを止める。穴は埋まる（この actor は終わる）。 */
@@ -96,7 +82,7 @@ export class PitActor implements WorldActor {
   }
 
   encode(): string {
-    return `${this.cell.col},${this.cell.row},${this.owner},${this.#remaining}`;
+    return `${this.cell.col},${this.cell.row},${this.owner}`;
   }
 }
 

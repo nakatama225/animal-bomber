@@ -80,11 +80,8 @@ export class ActorEffects {
       return 0;
     }
     if (actor instanceof PitActor) {
-      // 時間切れで消えた穴は、最後まで見せない。誰かが落ちたときだけ出す。
-      // 落ちたかは残り時間で見分ける（落ちた tick には残りを減らさない。`PitActor.tick`）。
-      // そのマスに誰かがいるかで見分けると、落ちない相手（掘れる動物・はまっている最中の
-      // プレイヤー）が乗ったまま時間切れになったとき、穴の位置を見せてしまう。
-      if (actor.remaining <= 0) return 0;
+      // 穴に寿命は無いので、ここで消えたなら誰かが落ちた（ラウンドの作り直しと延長戦の片付けは
+      // `reset` で前からあったものとして覚え直すので、ここを通らない）。
       puff(out, rng, actor.cell, '#8a5a2a', '🕳️');
       return PIT_SHAKE;
     }

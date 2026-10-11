@@ -254,10 +254,10 @@ describe('粒子と画面の揺れ', () => {
     expect(paintedParticles(field)).toBe(0);
   });
 
-  it('落とし穴は、誰かが落ちて消えたときだけ揺らす（落ちない相手が乗ったまま時間切れになっても揺らさない）', () => {
-    // そのマスに誰かいるかで決めると、落ちない相手（ほかのもぐら）が乗ったまま時間切れになったとき、
-    // 見えないはずの穴の位置を見せてしまう。
-    const untilPitGoes = (animal: string): { shake: number; ticks: number } => {
+  it('落とし穴は、誰かが落ちて消えたときに揺らす（落ちないもぐらが乗り続けても消えず、揺らさない）', () => {
+    // 穴に寿命は無いので、消えるのは誰かが落ちたときだけ（ラウンドの作り直しと延長戦の片付けは、
+    // 消えたものとして数えない）。
+    const standOnPit = (animal: string, ticks: number): { shake: number; pitLeft: boolean } => {
       const world = makeWorld(1, ['mole', animal]);
       clearBoard(world);
       const field = new ParticleField(new CosmeticRng());
@@ -265,40 +265,13 @@ describe('粒子と画面の揺れ', () => {
       const idle = new Map(world.players.map((player) => [player.id, IDLE_INPUT]));
       world.players[1]!.position = centerOf({ col: 5, row: 5 });
       observeNew(field, world, new PitActor({ col: 5, row: 5 }, 0));
-      // 上限を付けて回す。穴の寿命を外す形にしたとき、止まらなくなるのではなく失敗させるため。
-      let ticks = 0;
-      for (; ticks < 4000 && world.actors.some((actor) => actor instanceof PitActor); ticks += 1) {
-        field.onEvents(sim.step(world, idle), world);
-      }
-      expect(world.actors.some((actor) => actor instanceof PitActor)).toBe(false);
-      return { shake: field.shake, ticks };
+      for (let i = 0; i < ticks; i += 1) field.onEvents(sim.step(world, idle), world);
+      return { shake: field.shake, pitLeft: world.actors.some((actor) => actor instanceof PitActor) };
     };
-    const onMole = untilPitGoes('mole');
-    // 途中で消えずに、時間切れまで乗り続けたことを確かめる。
-    expect(onMole.ticks).toBe(3600);
-    expect(onMole.shake).toBe(0);
-    expect(untilPitGoes('rabbit').shake).toBeGreaterThan(0);
-  });
-
-  it('落とし穴の寿命の最後の tick に落ちても、落ちたものとして揺らす', () => {
-    // 落ちた tick には残りを減らさない（`PitActor.tick`）。減らしてから落とすと、最後の tick に
-    // 落ちた穴は残りが 0 になり、時間切れと見分けられない。
-    const world = makeWorld(1, ['mole', 'rabbit']);
-    clearBoard(world);
-    const field = new ParticleField(new CosmeticRng());
-    const sim = new Simulation();
-    const idle = new Map(world.players.map((player) => [player.id, IDLE_INPUT]));
-    const rabbit = world.players[1]!;
-    rabbit.position = centerOf({ col: 9, row: 9 });
-    const pit = new PitActor({ col: 5, row: 5 }, 0);
-    observeNew(field, world, pit);
-    for (let i = 0; i < 3600 && pit.remaining > 1; i += 1) field.onEvents(sim.step(world, idle), world);
-    expect(pit.remaining).toBe(1);
-    rabbit.position = centerOf({ col: 5, row: 5 });
-    field.onEvents(sim.step(world, idle), world);
-    expect(rabbit.effects.has('pitfall')).toBe(true);
-    expect(world.actors).not.toContain(pit);
-    expect(field.shake).toBeGreaterThan(0);
+    expect(standOnPit('mole', 4000)).toEqual({ shake: 0, pitLeft: true });
+    const onRabbit = standOnPit('rabbit', 1);
+    expect(onRabbit.pitLeft).toBe(false);
+    expect(onRabbit.shake).toBeGreaterThan(0);
   });
 
   it('撒かれた障害物が置かれると、煙を出す', () => {

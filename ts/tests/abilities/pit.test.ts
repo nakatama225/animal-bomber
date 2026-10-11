@@ -219,6 +219,33 @@ describe('落ちる（原型 pitfallCheck）', () => {
     expect(pitCells(world)).toEqual([]);
   });
 
+  it('誰も踏まない穴は消えない（4000 tick たっても残り、そのあと踏めば落ちる）', () => {
+    // 原型の穴に寿命は無い。消えるのは踏まれたときと、ラウンドが始まり直すときだけ。
+    const world = arena(['mole', 'rabbit']);
+    const [mole, rabbit] = world.players as [PlayerState, PlayerState];
+    place(mole, { col: 1, row: 1 });
+    place(rabbit, { col: 19, row: 13 });
+    world.actors.push(new PitActor({ col: 7, row: 5 }, mole.id));
+    const sim = new Simulation();
+    advance(world, sameForAll(world, press({})), 4000, sim);
+    expect(pitCells(world)).toEqual(['7,5']);
+    place(rabbit, { col: 7, row: 5 });
+    sim.step(world, sameForAll(world, press({})));
+    expect(rabbit.effects.has('pitfall')).toBe(true);
+    expect(pitCells(world)).toEqual([]);
+  });
+
+  it('落ちないもぐらが乗り続けても、穴は消えない', () => {
+    const world = arena(['mole', 'mole']);
+    const [owner, other] = world.players as [PlayerState, PlayerState];
+    place(owner, { col: 1, row: 1 });
+    place(other, { col: 7, row: 5 });
+    world.actors.push(new PitActor({ col: 7, row: 5 }, owner.id));
+    advance(world, sameForAll(world, press({})), 4000);
+    expect(pitCells(world)).toEqual(['7,5']);
+    expect(isFrozen(other)).toBe(false);
+  });
+
   it('2匹のもぐらが同じマスで同時に掘ると、穴は1つで、どちらも落ちない', () => {
     const world = arena(['mole', 'mole']);
     const [m0, m1] = world.players as [PlayerState, PlayerState];
