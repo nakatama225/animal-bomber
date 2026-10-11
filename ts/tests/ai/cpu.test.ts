@@ -239,8 +239,8 @@ describe('爆弾を置いてよいかの判断', () => {
   });
 
   it('爆弾おけないだけなら置かず、「勝手に設置」が重なっている間は置く（ゲームの側の canPlaceBomb と同じ）', () => {
-    // 原型の答え（c5b/oracle/legacy_rabbit_fox.json の cpu_canPlaceBomb_*）：原型の CPU は cpuUpdate で
-    // canPlaceBomb を見る。爆弾おけないだけなら false、勝手に設置が重なっていれば true。
+    // 原型の CPU は cpuUpdate で canPlaceBomb を見る。原型を画面なしで動かして測ると、爆弾おけないだけなら
+    // 置けず、勝手に設置が重なっていれば置ける。
     const decide = (withAutobomb: boolean) => {
       const world = makeWorld(3);
       clearBoard(world);
@@ -369,10 +369,11 @@ describe('技の最中と技の出し方', () => {
     expect(cpu.hp).toBe(hp);
   });
 
-  it('爆弾を置ける技の最中は、技の無いときと同じく爆弾を置く（置けない技の最中は置かない）', () => {
-    // うさぎの撒く技は、撒きながら爆弾も置ける（原型の答え：c5b/oracle/legacy_rabbit_fox.json の
-    // c3_scatter_*）。CPU も撒いている間に置く。置けるかは技の canPlaceBomb が決める。
-    const firstBombWhile = (kind: 'scatter' | 'probe'): number | null => {
+  it('爆弾を置ける技の最中は爆弾を置き、置けない技の最中はボタンを押さない', () => {
+    // うさぎの撒く技は、撒きながら爆弾も置ける（原型も、撒いている間にボタンでも勝手に設置でも置く）。
+    // CPU も撒いている間に置く。置けるかは技の canPlaceBomb が決める。
+    /** 技の最中に爆弾のボタンを押した回数と、技の最中に初めて置いた tick。 */
+    const whileAction = (kind: 'scatter' | 'probe'): { pressed: number; placedAt: number | null } => {
       const world = makeWorld(1, ['rabbit', 'frog']);
       const rabbit = world.players[0]!;
       let left = 120;
@@ -393,16 +394,23 @@ describe('技の最中と技の出し方', () => {
             };
       const source = new CpuInputSource(0, CPU_LEVELS.oni, 1);
       const sim = new Simulation();
+      let pressed = 0;
       for (let t = 0; t < 120; t += 1) {
-        // 置いた tick の前に技が続いていたかを見る。技が終わってから置いたのでは確かめにならない。
+        // 技が続いている間だけを数える。技が終わってから置いたのでは確かめにならない。
         const during = rabbit.action?.kind === kind;
-        const events = sim.step(world, new Map([[0, source.next(world)], [1, IDLE_INPUT]]));
-        if (events.some((e) => e.type === 'bombPlaced' && e.owner === 0)) return during ? t : null;
+        const input = source.next(world);
+        if (during && input.bomb) pressed += 1;
+        const events = sim.step(world, new Map([[0, input], [1, IDLE_INPUT]]));
+        if (events.some((e) => e.type === 'bombPlaced' && e.owner === 0)) {
+          return { pressed, placedAt: during ? t : null };
+        }
       }
-      return null;
+      return { pressed, placedAt: null };
     };
-    expect(firstBombWhile('scatter')).not.toBeNull();
-    expect(firstBombWhile('probe')).toBeNull();
+    expect(whileAction('scatter').placedAt).not.toBeNull();
+    // 置けない技の最中は、CPU の判断でボタンを押さない。置いたかだけを見ると、CPU が押しても
+    // ゲームの側（BombSystem の canPlaceBomb）が止めるので、CPU の判断を確かめられない。
+    expect(whileAction('probe')).toEqual({ pressed: 0, placedAt: null });
   });
 
   it('押して離すだけの技は、途中で危なくなっても向きを変えずに出し切る', () => {

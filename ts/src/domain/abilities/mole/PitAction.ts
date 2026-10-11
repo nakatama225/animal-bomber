@@ -57,7 +57,7 @@ export class PitActor implements WorldActor {
     readonly owner: PlayerId,
   ) {}
 
-  /** 穴が残る長さの残り。描画のためだけに読む（踏まれて消えたか、時間切れで消えたかを見分ける）。 */
+  /** 穴が残る長さの残り。描画のためだけに読む（誰かが落ちて消えたか、時間切れで消えたかを見分ける）。 */
   get remaining(): Tick {
     return this.#remaining;
   }
@@ -70,7 +70,7 @@ export class PitActor implements WorldActor {
       if (!sameCell(cellOf(player.position), this.cell)) continue;
       return { events: this.#trap(world, player), done: true };
     }
-    // 残りを減らすのは、誰も落ちなかった tick だけ。踏まれて消えた穴は残りが 1 以上のままなので、
+    // 残りを減らすのは、誰も落ちなかった tick だけ。落ちて消えた穴は残りが 1 以上のままなので、
     // 描画は残りの有無で時間切れと見分けられる。
     this.#remaining = tick(this.#remaining - 1);
     return { events: [], done: this.#remaining <= 0 };

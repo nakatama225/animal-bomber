@@ -265,15 +265,16 @@ describe('粒子と画面の揺れ', () => {
       const idle = new Map(world.players.map((player) => [player.id, IDLE_INPUT]));
       world.players[1]!.position = centerOf({ col: 5, row: 5 });
       observeNew(field, world, new PitActor({ col: 5, row: 5 }, 0));
+      // 上限を付けて回す。穴の寿命を外す形にしたとき、止まらなくなるのではなく失敗させるため。
       let ticks = 0;
-      while (world.actors.some((actor) => actor instanceof PitActor)) {
+      for (; ticks < 4000 && world.actors.some((actor) => actor instanceof PitActor); ticks += 1) {
         field.onEvents(sim.step(world, idle), world);
-        ticks += 1;
       }
+      expect(world.actors.some((actor) => actor instanceof PitActor)).toBe(false);
       return { shake: field.shake, ticks };
     };
     const onMole = untilPitGoes('mole');
-    // 片付け（延長戦）で消えたのではなく、時間切れまで乗り続けたことを確かめる。
+    // 途中で消えずに、時間切れまで乗り続けたことを確かめる。
     expect(onMole.ticks).toBe(3600);
     expect(onMole.shake).toBe(0);
     expect(untilPitGoes('rabbit').shake).toBeGreaterThan(0);
@@ -291,7 +292,8 @@ describe('粒子と画面の揺れ', () => {
     rabbit.position = centerOf({ col: 9, row: 9 });
     const pit = new PitActor({ col: 5, row: 5 }, 0);
     observeNew(field, world, pit);
-    while (pit.remaining > 1) field.onEvents(sim.step(world, idle), world);
+    for (let i = 0; i < 3600 && pit.remaining > 1; i += 1) field.onEvents(sim.step(world, idle), world);
+    expect(pit.remaining).toBe(1);
     rabbit.position = centerOf({ col: 5, row: 5 });
     field.onEvents(sim.step(world, idle), world);
     expect(rabbit.effects.has('pitfall')).toBe(true);
