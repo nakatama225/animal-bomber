@@ -89,7 +89,7 @@ export type SimEvent =
   | { readonly type: 'bombDoused'; readonly cell: Cell; readonly owner: PlayerId }
   /**
    * 正面のマスへ水を吹きかけた（見た目のための知らせ）。届いたマスを手前から順に運ぶ。
-   * 柱の手前で止まったマスは入らない。壊せるブロックのマスは入る（そこで止まる）。
+   * 柱のマス（とその先）は入らない。壊せるブロックのマスは入る（そこで止まる）。
    */
   | {
       readonly type: 'sprayed';

@@ -210,7 +210,7 @@ export function isInvulnerable(player: PlayerState, now: Tick): boolean {
 /**
  * 爆風・追いかける炎・体当たりの傷が当たらないか（原型の isBlastProof）。跳び上がっている間（'leap'）だけ。
  *
- * ⚠️ 体当たりで傷を減らす振る舞い（`ActiveAction.damageCap`）の最中は入れない。その振る舞いは
+ * ⚠️ 受ける傷に上限がある振る舞い（`ActiveAction.damageCap`。体当たりの最中）は入れない。その振る舞いは
  * 「止まらないが傷は入る」（上限つき）で、爆風にも追いかける炎にも、ほかの体当たりにも当たる。
  */
 export function isBlastProof(player: PlayerState): boolean {

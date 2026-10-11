@@ -30,7 +30,7 @@ const RELEASE: MacroStep = Object.freeze({
  * ゲームの側はボタンの**押し方**で意味を分けている。
  *
  * - 爆弾は「押し下げた瞬間」に1個置く。押しっぱなしでは連射しない
- * - 技のボタンは「押して離す」と通常技、「押し続ける」ととくぎ
+ * - 技のボタンは「押して離す」と通常技（通常技の無い動物は、チキンがあればとくぎ）、「押し続ける」ととくぎ
  *
  * 人間は指で自然にこれをやるが、CPU は tick ごとに入力を返すだけなので、
  * 「1 tick 押して次の tick に離す」「90 tick 押し続けて離す」を
@@ -57,7 +57,7 @@ export class ButtonMacro {
     return new ButtonMacro([{ ...RELEASE, bomb: true, still: true }]);
   }
 
-  /** 技のボタンを軽く押して離す（通常技）。 */
+  /** 技のボタンを軽く押して離す（通常技。通常技の無い動物では、チキンがあればとくぎ）。 */
   static tap(): ButtonMacro {
     return new ButtonMacro([{ ...RELEASE, action: true, still: true }]);
   }

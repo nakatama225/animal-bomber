@@ -65,7 +65,7 @@ export const ELEPHANT: Ability = {
       }
       if (tile === 'soft') break;
     }
-    // 水しぶきは届いたマスごとに出す（原型も、柱の手前で止まったマスには出さない）。
+    // 水しぶきは届いたマスごとに出す（原型も、柱のマスとその先には出さない）。
     events.push({ type: 'sprayed', player: player.id, cells: sprayedCells, facing: player.facing });
     return { action: null, events };
   },
