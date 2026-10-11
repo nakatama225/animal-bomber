@@ -188,6 +188,17 @@ describe('外周にいる CPU', () => {
     expect(events.some((e) => e.type === 'leekThrown')).toBe(false);
   });
 
+  it('とくぎで跳び上がっている相手は狙わない（葱が当たらない。原型の isUntouchable）', () => {
+    // 跳び上がっている状態（'leap'）は振る舞いではないので、上の振る舞いの性質だけを見ると狙ってしまう。
+    // 撃つほうの対照は「射線の上に相手がいれば…撃つ」。
+    const { world, cpu, foe } = arena();
+    onLane(cpu, topAlongFor(5));
+    foe.position = centerOf({ col: 5, row: 3 });
+    foe.effects.add('leap', tick(1000), tick(1000));
+    const events = run(world, [cpuOf(), new IdleInputSource(1)], 300).flat();
+    expect(events.some((e) => e.type === 'leekThrown')).toBe(false);
+  });
+
   it('柱の陰になる位置には寄らず、撃てる辺へ回る', () => {
     // 4 列目は2行目に柱がある。上辺からは撃てないので、3 行目を撃てる左辺へ回る。
     const { world, cpu, foe } = arena();

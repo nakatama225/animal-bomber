@@ -173,3 +173,58 @@ describe('突進どうしの体当たり（原型 updateCharge は相手の突�
     expect(changes(hp)).toEqual(['1:8/8', '14:7/8', '17:7/7']);
   });
 });
+
+describe('跳び上がっている間と、同じマスの相手（原型 updateFoxfires・updateCharge の isBlastProof）', () => {
+  it('跳び上がっている相手には、狐火が当たらない（対照：跳んでいなければ 21 tick 目に当たる）', () => {
+    // きつねどうしの対戦で起きる。炎を放ったきつね自身は持ち主として除かれるので、相手もきつねにする。
+    const hitBy = (leaping: boolean): string[] => {
+      const { world, p0: fox, p1: other } = arena(['fox', 'fox']);
+      place(fox, { col: 3, row: 7 });
+      place(other, { col: 5, row: 7 });
+      if (leaping) other.effects.add('leap', tick(60), tick(60));
+      return changes(runFire(world, new FoxfireActor(fox.position, fox.id), 40).hp);
+    };
+    const { p1 } = arena(['fox', 'fox']);
+    expect(hitBy(true)).toEqual([`1:${p1.hp}`]);
+    expect(hitBy(false)).toEqual([`1:${p1.hp}`, `21:${p1.hp - 2}`]);
+  });
+
+  it('狐火は、乗ったマスにいる相手全員に当たる（最初の1人で止めない）', () => {
+    const world = makeWorld(5, ['fox', 'rabbit', 'frog']);
+    clearBoard(world);
+    world.items = [];
+    const [fox, rabbit, frog] = world.players as [PlayerState, PlayerState, PlayerState];
+    for (const player of world.players) player.invulnerableUntil = tick(0);
+    place(fox, { col: 3, row: 7 });
+    place(rabbit, { col: 5, row: 7 });
+    place(frog, { col: 5, row: 7 });
+    const before = { rabbit: rabbit.hp, frog: frog.hp };
+    const fire = new FoxfireActor(fox.position, fox.id);
+    const hitAt: { rabbit: number | null; frog: number | null } = { rabbit: null, frog: null };
+    for (let t = 1; t <= 40; t += 1) {
+      fire.tick(world);
+      if (hitAt.rabbit === null && rabbit.hp < before.rabbit) hitAt.rabbit = t;
+      if (hitAt.frog === null && frog.hp < before.frog) hitAt.frog = t;
+    }
+    expect(hitAt).toEqual({ rabbit: 21, frog: 21 });
+  });
+
+  it('跳び上がっている相手には、突進の体当たりの傷が入らない（対照：跳んでいなければ入る）', () => {
+    const hpAfter = (leaping: boolean): { before: number; after: number } => {
+      const { world, p0: elephant, p1: fox } = arena(['elephant', 'fox']);
+      place(elephant, { col: 3, row: 7 });
+      place(fox, { col: 6, row: 7 });
+      elephant.facing = 'right';
+      elephant.action = new ChargeAction('right');
+      if (leaping) fox.effects.add('leap', tick(60), tick(60));
+      const before = fox.hp;
+      const sim = new Simulation();
+      for (let t = 0; t < 30; t += 1) sim.step(world, sameForAll(world, press({})));
+      return { before, after: fox.hp };
+    };
+    const leaping = hpAfter(true);
+    expect(leaping.after).toBe(leaping.before);
+    const standing = hpAfter(false);
+    expect(standing.after).toBeLessThan(standing.before);
+  });
+});

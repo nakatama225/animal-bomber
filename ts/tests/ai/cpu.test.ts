@@ -11,6 +11,7 @@ import { DEFAULT_CHAIN } from '../../src/ai/behaviors/DefaultChain.js';
 import { FLEE } from '../../src/ai/behaviors/Flee.js';
 import { OUT_OF_BOMBS_BAN, SAME_SPOT_BAN, UNSAFE_SPOT_BAN } from '../../src/ai/margins.js';
 import { directionAlong } from '../../src/ai/PathFollower.js';
+import { FOX_TACTIC } from '../../src/ai/tactics/FoxTactic.js';
 import { FROG_TACTIC } from '../../src/ai/tactics/FrogTactic.js';
 import { BurntTongueActor } from '../../src/domain/abilities/frog/TongueAction.js';
 import type { ActiveAction } from '../../src/domain/abilities/ActiveAction.js';
@@ -27,7 +28,7 @@ import { DangerMap } from '../../src/domain/query/DangerMap.js';
 import { findPath } from '../../src/domain/query/PathFinder.js';
 import { itemEffectTicks } from '../../src/domain/rules/items.js';
 import { BLAST_DURATION, BOMB_FUSE } from '../../src/domain/rules/tuning.js';
-import { isAlive, type PlayerId } from '../../src/domain/state/PlayerState.js';
+import { isAlive, type PlayerId, type PlayerState } from '../../src/domain/state/PlayerState.js';
 import { hashWorld, type WorldState } from '../../src/domain/state/WorldState.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
 import { clearBoard, makeWorld } from '../helpers.js';
@@ -552,5 +553,25 @@ describe('かえるの舌', () => {
     expect(decide(null)).not.toBeNull();
     expect(decide(5)).not.toBeNull();
     expect(decide(3)).toBeNull();
+  });
+});
+
+describe('きつねの狐火', () => {
+  it('相手が歩ける道で 6 マス以内なら放ち、7 マス先なら放たない（原型の CPU は届く長さ 8 マスの 8 割まで）', () => {
+    const decide = (distance: number): ButtonMacro | null => {
+      const world = makeWorld(3, ['fox', 'rabbit']);
+      clearBoard(world);
+      const [me, foe] = world.players as [PlayerState, PlayerState];
+      me.position = centerOf({ col: 1, row: 1 });
+      foe.position = centerOf({ col: 1 + distance, row: 1 });
+      me.specialCharges = 1;
+      // 技を使うかの抽選が必ず当たる強さ（skillUse 1）にする。乱数を確かめるテストにしないため。
+      const ctx = new CpuContext(
+        world, me, { col: 1, row: 1 }, DangerMap.of(world), false, CPU_LEVELS.hard, freshMemory(new Rng(1)), new Rng(1),
+      );
+      return FOX_TACTIC.reflex?.(ctx) ?? null;
+    };
+    expect(decide(6)).not.toBeNull();
+    expect(decide(7)).toBeNull();
   });
 });

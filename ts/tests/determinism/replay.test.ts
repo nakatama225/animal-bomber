@@ -424,4 +424,31 @@ describe('状態の要約', () => {
     player.life = { kind: 'negibon', along: 3, readyAt: tick(11) };
     expect(hashWorld(world)).not.toBe(base);
   });
+
+  it('撒かれたもの・溶けているアイテムは、撒いたプレイヤー・消える時刻・溶けきる時刻も見る', () => {
+    // アイテムの種類と位置だけを混ぜると、撒いたものが消える時刻や、溶けている最中かがずれても検出できない。
+    const world = createWorld({ seed: SEED, animals: ANIMALS });
+    const plain = { id: world.ids.take(), cell: { col: 5, row: 5 }, kind: 'poop' as const };
+    world.items = [plain];
+    const base = hashWorld(world);
+
+    const scattered = { ...plain, scatteredBy: 0 as const, expiresAt: tick(100) };
+    world.items = [scattered];
+    const scatteredHash = hashWorld(world);
+    expect(scatteredHash).not.toBe(base);
+    world.items = [{ ...scattered, scatteredBy: 1 as const }];
+    expect(hashWorld(world)).not.toBe(scatteredHash);
+    world.items = [{ ...scattered, expiresAt: tick(101) }];
+    expect(hashWorld(world)).not.toBe(scatteredHash);
+
+    world.items = [{ ...plain, meltingUntil: tick(27) }];
+    const meltingHash = hashWorld(world);
+    expect(meltingHash).not.toBe(base);
+    world.items = [{ ...plain, meltingUntil: tick(28) }];
+    expect(hashWorld(world)).not.toBe(meltingHash);
+
+    // 値を外せば、ふつうのアイテムの要約に戻る。
+    world.items = [plain];
+    expect(hashWorld(world)).toBe(base);
+  });
 });

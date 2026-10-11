@@ -104,15 +104,20 @@ describe('鼻水噴射（原型 elephantSnot）', () => {
     expect(world.board.at({ col: 4, row: 7 })).toBe('soft');
   });
 
-  it('5 秒に1回（何も消せなくても間隔は始まる）', () => {
-    const { world, rabbit, sim } = arena();
-    snot(world, sim);
-    bombAt(world, rabbit, { col: 4, row: 7 });
-    snot(world, sim);
-    expect(bombCells(world)).toEqual(['4,7']);
-    // 最初に吹いてから 300 tick たてば、また吹ける。
-    for (let t = 0; t < 300; t += 1) sim.step(world, sameForAll(world, press({})));
-    snot(world, sim);
-    expect(bombCells(world)).toEqual([]);
+  it('5 秒に1回（何も消せなくても間隔は始まる）：吹いた tick から 299 tick 後は吹けず、300 tick 後に吹ける', () => {
+    // 原型（legacy_p3_snot の cooldown）は 300〜301 フレーム後に戻る。1 tick のずれは決めた基準の範囲。
+    /** 1回吹き、その tick から gap tick 後に離して、2回目で爆弾が消えたか。 */
+    const secondSnotDouses = (gap: number): boolean => {
+      const { world, rabbit, sim } = arena();
+      snot(world, sim);
+      bombAt(world, rabbit, { col: 4, row: 7 });
+      // snot は「離す・押す・離す」の3 tick なので、その手前まで何もしない。
+      for (let t = 0; t < gap - 3; t += 1) sim.step(world, sameForAll(world, press({})));
+      snot(world, sim);
+      return bombCells(world).length === 0;
+    };
+    expect(secondSnotDouses(3)).toBe(false);
+    expect(secondSnotDouses(299)).toBe(false);
+    expect(secondSnotDouses(300)).toBe(true);
   });
 });
