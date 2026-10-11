@@ -209,4 +209,50 @@ export const SOUND_RECIPES: Readonly<Record<SoundName, Recipe>> = {
     v.tone({ f0: 200, f1: 520, type: 'sine', dur: 0.22, vol: 0.2 });
     v.noiseBurst({ dur: 0.14, f0: 900, f1: 2200, vol: 0.1, type: 'bandpass', q: 1.4 });
   },
+
+  slimeHop(v) {
+    v.tone({ f0: 420, f1: 700, type: 'sine', dur: 0.09, vol: 0.13 });
+  },
+
+  pitFall(v) {
+    // 落ちていく音と、ずしんと響く音。そのあと長三度ずつ下がる3音。
+    v.tone({ f0: 700, f1: 70, type: 'sine', dur: 0.55, vol: 0.3 });
+    v.noiseBurst({ dur: 0.5, f0: 1200, f1: 120, vol: 0.24, type: 'lowpass' });
+    [0, -4, -8].forEach((s, i) =>
+      v.tone({ f0: semitone(330, s), type: 'triangle', dur: 0.18, vol: 0.14, delay: 0.15 + i * 0.1 }),
+    );
+  },
+
+  pitDone(v) {
+    v.tone({ f0: 150, f1: 80, type: 'sine', dur: 0.2, vol: 0.18 });
+    v.tone({ f0: 600, type: 'square', dur: 0.05, vol: 0.07, delay: 0.16 });
+  },
+
+  tongueCatch(v) {
+    v.tone({ f0: 1300, f1: 600, type: 'sine', dur: 0.12, vol: 0.18 });
+    v.tone({ f0: 1800, type: 'square', dur: 0.05, vol: 0.09, delay: 0.1 });
+  },
+
+  snot(v) {
+    v.noiseBurst({ dur: 0.28, f0: 2600, f1: 500, vol: 0.2, type: 'bandpass', q: 1.1 });
+    v.tone({ f0: 220, f1: 90, type: 'sawtooth', dur: 0.22, vol: 0.14 });
+  },
+
+  foxLeap(v) {
+    // 跳び上がる音 → 滞空 → 着地。
+    v.tone({ f0: 420, f1: 1150, type: 'triangle', dur: 0.22, vol: 0.24 });
+    v.tone({ f0: 1400, f1: 900, type: 'square', dur: 0.1, vol: 0.1, delay: 0.2 });
+    v.tone({ f0: 260, f1: 150, type: 'sine', dur: 0.14, vol: 0.2, delay: 0.72 });
+    v.noiseBurst({ dur: 0.12, f0: 900, f1: 200, vol: 0.16, delay: 0.74 });
+  },
+
+  foxfireHit(v) {
+    v.tone({ f0: 900, f1: 180, type: 'sine', dur: 0.3, vol: 0.24 });
+    v.noiseBurst({ dur: 0.25, f0: 3000, f1: 600, vol: 0.18, type: 'bandpass', q: 1.5 });
+  },
+
+  spit(v) {
+    v.tone({ f0: 330, f1: 660, type: 'triangle', dur: 0.11, vol: 0.15 });
+    v.tone({ f0: 990, type: 'square', dur: 0.05, vol: 0.08, delay: 0.06 });
+  },
 };

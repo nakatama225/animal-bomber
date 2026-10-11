@@ -139,7 +139,8 @@ export class SlimeBombActor implements WorldActor {
     if (this.#hopsLeft <= 0) return { events: this.#burst(world), done: true };
     this.#hop(world);
     this.#startInterval(world);
-    return { events: [], done: false };
+    // 跳べずに留まったときも鳴らす（原型も跳ぶ先を試したあと必ず鳴らす）。
+    return { events: [{ type: 'techniqueMoment', player: this.owner.id, moment: 'slimeHopped' }], done: false };
   }
 
   /** 次の区切りまでの間隔を引く。 */

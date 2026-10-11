@@ -176,7 +176,10 @@ export class TongueAction implements ActiveAction {
       world.items.splice(index, 1);
       this.#caught = item.kind;
       this.#returning = true;
-      return [{ type: 'itemTaken', cell, kind: item.kind, taker: player.id }];
+      return [
+        { type: 'itemTaken', cell, kind: item.kind, taker: player.id },
+        { type: 'techniqueMoment', player: player.id, moment: 'tongueCaught' },
+      ];
     }
     if (this.#length >= this.#reach) this.#returning = true;
     return [];

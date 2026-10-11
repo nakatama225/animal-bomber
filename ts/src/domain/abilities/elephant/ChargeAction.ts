@@ -139,7 +139,8 @@ export class ChargeAction implements ActiveAction {
       return [];
     }
     if (this.#carried.length === 0) return [];
-    const events: SimEvent[] = [];
+    // 撒き散らす音は、置けるマスが無くても鳴らす（原型の chargeDrop も抱えていれば鳴らす）。
+    const events: SimEvent[] = [{ type: 'techniqueMoment', player: player.id, moment: 'itemsSpat' }];
     const origin = cellOf(player.position);
     const horizontal = this.#direction === 'left' || this.#direction === 'right';
     // 進行方向と直角の両側へ、左右交互に離れながら空きを探す。
@@ -233,6 +234,7 @@ export class ChargeAction implements ActiveAction {
       // 被弾のあとの無敵の間と、跳び上がっている間は傷つけない（原型の updateCharge）。
       // ⚠️ 相手が突進中でも傷は入る（上限で減る）。突進どうしでぶつかると、どちらにも傷が入る。
       if (isInvulnerable(other, world.now) || isBlastProof(other)) continue;
+      events.push({ type: 'techniqueMoment', player: player.id, moment: 'chargeHit' });
       events.push(...hurt(world, other, player.id, 2));
     }
     return events;

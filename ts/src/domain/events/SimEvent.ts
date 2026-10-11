@@ -4,6 +4,24 @@ import type { EffectKind } from '../state/EffectBag.js';
 import type { ItemKind } from '../rules/items.js';
 
 /**
+ * 技の途中で起きたことの種類（`techniqueMoment` のイベント）。
+ *
+ * - `tongueCaught` … 舌がアイテムを掴んだ
+ * - `pitDug` … 穴を掘り終えた
+ * - `slimeHopped` … 跳ね回る爆弾が跳ねた（跳べずにその場に留まったときも）
+ * - `itemsSpat` … 体当たりで抱えていた悪いアイテムを、止まった所の左右へ撒き散らした
+ * - `chargeHit` … 体当たりが相手に当たった
+ * - `foxfireHit` … 追いかける炎が相手に当たった
+ */
+export type TechniqueMoment =
+  | 'tongueCaught'
+  | 'pitDug'
+  | 'slimeHopped'
+  | 'itemsSpat'
+  | 'chargeHit'
+  | 'foxfireHit';
+
+/**
  * 試合の中で起きたイベント。
  *
  * 「爆弾が置かれた」「ブロックが壊れた」「誰かが倒れた」といった、
@@ -88,6 +106,17 @@ export type SimEvent =
       readonly player: PlayerId;
       /** 長押しのとくぎか。false なら押して離す通常技。 */
       readonly special: boolean;
+    }
+  | {
+      /**
+       * 技の途中で起きたこと。音を鳴らすのに使う（原型は、それぞれの瞬間に専用の音を鳴らしていた）。
+       *
+       * ⚠️ どのマスかは運ばない。掘り終えた穴の位置を描画の側に渡すと、見えないはずの穴がばれる。
+       */
+      readonly type: 'techniqueMoment';
+      /** 技を使ったプレイヤー。 */
+      readonly player: PlayerId;
+      readonly moment: TechniqueMoment;
     }
   | {
       readonly type: 'leekThrown';

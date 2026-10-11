@@ -87,6 +87,7 @@ export class FoxfireActor implements WorldActor {
       if (player.id === this.owner || !isAlive(player)) continue;
       if (isInvulnerable(player, world.now) || isBlastProof(player)) continue;
       if (!sameCell(cellOf(player.position), this.#cell)) continue;
+      events.push({ type: 'techniqueMoment', player: this.owner, moment: 'foxfireHit' });
       events.push(...hurt(world, player, this.owner, 2));
     }
     return { events, done: false };

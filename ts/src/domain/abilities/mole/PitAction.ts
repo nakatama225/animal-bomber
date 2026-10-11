@@ -141,6 +141,7 @@ export class PitAction implements ActiveAction {
     // 同じマスへ爆弾を置かれても、その下に穴ができる。爆弾を見るのは掘り始め（`canDigAt`）だけ。
     if (world.board.at(this.cell) !== 'empty' || pitAt(world, this.cell) !== undefined) return [];
     world.actors.push(new PitActor(this.cell, player.id));
-    return [];
+    // 掘り終えた音のため。どのマスかは知らせない（見えないはずの穴がばれる）。
+    return [{ type: 'techniqueMoment', player: player.id, moment: 'pitDug' }];
   }
 }

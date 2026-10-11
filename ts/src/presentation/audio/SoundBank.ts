@@ -33,7 +33,15 @@ export type SoundName =
   | 'leek'
   | 'leekBlock'
   | 'leekHit'
-  | 'lanesClosed';
+  | 'lanesClosed'
+  | 'pitFall'
+  | 'pitDone'
+  | 'tongueCatch'
+  | 'slimeHop'
+  | 'snot'
+  | 'foxLeap'
+  | 'foxfireHit'
+  | 'spit';
 
 /** すべての音の名前。表の漏れを検査するのに使う。 */
 export const SOUND_NAMES: readonly SoundName[] = [
@@ -66,6 +74,14 @@ export const SOUND_NAMES: readonly SoundName[] = [
   'leekBlock',
   'leekHit',
   'lanesClosed',
+  'pitFall',
+  'pitDone',
+  'tongueCatch',
+  'slimeHop',
+  'snot',
+  'foxLeap',
+  'foxfireHit',
+  'spit',
 ];
 
 /** 音を鳴らすもの。 */

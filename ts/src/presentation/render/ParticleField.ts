@@ -167,8 +167,10 @@ export class ParticleField {
       case 'lanesClosed':
       case 'roundEnded':
       case 'matchEnded':
+      case 'techniqueMoment':
         // 原型でも、置いた瞬間・効いた瞬間には粒子を出していない。効いたきっかけ
         // （拾った・踏んだ）の側で煙を出す。ラウンドの区切りは盤面の作り直しで片づける。
+        // 技の途中で起きたことは音だけ（掘り終えた穴の位置は見せない）。
         return;
       default:
         assertNever(event);

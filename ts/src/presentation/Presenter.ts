@@ -4,7 +4,7 @@ import { SUDDEN_DEATH_SECONDS } from '../domain/rules/suddenDeath.js';
 import type { PlayerId } from '../domain/state/PlayerState.js';
 import type { WorldState } from '../domain/state/WorldState.js';
 import { NullSoundBank, type SoundBank, type SoundName } from './audio/SoundBank.js';
-import { techniqueSound } from './audio/techniqueSounds.js';
+import { MOMENT_SOUNDS, techniqueSounds } from './audio/techniqueSounds.js';
 import { effectText } from './hud/effectLabels.js';
 
 /** 画面に短く出す通知。 */
@@ -117,10 +117,13 @@ export class Presenter {
         return;
       case 'techniqueUsed': {
         const animal = world.players[event.player]?.animal;
-        const sound = animal === undefined ? null : techniqueSound(animal, event.special);
-        if (sound !== null) this.sounds.play(sound);
+        if (animal === undefined) return;
+        for (const sound of techniqueSounds(animal, event.special)) this.sounds.play(sound);
         return;
       }
+      case 'techniqueMoment':
+        this.sounds.play(MOMENT_SOUNDS[event.moment]);
+        return;
       case 'leekThrown':
         this.sounds.play('leek');
         return;
@@ -159,13 +162,11 @@ export class Presenter {
 }
 
 /**
- * 悪い状態にかかったときの音。滑る・泣くは専用の音、うんこの効果はまとめて1つ。
- *
- * ⚠️ 落とし穴は泣くのと同じ音にしている。原型は専用の音（SE.pitFall）を鳴らすが、この版の
- * 音の表にはまだ無い。
+ * 悪い状態にかかったときの音。滑る・泣く・落とし穴は専用の音、うんこの効果はまとめて1つ（原型と同じ）。
  */
 function effectSound(effect: string): SoundName {
   if (effect === 'slide') return 'slip';
-  if (effect === 'stun' || effect === 'pitfall') return 'cry';
+  if (effect === 'stun') return 'cry';
+  if (effect === 'pitfall') return 'pitFall';
   return 'poop';
 }
