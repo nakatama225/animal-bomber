@@ -25,15 +25,23 @@ export class ItemSystem {
       const item = world.items[index] as Item;
       // 撒いたプレイヤー自身は、自分の撒いたものを踏んでも拾わない（効かず、残る。原型の pickupCheck）。
       if (item.scatteredBy === player.id) continue;
+      // 鼻水で溶けている最中のものは、踏んでも効かない（原型の pickupCheck）。
+      if (item.meltingUntil !== undefined) continue;
       world.items.splice(index, 1);
       events.push({ type: 'itemTaken', cell, kind: item.kind, taker: player.id });
       const multiplier = abilityOf(player.animal).itemMultiplier;
       events.push(...applyItem(world, player, item.kind, multiplier));
     }
 
-    // 残る長さを過ぎた撒かれたアイテムを消す。拾うのが先（原型も、拾ったあとに寿命を見る）。
+    // 溶けきったものと、残る長さを過ぎた撒かれたものを消す。拾うのが先（原型も、拾ったあとに見る）。
     for (let index = world.items.length - 1; index >= 0; index -= 1) {
       const item = world.items[index] as Item;
+      if (item.meltingUntil !== undefined) {
+        if (world.now < item.meltingUntil) continue;
+        world.items.splice(index, 1);
+        events.push({ type: 'itemWashed', cell: item.cell, kind: item.kind });
+        continue;
+      }
       if (item.expiresAt === undefined || world.now <= item.expiresAt) continue;
       world.items.splice(index, 1);
       events.push({ type: 'itemExpired', cell: item.cell, kind: item.kind });

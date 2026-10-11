@@ -101,7 +101,9 @@ export class Presenter {
         this.sounds.play('burn');
         return;
       case 'itemExpired':
-        // 原型も、撒かれたものが消えるときは音を鳴らさない（煙だけ）。
+      case 'itemWashed':
+      case 'bombDoused':
+        // 原型も、これらには音を鳴らさない（煙だけ）。鼻水の音は技を使ったとき（techniqueUsed）に鳴らす。
         return;
       case 'effectApplied':
         this.sounds.play(effectSound(event.effect));

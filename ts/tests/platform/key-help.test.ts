@@ -46,7 +46,8 @@ describe('遊び方の説明', () => {
     expect(lineOf('うさぎ')).toContain('0.5 秒');
     expect(lineOf('うさぎ')).not.toContain('通常技は無い');
     expect(lineOf('ぞう')).toContain('1.5 秒');
-    expect(lineOf('ぞう')).toContain('通常技は無い');
+    // ぞうはポン押しで鼻水を吹く（原型の通常技）。
+    expect(lineOf('ぞう')).not.toContain('通常技は無い');
     expect(lineOf('もぐら')).toContain('通常技は無い');
   });
 });

@@ -101,6 +101,17 @@ describe('アイテム', () => {
     expect(drawn(scattered, 3500).alpha).toBeLessThan(1);
     expect(drawn(plain, 3500)).toEqual({ alpha: 1, tint: 'rgba(255,105,80,.34)' });
   });
+
+  it('鼻水で溶けているうんこは、溶けきるまでの残りに合わせて薄れていく', () => {
+    const alphaAt = (now: number): unknown => {
+      const canvas = fakeCanvas();
+      drawItem(frameOn(canvas), { id: 1 as never, cell: { col: 4, row: 5 }, kind: 'poop', meltingUntil: tick(27) }, tick(now));
+      return canvas.context.globalAlpha;
+    };
+    expect(alphaAt(0)).toBe(1);
+    expect(alphaAt(13)).toBeCloseTo(14 / 27);
+    expect(alphaAt(26)).toBeCloseTo(1 / 27);
+  });
 });
 
 describe('爆弾と爆風', () => {
@@ -303,6 +314,18 @@ describe('粒子と画面の揺れ', () => {
     const expired = new ParticleField(new CosmeticRng());
     expired.onEvents([{ type: 'itemExpired', cell: { col: 5, row: 5 }, kind: 'poop' }], world);
     expect(paintedParticles(expired)).toBeGreaterThan(0);
+  });
+
+  it('鼻水で爆弾の火が消えたときと、うんこが溶けきったときに、しずくを出す', () => {
+    const world = makeWorld();
+    for (const event of [
+      { type: 'bombDoused', cell: { col: 5, row: 5 }, owner: 1 },
+      { type: 'itemWashed', cell: { col: 5, row: 5 }, kind: 'poop' },
+    ] as const) {
+      const field = new ParticleField(new CosmeticRng());
+      field.onEvents([event], world);
+      expect(paintedParticles(field), event.type).toBeGreaterThan(0);
+    }
   });
 
   /** 光の玉の数。1つにつき放射状の塗りを1回使う。 */

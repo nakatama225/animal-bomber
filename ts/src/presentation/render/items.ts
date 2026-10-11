@@ -60,6 +60,9 @@ const TONES: Readonly<Record<BadgeTone, ToneColors>> = {
 /** 撒かれたアイテムが、消える前に点滅を始める残り時間。原型と同じ値。 */
 const SCATTERED_BLINK = secondsToTicks(3.5);
 
+/** 流されたうんこが溶けきるまでの長さ。ルールの層（ぞうの鼻水）と揃える。 */
+const MELT_TICKS = 27;
+
 /**
  * 盤面に落ちているアイテムを描く。
  *
@@ -69,6 +72,12 @@ const SCATTERED_BLINK = secondsToTicks(3.5);
  */
 export function drawItem(frame: Frame, item: Item, now: Tick): void {
   const definition = itemDefinition(item.kind);
+  if (item.meltingUntil !== undefined) {
+    // 鼻水で流されて溶けている。溶けきるまでの残りに合わせて薄れていく（原型は下へずり落ちて消える）。
+    const left = Math.max(0, Math.min(1, (item.meltingUntil - now) / MELT_TICKS));
+    drawBadge(frame, item.cell, definition.emoji, 'harmful', left);
+    return;
+  }
   if (item.scatteredBy === undefined) {
     drawBadge(frame, item.cell, definition.emoji, definition.harmful ? 'harmful' : 'good', 1);
     return;

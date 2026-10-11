@@ -107,6 +107,11 @@ export class ParticleField {
       case 'itemExpired':
         puff(out, rng, event.cell, '#f7a8c4', '💨');
         return;
+      case 'itemWashed':
+      case 'bombDoused':
+        // 鼻水で消えた。水のしずく。
+        puff(out, rng, event.cell, '#9fd8ff', '💧');
+        return;
       case 'itemTaken': {
         const definition = itemDefinition(event.kind);
         puff(out, rng, event.cell, definition.harmful ? '#b98a5a' : '#ffd23f', definition.emoji);

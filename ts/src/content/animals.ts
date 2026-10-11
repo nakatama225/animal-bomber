@@ -69,7 +69,7 @@ export const ANIMAL_LOOKS: readonly AnimalLook[] = [
     build: { head: 1.16, bodyWidth: 1.22, bodyHeight: 1.18, legHeight: 0.92, tail: 'thin', fur: '#cfdeed', bigFeet: false },
     special: { name: '突進', emoji: '🐗' },
     description:
-      '爆風が2マス長く、体力が1つ多い。' +
+      '爆風が2マス長く、体力が1つ多い。技のボタンで鼻水を吹き、正面2マスの爆弾とうんこを消す（5秒に1回）。' +
       'とくぎは 1.5 秒の長押しで出る突進。柱に当たるまでブロックを壊しながら進む。',
   },
   {
