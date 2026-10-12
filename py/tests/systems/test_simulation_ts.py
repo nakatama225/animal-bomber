@@ -32,9 +32,15 @@
 ## 台本
 
 3つ目の台本は、悪い状態の動き方を通すためのもの。空いたマスにアイテムを並べ、ときどき
-向きのボタンを全部離す。種 16 では、悪い状態が8つともかかり、チキンを拾い、手を離しても
-滑る・とまれないで進む・壁で滑りが終わる・反転して進む、をどれも通る（段階 5 の形で
-1〜40 を数えて選んだ。段階 4 までの種 9 では、反転ととまれないが、かからなくなった）。
+向きのボタンを全部離す。種 60 では、悪い状態が8つともかかり、手を離しても滑る・
+とまれないで進む・反転して進む、をどれも通る（技のボタンの読み方と滑り方を原型に合わせた
+あとに 1〜300 を数えて選んだ。それまでの種 16 では、悪い状態が7つになった）。通るかは
+`test_scenario_coverage.py` が確かめる。
+
+この台本では、チキンを拾う場面と、手を離している間に壁で滑りが終わる場面は通らない
+（盤面の並びが種によらず同じで、歩く道筋にチキンが無い。滑る向きが変わらないので、手を
+離す 15 tick のうちに壁に当たらない）。チキンを拾うのは技の台本
+（`technique_scenarios.py`）で、壁で滑りが終わるのは `test_movement.py` で確かめる。
 
 台本は `tests/determinism/scenario.py` と切り離して、このファイルに持つ。決定性の台本は
 ルールを足すたびに足していくので、それに頼ると、この固定値が意図せず変わる。
@@ -43,6 +49,7 @@
 import json
 from collections.abc import Callable
 from pathlib import Path
+from typing import Final
 
 import pytest
 
@@ -149,6 +156,21 @@ def place_items(world: WorldState) -> None:
         world.items.append(Item(id=world.ids.take(), cell=cell, kind=kind))
 
 
+ITEMS_CASE: Final = (
+    "items",
+    60,
+    (1, 2, 4, 6),
+    (2, 2, 3, 3),
+    (2, 2, 3, 3),
+    pausing,
+    True,
+    True,
+)
+"""アイテムを並べた台本（名前・種・靴・爆弾の数・火力・台本・まばら・アイテム）。
+
+`test_scenario_coverage.py` も、同じ盤面で通る場面を数える。
+"""
+
 CASES = [
     pytest.param(
         "sparse",
@@ -172,18 +194,33 @@ CASES = [
         False,
         id="ブロックの詰まった盤面",
     ),
-    pytest.param(
-        "items",
-        16,
-        (1, 2, 4, 6),
-        (2, 2, 3, 3),
-        (2, 2, 3, 3),
-        pausing,
-        True,
-        True,
-        id="アイテムを並べた盤面_ときどき手を離す",
-    ),
+    pytest.param(*ITEMS_CASE, id="アイテムを並べた盤面_ときどき手を離す"),
 ]
+
+
+def set_up(
+    seed: int,
+    shoes: tuple[int, ...],
+    max_bombs: tuple[int, ...],
+    powers: tuple[int, ...],
+    sparse: bool,
+    items: bool,
+) -> WorldState:
+    """台本を流す前の盤面。"""
+    world = create_world(seed, FOUR)
+    for player in world.players:
+        player.previous_input = PlayerInput.IDLE
+    if sparse:
+        sparse_board(world)
+    if items:
+        place_items(world)
+    for player, count, bombs, power in zip(
+        world.players, shoes, max_bombs, powers, strict=True
+    ):
+        player.shoes = count
+        player.max_bombs = bombs
+        player.power = power
+    return world
 
 
 @pytest.mark.parametrize(
@@ -200,19 +237,7 @@ def test_同じ台本を流すと_TypeScript版と同じ結果になる(
     sparse: bool,
     items: bool,
 ) -> None:
-    world = create_world(seed, FOUR)
-    for player in world.players:
-        player.previous_input = PlayerInput.IDLE
-    if sparse:
-        sparse_board(world)
-    if items:
-        place_items(world)
-    for player, count, bombs, power in zip(
-        world.players, shoes, max_bombs, powers, strict=True
-    ):
-        player.shoes = count
-        player.max_bombs = bombs
-        player.power = power
+    world = set_up(seed, shoes, max_bombs, powers, sparse, items)
     got: list[dict[str, object]] = []
     pending: list[list[object]] = []
     for tick in range(600):
