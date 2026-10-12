@@ -37,6 +37,7 @@ export class CombinedInputSource implements InputSource {
       right: playerInputs.some((playerInput) => playerInput.right),
       bomb: playerInputs.some((playerInput) => playerInput.bomb),
       action: playerInputs.some((playerInput) => playerInput.action),
+      special: playerInputs.some((playerInput) => playerInput.special),
     };
   }
 }

@@ -159,7 +159,7 @@ describe('記録の文字列の区画と変化の一覧', () => {
     ['tick の頭に 0', '0:05,8', /^記録のプレイヤー 0 の項目が読めない/],
     ['tick が安全な整数の範囲の外', '0:9007199254740992,8', /^記録のプレイヤー 0 の項目が読めない/],
     ['ビットの頭に 0', '0:0,08', /^記録のプレイヤー 0 の項目が読めない/],
-    ['ビットが6つのボタンを超える', '0:0,64', /^記録のプレイヤー 0 の項目が読めない/],
+    ['ビットが7つのボタンを超える', '0:0,128', /^記録のプレイヤー 0 の項目が読めない/],
   ])('区画か変化の一覧に読めない所があれば、戻す前に止まる（%s）', (_case, text, message) => {
     // 黙って読み飛ばしたり違う値に読んだりすると、その人の入力が記録と違うまま、例外も出ずに別の試合になる。
     expect(() => InputLog.decode(text)).toThrow(message);
@@ -193,9 +193,9 @@ describe('記録の文字列の区画と変化の一覧', () => {
     expect(restored.lastTick).toBe(-1);
   });
 
-  it('6つのボタンを全部押した入力も、文字列にして戻せる', () => {
-    // 上の「ビットが6つのボタンを超える」の対照。上限そのものは読める。
-    const all = press({ up: true, down: true, left: true, right: true, bomb: true, action: true });
+  it('7つのボタンを全部押した入力も、文字列にして戻せる', () => {
+    // 上の「ビットが7つのボタンを超える」の対照。上限そのものは読める。
+    const all = press({ up: true, down: true, left: true, right: true, bomb: true, action: true, special: true });
     const log = new InputLog();
     log.record(0, 0, all);
     expect(InputLog.decode(log.encode()).at(0, 0)).toEqual(all);

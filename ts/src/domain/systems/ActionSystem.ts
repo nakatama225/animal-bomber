@@ -23,6 +23,11 @@ import type { WorldState } from '../state/WorldState.js';
  *
  * どちらが何になるかは `abilities/` の各動物が決める。
  *
+ * もう1つ、とくぎを直に出すボタン（`PlayerInput.special`）がある。押した瞬間に、通常技を挟まずに
+ * とくぎが出る。人間の操作には割り当てておらず、CPU だけが押す（原型の CPU はボタンを通らずに
+ * とくぎを呼んでいた）。出せる条件（動けない間・ボタンを受け付けない振る舞いの最中・チキンが無い）は
+ * 長押しのとくぎと同じ。
+ *
  * とくぎはチキンを拾って溜めた回数ぶんだけ使える。しきい値は押し方1回につき1回だけ見る
  * （`actionFired`）。届いた tick に出せなければ（動けない・チキンが無い・ボタンを受け付けない
  * 振る舞いの最中）、その押し方のとくぎはそれきり。離すと数え直す。
@@ -120,6 +125,10 @@ export class ActionSystem {
     playerInput: PlayerInput,
   ): SimEvent[] {
     const events: SimEvent[] = [];
+    // とくぎを直に出すボタン（人間の操作には無い。`PlayerInput.special`）。技のボタンの長さには触れない。
+    if (justPressed(player, playerInput, 'special') && this.#accepts(player) && player.specialCharges > 0) {
+      events.push(...this.#special(world, player));
+    }
     if (justPressed(player, playerInput, 'action')) events.push(...this.#tap(world, player));
     if (!playerInput.action) {
       player.actionHeld = tick(0);

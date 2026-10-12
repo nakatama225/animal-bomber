@@ -129,7 +129,7 @@ export interface PlayerState {
 export function justPressed(
   player: PlayerState,
   playerInput: PlayerInput,
-  button: 'bomb' | 'action',
+  button: 'bomb' | 'action' | 'special',
 ): boolean {
   return playerInput[button] && !player.previousInput[button];
 }

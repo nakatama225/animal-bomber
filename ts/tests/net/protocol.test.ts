@@ -85,7 +85,7 @@ describe('中継から届いたメッセージを読む', () => {
     ['プレイヤー番号が文字列', '{"t":"peer_joined","seat":"1"}'],
     ['tick が負', '{"t":"input","seat":1,"tick":-1,"bits":0,"match":1}'],
     ['tick が小数', '{"t":"input","seat":1,"tick":1.5,"bits":0,"match":1}'],
-    ['ビットが6つのボタンを超える', '{"t":"input","seat":1,"tick":0,"bits":64,"match":1}'],
+    ['ビットが7つのボタンを超える', '{"t":"input","seat":1,"tick":0,"bits":128,"match":1}'],
     ['lastTick が -1 より小さい', '{"t":"peer_left","seat":1,"lastTick":-2}'],
     ['role が知らない値', '{"t":"welcome","seat":0,"role":"owner","seats":[]}'],
     ['報告が辞書でない', '{"t":"desync","tick":0,"reports":[1]}'],

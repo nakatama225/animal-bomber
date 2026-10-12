@@ -28,6 +28,15 @@ export interface PlayerInput {
   readonly bomb: boolean;
   /** 技のボタンを押しているか。押した長さで通常技ととくぎが分かれる。 */
   readonly action: boolean;
+  /**
+   * とくぎを直に出すボタンを押しているか。押した瞬間に、通常技を挟まずにとくぎが出る。
+   *
+   * ⚠️ 人間の操作には割り当てていない。原型の人間は、技のボタンの長押しでしかとくぎを出せない
+   * （押した瞬間に通常技も出る）。一方、原型の CPU はボタンを通らずにとくぎを呼んでいた
+   * （useSpecial を直に呼ぶ。長押しの待ちも通常技も無い）。この版の CPU は入力しか返せないので、
+   * 原型の CPU と同じ出し方をこのボタンで表す。
+   */
+  readonly special: boolean;
 }
 
 /** 何も押していない入力。 */
@@ -38,6 +47,7 @@ export const IDLE_INPUT: PlayerInput = Object.freeze({
   right: false,
   bomb: false,
   action: false,
+  special: false,
 });
 
 /**
@@ -57,12 +67,13 @@ export function packInput(playerInput: PlayerInput): number {
     (playerInput.left ? 4 : 0) |
     (playerInput.right ? 8 : 0) |
     (playerInput.bomb ? 16 : 0) |
-    (playerInput.action ? 32 : 0)
+    (playerInput.action ? 32 : 0) |
+    (playerInput.special ? 64 : 0)
   );
 }
 
 /**
- * 入力のビットの上限（6つのボタンを全部押した値）。通信の約束と記録の文字列が、読んだ値を確かめるのに使う。
+ * 入力のビットの上限（7つのボタンを全部押した値）。通信の約束と記録の文字列が、読んだ値を確かめるのに使う。
  *
  * 数を直接書かず `packInput` から作る。ボタンを足すと、ここでそのボタンが足りずに型が合わなくなるので、
  * 上限の直し忘れに気づける。
@@ -74,6 +85,7 @@ export const MAX_INPUT_BITS = packInput({
   right: true,
   bomb: true,
   action: true,
+  special: true,
 });
 
 /** 1 バイトから入力を戻す。 */
@@ -85,6 +97,7 @@ export function unpackInput(bits: number): PlayerInput {
     right: (bits & 8) !== 0,
     bomb: (bits & 16) !== 0,
     action: (bits & 32) !== 0,
+    special: (bits & 64) !== 0,
   };
 }
 

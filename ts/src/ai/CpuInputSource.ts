@@ -276,5 +276,6 @@ function compose(me: PlayerState, step: MacroStep | null, direction: Direction |
     right: pressed === 'right',
     bomb: step?.bomb ?? false,
     action: step?.action ?? false,
+    special: false,
   };
 }

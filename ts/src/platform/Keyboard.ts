@@ -212,6 +212,8 @@ export class KeyboardInputSource implements InputSource {
       right: this.watcher.anyOf(this.binding.right),
       bomb: this.watcher.anyOf(this.binding.bomb),
       action: this.watcher.anyOf(this.binding.action),
+      // とくぎを直に出すキーは割り当てない（原型の人間は長押しでしか出せない。`PlayerInput.special`）。
+      special: false,
     };
   }
 }

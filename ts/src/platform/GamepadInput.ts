@@ -187,6 +187,8 @@ export class GamepadInputSource implements InputSource {
       ...this.#reader.directions(pad),
       bomb: held(pad, BUTTON.a) || held(pad, BUTTON.r1),
       action: held(pad, BUTTON.b) || held(pad, BUTTON.x) || held(pad, BUTTON.y) || held(pad, BUTTON.l1),
+      // とくぎを直に出すボタンは割り当てない（原型の人間は長押しでしか出せない。`PlayerInput.special`）。
+      special: false,
     };
   }
 }
