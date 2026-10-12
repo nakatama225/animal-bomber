@@ -76,13 +76,18 @@ app → shell → presentation → net → ai → content → domain
 ルールと同じく結果を決める層（`content`・`ai`）を作ったときは、「ルールの層は乱数・実時間・
 描画・環境で結果が違いうる計算を import しない」の `source_modules` にも足してください。
 
-`domain/` の中の向きは検査していません。次の2つは守ってください。
+`domain/` の中の向きは検査していません。次の3つは守ってください。
 
 - `domain/query/` は読むだけです。状態を書き換えず、`domain/systems/` を import しません
   （CPU の判断（段階 6）も同じ問い合わせを使うため）
 - 1 tick の処理は `domain/systems/` に処理ごとのモジュールとして置き、`simulation.py` の
   `step()` に順に並べます。並べる順の理由は `simulation.py` のモジュールの説明に、並びと
   同じ番号で書いてください
+- 動物の技（`domain/abilities/`）は、`domain/systems/` の基本の操作（爆発させる・傷つける・
+  アイテムを効かせる・爆弾を置く）を呼びます。`domain/systems/` から `domain/abilities/` を
+  import してよいのは、技を呼び分ける `actions.py` と盤面の物を進める `actors.py` だけです
+  （ほかから import すると、読み込みが循環します）。`domain/state/` は `domain/abilities/` を
+  import しません（振る舞いと盤面の物の状態は `state/` に、振る舞いは `abilities/` に置く）
 
 ## `domain/` の中で使ってはいけないもの
 
@@ -152,37 +157,45 @@ set の反復は、import でも構文木でも止められません。`tests/de
 - ルールの層から音・画面・通知を呼ばないでください。起きたことは `SimEvent` の種類に足して
   `step()` の戻り値で返し、音と通知に変えるのは `presentation/presenter.py` です
 - 種類を足すと、`presentation/presenter.py` の `match` と、TypeScript 版と比べるテストの
-  `event_row`（`tests/ts_rows.py`。TypeScript 版と比べる段階 3・4 のテストが使う）が mypy で失敗します。扱いを書いてから
-  完了としてください。`case _:` には `assert_never` だけを置きます
-- TypeScript 版と比べる固定値（`tests/systems/test_simulation_ts.py` は段階 3 の f95d2a5、
-  `tests/app/test_session_ts.py` は段階 4 の 6e25fc2）は、その段階のコミットに、あとから
-  TypeScript 版を原型に合わせた直しを当て、同じ台本を流して出したものです。当てる直しは、
-  7825fac（壊れたブロックの一覧に同じマスを1回だけ入れる）・32bf68b（「勝手に設置」は
-  0.5 秒に1回だけ置こうとする・重なった爆風はあとから置かれた爆風の持ち主）・bcb1567
-  （ラウンドの始まりは爆弾のボタンを押していた扱い）・2人は対角から始める（HEAD の
-  `DUEL_SPAWN_ORDER`）・c391fa1（決着のあと 120 tick 待ってから次のラウンド）・爆風を
-  右・左・下・上の順に伸ばす（HEAD の `query/BlastReach.ts` の `BLAST_DIRECTIONS`）・
-  「勝手に設置」の拍に置くのは動く前（HEAD の `systems/AutobombSystem.ts`）。
-  段階を進めて出し直すときも、その段階のコミットに同じ直しを当ててから流してください
-  （段階のコミットはどれも直しより前です。爆発の処理は段階 4 までは `systems/BlastSystem.ts`、
-  段階 5a からは `mutations/explode.ts`）。どのコミットに何を当てて出したかを、テストの
-  説明に書いてください
-- 段階 5（動物の技）の固定値を出すときは、上の直しに加えて、段階 5 の TypeScript 版を
-  原型に合わせた直しも当てます：2202d07（落とし穴・置けるかを `canPlaceBomb` にまとめる
-  ほかの共通の部品）・0978d03（動けない間は技を出さない・「勝手に設置」は技を進めた直後）・
-  1b50a95（突進）・32acca4（粘膜爆弾と舌）・864fbc4（撒くのと一列置き）・603aea9（掘り終わりは
-  爆弾を見ない）・16cec97（CPU も `canPlaceBomb` で置けるかを決める）。さらに、段階 5 の技を
-  原型に合わせ切った e53aaf3 から 1aa4c2c までの 16 コミット（`git log fbd6cdd..1aa4c2c`。落とし穴の
-  寿命・とくぎの長押し・粘膜爆弾・舌と焼き切れ・狐火とキツネ跳び・うさぎの撒く技と跳び・ぞうの
-  鼻水・ポン押しのとくぎ・技の音・CPU のもぐら）も当てます
+  `event_row`（`tests/ts_rows.py`）が mypy で失敗します。扱いを書いてから完了として
+  ください。`case _:` には `assert_never` だけを置きます
+- TypeScript 版と比べる固定値（`tests/systems/test_simulation_ts.py`・
+  `test_techniques_ts.py`・`tests/app/test_session_ts.py`）は、TypeScript 版の 37ac1a7
+  （段階 5 の技を原型に合わせ切ったあと）の `domain/` と `app/GameSession.ts` を写し、
+  この版にまだ無いものを止めて、同じ台本を流して出したものです。止めたのは、倒れた
+  プレイヤーが外周へ回ること（葱ボン。写しの `mutations/damage.ts` で退場にする）と、
+  延長戦（試合の設定で切る）。もう1つ、写しでは全員が下を向いて始まる形にします（この版は
+  原型と同じく全員が下を向く。TypeScript 版は下の隅のプレイヤーが上を向く）。
+  段階 4 までは、段階のコミットにあとからの直しを当てて出していましたが、段階 5 で、その
+  間に入った名前の置き換え（7412fde）と葱ボン・延長戦（段階 8）のために直しが当たらなく
+  なったので、直しが全部入った HEAD から出す形に替えました。
+  段階を進めて出し直すときは、その段階で入る仕組み（葱ボン・延長戦など）を写しで止める
+  のをやめ、止めたものと理由をテストの説明に書いてください
+- `tests/boundary/test_closed_kinds.py` は、試合を進める処理（`domain/systems/`）・盤面への
+  問い合わせ（`domain/query/`）・イベント（`domain/events.py`）に、動物の名前と振る舞い・
+  盤面の物のクラスの名前が現れないことを見ます。コメントも含みます。共通の処理は種類を
+  見ず、性質（`state/actions.py` の `traits_of`・`rules/animals.py` の数値）だけを見ます。
+  逸話を書くときも、動物の名前を出さず能力で書いてください（「ブロックを通り抜ける動物」）
 - `tests/systems/test_match_invariants.py` は、試合を通して崩れない約束（同じマスにアイテムが
   2つ並ばない）を毎 tick 確かめます。約束を崩す仕組みを足すときは、約束のほうから決め直して
   ください
 
 ## 動物の能力を追加するとき
 
-能力と行動中の状態は、取りうる種類を閉じた union で定義します（段階 5 で作ります）。
-追加すると、対応を書き忘れている分岐が型検査（mypy の `exhaustive-match`）で失敗します。
-戻り値を返さない `match` でも失敗するよう、`pyproject.toml` で有効にしてあります。
+動物（`domain/rules/animals.py` の `Animal`）・プレイヤーを乗っ取る振る舞い
+（`domain/state/actions.py` の `Action`）・盤面の物（`domain/state/actors.py` の
+`Actor`）は、取りうる種類を閉じた列挙と union で定義しています。種類で分ける所は
+`match` で書き、最後に `assert_never` を置いています（振り分けは
+`domain/abilities/techniques.py` にまとめてあります）。追加すると、対応を書き忘れている
+分岐が型検査（mypy の `exhaustive-match`）で失敗します。戻り値を返さない `match` でも
+失敗するよう、`pyproject.toml` で有効にしてあります。
 **失敗した箇所を潰してから完了としてください。**`match` の分岐に
 catch-all（`case _:`）を足して黙らせないでください。
+
+- 数値の違い（速さ・火力・体力・爆弾の数・アイテムの倍率・とくぎの長押し）は
+  `rules/animals.py` の `stats_of` に足します。技は `domain/abilities/` に動物ごとの
+  モジュールを足し、`techniques.py` の `match` に書きます
+- ⛔ 試合を進める処理（`domain/systems/`）に、動物や振る舞いの種類で分ける処理を足さない
+  でください。振る舞いが移動・爆弾・拾う・被弾に割り込むときは、`ActionTraits` に性質を
+  足し、処理はその性質だけを見ます（突進が特別扱いなしで書けているのが、この形の確かめ
+  です）
