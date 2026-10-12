@@ -58,6 +58,12 @@ class Exploded:
     ⚠️ 跳ね回る爆弾が、まわりのどこにも降りられないマスで爆発したときは、爆弾なしで
     中心の爆風だけが出る。そのときも 1。
     """
+    blocks: int
+    """この連鎖で壊したブロックの数。
+
+    ブロックの壊れる音は、連鎖1回につき1回だけ鳴らす（原型の explodeChain。壊した
+    ブロックごとの `BlockDestroyed` では鳴らさない）。
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,6 +218,8 @@ class Moment(Enum):
     """追いかける炎を放った（盤面に相手がいなくて出さなかったときは知らせない）。"""
     CHASER_HIT = "chaserHit"
     """追いかける炎が相手に当たった。"""
+    RING_SCATTERED = "ringScattered"
+    """周りに撒く技が、輪を1つ撒いた（その輪に1つも撒けなかったときは知らせない）。"""
 
 
 @dataclass(frozen=True, slots=True)

@@ -157,7 +157,14 @@ def advance_charge(world: WorldState, player: PlayerState, charge: Charge) -> Pr
     bomb = bomb_at(world, ahead)
     if bomb is not None and not bomb.chained:
         result = detonate(world, bomb)
-        events.append(Exploded(cell=bomb.cell, owner=bomb.owner, count=result.exploded))
+        events.append(
+            Exploded(
+                cell=bomb.cell,
+                owner=bomb.owner,
+                count=result.exploded,
+                blocks=len(result.destroyed),
+            )
+        )
         events.extend(result.events)
 
     tile = world.board.at(ahead)

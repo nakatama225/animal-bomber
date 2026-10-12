@@ -44,8 +44,8 @@ def event_row(event: SimEvent) -> list[object]:
     match event:
         case BombPlaced(cell=cell, owner=owner):
             return ["bombPlaced", cell.col, cell.row, owner]
-        case Exploded(cell=cell, owner=owner, count=count):
-            return ["exploded", cell.col, cell.row, owner, count]
+        case Exploded(cell=cell, owner=owner, count=count, blocks=blocks):
+            return ["exploded", cell.col, cell.row, owner, count, blocks]
         case BlockDestroyed(cell=cell):
             return ["blockDestroyed", cell.col, cell.row]
         case ItemDropped(cell=cell, kind=kind):

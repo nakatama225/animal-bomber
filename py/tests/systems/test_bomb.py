@@ -1,7 +1,7 @@
 """爆弾を置く・導火線・爆発・誘爆・ブロック破壊・爆風の寿命の検査。"""
 
 from animal_bomber.domain.core.coord import Cell, Point
-from animal_bomber.domain.events import BlockDestroyed
+from animal_bomber.domain.events import BlockDestroyed, Exploded
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.query.board import blast_at, bomb_at, is_solid_for
 from animal_bomber.domain.rules.animals import Animal
@@ -166,6 +166,21 @@ class Test爆発:
         advance(world, only_for(world, 0, IDLE), 1)
         assert world.bombs == []
         assert blast_at(world, Cell(1, 1)) is not None
+
+    def test_爆発を知らせるときに_その連鎖で壊したブロックの数も知らせる(self) -> None:
+        """ブロックの壊れる音を、連鎖1回につき1回鳴らすため（原型の explodeChain）。"""
+        world = make_world()
+        clear_board(world)
+        player = world.players[0]
+        player.position = Cell(5, 5).center()
+        world.board.put(Cell(6, 5), Tile.SOFT)
+        world.board.put(Cell(5, 6), Tile.SOFT)
+        place_bomb(world, player)
+        exploded: list[Exploded] = []
+        for _ in range(BOMB_FUSE):
+            events = simulation.step(world, only_for(world, 0, IDLE))
+            exploded.extend(e for e in events if isinstance(e, Exploded))
+        assert exploded == [Exploded(cell=Cell(5, 5), owner=0, count=1, blocks=2)]
 
     def test_爆発すると_盤面に出ている爆弾の数が減る(self) -> None:
         world = make_world()

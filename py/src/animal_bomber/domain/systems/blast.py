@@ -101,7 +101,14 @@ def detonate_expired(world: WorldState) -> list[SimEvent]:
         if bomb not in world.bombs:
             continue
         result = detonate(world, bomb)
-        events.append(Exploded(cell=bomb.cell, owner=bomb.owner, count=result.exploded))
+        events.append(
+            Exploded(
+                cell=bomb.cell,
+                owner=bomb.owner,
+                count=result.exploded,
+                blocks=len(result.destroyed),
+            )
+        )
         events.extend(result.events)
     return events
 

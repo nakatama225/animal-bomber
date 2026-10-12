@@ -9,6 +9,7 @@ from animal_bomber.domain.events import (
     BlockDestroyed,
     BombDoused,
     BombPlaced,
+    BurntOff,
     EffectApplied,
     Exploded,
     ItemBlown,
@@ -65,7 +66,7 @@ class RecordingNotices:
 
 ALL_EVENTS: list[SimEvent] = [
     BombPlaced(cell=Cell(1, 1), owner=0),
-    Exploded(cell=Cell(1, 1), owner=0, count=2),
+    Exploded(cell=Cell(1, 1), owner=0, count=2, blocks=1),
     BlockDestroyed(cell=Cell(2, 1)),
     ItemDropped(cell=Cell(2, 1), kind=ItemKind.FIRE),
     ItemTaken(cell=Cell(2, 1), kind=ItemKind.FIRE, taker=0),
@@ -85,6 +86,7 @@ ALL_EVENTS: list[SimEvent] = [
     TechniqueUsed(player=1, special=False),
     TechniqueUsed(player=1, special=True),
     TechniqueMoment(player=1, moment=Moment.RAMMED),
+    BurntOff(player=0, cell=Cell(2, 1)),
     RoundEnded(round=1, winner=None),
     RoundEnded(round=2, winner=1),
     MatchEnded(champion=1),
@@ -109,11 +111,12 @@ def test_すべての種類を_決めた音と通知に変える() -> None:
     assert sounds.played == [
         (SoundName.PLACE, 1),
         (SoundName.EXPLODE, 2),
+        # ブロックの音は、壊した連鎖に1回（壊したブロックごとには鳴らさない）。
         (SoundName.BREAK_BLOCK, 1),
         # 落ちた瞬間は鳴らさない。
         (SoundName.ITEM, 1),
         (SoundName.CHICKEN, 1),
-        (SoundName.BURN, 1),
+        # 焼けたアイテムは鳴らさない（原型と同じ）。
         (SoundName.BLOW_POOP, 1),
         # 消えた・溶けた・火を消した・水しぶきは鳴らさない（原型も煙としぶきだけ）。
         (SoundName.POOP, 1),
@@ -153,7 +156,7 @@ def test_技の音は_必ず鳴る音を動物ごとに決める() -> None:
     }
     specials = {animal: technique_sounds(animal, special=True) for animal in Animal}
     assert specials == {
-        Animal.RABBIT: [SoundName.SPECIAL, SoundName.SCATTER],
+        Animal.RABBIT: [SoundName.SPECIAL, SoundName.POOP],
         Animal.ELEPHANT: [SoundName.SPECIAL, SoundName.CHARGE],
         Animal.MOLE: [SoundName.SPECIAL],
         Animal.FOX: [SoundName.SPECIAL, SoundName.FOX_LEAP],
@@ -177,7 +180,28 @@ def test_技の途中で起きたことには_それぞれ別の音を当てる(
         Moment.RAMMED: SoundName.CHARGE,
         Moment.CHASER_CAST: SoundName.FOXFIRE,
         Moment.CHASER_HIT: SoundName.FOXFIRE_HIT,
+        Moment.RING_SCATTERED: SoundName.POOP,
     }
+
+
+def test_ブロックの音は_連鎖1回につき1回_壊していなければ鳴らない() -> None:
+    """原型の explodeChain。体当たりで壊したブロック（`Exploded` を伴わない）も無音。"""
+    sounds = RecordingSounds()
+    Presenter(sounds).consume(
+        [
+            Exploded(cell=Cell(3, 3), owner=0, count=2, blocks=3),
+            BlockDestroyed(cell=Cell(3, 4)),
+            BlockDestroyed(cell=Cell(4, 3)),
+            BlockDestroyed(cell=Cell(2, 3)),
+            Exploded(cell=Cell(9, 9), owner=1, count=1, blocks=0),
+            BlockDestroyed(cell=Cell(5, 5)),
+        ]
+    )
+    assert sounds.played == [
+        (SoundName.EXPLODE, 2),
+        (SoundName.BREAK_BLOCK, 1),
+        (SoundName.EXPLODE, 1),
+    ]
 
 
 def test_プレイヤーの呼び方は外から渡せる() -> None:

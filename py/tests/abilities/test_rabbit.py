@@ -10,7 +10,7 @@ from animal_bomber.domain.abilities.frog import advance_slime, advance_tongue
 from animal_bomber.domain.abilities.rabbit import advance_scatter
 from animal_bomber.domain.core.coord import Cell, Direction
 from animal_bomber.domain.core.tick import Tick
-from animal_bomber.domain.events import ItemExpired
+from animal_bomber.domain.events import ItemExpired, Moment, TechniqueMoment
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import Animal, stats_of
 from animal_bomber.domain.rules.items import ItemKind
@@ -166,6 +166,29 @@ class Test撒く順と時刻:
         ring2 += [(c, 9) for c in range(7, 12)]
         assert order == [Cell(9, 7)] + [Cell(c, r) for c, r in ring1 + ring2]
         assert done
+
+    def test_1つでも撒けた輪ごとに知らせる_撒けない輪は知らせない(self) -> None:
+        """撒いた音を輪ごとに鳴らすため（原型も、輪に1つでも置けたときだけ鳴らす）。"""
+
+        def rings(blocked: bool) -> list[int]:
+            world, _, _ = arena((Animal.RABBIT, Animal.FROG))
+            if blocked:
+                # 2周目の輪をすべて塞ぐ。
+                for col in range(7, 12):
+                    for row in range(5, 10):
+                        if max(abs(col - 9), abs(row - 7)) == 2:
+                            world.board.put(Cell(col, row), Tile.SOFT)
+            scatter = Scatter(center=Cell(9, 7), owner=0)
+            at = []
+            for tick in range(1, 131):
+                events = advance_scatter(world, scatter).events
+                ring = TechniqueMoment(player=0, moment=Moment.RING_SCATTERED)
+                if ring in events:
+                    at.append(tick)
+            return at
+
+        assert rings(blocked=False) == [1, 40, 80]
+        assert rings(blocked=True) == [1, 40]
 
     def test_撒いている間も跳べる(self) -> None:
         """撒くのは盤面の側の物が続け、うさぎは乗っ取られない。"""

@@ -5,7 +5,7 @@ from typing import Final
 from animal_bomber.domain.abilities.results import NOTHING, Progress, Started
 from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.core.tick import Tick, seconds_to_ticks
-from animal_bomber.domain.events import ItemDropped, SimEvent
+from animal_bomber.domain.events import ItemDropped, Moment, SimEvent, TechniqueMoment
 from animal_bomber.domain.query.board import bomb_at, item_at
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.state.actors import Scatter
@@ -127,4 +127,9 @@ def _place_ring(world: WorldState, scatter: Scatter, ring: int) -> list[SimEvent
                 )
             )
             events.append(ItemDropped(cell=cell, kind=ItemKind.POOP))
+    # 1つでも撒けた輪だけ知らせる（原型も、輪に1つでも置けたときだけうんこの音を
+    # 鳴らす）。
+    if events:
+        moment = Moment.RING_SCATTERED
+        events.append(TechniqueMoment(player=scatter.owner, moment=moment))
     return events

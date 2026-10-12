@@ -68,7 +68,6 @@ class SoundName(Enum):
     BREAK_BLOCK = "break_block"
     ITEM = "item"
     CHICKEN = "chicken"
-    BURN = "burn"
     BLOW_POOP = "blow_poop"
     SLIP = "slip"
     CRY = "cry"
@@ -81,7 +80,6 @@ class SoundName(Enum):
     SNOT = "snot"
     LINE_BOMBS = "line_bombs"
     TONGUE = "tongue"
-    SCATTER = "scatter"
     CHARGE = "charge"
     FOX_LEAP = "fox_leap"
     SLIME = "slime"
@@ -221,9 +219,9 @@ def technique_sounds(animal: Animal | None, special: bool) -> list[SoundName]:
     とくぎは、どの動物でも共通の音（`SPECIAL`）を先に鳴らし、そのあと動物ごとの音を
     鳴らす（原型の useSpecial）。ここに書くのは、とくぎを使えば必ず鳴る音だけ。技が
     出なければ鳴らない音（掘る音・炎の音）は、技が出たときの `TechniqueMoment` の側で
-    鳴らす（`moment_sound`）。うさぎのとくぎは原型ではうんこを踏んだときと同じ音だが、
-    悪い状態にかかったときの音と分けたいので `SCATTER` を当てる（TypeScript 版と同じ）。
-    動物が分からなければ、とくぎの共通の音だけを鳴らす。
+    鳴らす（`moment_sound`）。うさぎのとくぎは、うんこを踏んだときと同じ音（原型の
+    rabbitPoroporo。TypeScript 版と同じ）。動物が分からなければ、とくぎの共通の音だけを
+    鳴らす。
     """
     if special:
         return [SoundName.SPECIAL, *_special_sounds(animal)]
@@ -252,8 +250,9 @@ def _special_sounds(animal: Animal | None) -> list[SoundName]:
         # 掘る音は、掘り始めたとき（`DIG_STARTED`）だけ。
         case None | Animal.MOLE:
             return []
+        # 撒く輪ごとにも同じ音を鳴らす（`RING_SCATTERED`）。
         case Animal.RABBIT:
-            return [SoundName.SCATTER]
+            return [SoundName.POOP]
         case Animal.ELEPHANT:
             return [SoundName.CHARGE]
         # 原型は跳び上がる音を鳴らし、炎を出したとき（`CHASER_CAST`）だけ炎の音を
@@ -285,6 +284,8 @@ def moment_sound(moment: Moment) -> SoundName:
             return SoundName.FOXFIRE
         case Moment.CHASER_HIT:
             return SoundName.FOXFIRE_HIT
+        case Moment.RING_SCATTERED:
+            return SoundName.POOP
         case _:
             assert_never(moment)
 
@@ -317,13 +318,17 @@ class Presenter:
         match event:
             case BombPlaced():
                 self._sounds.play(SoundName.PLACE)
-            case Exploded(count=count):
+            case Exploded(count=count, blocks=blocks):
                 # 連鎖した爆弾の数を渡す。まとめて爆発したときに大きな音になる。
                 self._sounds.play(SoundName.EXPLODE, count)
+                # ブロックの壊れる音は、1つでも壊した連鎖に1回だけ（原型の
+                # explodeChain）。
+                if blocks > 0:
+                    self._sounds.play(SoundName.BREAK_BLOCK)
             case BlockDestroyed():
-                # ⚠️ 原型は連鎖1つにつき1回だけ鳴らす（壊れたブロックの数によらない）。
-                # 音を作る段階 7 で揃える。
-                self._sounds.play(SoundName.BREAK_BLOCK)
+                # ここでは鳴らさない。爆発で壊したぶんは `Exploded` でまとめて鳴らす。
+                # 体当たりで壊したブロックには、原型も音を鳴らさない。
+                pass
             case ItemDropped():
                 # 落ちた瞬間は鳴らさない。壊した音と重なってうるさくなる。
                 pass
@@ -332,7 +337,8 @@ class Presenter:
                 is_chicken = kind is ItemKind.CHICKEN
                 self._sounds.play(SoundName.CHICKEN if is_chicken else SoundName.ITEM)
             case ItemBurned():
-                self._sounds.play(SoundName.BURN)
+                # 原型も、焼けたアイテムには音を鳴らさない（煙だけ）。
+                pass
             case ItemBlown():
                 self._sounds.play(SoundName.BLOW_POOP)
             case ItemExpired() | ItemWashed() | BombDoused() | Sprayed():

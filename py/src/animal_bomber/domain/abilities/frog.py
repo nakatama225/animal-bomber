@@ -345,7 +345,7 @@ def _burst(world: WorldState, slime: SlimeBomb) -> list[SimEvent]:
         )
         if landing is None:
             add_blast(world, cell, slime.owner, is_center=True)
-            return [Exploded(cell=cell, owner=slime.owner, count=1)]
+            return [Exploded(cell=cell, owner=slime.owner, count=1, blocks=0)]
         cell = landing
     # 投げたプレイヤーが倒れていても、その爆弾として起こす（爆風の持ち主も
     # そのプレイヤー）。
@@ -353,10 +353,13 @@ def _burst(world: WorldState, slime: SlimeBomb) -> list[SimEvent]:
     if owner is None:
         raise ValueError(f"投げたプレイヤーが盤面の一覧にいない: {slime.owner}")
     result = detonate(world, spawn_bomb(world, owner, cell))
-    return [
-        Exploded(cell=cell, owner=slime.owner, count=result.exploded),
-        *result.events,
-    ]
+    exploded = Exploded(
+        cell=cell,
+        owner=slime.owner,
+        count=result.exploded,
+        blocks=len(result.destroyed),
+    )
+    return [exploded, *result.events]
 
 
 def _blocked(world: WorldState, cell: Cell) -> bool:
