@@ -11,8 +11,7 @@ import { clearBoard, makeWorld, onlyFor, press, sameForAll } from '../helpers.js
 
 /*
  * ぞうの通常技（鼻水噴射）を、原型（legacy/animal-bomber.html の elephantSnot）に合わせる。
- * 期待値は原型を画面なしで動かして測った値。原型は技のボタンを押した瞬間に吹くので、そのフレームを 0 と数えた。
- * この版は離した tick に吹くので、その tick を 0 と数える。
+ * 期待値は原型を画面なしで動かして測った値。技のボタンを押した瞬間に吹くので、そのフレーム（tick）を 0 と数える。
  */
 
 /** 悪いアイテムのうんこの抽選でかかりうる状態。 */
@@ -30,11 +29,10 @@ function arena(): { world: WorldState; elephant: PlayerState; rabbit: PlayerStat
   return { world, elephant, rabbit, sim: new Simulation() };
 }
 
-/** 0番に技のボタンを押して離させる。吹いた tick（離した tick）のイベントを返す。 */
+/** 0番に技のボタンを押させる。吹いた tick（押した tick）のイベントを返す。離すのは呼んだ側の次の tick。 */
 function snot(world: WorldState, sim: Simulation): SimEvent[] {
   sim.step(world, sameForAll(world, press({})));
-  sim.step(world, onlyFor(world, 0, press({ action: true })));
-  return sim.step(world, sameForAll(world, press({})));
+  return sim.step(world, onlyFor(world, 0, press({ action: true })));
 }
 
 function bombAt(world: WorldState, owner: PlayerState, cell: Cell): void {
@@ -106,13 +104,13 @@ describe('鼻水噴射（原型 elephantSnot）', () => {
 
   it('5 秒に1回（何も消せなくても間隔は始まる）：吹いた tick から 299 tick 後は吹けず、300 tick 後に吹ける', () => {
     // 原型（legacy_p3_snot の cooldown）は 300〜301 フレーム後に戻る。1 tick のずれは決めた基準の範囲。
-    /** 1回吹き、その tick から gap tick 後に離して、2回目で爆弾が消えたか。 */
+    /** 1回吹き、その tick から gap tick 後に押して、2回目で爆弾が消えたか。 */
     const secondSnotDouses = (gap: number): boolean => {
       const { world, rabbit, sim } = arena();
       snot(world, sim);
       bombAt(world, rabbit, { col: 4, row: 7 });
-      // snot は「離す・押す・離す」の3 tick なので、その手前まで何もしない。
-      for (let t = 0; t < gap - 3; t += 1) sim.step(world, sameForAll(world, press({})));
+      // snot は「離す・押す」の2 tick なので、その手前まで何もしない。
+      for (let t = 0; t < gap - 2; t += 1) sim.step(world, sameForAll(world, press({})));
       snot(world, sim);
       return bombCells(world).length === 0;
     };

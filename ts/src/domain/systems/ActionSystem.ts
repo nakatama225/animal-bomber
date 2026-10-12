@@ -3,22 +3,29 @@ import { tick } from '../core/Tick.js';
 import type { SimEvent } from '../events/SimEvent.js';
 import type { PlayerInput } from '../input/PlayerInput.js';
 import type { PlayerState } from '../state/PlayerState.js';
-import { isAlive, isFrozen } from '../state/PlayerState.js';
+import { isAlive, isFrozen, justPressed } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 
 /**
  * 技のボタンを見て、動物ごとの振る舞いを始める・進める。
  *
- * ## タップととくぎを1つのボタンで分ける
+ * ## 通常技ととくぎを1つのボタンで分ける
  *
- * ボタンを増やさずに2つの技を持たせるため、押した長さで分けている。
+ * ボタンを増やさずに2つの技を持たせるため、押した瞬間と押し続けた長さで分けている
+ * （原型の humanUpdate と同じ）。
  *
- * - 押して離す … 通常技（通常技の無い動物は、チキンがあればとくぎ。原型の doAction）
- * - 押し続ける … とくぎ（動物ごとに必要な長さが違う）
+ * - 押した瞬間 … 通常技（通常技の無い動物は、チキンがあればとくぎ。原型の doAction）
+ * - 押し続けてしきい値に届いた瞬間 … とくぎ（動物ごとに必要な長さが違う。原型の doSpecial）
+ *
+ * ⚠️ とくぎを出そうと押し続けると、押した瞬間の通常技も出る（跳んでから撒く、など）。原型も同じ。
+ * 通常技がボタンを受け付けない振る舞い（`ActiveAction.blocksButtons`）を始める動物は、その振る舞いが
+ * しきい値より前に終わらない限り、押し続けてもとくぎが出ない。
  *
  * どちらが何になるかは `abilities/` の各動物が決める。
  *
- * とくぎはチキンを拾って溜めた回数ぶんだけ使える。
+ * とくぎはチキンを拾って溜めた回数ぶんだけ使える。しきい値は押し方1回につき1回だけ見る
+ * （`actionFired`）。届いた tick に出せなければ（動けない・チキンが無い・ボタンを受け付けない
+ * 振る舞いの最中）、その押し方のとくぎはそれきり。離すと数え直す。
  *
  * ## ⚠️ ラウンドの開始時に押していたボタンは、一度離すまで効かない
  *
@@ -26,37 +33,28 @@ import type { WorldState } from '../state/WorldState.js';
  * 偶然の緩衝材になっていた。ゲームパッドは次の tick で押下が戻るため、
  * ラウンドが始まって 0.5 秒でとくぎが暴発する。
  *
- * 開始時は「ロックされた」状態にしておき、**一度離したときに解除**する。
- * キーボード側も同じだけ安全になる。
+ * 開始時は、前の tick にボタンを押していた扱い（押した瞬間にならない）・とくぎは出し終えた扱い
+ * （`actionFired`）にしておく。一度離すと、どちらも元に戻る（原型の startRound と同じ）。
  *
  * ## 動けない間（泣いている・落とし穴にはまっている）は技を出さない
  *
- * 原型は押した瞬間に通常技を、しきい値に届いた瞬間にとくぎを出し、どちらも動けなければ
- * 何もせずに帰る。その押し方の分は捨てる（あとから遅れて出ない。チキンも減らない）。
- * この版は離した瞬間に通常技を出すので、次の3か所で見る。
- *
- * - 押し始めた tick に動けなければ、その押し方では通常技を出さない（`tapVoided`）
- * - しきい値に届いた tick に動けなければ、とくぎを出さない（その押し方のとくぎはそれきり）
- * - 離した tick に動けなければ、通常技を出さない
- *
- * ⚠️ 3つ目は原型と揃わない。原型は押した瞬間（動けるうち）に通常技を出し終えている。
- * この版で出すと泣いたまま技が出る（跳んで逃げる、など）ので、出さないことにした。
- * 押し始めに動けなくても、動けるようになってからしきい値に届けば、とくぎは出る（原型と同じ）。
+ * 押した瞬間・しきい値に届いた瞬間に動けなければ、何もしない。あとから遅れて出ない
+ * （チキンも減らない）。押し始めに動けなくても、動けるようになってからしきい値に届けば、
+ * とくぎは出る。どれも原型と同じ。
  *
  * ## 進めるのと始めるのを分ける
  *
- * 続いている振る舞いを進める（`advanceFor`）のと、ボタンを見て新しく始める（`watchFor`）のは
+ * 続いている振る舞いを進める（`advanceFor`）のと、ボタンを見て技を出す（`watchFor`）のは
  * 別の番にある。原型は、プレイヤーごとの効果の処理の中で技を進め、全員ぶん済ませたあとの、
- * プレイヤーごとの入力の処理（動く → 爆弾を置く → 技を始める）で技を始める。どちらの番で
+ * プレイヤーごとの入力の処理（動く → 爆弾を置く → 技を始める）で技を出す。どちらの番で
  * 呼ぶかは `Simulation` が決める。
  *
- * ⚠️ この tick に振る舞いを進めたプレイヤーは、同じ tick には新しく始めない（終わった tick でも）。
- * 原型は、技が終わったフレームのうちに次の技を始められる。1 tick の違いで、今までの形のままにしてある。
+ * 振る舞いの最中もボタンは見る。振る舞いが終わった tick のうちに押せば、次の技が出る（原型と同じ）。
  *
  * ## この System は動物の種類を知らない
  *
  * 何の技かは `Ability` が決め、始まった振る舞いは `ActiveAction` が
- * 自分で進める。ここは押した長さを数えて呼び分けるだけ。
+ * 自分で進める。ここは押し方を見て呼び分けるだけ。
  */
 export class ActionSystem {
   /**
@@ -64,16 +62,13 @@ export class ActionSystem {
    *
    * 間隔を減らすのは、入力を受け取っているプレイヤーだけ（通信対戦で入力の届いていない番は
    * 進めない。今までと同じ）。
-   *
-   * @returns 起きたイベントと、振る舞いを進めたか（進めたら、この tick は新しく始めない）
    */
-  advanceFor(world: WorldState, player: PlayerState, hasInput: boolean): { events: SimEvent[]; advanced: boolean } {
-    if (!hasInput) return { events: [], advanced: false };
+  advanceFor(world: WorldState, player: PlayerState, hasInput: boolean): SimEvent[] {
+    if (!hasInput) return [];
     if (player.abilityCooldown > 0) {
       player.abilityCooldown = tick(player.abilityCooldown - 1);
     }
-    if (player.action === null) return { events: [], advanced: false };
-    return { events: this.#advance(world, player), advanced: true };
+    return this.#advance(world, player);
   }
 
   /** 1人ぶん。技のボタンの押し方を見て、技を出す。盤面にいるプレイヤーだけ。 */
@@ -118,41 +113,38 @@ export class ActionSystem {
     return events;
   }
 
-  /** 技のボタンの押し方を見て、通常技ととくぎを呼び分ける。 */
+  /** 技のボタンの押し方を見て、通常技ととくぎを呼び分ける（原型の humanUpdate の終わり）。 */
   #watchButton(
     world: WorldState,
     player: PlayerState,
     playerInput: PlayerInput,
   ): SimEvent[] {
-    // ラウンド開始時から押しっぱなしのぶんは、離すまで数え始めない。
-    if (player.actionHeld < 0) {
-      if (!playerInput.action) player.actionHeld = tick(0);
-      return [];
+    const events: SimEvent[] = [];
+    if (justPressed(player, playerInput, 'action')) events.push(...this.#tap(world, player));
+    if (!playerInput.action) {
+      player.actionHeld = tick(0);
+      player.actionFired = false;
+      return events;
     }
+    player.actionHeld = tick(player.actionHeld + 1);
+    if (player.actionHeld >= abilityOf(player.animal).holdTicks && !player.actionFired) {
+      // ⚠️ 出せるかを見る前に立てる。出せなくても、この押し方のとくぎはそれきり。
+      player.actionFired = true;
+      if (this.#accepts(player) && player.specialCharges > 0) events.push(...this.#special(world, player));
+    }
+    return events;
+  }
 
+  /** 技のボタンが効くか。動けない間と、ボタンを受け付けない振る舞いの最中は効かない。 */
+  #accepts(player: PlayerState): boolean {
+    return !isFrozen(player) && player.action?.blocksButtons !== true;
+  }
+
+  /** 押した瞬間。通常技（原型の doAction）。 */
+  #tap(world: WorldState, player: PlayerState): SimEvent[] {
+    if (!this.#accepts(player)) return [];
     const ability = abilityOf(player.animal);
-    const frozen = isFrozen(player);
-
-    if (playerInput.action) {
-      player.actionHeld = tick(player.actionHeld + 1);
-      // 押し始めに動けなければ、この押し方では通常技を出さない（離すまで覚えておく）。
-      if (player.actionHeld === 1) player.tapVoided = frozen;
-      // 長押しがしきい値に届いた瞬間に1回だけ出す。
-      if (player.actionHeld === ability.holdTicks && player.specialCharges > 0) {
-        // 動けなければ出さない。チキンは減らさず、この押し方のとくぎはそれきり。
-        if (frozen) return [];
-        return this.#special(world, player);
-      }
-      return [];
-    }
-
-    // 離した。しきい値に届いていなければ通常技。
-    const held = player.actionHeld;
-    player.actionHeld = tick(0);
-    if (held <= 0 || held >= ability.holdTicks) return [];
-    // 動けない間に離した押し方と、動けない間に押し始めた押し方は捨てる。
-    if (frozen || player.tapVoided) return [];
-    // 通常技の無い動物は、ポン押しでもとくぎが出る（チキンがあれば。原型の doAction）。
+    // 通常技の無い動物は、押した瞬間にとくぎが出る（チキンがあれば）。
     if (ability.onTap === undefined) return player.specialCharges > 0 ? this.#special(world, player) : [];
     const cooldownBefore = player.abilityCooldown;
     const result = ability.onTap(world, player);

@@ -48,6 +48,7 @@ const CASES: readonly Case[] = [
     setup: (_w, p) => {
       p.specialCharges = 1;
       p.actionHeld = tick(Math.floor(abilityOf(p.animal).holdTicks / 2));
+      p.actionFired = false;
     },
     icons: true,
     gauge: true,
@@ -134,19 +135,33 @@ describe('プレイヤーの描画', () => {
 });
 
 describe('とくぎの溜めのゲージ', () => {
-  it('とくぎの最中は、次のとくぎが残っていてもゲージを出さない', () => {
-    // 技の最中はゲームの側がボタンを見ないので、押した長さが満タンのまま残る。
-    // 描くと、次のとくぎがもう出せるように見える。
-    const full = (withAction: boolean): Case => ({
-      name: withAction ? '突進の最中' : '溜め切った直後',
+  it('この押し方のとくぎを出し終えたら（actionFired）、押し続けていても次のとくぎが残っていてもゲージを出さない', () => {
+    // 原型も出し終えたら消す（actFired）。描くと、次のとくぎがもう出せるように見える。
+    const held = (fired: boolean): Case => ({
+      name: fired ? '出し終えた' : '溜めている途中',
       setup: (_w, p) => {
         p.specialCharges = 2;
         p.actionHeld = abilityOf(p.animal).holdTicks;
-        if (withAction) p.action = new ChargeAction(p.facing);
+        p.actionFired = fired;
       },
     });
     const rects = (c: Case): number => drawOnce('elephant', 'down', false, c).calls.get('fillRect') ?? 0;
-    expect(rects(full(false))).toBeGreaterThan(rects(full(true)));
+    expect(rects(held(false))).toBeGreaterThan(rects(held(true)));
+  });
+
+  it('振る舞いの最中でも、押していて出し終えていなければゲージを出す（最中もとくぎのボタンは効く。原型と同じ）', () => {
+    const during = (withAction: boolean): Case => ({
+      name: withAction ? '突進の最中' : '突進していない',
+      setup: (_w, p) => {
+        p.specialCharges = 1;
+        p.actionHeld = tick(10);
+        p.actionFired = false;
+        if (withAction) p.action = new ChargeAction(p.facing);
+      },
+    });
+    const gauge = (c: Case): number => drawOnce('elephant', 'down', false, c).calls.get('fillRect') ?? 0;
+    expect(gauge(during(true))).toBe(gauge(during(false)));
+    expect(gauge(during(true))).toBeGreaterThan(0);
   });
 });
 

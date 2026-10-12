@@ -133,7 +133,7 @@ export type SimEvent =
   | {
       readonly type: 'techniqueUsed';
       readonly player: PlayerId;
-      /** 長押しのとくぎか。false なら押して離す通常技。 */
+      /** 長押しのとくぎか。false なら押した瞬間の通常技。 */
       readonly special: boolean;
     }
   | {

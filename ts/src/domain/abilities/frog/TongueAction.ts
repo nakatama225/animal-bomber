@@ -107,6 +107,8 @@ export class TongueAction implements ActiveAction {
   readonly damageCap = null;
   readonly untouchable = false;
   readonly canPlaceBomb = false;
+  /** 往復し終わるまで、技のボタンは効かない（原型の doAction・doSpecial）。 */
+  readonly blocksButtons = true;
   readonly sweepsItems = false;
 
   /** 伸ばし始めたマス。押されて動いても、舌の根元はここのまま（原型も伸ばし始めのマスを覚える）。 */

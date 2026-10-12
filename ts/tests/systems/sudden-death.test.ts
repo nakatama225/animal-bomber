@@ -170,19 +170,22 @@ describe('延長戦の準備', () => {
     expect(player.action).toBeNull();
   });
 
-  it('長押しの途中で延長戦に入っても、離したときに通常技が出ない', () => {
-    // 押した長さを 0 に戻すと、長押しの途中が短い押しに化け、離した瞬間に通常技が出る。
-    // 延長戦を挟まない場合と同じく、何も起きないのが正しい。
+  it('長押しの途中で延長戦に入ると、押した長さを数え直す（原型 enterSuddenDeath）。押した瞬間にはならない', () => {
     const world = makeWorld(3, ['fox', 'rabbit']);
     const fox = world.players[0]!;
     const sim = new Simulation();
     const hold = abilityOf(fox.animal).holdTicks;
-    fox.actionHeld = tick(0);
+    advance(world, onlyFor(world, 0, press({})), 1, sim);
     advance(world, onlyFor(world, 0, press({ action: true })), hold + 10, sim);
+    expect(fox.actionFired).toBe(true);
     enterSuddenDeath(world, [0, 1], 'timeUp');
-    advance(world, onlyFor(world, 0, press({ action: true })), 10, sim);
-    const released = sim.step(world, onlyFor(world, 0, press({})));
-    expect(released.filter((e) => e.type === 'techniqueUsed')).toEqual([]);
+    expect([fox.actionHeld, fox.actionFired]).toEqual([0, false]);
+    // 押したまま、延長戦の中でチキンを拾った。しきい値ぶん押し続けると、とくぎがもう一度出る。
+    // 押した瞬間にはならないので、通常技（一列に置く）は出ない。
+    fox.specialCharges = 1;
+    const events: SimEvent[] = [];
+    for (let t = 1; t <= hold; t += 1) events.push(...sim.step(world, onlyFor(world, 0, press({ action: true }))));
+    expect(events.filter((e) => e.type === 'techniqueUsed')).toEqual([{ type: 'techniqueUsed', player: 0, special: true }]);
     expect(world.bombs).toHaveLength(0);
   });
 

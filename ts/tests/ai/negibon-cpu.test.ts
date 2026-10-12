@@ -181,6 +181,7 @@ describe('外周にいる CPU', () => {
       damageCap: null,
       untouchable: true,
       canPlaceBomb: false,
+      blocksButtons: false,
       sweepsItems: false,
       tick: () => ({ events: [], done: false }),
     };

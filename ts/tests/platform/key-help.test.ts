@@ -40,15 +40,15 @@ describe('キー配置の説明', () => {
 });
 
 describe('遊び方の説明', () => {
-  it('とくぎの長押しの長さと、通常技が無くポン押しでもとくぎが出る動物を、能力の表から出す', () => {
+  it('とくぎの長押しの長さと、通常技が無く押すとすぐとくぎが出る動物を、能力の表から出す', () => {
     const lines = describeManual().find((section) => section.title === '技ととくぎ')?.lines ?? [];
     const lineOf = (name: string): string => lines.find((line) => line.includes(name)) ?? '';
     expect(lineOf('うさぎ')).toContain('0.5 秒');
     expect(lineOf('うさぎ')).not.toContain('通常技は無く');
     expect(lineOf('ぞう')).toContain('1.5 秒');
-    // ぞうはポン押しで鼻水を吹く（原型の通常技）。
+    // ぞうは押した瞬間に鼻水を吹く（原型の通常技）。
     expect(lineOf('ぞう')).not.toContain('通常技は無く');
-    expect(lineOf('もぐら')).toContain('通常技は無く、ポン押しでもとくぎが出る');
+    expect(lineOf('もぐら')).toContain('通常技は無く、押すとすぐとくぎが出る');
   });
 });
 

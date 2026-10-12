@@ -39,12 +39,13 @@ export const MOLE: Ability = {
   /**
    * 足元に穴を掘り始める。
    *
-   * 壊せるブロックの中・すでに穴があるマス・爆弾のマスでは掘らない（`canDigAt`）。
+   * 掘っている最中・壊せるブロックの中・すでに穴があるマス・爆弾のマスでは掘らない（`canDigAt`）。
    * ⚠️ 掘らなくてもチキンは減る（呼び出し側が先に減らす）。原型も、とくぎを使った時点で
-   * 減らしてから掘れるかを見ていた。
+   * 減らしてから掘れるかを見ていた。掘っている最中に押すと、チキンだけ減って掘るのは続く。
    * 掘る音は、掘り始めたときだけ鳴らす（`digStarted`。原型の startDigPit も、掘れなければ音の手前で返る）。
    */
   onHold(world, player) {
+    if (player.action instanceof PitAction) return { action: null, events: [] };
     const cell = cellOf(player.position);
     if (!canDigAt(world, cell)) return { action: null, events: [] };
     return {

@@ -36,10 +36,15 @@ function place(player: PlayerState, cell: Cell): void {
   player.position = centerOf(cell);
 }
 
-/** 0番に技のボタンを長押しさせて、とくぎを出す（ラウンドの始まりのロックを外すため、まず離す）。 */
+/**
+ * 0番に技のボタンを長押しさせて、とくぎを出す（ラウンドの始まりの「出し終えた扱い」を外すため、まず離す）。
+ *
+ * 押した瞬間の通常技（跳躍）は、間隔の途中にして出さない。その場で撒かせる。
+ */
 function holdSpecial(world: WorldState, sim: Simulation): void {
   const player = world.players[0]!;
   player.specialCharges = 1;
+  player.abilityCooldown = tick(600);
   sim.step(world, sameForAll(world, press({})));
   for (let i = 0; i < abilityOf(player.animal).holdTicks; i += 1) {
     sim.step(world, onlyFor(world, 0, press({ action: true })));
@@ -93,7 +98,9 @@ describe('撒く順と時刻（原型 updatePoroporos）', () => {
     holdSpecial(world, sim);
     expect(rabbit.action).toBeNull();
     expect(rabbit.effects.has('scattering')).toBe(true);
+    expect(rabbit.position.x).toBe(3.5);
     advance(world, sameForAll(world, press({})), 10, sim);
+    rabbit.abilityCooldown = tick(0);
     sim.step(world, onlyFor(world, 0, press({ action: true })));
     sim.step(world, sameForAll(world, press({})));
     expect(rabbit.position.x).toBe(5.5);

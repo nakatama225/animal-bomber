@@ -39,7 +39,7 @@ import { NegibonSystem } from './NegibonSystem.js';
  * 1. プレイヤーごとに：焼けた舌を戻す → 一時的な状態の時間を減らす → 乗っ取り中の振る舞いを
  *    進める → 「勝手に設置」の拍を見る（原型の「効果タイマー」の輪）
  * 2. 外周を閉じる時刻なら閉じる。そのあとプレイヤーごとに：動く → ボタンの爆弾を置く →
- *    技を始める → 足元のアイテムを拾う（原型の「入力 / AI」の輪。外周のプレイヤーは外周を
+ *    技のボタンを見る → 足元のアイテムを拾う（原型の「入力 / AI」の輪。外周のプレイヤーは外周を
  *    動いて葱を撃つ）
  * 3. 爆弾の通り抜けを外す → 盤面の物を進める（落とし穴 → 葱 → 追いかける炎 → 撒く本体 →
  *    跳ねる爆弾の順）
@@ -83,13 +83,10 @@ export class Simulation {
     // 1. 乗っ取り中の振る舞いを先に進める。位置を決めるのがそちらなので、
     // あとから移動の入力を当てると1 tick ぶん食い違う。
     // 「勝手に設置」は、そのプレイヤーの振る舞いを進めた直後に置く（`AutobombSystem` の説明）。
-    const advanced = new Set<PlayerId>();
     for (const player of world.players) {
       events.push(...this.#actors.stepOwnedBy(world, player));
       this.#effects.advanceFor(player);
-      const result = this.#actions.advanceFor(world, player, playerInputs.has(player.id));
-      if (result.advanced) advanced.add(player.id);
-      events.push(...result.events);
+      events.push(...this.#actions.advanceFor(world, player, playerInputs.has(player.id)));
       events.push(...this.#autobomb.step(world, player));
     }
 
@@ -104,8 +101,8 @@ export class Simulation {
       if (playerInput !== undefined) {
         this.#movement.moveFor(world, player, playerInput);
         events.push(...this.#bombs.placeFor(world, player, playerInput));
-        // この tick に振る舞いを進めたプレイヤーは、新しく始めない（`ActionSystem` の説明）。
-        if (!advanced.has(player.id)) events.push(...this.#actions.watchFor(world, player, playerInput));
+        // 振る舞いの最中も見る。終わった tick のうちに押せば次の技が出る（`ActionSystem` の説明）。
+        events.push(...this.#actions.watchFor(world, player, playerInput));
       }
       events.push(...this.#items.pickUpFor(world, player));
     }

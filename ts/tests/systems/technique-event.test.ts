@@ -45,7 +45,7 @@ describe('技を使ったイベント', () => {
     expect(techniqueEvents(tapEvents(world, sim))).toEqual([]);
   });
 
-  it('とくぎが出たら、とくぎとして知らせる', () => {
+  it('とくぎが出たら、とくぎとして知らせる（押した瞬間の通常技は、とくぎではない技として先に知らせる）', () => {
     const world = makeWorld(3, ['elephant', 'rabbit']);
     world.players[0]!.specialCharges = 1;
     const sim = new Simulation();
@@ -53,6 +53,9 @@ describe('技を使ったイベント', () => {
     for (let i = 0; i < abilityOf('elephant').holdTicks; i += 1) {
       events.push(...sim.step(world, onlyFor(world, 0, press({ action: true }))));
     }
-    expect(techniqueEvents(events)).toEqual([{ type: 'techniqueUsed', player: 0, special: true }]);
+    expect(techniqueEvents(events)).toEqual([
+      { type: 'techniqueUsed', player: 0, special: false },
+      { type: 'techniqueUsed', player: 0, special: true },
+    ]);
   });
 });

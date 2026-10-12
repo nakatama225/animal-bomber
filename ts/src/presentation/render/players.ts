@@ -118,15 +118,12 @@ function drawFootprint(
  * とくぎの長押しのゲージ。溜まり切ると出るので、押している手応えを見せる。
  *
  * 出た後も押し続けると、押している長さは伸び続ける。そのままでは満タンの
- * ゲージが残るので、しきい値を越えたら消す（原型も出た後は消していた）。
+ * ゲージが残るので、この押し方のとくぎを出し終えたら（`actionFired`）消す（原型と同じ）。
+ * ラウンドの始まりに押していた押し方も、出し終えた扱いなので描かない。
  */
 function drawHoldGauge(g: CanvasRenderingContext2D, tile: number, player: PlayerState, x: number, y: number): void {
-  if (player.specialCharges <= 0 || player.actionHeld <= 0) return;
-  // ⚠️ 技の最中はゲームの側がボタンを見ないので、押した長さが満タンのまま残る。
-  // そのまま描くと、次のとくぎが出せるように見える。
-  if (player.action !== null) return;
+  if (player.specialCharges <= 0 || player.actionHeld <= 0 || player.actionFired) return;
   const hold = abilityOf(player.animal).holdTicks;
-  if (player.actionHeld > hold) return;
   const k = Math.min(1, player.actionHeld / hold);
   const width = tile * 0.62;
   const height = 3.4;

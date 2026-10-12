@@ -58,9 +58,12 @@ export interface Ability {
   readonly passesThrough?: (world: Readonly<WorldState>, cell: Cell, player: PlayerState) => boolean;
 
   /**
-   * 技のボタンを押して、長押しのしきい値に届く前に離した瞬間。通常技。
+   * 技のボタンを押した瞬間。通常技。そのまま押し続けてしきい値に届くと、とくぎも出る。
    *
-   * @returns 始まった振る舞い（無ければ null）と、起きたイベント
+   * 自分の振る舞いの最中にも呼ばれる（技のボタンを受け付けない振る舞いの間は呼ばれない。
+   * `ActiveAction.blocksButtons`）。
+   *
+   * @returns 始まった振る舞い（無ければ null。あれば今の振る舞いと差し替わる）と、起きたイベント
    */
   readonly onTap?: (
     world: WorldState,
@@ -68,11 +71,12 @@ export interface Ability {
   ) => { action: ActiveAction | null; events: SimEvent[] };
 
   /**
-   * 技のボタンを長押ししてしきい値に届いた瞬間。とくぎ。onTap を書かない動物では、押して離したときも
+   * 技のボタンを長押ししてしきい値に届いた瞬間。とくぎ。onTap を書かない動物では、押した瞬間にも
    * チキンがあればこちらを呼ぶ（原型の doAction）。
    *
    * とくぎはチキンを拾って溜めた回数ぶんだけ使える。回数の管理は
-   * 呼び出し側が行うので、ここでは効果だけを書く。
+   * 呼び出し側が行うので、ここでは効果だけを書く。自分の振る舞いの最中にも呼ばれるので、
+   * 最中にどうするか（やり直す・何もしない）もここで決める。
    */
   readonly onHold?: (
     world: WorldState,

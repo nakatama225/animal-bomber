@@ -366,6 +366,7 @@ describe('技の最中と技の出し方', () => {
       damageCap: null,
       untouchable: false,
       canPlaceBomb: options.canPlaceBomb,
+      blocksButtons: false,
       sweepsItems: false,
       tick: () => {
         left -= 1;
@@ -445,7 +446,6 @@ describe('技の最中と技の出し方', () => {
     const fox = world.players[0]!;
     const enemy = world.players[1]!;
     fox.position = centerOf({ col: 5, row: 1 });
-    fox.actionHeld = tick(0);
     fox.maxBombs = 3;
     const source = new CpuInputSource(0, CPU_LEVELS.oni, 1);
     const sim = new Simulation();
@@ -458,8 +458,8 @@ describe('技の最中と技の出し方', () => {
     enemy.maxBombs = 5;
     enemy.power = 2;
     placeBombAt(world, enemy, { col: 7, row: 1 });
-    step(); // 押す
-    step(); // 離す → 一列が出る
+    step(); // 押す → 一列が出る
+    step(); // 離す
     const mine = world.bombs.filter((bomb) => bomb.owner === 0);
     expect(mine.length).toBeGreaterThan(0);
     expect(mine.every((bomb) => bomb.cell.row === 1)).toBe(true);
@@ -477,23 +477,22 @@ describe('技の最中と技の出し方', () => {
     for (let t = 1; t <= 60 && dugAt === null; t += 1) {
       if (game.run(1).some((e) => e.type === 'techniqueUsed' && e.player === 0 && e.special)) dugAt = t;
     }
-    // ラウンドの始まりのボタンのロックが外れる tick・押す tick・離す tick。長押し（30 tick）を待たない。
-    expect(dugAt).toBe(3);
+    // ラウンドの始まりの「とくぎを出し終えた扱い」が外れる tick・押す tick（押した tick に掘り始める）。
+    // 長押し（30 tick）を待たない。
+    expect(dugAt).toBe(2);
     expect(mole.action?.kind).toBe('dig');
     expect(cellOf(mole.position)).toEqual({ col: 5, row: 7 });
   });
 
-  it('立ち止まって長押ししている途中で危なくなったら、離さずに押し続けたまま歩いて逃げる（離すと別の技に化ける）', () => {
-    // 通常技の無い動物（もぐら）は離すととくぎが、ある動物（ぞう）は離すと通常技が出る（ActionSystem）。
-    // 危なくなってから、長押しのしきい値に届く前までを見る。
-    const holdThenDanger = (animal: string): { used: number; moved: boolean } => {
+  it('立ち止まって長押ししている途中で危なくなったら、離さずに押し続けたまま歩いて逃げる（離すと、この押し方のとくぎが出ない）', () => {
+    // 押した瞬間の通常技（鼻水）は出る（ActionSystem）。危なくなってから、長押しのしきい値に届く前までを見る。
+    const holdThenDanger = (animal: string): { used: number; moved: boolean; held: number } => {
       const world = makeWorld(3, [animal, 'rabbit']);
       clearBoard(world);
       const me = world.players[0]!;
       const enemy = world.players[1]!;
       me.position = centerOf({ col: 5, row: 7 });
       enemy.position = centerOf({ col: 15, row: 7 });
-      me.actionHeld = tick(0);
       me.specialCharges = 1;
       const holdTicks = abilityOf(animal).holdTicks;
       const source = new CpuInputSource(0, CPU_LEVELS.oni, 1);
@@ -512,10 +511,10 @@ describe('技の最中と技の出し方', () => {
       placeBombAt(world, enemy, { col: 7, row: 7 });
       for (let t = 0; t < holdTicks - 15; t += 1) step();
       const now = cellOf(me.position);
-      return { used, moved: now.col !== start.col || now.row !== start.row };
+      return { used, moved: now.col !== start.col || now.row !== start.row, held: me.actionHeld };
     };
-    expect(holdThenDanger('mole')).toEqual({ used: 0, moved: true });
-    expect(holdThenDanger('elephant')).toEqual({ used: 0, moved: true });
+    const holdTicks = abilityOf('elephant').holdTicks;
+    expect(holdThenDanger('elephant')).toEqual({ used: 1, moved: true, held: holdTicks - 5 });
   });
 
   it('立ち位置の指定がある動物も、ブロックの隣しか無ければ足元に置いて壊す', () => {

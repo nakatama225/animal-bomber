@@ -57,7 +57,8 @@ describe('1 tick の中の並び（原型の update と同じ）', () => {
     place(frog, { col: 19, row: 13 });
     elephant.facing = 'down';
     elephant.specialCharges = 1;
-    elephant.actionHeld = tick(0);
+    // ラウンドの途中の、何も押していない状態にする（ラウンドの始まりは、とくぎを出し終えた扱い）。
+    elephant.actionFired = false;
     const sim = new Simulation();
     const hold = abilityOf('elephant').holdTicks;
     for (let t = 1; t <= hold; t += 1) {

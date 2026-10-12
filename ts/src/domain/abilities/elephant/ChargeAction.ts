@@ -58,7 +58,7 @@ const CARRY_LIMIT = 6;
  * 突進は移動・破壊・取得・被弾の4つに同時に割り込むが、
  * `src/domain/systems/` には「突進」という言葉が1つも無い。
  * System が見るのは `drivesMovement` `damageCap` `untouchable`
- * `canPlaceBomb` `sweepsItems` の5つの性質だけで、何の振る舞いかは知らない。
+ * `canPlaceBomb` `blocksButtons` `sweepsItems` の6つの性質だけで、何の振る舞いかは知らない。
  */
 export class ChargeAction implements ActiveAction {
   readonly kind = 'charge';
@@ -67,6 +67,12 @@ export class ChargeAction implements ActiveAction {
   /** 葱は当たらないが、爆風・追いかける炎・ほかの突進の体当たりは当たる（傷は上限で減る）。 */
   readonly untouchable = true;
   readonly canPlaceBomb = false;
+  /**
+   * 最中も技のボタンは効く。鼻水を吹け、とくぎでは突進が最初からやり直しになる（新しい突進に
+   * 差し替わり、この突進の `finish` は呼ばれないので、抱えていた悪いアイテムは撒かれずに消える。
+   * 原型の elephantCharge も抱えた物を空にして始め直す）。
+   */
+  readonly blocksButtons = false;
   /** 通り道のアイテムは自分で扱う（下の「通り道のアイテムの扱い」）。 */
   readonly sweepsItems = true;
 

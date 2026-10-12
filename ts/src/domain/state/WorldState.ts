@@ -98,19 +98,17 @@ export interface StartingBonus {
 const NO_BONUS: StartingBonus = { hp: 0, power: 0, bombs: 0 };
 
 /**
- * ラウンドの始まりの「前の tick に押していた内容」。爆弾のボタンを押していた扱いにする。
+ * ラウンドの始まりの「前の tick に押していた内容」。爆弾と技のボタンを押していた扱いにする。
  *
- * ⚠️ 何も押していない扱い（`IDLE_INPUT`）にすると、爆弾のボタンを押したままラウンドが
- * 始まったとき、最初の tick が「押した瞬間」になり、押したまま始まった人が開始位置に爆弾を置く。
- * 原型でも、決着の幕を Space で送った押下が次のラウンドの最初に届いて、同じことが起きた
- * （`legacy/test/README.md` の 11）。押したまま始まったボタンは、一度離して押し直すと効く。
+ * ⚠️ 何も押していない扱い（`IDLE_INPUT`）にすると、ボタンを押したままラウンドが
+ * 始まったとき、最初の tick が「押した瞬間」になり、押したまま始まった人が開始位置に爆弾を置く
+ * （技のボタンなら通常技を出す）。原型でも、決着の幕を Space で送った押下が次のラウンドの最初に
+ * 届いて、同じことが起きた（`legacy/test/README.md` の 11）。原型はラウンドの始まりに押した瞬間の
+ * 記録を捨てる。押したまま始まったボタンは、一度離して押し直すと効く。
  *
- * 技のボタンはここでは扱わない。技を出すかどうかは前の tick の入力ではなく、押し続けた
- * 長さ（`actionHeld`）で決まるので、下の `actionHeld` の -1 が同じ役目をする。
- * ここで技のボタンも押していた扱いにしても、変わるのは外周の葱ボンが撃つ判定だけで、
- * ラウンドの始まりに葱ボンはいない。
+ * 技のボタンの長押し（とくぎ）は、下の `actionFired` の true が止める（原型の startRound も同じ）。
  */
-const HELD_AT_ROUND_START: PlayerInput = Object.freeze({ ...IDLE_INPUT, bomb: true });
+const HELD_AT_ROUND_START: PlayerInput = Object.freeze({ ...IDLE_INPUT, bomb: true, action: true });
 
 /**
  * 各プレイヤーが始まる隅の番号。プレイヤー番号の順。
@@ -180,11 +178,10 @@ export function createWorld(config: WorldSeed): WorldState {
       effects: new EffectBag(),
       specialCharges: 0,
       action: null,
-      // ⚠️ -1 はロックの印。ラウンド開始時から押しっぱなしのボタンは、
-      // 一度離すまで技が出ない。パッドは次の tick で押下が戻るため、
-      // これが無いと開始 0.5 秒でとくぎが暴発する。
-      actionHeld: tick(-1),
-      tapVoided: false,
+      actionHeld: tick(0),
+      // ⚠️ ラウンド開始時から押しっぱなしのボタンは、一度離すまでとくぎが出ない（原型の startRound）。
+      // パッドは次の tick で押下が戻るため、これが無いと開始 0.5 秒でとくぎが暴発する。
+      actionFired: true,
       abilityCooldown: tick(0),
       autobombWait: tick(0),
       lastHitBy: null,
@@ -245,7 +242,7 @@ export function hashWorld(world: WorldState): number {
       .int(player.specialCharges)
       .text(player.action?.kind ?? '')
       .int(player.actionHeld)
-      .bool(player.tapVoided)
+      .bool(player.actionFired)
       .int(player.abilityCooldown)
       .int(player.autobombWait)
       .int(player.lastHitBy ?? -1);

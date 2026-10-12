@@ -8,7 +8,7 @@ import { IDLE_INPUT, packInput, type PlayerInput } from '../../src/domain/input/
 import { defaultMatchConfig } from '../../src/domain/rules/MatchConfig.js';
 import { SPAWN_CELLS } from '../../src/domain/rules/tuning.js';
 import { OUT } from '../../src/domain/state/Life.js';
-import type { PlayerId } from '../../src/domain/state/PlayerState.js';
+import type { PlayerId, PlayerState } from '../../src/domain/state/PlayerState.js';
 import { hashWorld } from '../../src/domain/state/WorldState.js';
 import { ConfirmedInputs, NetworkInputSource } from '../../src/net/ConfirmedInputs.js';
 import { InputLog, ReplayInputSource } from '../../src/net/InputLog.js';
@@ -177,13 +177,17 @@ describe('ロックステップ', () => {
     const { relay, peers } = startMatch(2, settings(), script);
     const [host] = peers as [Peer];
     const bombsOfHumans = (): number => host.session.world.bombs.filter((bomb) => bomb.owner <= 1).length;
+    const humans = (): PlayerState[] => [0, 1].map((id) => host.session.world.players[id]!);
+    const start = humans().map((player) => ({ ...player.position }));
 
     for (let t = 0; t < 12; t += 1) {
       runTogether(relay, peers, 1);
       expect(bombsOfHumans(), `tick ${t}`).toBe(0);
-      for (const id of [0, 1] as const) {
-        expect(host.session.world.players[id]!.actionHeld, `tick ${t} のプレイヤー ${id}`).toBe(-1);
-      }
+      // 押した瞬間にならないので通常技は出ず（跳ぶ動物も動かない）、とくぎは出し終えた扱いのまま。
+      humans().forEach((player, id) => {
+        expect(player.actionFired, `tick ${t} のプレイヤー ${id}`).toBe(true);
+        expect(player.position, `tick ${t} のプレイヤー ${id}`).toEqual(start[id]);
+      });
     }
     // 離して押し直せば置ける（入力を殺していないことの確認）。
     runTogether(relay, peers, 8);

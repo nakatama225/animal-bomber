@@ -149,16 +149,15 @@ describe('もぐら', () => {
     expect(other.effects.has('pitfall')).toBe(true);
   });
 
-  it('ポン押しでも、チキンがあれば穴を掘り始める（通常技の無い動物。原型の doAction）', () => {
-    // 原型：もぐらでチキンを持って技のボタンを押すと、その場で掘り始める。
+  it('押した瞬間に、チキンがあれば穴を掘り始める（通常技の無い動物。原型の doAction）', () => {
+    // 原型：もぐらでチキンを持って技のボタンを押すと、押したフレームに掘り始める。
     const world = worldWith('mole');
     clearBoard(world);
     const mole = world.players[0]!;
     mole.specialCharges = 1;
     const sim = new Simulation();
     sim.step(world, onlyFor(world, 0, press({})));
-    sim.step(world, onlyFor(world, 0, press({ action: true })));
-    const events = sim.step(world, onlyFor(world, 0, press({})));
+    const events = sim.step(world, onlyFor(world, 0, press({ action: true })));
     expect(mole.action?.kind).toBe('dig');
     expect(mole.specialCharges).toBe(0);
     expect(events).toContainEqual({ type: 'techniqueUsed', player: 0, special: true });
@@ -264,14 +263,18 @@ describe('かえる', () => {
     expect(world.items).toHaveLength(0);
   });
 
+  // 押した瞬間に舌が出て、舌の最中はとくぎが出ない（原型と同じ）。外周の壁を向いて押し、
+  // 舌がしきい値より前に戻るようにする（原型：壁を向いた (1,1) で 17 フレーム目に戻り、31 で投げる）。
   it('とくぎで跳ね回る爆弾が出る', () => {
     const world = worldWith('frog');
+    world.players[0]!.facing = 'up';
     hold(world, 'frog');
     expect(world.actors.some((a) => a.kind === 'slime')).toBe(true);
   });
 
   it('跳ね回ったあと爆発する', () => {
     const world = worldWith('frog');
+    world.players[0]!.facing = 'up';
     hold(world, 'frog');
     advance(world, onlyFor(world, 0, press({})), 400);
     expect(world.actors.some((a) => a.kind === 'slime')).toBe(false);

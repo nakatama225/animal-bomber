@@ -38,11 +38,11 @@ export function describeManual(): ManualSection[] {
     {
       title: '技ととくぎ',
       lines: [
-        '技のボタンをポンと押すと通常技、長押しで🍗とくぎ（チキンを拾うと使える）',
+        '技のボタンを押すと通常技、そのまま長押しで🍗とくぎ（チキンを拾うと使える。押した瞬間の通常技も出る）',
         ...ANIMAL_LOOKS.map((look) => {
           const ability = abilityOf(look.key);
-          // 通常技の無い動物は、ポン押しでもとくぎが出る（ゲームの側の決まり。ActionSystem）。
-          const tap = ability.onTap === undefined ? '（通常技は無く、ポン押しでもとくぎが出る）' : '';
+          // 通常技の無い動物は、押した瞬間にとくぎが出る（ゲームの側の決まり。ActionSystem）。
+          const tap = ability.onTap === undefined ? '（通常技は無く、押すとすぐとくぎが出る）' : '';
           return `${look.emoji}${look.name}：とくぎ「${look.special.name}」は ${seconds(ability.holdTicks)} 秒の長押し${tap}`;
         }),
         'P キーか「ポーズ」ボタンで止める（1台で遊ぶときだけ）',

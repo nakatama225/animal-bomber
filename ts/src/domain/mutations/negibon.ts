@@ -60,11 +60,9 @@ export function swapPlaces(
   shooter.hp = REVIVE_HP;
   shooter.invulnerableUntil = tick(world.now + REVIVE_INVULNERABLE);
   shooter.lastHitBy = null;
-  // ⚠️ 技のボタンは、一度離すまで効かなくする（ラウンドの開始と同じ印）。外周にいる間は
-  // 押した長さを数えていないので、倒れたときの長さが残っている。そのままだと戻った直後に
-  // 「離した」と見なされて通常技が出る。0 に戻すだけでも、葱を撃った押下を握ったまま
-  // 戻ると、離した瞬間に通常技に化ける。
-  shooter.actionHeld = tick(-1);
+  // 技のボタンの押した長さには触らない（原型の negiHit も触らない）。外周にいる間は数えないので、
+  // 倒れたときの長さが残る。押したまま戻ると、そこから数え続ける。とくぎの回数は外周へ回るときに
+  // 0 にしてあるので、拾わない限りとくぎは出ない。
 
   return [{ type: 'revived', player: shooter.id, replaced: victim.id, at: { ...at } }];
 }

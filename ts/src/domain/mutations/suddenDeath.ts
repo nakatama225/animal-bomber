@@ -81,10 +81,11 @@ function clearRoundState(player: PlayerState): void {
   for (const kind of EFFECT_KINDS) player.effects.clear(kind);
   player.action = null;
   player.specialCharges = 0;
-  // ⚠️ 技のボタンを押している長さ（`actionHeld`）には触らない。この版は離した瞬間に
-  // 通常技を出すので、0 に戻すと、長押しの途中が短い押しに化けて通常技が出てしまう。
-  // 原型は押した瞬間に出す作りで、長さを戻しても技は出なかった。触らなければ、
-  // 延長戦を挟まない場合と同じ振る舞いになる。
+  // 技のボタンの長押しは数え直す（原型の enterSuddenDeath）。押したまま延長戦に入ると、
+  // そこからしきい値ぶん押し続ければ、とくぎがもう一度出る（チキンを拾っていれば）。
+  // 前の tick の入力（`previousInput`）には触らないので、押した瞬間にはならない。
+  player.actionHeld = tick(0);
+  player.actionFired = false;
   player.abilityCooldown = tick(0);
   player.lastHitBy = null;
 }

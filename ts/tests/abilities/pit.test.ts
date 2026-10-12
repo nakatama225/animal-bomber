@@ -23,8 +23,6 @@ import { advance, clearBoard, makeWorld, onlyFor, press, sameForAll } from '../h
  * 動けるようになるのは原型 181 フレーム目・この版 180 tick 目。幅を持たせて比べる。
  */
 
-const MOLE_HOLD = abilityOf('mole').holdTicks;
-
 /** 盤面を空にした世界。0番と1番を指定の動物にし、アイテムを片付ける。 */
 function arena(animals: [string, string]): WorldState {
   const world = makeWorld(2468, animals);
@@ -33,12 +31,13 @@ function arena(animals: [string, string]): WorldState {
   return world;
 }
 
-/** 1人に技のボタンを長押しさせて、とくぎを出す（ラウンドの始まりのロックを外すため、まず離す）。 */
-function holdSpecial(world: WorldState, who: 0 | 1, sim: Simulation): void {
+/**
+ * 1人に技のボタンを押させて、とくぎを出す。もぐらは通常技が無いので、押した瞬間にとくぎが出る
+ * （原型の doAction）。押した tick で終わる（離す tick は呼んだ側が進める）。
+ */
+function pressSpecial(world: WorldState, who: 0 | 1, sim: Simulation): void {
   sim.step(world, onlyFor(world, who, press({})));
-  for (let i = 0; i < MOLE_HOLD; i += 1) {
-    sim.step(world, onlyFor(world, who, press({ action: true })));
-  }
+  sim.step(world, onlyFor(world, who, press({ action: true })));
 }
 
 function pitCells(world: WorldState): string[] {
@@ -77,9 +76,9 @@ describe('掘る（原型 startDigPit・updateDigging）', () => {
     place(rabbit, { col: 19, row: 13 });
     mole.specialCharges = 2;
     const sim = new Simulation();
-    holdSpecial(world, 0, sim);
+    pressSpecial(world, 0, sim);
     advance(world, onlyFor(world, 0, press({})), 100, sim);
-    holdSpecial(world, 0, sim);
+    pressSpecial(world, 0, sim);
     // 2回目は掘り始めない（原型も掘り始めない）。掘り終わりの確かめだけに任せると、
     // 何も生まない「掘る」で 90 tick 動けなくなる。
     expect(mole.action).toBeNull();
@@ -102,7 +101,7 @@ describe('掘る（原型 startDigPit・updateDigging）', () => {
     world.board.set({ col: 5, row: 5 }, 'soft');
     mole.specialCharges = 1;
     const sim = new Simulation();
-    holdSpecial(world, 0, sim);
+    pressSpecial(world, 0, sim);
     expect(mole.action).toBeNull();
     advance(world, onlyFor(world, 0, press({})), 100, sim);
     expect(mole.specialCharges).toBe(0);
@@ -119,7 +118,7 @@ describe('掘る（原型 startDigPit・updateDigging）', () => {
     bomb.fuse = tick(9999);
     mole.specialCharges = 1;
     const sim = new Simulation();
-    holdSpecial(world, 0, sim);
+    pressSpecial(world, 0, sim);
     expect(mole.action).toBeNull();
     advance(world, onlyFor(world, 0, press({})), 100, sim);
     expect(mole.specialCharges).toBe(0);
@@ -133,7 +132,7 @@ describe('掘る（原型 startDigPit・updateDigging）', () => {
     place(rabbit, { col: 19, row: 13 });
     mole.specialCharges = 1;
     const sim = new Simulation();
-    holdSpecial(world, 0, sim);
+    pressSpecial(world, 0, sim);
     expect(mole.action?.kind).toBe('dig');
     advance(world, onlyFor(world, 0, press({})), 30, sim);
     place(mole, { col: 7, row: 5 });
@@ -153,7 +152,7 @@ describe('掘る（原型 startDigPit・updateDigging）', () => {
       place(rabbit, { col: 19, row: 13 });
       mole.specialCharges = 1;
       const sim = new Simulation();
-      holdSpecial(world, 0, sim);
+      pressSpecial(world, 0, sim);
       expect(mole.action?.kind).toBe('dig');
       for (let t = 0; t < 100; t += 1) {
         if (t === at) {
@@ -185,7 +184,7 @@ describe('掘る（原型 startDigPit・updateDigging）', () => {
     place(rabbit, { col: 19, row: 13 });
     mole.specialCharges = 1;
     const sim = new Simulation();
-    holdSpecial(world, 0, sim);
+    pressSpecial(world, 0, sim);
     advance(world, onlyFor(world, 0, press({})), 100, sim);
     expect(pitCells(world)).toEqual(['5,5']);
   });
@@ -255,7 +254,7 @@ describe('落ちる（原型 pitfallCheck）', () => {
     m1.specialCharges = 1;
     const sim = new Simulation();
     sim.step(world, sameForAll(world, press({})));
-    for (let i = 0; i < MOLE_HOLD; i += 1) sim.step(world, sameForAll(world, press({ action: true })));
+    sim.step(world, sameForAll(world, press({ action: true })));
     expect([m0.action?.kind, m1.action?.kind]).toEqual(['dig', 'dig']);
     advance(world, sameForAll(world, press({})), 100, sim);
     expect(pitCells(world)).toEqual(['5,5']);
@@ -333,6 +332,8 @@ describe('落ちる（原型 pitfallCheck）', () => {
       place(rabbit, { col: 5, row: 5 });
       place(mole, { col: 1, row: 3 });
       rabbit.specialCharges = 1;
+      // 押した瞬間の跳躍は、間隔の途中にして出さない（その場で撒かせる）。
+      rabbit.abilityCooldown = tick(600);
       const sim = new Simulation();
       sim.step(world, sameForAll(world, press({})));
       for (let i = 0; i < abilityOf('rabbit').holdTicks; i += 1) {

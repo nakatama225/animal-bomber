@@ -30,11 +30,14 @@ const RELEASE: MacroStep = Object.freeze({
  * ゲームの側はボタンの**押し方**で意味を分けている。
  *
  * - 爆弾は「押し下げた瞬間」に1個置く。押しっぱなしでは連射しない
- * - 技のボタンは「押して離す」と通常技（通常技の無い動物は、チキンがあればとくぎ）、「押し続ける」ととくぎ
+ * - 技のボタンは「押し下げた瞬間」に通常技（通常技の無い動物は、チキンがあればとくぎ）、
+ *   「押し続けてしきい値に届いた瞬間」にとくぎ
  *
  * 人間は指で自然にこれをやるが、CPU は tick ごとに入力を返すだけなので、
  * 「1 tick 押して次の tick に離す」「90 tick 押し続けて離す」を
  * 手順として覚えておく必要がある。
+ *
+ * ⚠️ 押し続ける手順でも、押し下げた tick に通常技が出る（ゲームの側の決まり。原型の人間の操作と同じ）。
  *
  * ⚠️ どの手順も**最後に離す1 tick**で終わる。離さずに次の手順を始めると、
  * ゲームの側からは押しっぱなしに見え、2回目の爆弾が置かれない。
@@ -47,12 +50,8 @@ export class ButtonMacro {
   /** 長押し（とくぎ）の手順か。押して離すだけの手順なら false。 */
   readonly isHold: boolean;
 
-  /**
-   * @param releaseStill 最後の「離す」tick も歩かないか。押して離す技は離した tick に出るので、
-   *   その tick に歩くと、向きが変わってから技が出る（ゲームの側は動いてから技を始める）
-   */
-  private constructor(steps: readonly MacroStep[], isHold = false, releaseStill = false) {
-    this.#steps = [...steps, releaseStill ? { ...RELEASE, still: true } : RELEASE];
+  private constructor(steps: readonly MacroStep[], isHold = false) {
+    this.#steps = [...steps, RELEASE];
     this.isHold = isHold;
   }
 
@@ -64,10 +63,11 @@ export class ButtonMacro {
   /**
    * 技のボタンを軽く押して離す（通常技。通常技の無い動物では、チキンがあればとくぎ）。
    *
-   * 技は離した tick に出るので、離す tick も歩かない（原型の CPU も、技を使うフレームは歩かない）。
+   * 技は押した tick に出るので、押す tick は歩かない（原型の CPU も、技を使うフレームは歩かない。
+   * ゲームの側は動いてから技を出すので、歩くと向きが変わってから技が出る）。
    */
   static tap(): ButtonMacro {
-    return new ButtonMacro([{ ...RELEASE, action: true, still: true }], false, true);
+    return new ButtonMacro([{ ...RELEASE, action: true, still: true }]);
   }
 
   /**
@@ -92,12 +92,7 @@ export class ButtonMacro {
    * しまうので、使う側がマスの中央付近にいることを確かめてから使う。
    */
   static facing(direction: Direction, then: ButtonMacro): ButtonMacro {
-    const last = then.#steps.at(-1);
-    return new ButtonMacro(
-      [{ ...RELEASE, face: direction }, ...then.#steps.slice(0, -1)],
-      then.isHold,
-      last?.still === true,
-    );
+    return new ButtonMacro([{ ...RELEASE, face: direction }, ...then.#steps.slice(0, -1)], then.isHold);
   }
 
   /** まだ終わっていないか。 */
@@ -114,8 +109,7 @@ export class ButtonMacro {
    * 歩かない指定を外す。
    *
    * 危ないマスに立っているのに、手順のために立ち止まり続けると倒れる。
-   * 長押しを途中で離すと別の技に化ける（通常技のある動物は通常技、無い動物はとくぎ）ので、
-   * 押し続けたまま逃げる。
+   * 長押しを途中で離すと、この押し方のとくぎは出ない（チキンは残る）ので、押し続けたまま逃げる。
    */
   allowMovement(): void {
     this.#movementAllowed = true;

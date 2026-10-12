@@ -115,6 +115,8 @@ export class PitAction implements ActiveAction {
   readonly damageCap = null;
   readonly untouchable = false;
   readonly canPlaceBomb = false;
+  /** 最中も技のボタンは効くが、掘り直しはしない（`MOLE.onHold`。押すとチキンだけ減る）。 */
+  readonly blocksButtons = false;
   readonly sweepsItems = false;
 
   #remaining: Tick = DIG_TIME;

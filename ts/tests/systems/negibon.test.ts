@@ -189,6 +189,7 @@ describe('倒れたら外周へ回る', () => {
       damageCap: null,
       untouchable: false,
       canPlaceBomb: false,
+      blocksButtons: false,
       sweepsItems: false,
       tick: () => {
         ticked += 1;
@@ -241,6 +242,9 @@ describe('葱が飛ぶ', () => {
   it('外壁をすり抜けて相手に当たると、撃った側が相手の位置へ戻り、相手が外周へ回る', () => {
     const { world, shooter, target } = shootingRange(5);
     target.position = centerOf({ col: 5, row: 3 });
+    // 技のボタンを 7 tick 押したまま倒れていた。
+    shooter.actionHeld = tick(7);
+    shooter.actionFired = false;
     const events = throwAndWait(world);
 
     const revived = events.find((e) => e.type === 'revived');
@@ -250,8 +254,8 @@ describe('葱が飛ぶ', () => {
     expect(shooter.hp).toBe(REVIVE_HP);
     expect(shooter.invulnerableUntil).toBeGreaterThan(world.now);
     expect(shooter.invulnerableUntil).toBeLessThanOrEqual(world.now + REVIVE_INVULNERABLE);
-    // 戻った直後は、技のボタンを一度離すまで効かない。
-    expect(shooter.actionHeld).toBe(-1);
+    // 技のボタンの押した長さは倒れたときのまま（原型の negiHit も触らない）。
+    expect([shooter.actionHeld, shooter.actionFired]).toEqual([7, false]);
     expect(target.life.kind).toBe('negibon');
   });
 

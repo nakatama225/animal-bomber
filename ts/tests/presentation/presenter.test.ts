@@ -167,11 +167,15 @@ describe('技の途中で起きたことを、ルールの層が知らせる', (
 });
 
 describe('とくぎが空振りしたときの音（原型の useSpecial：技が出なければ、その技の音の手前で返る）', () => {
-  /** 0番のプレイヤーに長押しでとくぎを出させ、その間に鳴った音を返す。 */
+  /**
+   * 0番のプレイヤーに長押しでとくぎを出させ、その間に鳴った音を返す。押した瞬間の通常技は、
+   * 間隔の途中にして出さない（通常技の無い動物は、押した瞬間にとくぎが出る）。
+   */
   function soundsOfSpecial(world: ReturnType<typeof makeWorld>): SoundName[] {
     const { played, presenter } = recorder();
     const player = world.players[0]!;
     player.specialCharges = 1;
+    player.abilityCooldown = tick(600);
     const sim = new Simulation();
     presenter.consume(sim.step(world, sameForAll(world, press({}))), world);
     for (let i = 0; i < abilityOf(player.animal).holdTicks; i += 1) {

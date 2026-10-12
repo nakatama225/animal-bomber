@@ -166,12 +166,10 @@ describe('粘膜爆弾の跳ぶ先（原型 updateSlimes）', () => {
     for (let seed = 1; seed <= 200; seed += 1) {
       const world = makeWorld(seed, ['frog', 'rabbit']);
       const frog = world.players[0]!;
-      frog.specialCharges = 1;
       const sim = new Simulation();
       sim.step(world, sameForAll(world, press({})));
-      for (let i = 0; i < abilityOf('frog').holdTicks; i += 1) {
-        sim.step(world, onlyFor(world, 0, press({ action: true })));
-      }
+      // ボタンを通さずに投げる。長押しすると押した瞬間に舌が出て、舌の最中はとくぎが出ない。
+      abilityOf('frog').onHold!(world, frog);
       let exploded = false;
       for (let i = 0; i < 400 && !exploded; i += 1) {
         const events = sim.step(world, sameForAll(world, press({})));

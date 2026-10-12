@@ -8,13 +8,13 @@ import { Simulation } from '../src/domain/systems/Simulation.js';
  * テスト用の世界を作る。種を変えなければ何度でも同じ盤面になる。
  *
  * 前の tick の入力だけを、ラウンドの途中の状態（誰も何も押していない）にする。ラウンドの始まりは、
- * 爆弾のボタンを押していた扱いになっていて、最初の tick に押しても「押した瞬間」にならない。
- * そのままだと、押した瞬間を見るテストがどれも1 tick 待つ形になる。爆弾のボタンのラウンドの
+ * 爆弾と技のボタンを押していた扱いになっていて、最初の tick に押しても「押した瞬間」にならない。
+ * そのままだと、押した瞬間を見るテストがどれも1 tick 待つ形になる。ボタンのラウンドの
  * 始まりの扱いは `tests/systems/round.test.ts` で `createWorld` から確かめる。
  *
- * ⚠️ 技のボタンのロック（`actionHeld` の -1）は、ラウンドの始まりのまま残る。技を見るテストは、
- * まず1 tick 離してから押す（`tests/abilities/charge.test.ts` の `triggerCharge`）。技のロック
- * そのものは `charge.test.ts` の「ラウンド開始時から押していると、離すまで出ない」で確かめる。
+ * ⚠️ 技のボタンの「とくぎを出し終えた扱い」（`actionFired` の true）は、ラウンドの始まりのまま残る。
+ * 長押しのとくぎを見るテストは、まず1 tick 離してから押す（`tests/abilities/charge.test.ts` の
+ * `triggerCharge`）。そのものは `charge.test.ts` の「ラウンド開始時から押していると、離すまで出ない」で確かめる。
  */
 export function makeWorld(seed = 1234, animals: string[] = ['rabbit', 'elephant']): WorldState {
   const world = createWorld({ seed, animals, bonusOf: startingBonusOf });

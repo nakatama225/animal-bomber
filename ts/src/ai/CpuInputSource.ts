@@ -114,7 +114,7 @@ export class CpuInputSource implements InputSource {
     const memory = this.#memory;
     countDown(memory);
 
-    // 技の最中は、技のボタンを押しても効かない（ゲームの側が見ていない）。
+    // 技の最中は手順を捨てる。最中にも効くボタンはあるが、CPU は使わない。
     // 移動まで乗っ取る技なら、何もせず終わるのを待つ。
     // ⚠️ 移動を乗っ取らない技（いまの動物には無い。作り物の振る舞いで tests/ai/cpu.test.ts が確かめる）の
     // 最中は歩ける。ここで一律に待つと、危ないマスで技が終わるまで固まって倒れる。
@@ -131,21 +131,19 @@ export class CpuInputSource implements InputSource {
     const ctx = new CpuContext(world, me, here, danger, inDanger, this.#level, memory, this.#rng);
 
     // 泣いている・落とし穴にはまっている間は何もしない（原型の CPU も同じ）。押している途中の
-    // ボタンも離し、手順は捨てる。動けない間に離しても通常技は出ない（`ActionSystem` の説明）ので、
-    // 離して別の技に化けることはない。動けるようになったら考え直す。
+    // ボタンも離し、手順は捨てる。離しても技は出ない（通常技は押した瞬間に出る。`ActionSystem` の説明）。
+    // 動けるようになったら考え直す。
     if (isFrozen(me)) {
       memory.macro = null;
       return IDLE_INPUT;
     }
 
     this.#keepSafeWhileHolding(ctx);
-    // ⚠️ 技のボタンが「離されて数え直された」状態（押している長さが 0）のときだけ
-    // 技を使う。ゲームの側は押した長さが長押しのしきい値に**ちょうど届いた瞬間**に
-    // とくぎを出すので、数え直される前に押し始めるとしきい値を飛び越して不発になる。
-    // これが起きるのは2つの場面。
-    // - ラウンドの開始時。ボタンが固定されていて、一度離すまで数えられない（値が負）
-    // - 技が終わった直後。技の最中はゲームの側がボタンを見ないので、長さが残っている
-    const buttonReady = me.actionHeld === 0 && me.action === null;
+    // ⚠️ 技のボタンが「離されて数え直された」状態（押している長さが 0・とくぎを出し終えていない）の
+    // ときだけ技を使う。ゲームの側はしきい値を押し方1回につき1回しか見ないので、数え直される前に
+    // 押し始めると、とくぎが出ない。これが起きるのはラウンドの開始時（一度離すまで、とくぎは出し終えた
+    // 扱い。`actionFired`）。
+    const buttonReady = me.actionHeld === 0 && !me.actionFired && me.action === null;
     if (memory.macro === null && buttonReady) {
       memory.macro = tacticOf(me.animal).reflex?.(ctx) ?? null;
     }
@@ -191,10 +189,9 @@ export class CpuInputSource implements InputSource {
   /**
    * 立ち止まって長押ししている最中に危なくなったら、立ち止まるのをやめ、押し続けたまま逃げる。
    *
-   * 長押しを途中で打ち切る安全な手は無い。離すと、押して離す技を持つ動物はその技が、
-   * 持たない動物はとくぎが出る（`ActionSystem`）。押し続ければ、しきい値に届いた所でとくぎが出る。
+   * 離すと、この押し方のとくぎは出ない（チキンは残る）。押し続ければ、しきい値に届いた所でとくぎが出る。
    *
-   * ⚠️ 長押しのときだけ。押して離すだけの技は、次の tick に出し切る。
+   * ⚠️ 長押しのときだけ。押して離すだけの技は、押した tick に出し切る。
    * そこで歩かせると向きが変わり、技が逃げる向きへ出る（一列に並べる技なら、
    * 自分の逃げ道に爆弾を並べてしまう）。
    */
