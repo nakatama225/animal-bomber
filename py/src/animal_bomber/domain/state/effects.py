@@ -87,12 +87,24 @@ class EffectBag:
     def add(self, kind: EffectKind, duration: Tick, cap: Tick) -> None:
         """状態をかける。もうかかっていれば、残り時間に足す（`cap` で止める）。
 
-        ⚠️ 上書きではなく足す。原型は初め上書きだったので、悪い状態をいくつ踏んでも
-        1つぶんの時間で済み、「踏むコスト」が頭打ちになっていた。その結果、CPU が悪い
-        アイテムの密集した所へ平然と突っ込んだ（原型の注記）。上限が無いと復帰できなく
-        なるので、`cap` で止める。
+        うんこでかかる状態はこちら。⚠️ 上書きではなく足す（原型も 2026-08-23 から）。
+        原型が上書きだった頃は、悪い状態をいくつ踏んでも1つぶんの時間で済み、「踏む
+        コスト」が頭打ちになっていた。その結果、CPU が悪いアイテムの密集した所へ平然と
+        突っ込んだ（原型の注記）。上限が無いと復帰できなくなるので、`cap` で止める。
+        バナナとたまねぎは、原型のいまも上書き（`set`）。
         """
         self._remaining[kind] = Tick(min(self.remaining(kind) + duration, cap))
+
+    def set(self, kind: EffectKind, duration: Tick) -> None:
+        """状態をかける。もうかかっていれば、残り時間を `duration` に置き換える。
+
+        足さない。バナナ（滑る）とたまねぎ（泣く）はこちら（原型の applyItem も、残り
+        時間を代入する）。
+        """
+        if duration <= 0:
+            self._remaining.pop(kind, None)
+        else:
+            self._remaining[kind] = duration
 
     def clear(self, kind: EffectKind) -> None:
         """状態を解く。かかっていなければ何もしない。"""

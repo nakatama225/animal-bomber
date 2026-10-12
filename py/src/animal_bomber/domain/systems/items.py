@@ -169,12 +169,16 @@ def apply_item(
             player.shoes = min(MAX_SHOES, player.shoes + times)
             return []
         case ItemKind.BANANA:
-            _add_effect(player, EffectKind.SLIDE, SLIDE_SECONDS * times)
+            # 足さずに置き換える（原型の applyItem。滑っている間に拾い直すと、残りが
+            # 3 秒に戻る）。
+            slide = seconds_to_ticks(SLIDE_SECONDS * times)
+            player.effects.set(EffectKind.SLIDE, slide)
             return [EffectApplied(target=player.id, effect=EffectKind.SLIDE)]
         case ItemKind.ONION:
             # 泣いている間は滑らない。同時にかかると、どちらの動きになるか読めない。
             player.effects.clear(EffectKind.SLIDE)
-            _add_effect(player, EffectKind.STUN, STUN_SECONDS * times)
+            # 足さずに置き換える（原型の applyItem）。
+            player.effects.set(EffectKind.STUN, seconds_to_ticks(STUN_SECONDS * times))
             return [EffectApplied(target=player.id, effect=EffectKind.STUN)]
         case ItemKind.CHICKEN:
             player.special_charges += times

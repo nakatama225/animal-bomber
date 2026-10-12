@@ -27,7 +27,6 @@ from animal_bomber.domain.rules.items import (
     POOP_LIFETIME,
     POOP_STACK_LIMIT,
     POWER_UP_KINDS,
-    SLIDE_SECONDS,
     ItemKind,
 )
 from animal_bomber.domain.rules.tuning import (
@@ -111,8 +110,42 @@ class Testアイテムの効果:
         assert player.effects.has(EffectKind.STUN)
         assert events == [EffectApplied(target=0, effect=EffectKind.STUN)]
 
-    def test_悪い状態は重ねると伸びる(self) -> None:
-        """上書きだと、何個踏んでも1つぶんの時間で済み、踏むコストが頭打ちになる。"""
+    @pytest.mark.parametrize(
+        ("kind", "effect"),
+        [(ItemKind.BANANA, EffectKind.SLIDE), (ItemKind.ONION, EffectKind.STUN)],
+    )
+    def test_バナナとたまねぎは_拾い直しても足さず_残りを3秒に戻す(
+        self, kind: ItemKind, effect: EffectKind
+    ) -> None:
+        """原型の applyItem は、残り時間を代入する（足すのはうんこの状態だけ）。"""
+        world = make_world()
+        player = world.players[0]
+        apply_item(world, player, kind)
+        # 残りを減らしてから拾い直す。
+        player.effects.set(effect, Tick(100))
+        apply_item(world, player, kind)
+        assert player.effects.remaining(effect) == seconds_to_ticks(3)
+        apply_item(world, player, kind)
+        assert player.effects.remaining(effect) == seconds_to_ticks(3)
+
+    @pytest.mark.parametrize(
+        ("kind", "effect"),
+        [(ItemKind.BANANA, EffectKind.SLIDE), (ItemKind.ONION, EffectKind.STUN)],
+    )
+    def test_効果が2倍の動物は_2倍の長さに置き換える(
+        self, kind: ItemKind, effect: EffectKind
+    ) -> None:
+        world = make_world(1234, (Animal.FROG, Animal.RABBIT))
+        player = world.players[0]
+        apply_item(world, player, kind)
+        apply_item(world, player, kind)
+        assert player.effects.remaining(effect) == seconds_to_ticks(6)
+
+    def test_うんこの悪い状態は重ねると伸びる(self) -> None:
+        """上書きだと、何個踏んでも1つぶんの時間で済み、踏むコストが頭打ちになる。
+
+        原型も 2026-08-23 から足す形。
+        """
         world = make_world()
         player = world.players[0]
         _add(player, EffectKind.SLOW, 4)
@@ -128,15 +161,19 @@ class Testアイテムの効果:
             4 * POOP_STACK_LIMIT
         )
 
-    def test_アイテムを重ねて拾っても_基本の秒数の上限倍で止まる(self) -> None:
-        """拾ったときの長さと上限は、テストの `_add` でなく `apply_item` で見る。"""
+    def test_うんこを重ねて拾っても_基本の秒数の上限倍で止まる(self) -> None:
+        """拾ったときの長さと上限は、テストの `_add` でなく `apply_item` で見る。
+
+        うんこでかかる状態は乱数で決まるので、かかった状態ごとに上限を見る。
+        """
         world = make_world()
         player = world.players[0]
-        for _ in range(POOP_STACK_LIMIT + 1):
-            apply_item(world, player, ItemKind.BANANA)
-        assert player.effects.remaining(EffectKind.SLIDE) == seconds_to_ticks(
-            SLIDE_SECONDS * POOP_STACK_LIMIT
-        )
+        for _ in range(60):
+            apply_item(world, player, ItemKind.POOP)
+        for poop in POOP_EFFECTS:
+            assert player.effects.remaining(poop.kind) == seconds_to_ticks(
+                poop.seconds * POOP_STACK_LIMIT
+            ), poop.kind
 
     def test_かけた長さの_tick_が過ぎると切れる(self) -> None:
         world = make_world()
