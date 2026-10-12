@@ -1,4 +1,4 @@
-import { DIRECTIONS, sameCell, step, type Cell } from '../core/Coord.js';
+import { SCAN_ORDER, sameCell, step, type Cell } from '../core/Coord.js';
 import { itemDefinition } from '../rules/items.js';
 import type { PlayerState } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
@@ -44,6 +44,9 @@ export interface PathOptions {
  * 重みの無いグラフでは、幅優先で最初に見つかった経路が最短になる。
  * 重みを扱う探索（ダイクストラ法や A*）は、ここでは複雑さに見合わない。
  *
+ * 隣のマスは原型の bfsPath と同じ右・左・下・上の順（`SCAN_ORDER`）で調べる。同じ長さの経路が
+ * いくつもあるとき、どれを返すかはこの順で決まる。
+ *
  * @param goal そのマスが目的地か。出発点そのものは調べない
  * @returns 出発点の次のマスから目的地までの並び。見つからなければ null
  */
@@ -74,7 +77,7 @@ export function findPath(
     }
     if (current.distance >= options.maxDistance) continue;
 
-    for (const direction of DIRECTIONS) {
+    for (const direction of SCAN_ORDER) {
       const next = step(current.cell, direction);
       if (!world.board.inBounds(next)) continue;
       const index = indexOf(next);

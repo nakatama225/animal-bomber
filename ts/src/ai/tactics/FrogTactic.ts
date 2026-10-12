@@ -2,12 +2,10 @@ import { sameCell, step } from '../../domain/core/Coord.js';
 import { tongueReachOf } from '../../domain/abilities/frog/TongueAction.js';
 import { bombAt } from '../../domain/query/BoardQuery.js';
 import { itemDefinition } from '../../domain/rules/items.js';
-import { holdSpecial } from '../BombPlacement.js';
-import { ButtonMacro } from '../ButtonMacro.js';
 import type { CpuContext } from '../CpuContext.js';
 import type { AnimalTactic } from './AnimalTactic.js';
 
-/** 跳ね回る爆弾を投げる相手までの距離（歩ける経路のマス数）。 */
+/** 跳ね回る爆弾を投げる相手までの距離（歩ける経路のマス数。原型 cpuUpdate の `foePathDist(p,tx,ty,9)<=8`）。 */
 const SLIME_RANGE = 8;
 
 /**
@@ -16,20 +14,26 @@ const SLIME_RANGE = 8;
  * 通常技の舌で、正面の遠くにあるアイテムを引き寄せる。とくぎは
  * 投げっぱなしの爆弾なので、相手がほどよく近いときに投げる。
  *
+ * - 舌はチキンを持っていないときだけ伸ばす（原型 cpuUpdate の `!p.chicken`）。舌を伸ばした tick は、
+ *   ほかに何もしない（原型もそのまま帰る）
+ * - とくぎは、歩いて爆弾を置いたあとに見る。原型の CPU は useSpecial を直に呼ぶので、
+ *   とくぎを直に出すボタンで出す（舌は出ない）
+ *
  * ⚠️ 舌は良いものも悪いものも区別なく掴み、かえるは効果が2倍になる。
  * 手前に悪いアイテムがあれば伸ばさない。
  */
 export const FROG_TACTIC: AnimalTactic = {
   animal: 'frog',
 
-  reflex(ctx) {
-    if (ctx.inDanger) return null;
-    if (goodItemAhead(ctx)) return ButtonMacro.tap();
+  beforePlan: {
+    button: 'action',
+    endsTurn: true,
+    when: (ctx) => !ctx.inDanger && ctx.me.specialCharges <= 0 && goodItemAhead(ctx),
+  },
 
-    if (ctx.me.specialCharges <= 0) return null;
-    if (ctx.foePathDistance(SLIME_RANGE + 1) > SLIME_RANGE) return null;
-    if (!ctx.skillReady()) return null;
-    return holdSpecial(ctx, false);
+  afterMove(ctx) {
+    if (ctx.me.specialCharges <= 0 || ctx.inDanger) return false;
+    return ctx.foePathDistance(SLIME_RANGE + 1) <= SLIME_RANGE && ctx.skillReady();
   },
 };
 

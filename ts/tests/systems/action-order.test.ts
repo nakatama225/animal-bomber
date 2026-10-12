@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import { startingBonusOf } from '../../src/app/GameSession.js';
-import { ButtonMacro } from '../../src/ai/ButtonMacro.js';
 import { CPU_LEVELS } from '../../src/ai/CpuLevel.js';
 import { CpuInputSource } from '../../src/ai/CpuInputSource.js';
 import type { CpuMemory } from '../../src/ai/CpuMemory.js';
@@ -427,22 +426,26 @@ describe('技を進める・勝手に設置・技を始める、の順（原型 
 
 describe('CPU は泣いている・はまっている間は何もしない（原型 cpuUpdate の isFrozen）', () => {
   for (const effect of ['stun', 'pitfall'] as const) {
-    it(`長押しの途中で${effect === 'stun' ? '泣く' : 'はまる'}と、ボタンを離して手順を捨てる`, () => {
+    it(`${effect === 'stun' ? '泣いている' : 'はまっている'}間は何も押さず、考え直しもしない。動けるようになれば押す`, () => {
+      // 射線に相手がいて、とくぎも使える場面。動けない間は、爆弾もとくぎも押さず、計画も立てない。
       const world = arena(['rabbit', 'frog']);
       const [rabbit, frog] = world.players as [PlayerState, PlayerState];
       place(rabbit, { col: 5, row: 5 });
-      place(frog, { col: 19, row: 13 });
+      place(frog, { col: 7, row: 5 });
+      rabbit.specialCharges = 1;
+      rabbit.effects.add(effect, tick(30), tick(30));
       const source = new CpuInputSource(0, CPU_LEVELS.oni, 1);
       const sim = new Simulation();
-      sim.step(world, new Map([[0, source.next(world)], [1, IDLE_INPUT]]));
-      const memory = source.memory as CpuMemory;
-      memory.macro = ButtonMacro.hold(abilityOf('rabbit').holdTicks, true);
-      sim.step(world, new Map([[0, source.next(world)], [1, IDLE_INPUT]]));
-      expect(rabbit.actionHeld).toBeGreaterThan(0);
-
-      rabbit.effects.add(effect, tick(120), tick(120));
-      expect(source.next(world)).toEqual(IDLE_INPUT);
-      expect(source.memory.macro).toBeNull();
+      const inputs = [];
+      for (let t = 0; t < 30; t += 1) {
+        const input = source.next(world);
+        inputs.push(input);
+        sim.step(world, new Map([[0, input], [1, IDLE_INPUT]]));
+      }
+      expect(inputs).toEqual(inputs.map(() => IDLE_INPUT));
+      expect((source.memory as CpuMemory).mode).toBe('idle');
+      const after = source.next(world);
+      expect(after.bomb || after.special).toBe(true);
     });
   }
 });

@@ -1,25 +1,32 @@
 import { cellOf, type Direction } from '../domain/core/Coord.js';
 import { Rng } from '../domain/core/Rng.js';
-import { secondsToTicks } from '../domain/core/Tick.js';
+import { secondsToTicks, TICKS_PER_SECOND } from '../domain/core/Tick.js';
 import type { InputSource } from '../domain/input/InputSource.js';
 import { IDLE_INPUT, type PlayerInput } from '../domain/input/PlayerInput.js';
-import { isSolidFor, playerById } from '../domain/query/BoardQuery.js';
+import { playerById } from '../domain/query/BoardQuery.js';
 import { DangerMap } from '../domain/query/DangerMap.js';
-import { cellsTouchedBy } from '../domain/query/Hitbox.js';
 import type { PlayerId, PlayerState } from '../domain/state/PlayerState.js';
 import { isAlive, isFrozen } from '../domain/state/PlayerState.js';
 import type { WorldState } from '../domain/state/WorldState.js';
-import { decideBomb, footBomb } from './BombPlacement.js';
-import type { MacroStep } from './ButtonMacro.js';
+import { decideBomb } from './BombPlacement.js';
 import { decide, type CpuBehavior } from './CpuBehavior.js';
 import { CpuContext } from './CpuContext.js';
 import type { CpuLevel } from './CpuLevel.js';
 import { freshMemory, type CpuMemory } from './CpuMemory.js';
-import { BLIND_MIN_SECONDS, BLIND_SPREAD_SECONDS, SHARP_THINK } from './margins.js';
+import type { CpuButton } from './CpuPlan.js';
+import { BLIND_MIN_SECONDS, BLIND_SPREAD_SECONDS, NOTICE_WITHIN, SHARP_THINK_SECONDS } from './margins.js';
 import { compensateReverse, directionAlong } from './PathFollower.js';
 import { DEFAULT_CHAIN } from './behaviors/DefaultChain.js';
 import { NegibonPilot } from './NegibonPilot.js';
 import { tacticOf } from './tactics/registry.js';
+
+/** この tick に押すもの。向きは行きたい向き（反転を打ち消す前）。 */
+interface Intent {
+  readonly direction: Direction | null;
+  readonly buttons: readonly CpuButton[];
+}
+
+const NOTHING: Intent = Object.freeze({ direction: null, buttons: [] });
 
 /**
  * CPU の操作の出どころ。
@@ -27,13 +34,24 @@ import { tacticOf } from './tactics/registry.js';
  * キーボードやゲームパッドと同じく、1 tick ごとに `PlayerInput` を返すだけ。
  * ゲーム本体からは人間と区別がつかない。
  *
- * ## 1 tick の流れ
+ * ## 1 tick の流れ（原型 cpuUpdate と同じ順）
  *
- * 1. 危険の地図を作り、いま立っているマスが危ないかを見る
- * 2. 動物ごとの戦い方に、技を使う機会があるかを聞く
- * 3. 判断の間隔が来ていれば、規則の連鎖で次の計画を決める
- * 4. 爆弾を置きたい計画なら、逃げ切れるかを確かめて置く
- * 5. 計画の経路を、押す向きに変える
+ * 1. 考え直すまでの間隔・爆弾を控える残り・とくぎの抽選の待ちを1つ減らす
+ * 2. 危険の地図を作り、立っているマス（体の中心のマス）が危ないかを見る。弱い CPU は見落とす
+ * 3. 泣いている・はまっている間は何もしない。移動を乗っ取る振る舞いの最中は、戦い方が考え続けると
+ *    言わない限り何もしない（原型は、穴を掘る・舌を伸ばす間は待ち、体当たりで走る技の最中は考え続ける）
+ * 4. 考える前の技（戦い方の `beforePlan`）。使った tick に何もしない技なら、ここで返す
+ * 5. 危なくなったのに逃げていない、逃げ先が危なくなった、なら間隔を待たずに考え直す。間隔が来ていれば考え直す
+ * 6. 滑っている間は、歩かず、爆弾も置かず、歩いたあとの技も無い（原型は滑って帰る）
+ * 7. 経路を1歩。爆弾を置きたい計画なら、逃げ切れるかを確かめて置く。最後に歩いたあとの技（戦い方の `afterMove`）
+ *
+ * どれも、tick の始めの盤面を見て決める。ゲームの側は、この入力を 動く → 爆弾 → 技 の順で効かせるので、
+ * 原型の CPU が1フレームの中で 歩く → 置く → とくぎ と呼んでいたのと同じ順になる。
+ *
+ * ## ⚠️ 押した瞬間でしか効かない
+ *
+ * ゲームの側はボタンを「前の tick は押していない」ときだけ押したと読む。前の tick に押したボタンは、
+ * この tick には押さない（原型の CPU は続くフレームで関数を呼べたが、そうなる場面はほとんど無い）。
  *
  * ## ⚠️ 乱数は CPU 専用のものを持つ
  *
@@ -111,56 +129,43 @@ export class CpuInputSource implements InputSource {
       this.#memory = freshMemory(this.#rng);
     }
 
+    countDown(this.#memory);
+    return compose(me, this.#decide(world, me));
+  }
+
+  /** 原型 cpuUpdate の本体。この tick に押すものを決める。 */
+  #decide(world: Readonly<WorldState>, me: PlayerState): Intent {
     const memory = this.#memory;
-    countDown(memory);
-
-    // 技の最中は手順を捨てる。最中にも効くボタンはあるが、CPU は使わない。
-    // 移動まで乗っ取る技なら、何もせず終わるのを待つ。
-    // ⚠️ 移動を乗っ取らない技（いまの動物には無い。作り物の振る舞いで tests/ai/cpu.test.ts が確かめる）の
-    // 最中は歩ける。ここで一律に待つと、危ないマスで技が終わるまで固まって倒れる。
-    if (me.action !== null) {
-      memory.macro = null;
-      if (me.action.drivesMovement) return IDLE_INPUT;
-    }
-
     const here = cellOf(me.position);
     const danger = DangerMap.of(world);
-    // 立っているマスだけでなく、体がはみ出している隣のマスも見る。
-    const touching = cellsTouchedBy(me.position);
-    const inDanger = this.#noticeDanger(touching.some((cell) => !danger.isSafe(cell)));
+    const inDanger = this.#noticeDanger(danger.at(here) < NOTICE_WITHIN);
+
+    // 泣いている・はまっている間は何もしない（原型の CPU も同じ）。
+    if (isFrozen(me)) return NOTHING;
+    const tactic = tacticOf(me.animal);
+    if (me.action?.drivesMovement === true && tactic.thinksDuringAction !== true) return NOTHING;
+
     const ctx = new CpuContext(world, me, here, danger, inDanger, this.#level, memory, this.#rng);
-
-    // 泣いている・落とし穴にはまっている間は何もしない（原型の CPU も同じ）。押している途中の
-    // ボタンも離し、手順は捨てる。離しても技は出ない（通常技は押した瞬間に出る。`ActionSystem` の説明）。
-    // 動けるようになったら考え直す。
-    if (isFrozen(me)) {
-      memory.macro = null;
-      return IDLE_INPUT;
-    }
-
-    this.#keepSafeWhileHolding(ctx);
-    // ⚠️ 技のボタンが「離されて数え直された」状態（押している長さが 0・とくぎを出し終えていない）の
-    // ときだけ技を使う。ゲームの側はしきい値を押し方1回につき1回しか見ないので、数え直される前に
-    // 押し始めると、とくぎが出ない。これが起きるのはラウンドの開始時（一度離すまで、とくぎは出し終えた
-    // 扱い。`actionFired`）。
-    const buttonReady = me.actionHeld === 0 && !me.actionFired && me.action === null;
-    if (memory.macro === null && buttonReady) {
-      memory.macro = tacticOf(me.animal).reflex?.(ctx) ?? null;
-    }
+    const early = tactic.beforePlan;
+    const usedEarly = early !== undefined && ctx.canPress(early.button) && early.when(ctx);
+    if (usedEarly && early.endsTurn) return { direction: null, buttons: [early.button] };
 
     this.#replanIfNeeded(ctx);
 
-    // 技の最中に置けるかは、その技が決める。
-    const canPlaceNow = me.action === null || me.action.canPlaceBomb;
-    if (memory.macro === null && canPlaceNow) {
-      const options =
-        (buttonReady ? tacticOf(me.animal).bombOptions?.(ctx) : undefined) ?? [footBomb(ctx)];
-      memory.macro = decideBomb(ctx, options);
-    }
+    // 滑っている間は操作が効かない。原型の CPU は滑らせて、そのフレームを終える。
+    const buttons: CpuButton[] = usedEarly ? [early.button] : [];
+    if (me.effects.has('slide')) return { direction: null, buttons };
 
-    const step = takeStep(memory);
-    const walk = step?.still === true ? null : directionAlong(me, memory.path);
-    return compose(me, step, step?.face ?? walk);
+    // 経路を1歩。着いたマスはここで並びから消える。
+    const walk = directionAlong(me, memory.path);
+    // 考える前の技を使った tick は、歩かず・置かず・歩いたあとの技も使わない（その技が移動を乗っ取り、
+    // 置けなくする。原型も、そのフレームは歩けず置けない）。
+    if (usedEarly) return { direction: null, buttons };
+
+    const placing = decideBomb(ctx, walk ?? me.facing);
+    if (placing !== null) buttons.push(placing);
+    if (tactic.afterMove !== undefined && ctx.canPress('special') && tactic.afterMove(ctx)) buttons.push('special');
+    return { direction: walk, buttons };
   }
 
   /**
@@ -187,61 +192,28 @@ export class CpuInputSource implements InputSource {
   }
 
   /**
-   * 立ち止まって長押ししている最中に危なくなったら、立ち止まるのをやめ、押し続けたまま逃げる。
+   * 間隔が来ていれば、次の計画を決める（原型 cpuUpdate の「考え直し」）。
    *
-   * 離すと、この押し方のとくぎは出ない（チキンは残る）。押し続ければ、しきい値に届いた所でとくぎが出る。
-   *
-   * ⚠️ 長押しのときだけ。押して離すだけの技は、押した tick に出し切る。
-   * そこで歩かせると向きが変わり、技が逃げる向きへ出る（一列に並べる技なら、
-   * 自分の逃げ道に爆弾を並べてしまう）。
+   * 危なくなったのにまだ逃げていない、または逃げている先が危なくなったなら、間隔を待たずに考え直す。
    */
-  #keepSafeWhileHolding(ctx: CpuContext): void {
-    const macro = ctx.memory.macro;
-    if (macro === null || !macro.isHold || !ctx.inDanger || !macro.holdsStill) return;
-    macro.allowMovement();
-  }
-
-  /** 判断の間隔が来ていれば、次の計画を決める。 */
   #replanIfNeeded(ctx: CpuContext): void {
     const memory = ctx.memory;
-    if (ctx.inDanger) {
-      if (memory.mode !== 'flee' || !fleeStillWorks(ctx)) {
-        // 危なくなったのに逃げていない、または逃げ道が使えなくなった。すぐ考え直す。
-        memory.thinkIn = 0;
-      } else {
-        // ⚠️ 逃げ道が使えるうちは考え直さない。マスの境目に立っていると、
-        // どちらのマスから探すかで逃げ道が入れ替わり、1 tick ごとに
-        // 向きが反転して逃げ遅れる。決めた逃げ道を最後まで使う。
-        return;
-      }
+    if (ctx.inDanger && memory.mode !== 'flee') memory.thinkIn = 0;
+    const goal = memory.path[memory.path.length - 1];
+    if (ctx.inDanger && memory.mode === 'flee' && goal !== undefined && !ctx.danger.isSafe(goal)) {
+      memory.thinkIn = 0;
     }
     if (memory.thinkIn > 0) return;
 
     // 危ないときだけ判断を詰める強さもある。ふだんは表の間隔のまま。
-    const base = ctx.inDanger && ctx.level.sharp ? SHARP_THINK : ctx.level.thinkInterval;
-    memory.thinkIn = Math.max(1, Math.round(base * (1 + memory.jitter)));
+    const seconds = ctx.inDanger && ctx.level.sharp ? SHARP_THINK_SECONDS : ctx.level.thinkSeconds;
+    memory.thinkIn = Math.max(1, Math.ceil(seconds * (1 + memory.jitter) * TICKS_PER_SECOND));
 
     const plan = decide(this.#chain, ctx);
     memory.mode = plan.mode;
     memory.path = [...plan.path];
     memory.wantBomb = plan.wantBomb;
   }
-}
-
-/**
- * いま持っている逃げ道が、まだ使えるか。
- *
- * 行き先がまだ安全で、次の一歩が塞がれていなければ使える。
- * 行き先が空なら、立っているマスが安全で中央へ寄っている最中なので使える。
- */
-function fleeStillWorks(ctx: CpuContext): boolean {
-  const path = ctx.memory.path;
-  const goal = path[path.length - 1];
-  if (goal === undefined) return ctx.danger.isSafe(ctx.here);
-  if (!ctx.danger.isSafe(goal)) return false;
-  const next = path[0];
-  if (next === undefined) return false;
-  return !isSolidFor(ctx.world, next, ctx.me, ctx.passesThrough);
 }
 
 /** 試合の種とプレイヤー番号から、CPU の判断に使う乱数の種を作る。 */
@@ -257,25 +229,21 @@ function countDown(memory: CpuMemory): void {
   if (memory.skillCool > 0) memory.skillCool -= 1;
 }
 
-/** 進行中のボタン操作から、この tick のぶんを取り出す。終わったら片付ける。 */
-function takeStep(memory: CpuMemory): MacroStep | null {
-  const macro = memory.macro;
-  if (macro === null) return null;
-  const step = macro.next();
-  if (!macro.running) memory.macro = null;
-  return step;
-}
-
-/** ボタンと向きを1つの入力にまとめる。 */
-function compose(me: PlayerState, step: MacroStep | null, direction: Direction | null): PlayerInput {
-  const pressed = direction === null ? null : compensateReverse(me, direction);
+/**
+ * 押すものを1つの入力にまとめる。
+ *
+ * 向きは、反転がかかっていれば逆にしておく（`compensateReverse`）。押さないボタンは離す。
+ * 前の tick に押したボタンは、決める側（`CpuContext.canPress`）がこの tick に選ばない。
+ */
+function compose(me: PlayerState, intent: Intent): PlayerInput {
+  const pressed = intent.direction === null ? null : compensateReverse(me, intent.direction);
   return {
     up: pressed === 'up',
     down: pressed === 'down',
     left: pressed === 'left',
     right: pressed === 'right',
-    bomb: step?.bomb ?? false,
-    action: step?.action ?? false,
-    special: false,
+    bomb: intent.buttons.includes('bomb'),
+    action: intent.buttons.includes('action'),
+    special: intent.buttons.includes('special'),
   };
 }

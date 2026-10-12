@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { footBomb, decideBomb } from '../../src/ai/BombPlacement.js';
-import { ButtonMacro } from '../../src/ai/ButtonMacro.js';
+import { decideBomb } from '../../src/ai/BombPlacement.js';
 import type { CpuBehavior } from '../../src/ai/CpuBehavior.js';
 import { CpuContext } from '../../src/ai/CpuContext.js';
 import { CpuInputSource, cpuSeed } from '../../src/ai/CpuInputSource.js';
 import { CPU_LEVELS, type CpuLevelKey } from '../../src/ai/CpuLevel.js';
-import { freshMemory, type CpuMemory } from '../../src/ai/CpuMemory.js';
+import { freshMemory } from '../../src/ai/CpuMemory.js';
+import { BREAK_BLOCKS } from '../../src/ai/behaviors/BreakBlocks.js';
 import { DEFAULT_CHAIN } from '../../src/ai/behaviors/DefaultChain.js';
 import { FLEE } from '../../src/ai/behaviors/Flee.js';
 import { OUT_OF_BOMBS_BAN, SAME_SPOT_BAN, UNSAFE_SPOT_BAN } from '../../src/ai/margins.js';
@@ -15,7 +15,6 @@ import { FOX_TACTIC } from '../../src/ai/tactics/FoxTactic.js';
 import { FROG_TACTIC } from '../../src/ai/tactics/FrogTactic.js';
 import { BurntTongueActor } from '../../src/domain/abilities/frog/TongueAction.js';
 import type { ActiveAction } from '../../src/domain/abilities/ActiveAction.js';
-import { abilityOf } from '../../src/domain/abilities/registry.js';
 import { cellOf, centerOf, type Cell } from '../../src/domain/core/Coord.js';
 import { Rng } from '../../src/domain/core/Rng.js';
 import { secondsToTicks, tick } from '../../src/domain/core/Tick.js';
@@ -28,7 +27,7 @@ import { DangerMap } from '../../src/domain/query/DangerMap.js';
 import { findPath } from '../../src/domain/query/PathFinder.js';
 import { itemEffectTicks } from '../../src/domain/rules/items.js';
 import { BLAST_DURATION, BOMB_FUSE } from '../../src/domain/rules/tuning.js';
-import { isAlive, type PlayerId, type PlayerState } from '../../src/domain/state/PlayerState.js';
+import type { PlayerId, PlayerState } from '../../src/domain/state/PlayerState.js';
 import { hashWorld, type WorldState } from '../../src/domain/state/WorldState.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
 import { clearBoard, makeWorld } from '../helpers.js';
@@ -111,13 +110,20 @@ describe('CPU は入力を返すだけ', () => {
 
 describe('身を守る', () => {
   it('足元に置かれた爆弾から逃げ切る', () => {
+    // 爆発する tick に、爆風の届かないマスに立っている。
+    // ⚠️ 爆発のあとまでは見ない。手持ちが戻ると、まだ燃えているマスの先へ逃げる前提で次を置くことがある
+    // （原型の canEscapeAfterBomb も、逃げ道が燃えているかは見ない）。
     const world = makeWorld(3, ['rabbit', 'elephant']);
     const cpu = world.players[0]!;
     const game = arena(world, [{ id: 0, level: 'hard' }]);
-    placeBomb(world, cpu);
+    const bomb = placeBomb(world, cpu)!;
     const hp = cpu.hp;
-    game.run(BOMB_FUSE + BLAST_DURATION + 10);
-    expect(isAlive(cpu)).toBe(true);
+    const reach = DangerMap.of(world);
+    game.run(BOMB_FUSE - 1);
+    expect(world.bombs).toContain(bomb);
+    expect(reach.isSafe(cellOf(cpu.position))).toBe(true);
+    const events = game.run(2);
+    expect(events.some((e) => e.type === 'exploded')).toBe(true);
     expect(cpu.hp).toBe(hp);
   });
 
@@ -183,15 +189,23 @@ describe('攻める', () => {
     expect(events.filter((e) => e.type === 'bombPlaced' && e.owner === 0)).toHaveLength(0);
   });
 
-  it('とくぎは、人間と同じく長押しで出す', () => {
+  it('とくぎは、原型の CPU と同じく直に出す（長押しを待たず、押した瞬間の通常技も出ない）', () => {
+    // 原型の CPU は useSpecial を直に呼ぶ。うさぎなら跳ばずに、その場で撒く。
     const world = makeWorld(3, ['rabbit', 'elephant']);
     clearBoard(world);
     const cpu = world.players[0]!;
     cpu.specialCharges = 1;
     world.players[1]!.position = centerOf({ col: 4, row: 1 });
     const game = arena(world, [{ id: 0, level: 'hard' }]);
-    game.run(abilityOf('rabbit').holdTicks + 5);
+    const start = cellOf(cpu.position);
+    let usedAt: number | null = null;
+    for (let t = 1; t <= 10 && usedAt === null; t += 1) {
+      if (game.run(1).some((e) => e.type === 'techniqueUsed' && e.player === 0)) usedAt = t;
+    }
+    expect(usedAt).toBe(1);
     expect(cpu.specialCharges).toBe(0);
+    expect(cpu.effects.has('scattering')).toBe(true);
+    expect(cellOf(cpu.position)).toEqual(start);
   });
 });
 
@@ -210,7 +224,7 @@ describe('爆弾を置いてよいかの判断', () => {
     const world = makeWorld(3);
     clearBoard(world);
     const { ctx } = context(world);
-    expect(decideBomb(ctx, [footBomb(ctx)])).not.toBeNull();
+    expect(decideBomb(ctx, 'down')).toBe('bomb');
   });
 
   it('逃げ切れないなら置かず、しばらく爆弾を狙わない', () => {
@@ -219,7 +233,7 @@ describe('爆弾を置いてよいかの判断', () => {
     world.board.set({ col: 2, row: 1 }, 'soft');
     world.board.set({ col: 1, row: 2 }, 'soft');
     const { ctx, memory } = context(world);
-    expect(decideBomb(ctx, [footBomb(ctx)])).toBeNull();
+    expect(decideBomb(ctx, 'down')).toBeNull();
     expect(memory.bombBan).toBe(UNSAFE_SPOT_BAN);
   });
 
@@ -229,7 +243,7 @@ describe('爆弾を置いてよいかの判断', () => {
     clearBoard(world);
     const { ctx, memory } = context(world);
     memory.lastBomb = { cell: { col: 1, row: 1 }, at: tick(world.now - SAME_SPOT_BAN + 1) };
-    expect(decideBomb(ctx, [footBomb(ctx)])).toBeNull();
+    expect(decideBomb(ctx, 'down')).toBeNull();
     expect(memory.bombBan).toBe(UNSAFE_SPOT_BAN);
   });
 
@@ -238,7 +252,16 @@ describe('爆弾を置いてよいかの判断', () => {
     clearBoard(world);
     const { ctx, memory } = context(world);
     memory.lastBomb = { cell: { col: 1, row: 1 }, at: tick(world.now - SAME_SPOT_BAN) };
-    expect(decideBomb(ctx, [footBomb(ctx)])).not.toBeNull();
+    expect(decideBomb(ctx, 'down')).toBe('bomb');
+  });
+
+  it('前の tick に爆弾のボタンを押していたら、この tick は何も決めずに待つ（押した瞬間でしか効かない）', () => {
+    const world = makeWorld(3);
+    clearBoard(world);
+    world.players[0]!.previousInput = { ...IDLE_INPUT, bomb: true };
+    const { ctx, memory } = context(world);
+    expect(decideBomb(ctx, 'down')).toBeNull();
+    expect([memory.wantBomb, memory.bombBan, memory.lastBomb]).toEqual([true, 0, null]);
   });
 
   it('爆弾おけないだけなら置かず、「勝手に設置」が重なっている間は置く（ゲームの側の canPlaceBomb と同じ）', () => {
@@ -250,10 +273,10 @@ describe('爆弾を置いてよいかの判断', () => {
       world.players[0]!.effects.add('nobomb', itemEffectTicks(6), itemEffectTicks(18));
       if (withAutobomb) world.players[0]!.effects.add('autobomb', itemEffectTicks(4), itemEffectTicks(12));
       const { ctx } = context(world);
-      return decideBomb(ctx, [footBomb(ctx)]);
+      return decideBomb(ctx, 'down');
     };
     expect(decide(false)).toBeNull();
-    expect(decide(true)).not.toBeNull();
+    expect(decide(true)).toBe('bomb');
   });
 
   it('自分の爆弾が多すぎるときは、短く待つだけにする', () => {
@@ -263,38 +286,27 @@ describe('爆弾を置いてよいかの判断', () => {
     me.maxBombs = 10;
     for (const col of [9, 11, 13]) placeBombAt(world, me, { col, row: 9 });
     const { ctx, memory } = context(world);
-    expect(decideBomb(ctx, [footBomb(ctx)])).toBeNull();
+    expect(decideBomb(ctx, 'down')).toBeNull();
     expect(memory.bombBan).toBe(OUT_OF_BOMBS_BAN);
   });
 });
 
-describe('ボタンの押し方の手順', () => {
-  function drain(macro: ButtonMacro) {
-    const steps = [];
-    for (let step = macro.next(); step !== null; step = macro.next()) steps.push(step);
-    return steps;
-  }
-
-  it('爆弾は1 tick 押して、次の tick に離す', () => {
-    // 押しっぱなしにすると、ゲームの側からは押し下げた瞬間が1回しか無い。
-    const steps = drain(ButtonMacro.dropBomb());
-    expect(steps.map((s) => s.bomb)).toEqual([true, false]);
-    // 置く瞬間は歩かない。歩くと隣のマスに置いてしまう。
-    expect(steps[0]!.still).toBe(true);
-  });
-
-  it('長押しは指定の長さだけ押し続けてから離す', () => {
-    const steps = drain(ButtonMacro.hold(3, false));
-    expect(steps.map((s) => s.action)).toEqual([true, true, true, false]);
-  });
-
-  it('向きを変えてから技を出せる', () => {
-    const steps = drain(ButtonMacro.facing('up', ButtonMacro.tap()));
-    expect(steps.map((s) => [s.face, s.action])).toEqual([
-      ['up', false],
-      [null, true],
-      [null, false],
-    ]);
+describe('ボタンの押し方', () => {
+  it('前の tick に押していたボタンは押さず、次の tick に押す（押した瞬間でしか効かない）', () => {
+    // 射線に相手がいて、すぐ置きたい場面。前の tick に爆弾のボタンを押していた扱いにすると、
+    // この tick は押さずに置きたいままでいて、次の tick に押す。
+    const world = makeWorld(3, ['rabbit', 'elephant']);
+    clearBoard(world);
+    const cpu = world.players[0]!;
+    cpu.power = 3;
+    world.players[1]!.position = centerOf({ col: 3, row: 1 });
+    cpu.previousInput = { ...IDLE_INPUT, bomb: true };
+    const source = new CpuInputSource(0, CPU_LEVELS.oni, 1);
+    const sim = new Simulation();
+    const first = source.next(world);
+    expect([first.bomb, source.memory.wantBomb]).toEqual([false, true]);
+    sim.step(world, new Map([[0, first], [1, IDLE_INPUT]]));
+    expect(source.next(world).bomb).toBe(true);
   });
 });
 
@@ -329,25 +341,58 @@ describe('ラウンドをまたぐ', () => {
   });
 });
 
-describe('経路の追従', () => {
-  it('経路が尽きても、マスの端では止まらず中央へ寄る', () => {
-    // 端に立つと体が隣のマスにはみ出し、そこへ来た爆風に当たる。
-    // 実際に、強い CPU の自爆の多くがこれだった。
+describe('経路の追従（原型 cpuUpdate の「経路追従」）', () => {
+  it('経路が尽きたら、その場に立ち止まる（中央へは寄らない）', () => {
     const world = makeWorld(3);
     const me = world.players[0]!;
     me.position = { x: 5.5, y: 2.11 };
-    expect(directionAlong(me, [])).toBe('down');
-    me.position = centerOf({ col: 5, row: 2 });
     expect(directionAlong(me, [])).toBeNull();
   });
 
-  it('隣のマスへ向かうときは、位置の違う軸だけを押す', () => {
-    // 直角の軸まで押すと、中央を挟んで左右に震えて前へ進まない。
-    // 通路の中央へ寄せるのはゲームの側の移動処理がやる。
+  it('次のマスの中央から 0.15 以内に来たら、並びから消して、その tick は歩かない', () => {
     const world = makeWorld(3);
     const me = world.players[0]!;
+    me.position = { x: 5.64, y: 2.5 };
+    const path = [{ col: 5, row: 2 }, { col: 5, row: 3 }];
+    expect(directionAlong(me, path)).toBeNull();
+    expect(path).toEqual([{ col: 5, row: 3 }]);
+    // 0.15 ちょうどは、まだ着いていない（原型は 0.15 未満で着いたとみなす）。
+    me.position = { x: 5.65, y: 2.5 };
+    expect(directionAlong(me, [{ col: 5, row: 2 }])).toBe('left');
+  });
+
+  it('縦も横も 0.06 より離れていれば離れているほうの軸だけ、片方が 0.06 以内なら両方の軸を見て横を押す', () => {
+    const world = makeWorld(3);
+    const me = world.players[0]!;
+    // 横に 0.04・縦に 1.0 離れている：横は 0.06 以内なので消さず、0.03 より離れているので横を押す
+    // （原型の movePlayer は斜めを横に丸める）。
     me.position = { x: 9.46, y: 1.5 };
+    expect(directionAlong(me, [{ col: 9, row: 2 }])).toBe('right');
+    // 横に 0.03 以内なら横は押さず、縦を押す。
+    me.position = { x: 9.48, y: 1.5 };
     expect(directionAlong(me, [{ col: 9, row: 2 }])).toBe('down');
+    // 横に 0.1・縦に 1.0：両方 0.06 より離れているので、離れているほう（縦）だけ。
+    me.position = { x: 9.4, y: 1.5 };
+    expect(directionAlong(me, [{ col: 9, row: 2 }])).toBe('down');
+  });
+});
+
+describe('同じ長さの経路の選び方', () => {
+  it('隣のマスを右・左・下・上の順に調べる（原型の bfsPath と同じ）', () => {
+    // (3,3) から (5,1) へは、右右上上 と 上上右右 の2通りがあり、どちらも4歩（(4,2) は柱）。
+    // 右を上より先に調べるので 右右上上。上を先に調べると 上上右右 になる。
+    const world = makeWorld(3);
+    clearBoard(world);
+    const me = world.players[0]!;
+    const path = findPath(world, me, { col: 3, row: 3 }, (cell) => cell.col === 5 && cell.row === 1, {
+      maxDistance: 6,
+    });
+    expect(path).toEqual([
+      { col: 4, row: 3 },
+      { col: 5, row: 3 },
+      { col: 5, row: 2 },
+      { col: 5, row: 1 },
+    ]);
   });
 });
 
@@ -439,125 +484,129 @@ describe('技の最中と技の出し方', () => {
     expect(whileAction(false)).toEqual({ pressed: 0, placedAt: null });
   });
 
-  it('押して離すだけの技は、途中で危なくなっても向きを変えずに出し切る', () => {
-    // 一列に並べる技の途中で歩かせると向きが変わり、自分の逃げ道に爆弾を並べる。
-    const world = makeWorld(3, ['fox', 'rabbit']);
-    clearBoard(world);
-    const fox = world.players[0]!;
-    const enemy = world.players[1]!;
-    fox.position = centerOf({ col: 5, row: 1 });
-    fox.maxBombs = 3;
-    const source = new CpuInputSource(0, CPU_LEVELS.oni, 1);
-    const sim = new Simulation();
-    const step = (): void => {
-      sim.step(world, new Map([[0, source.next(world)], [1, IDLE_INPUT]]));
-    };
-    step(); // 記憶を作る（盤面が変わった扱い）
-    (source.memory as CpuMemory).macro = ButtonMacro.facing('right', ButtonMacro.tap());
-    step(); // 右を向く
-    enemy.maxBombs = 5;
-    enemy.power = 2;
-    placeBombAt(world, enemy, { col: 7, row: 1 });
-    step(); // 押す → 一列が出る
-    step(); // 離す
-    const mine = world.bombs.filter((bomb) => bomb.owner === 0);
-    expect(mine.length).toBeGreaterThan(0);
-    expect(mine.every((bomb) => bomb.cell.row === 1)).toBe(true);
-  });
-
-  it('安全なマスの CPU のもぐらは、長押しせずにその場で押して離して掘り始める（原型の CPU も安全なときに useSpecial を直に呼ぶ）', () => {
+  it('安全なマスの CPU のもぐらは、とくぎを直に出して、その場で掘り始める（原型の CPU も安全なときに useSpecial を直に呼ぶ）', () => {
     const world = makeWorld(3, ['mole', 'rabbit']);
     clearBoard(world);
     const mole = world.players[0]!;
     mole.position = centerOf({ col: 5, row: 7 });
     world.players[1]!.position = centerOf({ col: 11, row: 7 });
     mole.specialCharges = 1;
+    // ラウンドの始まりと同じく、前の tick に技のボタンを押していた扱いにする（`HELD_AT_ROUND_START`）。
+    // 技のボタンで出すなら、一度離す tick が要る。とくぎを直に出すボタンなら、最初の tick に出る。
+    mole.previousInput = { ...IDLE_INPUT, bomb: true, action: true };
     const game = arena(world, [{ id: 0, level: 'hard' }]);
     let dugAt: number | null = null;
     for (let t = 1; t <= 60 && dugAt === null; t += 1) {
       if (game.run(1).some((e) => e.type === 'techniqueUsed' && e.player === 0 && e.special)) dugAt = t;
     }
-    // ラウンドの始まりの「とくぎを出し終えた扱い」が外れる tick・押す tick（押した tick に掘り始める）。
-    // 長押し（30 tick）を待たない。
-    expect(dugAt).toBe(2);
+    // 最初の tick に掘り始める。長押し（30 tick）を待たない。
+    expect(dugAt).toBe(1);
     expect(mole.action?.kind).toBe('dig');
     expect(cellOf(mole.position)).toEqual({ col: 5, row: 7 });
   });
 
-  it('立ち止まって長押ししている途中で危なくなったら、離さずに押し続けたまま歩いて逃げる（離すと、この押し方のとくぎが出ない）', () => {
-    // 押した瞬間の通常技（鼻水）は出る（ActionSystem）。危なくなってから、長押しのしきい値に届く前までを見る。
-    const holdThenDanger = (animal: string): { used: number; moved: boolean; held: number } => {
-      const world = makeWorld(3, [animal, 'rabbit']);
-      clearBoard(world);
-      const me = world.players[0]!;
-      const enemy = world.players[1]!;
-      me.position = centerOf({ col: 5, row: 7 });
-      enemy.position = centerOf({ col: 15, row: 7 });
-      me.specialCharges = 1;
-      const holdTicks = abilityOf(animal).holdTicks;
-      const source = new CpuInputSource(0, CPU_LEVELS.oni, 1);
-      const sim = new Simulation();
-      let used = 0;
-      const step = (): void => {
-        const events = sim.step(world, new Map([[0, source.next(world)], [1, IDLE_INPUT]]));
-        used += events.filter((e) => e.type === 'techniqueUsed' && e.player === 0).length;
-      };
-      step(); // 記憶を作る（盤面が変わった扱い）
-      (source.memory as CpuMemory).macro = ButtonMacro.hold(holdTicks, true);
-      for (let t = 0; t < 10; t += 1) step();
-      const start = cellOf(me.position);
-      enemy.maxBombs = 5;
-      enemy.power = 3;
-      placeBombAt(world, enemy, { col: 7, row: 7 });
-      for (let t = 0; t < holdTicks - 15; t += 1) step();
-      const now = cellOf(me.position);
-      return { used, moved: now.col !== start.col || now.row !== start.row, held: me.actionHeld };
-    };
-    const holdTicks = abilityOf('elephant').holdTicks;
-    expect(holdThenDanger('elephant')).toEqual({ used: 1, moved: true, held: holdTicks - 5 });
-  });
+});
 
-  it('立ち位置の指定がある動物も、ブロックの隣しか無ければ足元に置いて壊す', () => {
-    // きつねは「1マス空けた手前」に立ちたいが、行き止まりにはその場所が無い。
-    // 妥協して隣に立ったなら、そこで置かないと永久に出られない。
-    const world = makeWorld(3, ['fox', 'rabbit']);
+describe('ブロックを壊しに行く（原型 planCPU の「ソフトブロックを壊しに行く」）', () => {
+  /**
+   * 1行目の 1〜5 列だけが空いた細い通路。ほかは柱。`softs` のマスを壊せるブロックにして、
+   * プレイヤー 0 を `at` に立たせた判断の文脈を作る。
+   */
+  function corridor(animal: string, softs: readonly Cell[], at: Cell): CpuContext {
+    const world = makeWorld(3, [animal, 'rabbit']);
     for (const { cell, tile } of world.board.cells()) {
       if (tile !== 'hard') world.board.set(cell, 'hard');
     }
     for (let col = 1; col <= 5; col += 1) world.board.set({ col, row: 1 }, 'empty');
-    world.board.set({ col: 1, row: 2 }, 'soft');
-    const game = arena(world, [{ id: 0, level: 'hard' }]);
-    const events = game.run(300);
-    expect(events.some((e) => e.type === 'bombPlaced' && e.owner === 0)).toBe(true);
+    for (const cell of softs) world.board.set(cell, 'soft');
+    world.items = [];
+    const me = world.players[0]!;
+    me.position = centerOf(at);
+    return new CpuContext(world, me, at, DangerMap.of(world), false, CPU_LEVELS.hard, freshMemory(new Rng(1)), new Rng(1));
+  }
+
+  it('いま立っているマスのほかに壊せる場所が無ければ、この規則は使わない（いまのマスが壊せる場所でも）', () => {
+    // 原型は、壊せる場所までの道（出発点そのものは含まない）が見つかったときだけ「壊しに行く」を選ぶ。
+    expect(BREAK_BLOCKS.decide(corridor('rabbit', [{ col: 1, row: 2 }], { col: 1, row: 1 }))).toBeNull();
+    // 対照：もう1か所あれば、そこへの道を持ち、いまのマスで置く。
+    expect(
+      BREAK_BLOCKS.decide(corridor('rabbit', [{ col: 1, row: 2 }, { col: 5, row: 2 }], { col: 1, row: 1 })),
+    ).toEqual({ mode: 'dig', path: [{ col: 2, row: 1 }, { col: 3, row: 1 }, { col: 4, row: 1 }, { col: 5, row: 1 }], wantBomb: true });
+  });
+
+  it('立ち位置の指定がある動物は、置くかを指定の場所に立っているかで決める（隣に立つ場所への道で妥協したときも）', () => {
+    // きつねは「1マス空けた手前」に立ちたい。(1,1) と (5,1) がブロックのとき、(3,1) がその場所で、(4,1) は隣。
+    // (4,1) に立てば (3,1) への道を持つが置かない（左へ並べれば (1,1) に届くが、立っているのは隣）。
+    // (3,1) に立てば、ほかに指定の場所が無いので隣の (4,1) への道で妥協し、いまのマスで置く。
+    // 原型のコメントは「隣に立って足元に置く」と書くが、置く判定は指定の場所のまま（コードに合わせた）。
+    const soft = [{ col: 1, row: 1 }, { col: 5, row: 1 }];
+    expect(BREAK_BLOCKS.decide(corridor('fox', soft, { col: 4, row: 1 }))).toEqual({
+      mode: 'dig',
+      path: [{ col: 3, row: 1 }],
+      wantBomb: false,
+    });
+    expect(BREAK_BLOCKS.decide(corridor('fox', soft, { col: 3, row: 1 }))).toEqual({
+      mode: 'dig',
+      path: [{ col: 4, row: 1 }],
+      wantBomb: true,
+    });
+  });
+
+  it('きつねは、並べる向きのどれにも一列と爆風で届く壊せるブロックが無ければ置かない', () => {
+    // (3,1) に立ち (5,1) がブロック。手持ち 1・火力 1 なら届く長さは 2 で (5,1) に届く。前のマスに爆弾があれば届かない。
+    const ctx = corridor('fox', [{ col: 5, row: 1 }], { col: 3, row: 1 });
+    expect(FOX_TACTIC.confirmsBreakBomb?.(ctx)).toBe(true);
+    placeBombAt(ctx.world, ctx.world.players[1]!, { col: 4, row: 1 });
+    expect(FOX_TACTIC.confirmsBreakBomb?.(ctx)).toBe(false);
   });
 });
 
+/** プレイヤー 0 が (1,1) に右向きで立つ盤面で、判断の文脈を作る（危なくない・つよい）。 */
+function frogContext(world: WorldState): CpuContext {
+  const me = world.players[0]!;
+  me.position = centerOf({ col: 1, row: 1 });
+  me.facing = 'right';
+  return new CpuContext(
+    world, me, { col: 1, row: 1 }, DangerMap.of(world), false, CPU_LEVELS.hard, freshMemory(new Rng(1)), new Rng(1),
+  );
+}
+
 describe('かえるの舌', () => {
   it('焼けて短くなった舌が届かないアイテムには、舌を伸ばさない（原型の CPU も今の長さを見る）', () => {
-    const decide = (burntTo: number | null): ButtonMacro | null => {
+    const decide = (burntTo: number | null): boolean => {
       const world = makeWorld(3, ['frog', 'rabbit']);
       clearBoard(world);
       world.items = [];
-      const me = world.players[0]!;
-      me.position = centerOf({ col: 1, row: 1 });
-      me.facing = 'right';
       world.items.push({ id: world.ids.take(), cell: { col: 6, row: 1 }, kind: 'fire' });
-      if (burntTo !== null) world.actors.push(new BurntTongueActor(me.id, burntTo));
-      const ctx = new CpuContext(
-        world, me, { col: 1, row: 1 }, DangerMap.of(world), false, CPU_LEVELS.hard, freshMemory(new Rng(1)), new Rng(1),
-      );
-      return FROG_TACTIC.reflex?.(ctx) ?? null;
+      if (burntTo !== null) world.actors.push(new BurntTongueActor(0, burntTo));
+      return FROG_TACTIC.beforePlan?.when(frogContext(world)) ?? false;
     };
     // 5 マス先の火。焼けていなければ届くので伸ばし、3 マスまでに焼けていれば伸ばさない。
-    expect(decide(null)).not.toBeNull();
-    expect(decide(5)).not.toBeNull();
-    expect(decide(3)).toBeNull();
+    expect(decide(null)).toBe(true);
+    expect(decide(5)).toBe(true);
+    expect(decide(3)).toBe(false);
+  });
+
+  it('チキンを持っていれば舌を伸ばさない（原型 cpuUpdate の `!p.chicken`）', () => {
+    const decide = (charges: number): boolean => {
+      const world = makeWorld(3, ['frog', 'rabbit']);
+      clearBoard(world);
+      world.items = [{ id: world.ids.take(), cell: { col: 3, row: 1 }, kind: 'fire' }];
+      world.players[0]!.specialCharges = charges;
+      return FROG_TACTIC.beforePlan?.when(frogContext(world)) ?? false;
+    };
+    expect(decide(0)).toBe(true);
+    expect(decide(1)).toBe(false);
+  });
+
+  it('舌は技のボタンを押した瞬間で伸ばし、その tick は歩かない', () => {
+    expect([FROG_TACTIC.beforePlan?.button, FROG_TACTIC.beforePlan?.endsTurn]).toEqual(['action', true]);
   });
 });
 
 describe('きつねの狐火', () => {
   it('相手が歩ける道で 6 マス以内なら放ち、7 マス先なら放たない（原型の CPU は届く長さ 8 マスの 8 割まで）', () => {
-    const decide = (distance: number): ButtonMacro | null => {
+    const decide = (distance: number): boolean => {
       const world = makeWorld(3, ['fox', 'rabbit']);
       clearBoard(world);
       const [me, foe] = world.players as [PlayerState, PlayerState];
@@ -568,9 +617,9 @@ describe('きつねの狐火', () => {
       const ctx = new CpuContext(
         world, me, { col: 1, row: 1 }, DangerMap.of(world), false, CPU_LEVELS.hard, freshMemory(new Rng(1)), new Rng(1),
       );
-      return FOX_TACTIC.reflex?.(ctx) ?? null;
+      return FOX_TACTIC.afterMove?.(ctx) ?? false;
     };
-    expect(decide(6)).not.toBeNull();
-    expect(decide(7)).toBeNull();
+    expect(decide(6)).toBe(true);
+    expect(decide(7)).toBe(false);
   });
 });

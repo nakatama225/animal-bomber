@@ -1,10 +1,10 @@
-import { sameCell } from '../domain/core/Coord.js';
+import { sameCell, type Direction } from '../domain/core/Coord.js';
 import { bombAt } from '../domain/query/BoardQuery.js';
-import { DangerMap, type HypotheticalBomb } from '../domain/query/DangerMap.js';
+import { DangerMap } from '../domain/query/DangerMap.js';
 import { BOMB_FUSE } from '../domain/rules/tuning.js';
 import { canPlaceBomb, powerOf, speedOf } from '../domain/state/PlayerState.js';
-import { ButtonMacro } from './ButtonMacro.js';
 import type { CpuContext } from './CpuContext.js';
+import type { BombOption } from './CpuPlan.js';
 import {
   ESCAPE_MARGIN,
   ESCAPE_SPEED_RATIO,
@@ -12,30 +12,18 @@ import {
   SAME_SPOT_BAN,
   UNSAFE_SPOT_BAN,
 } from './margins.js';
-
-/**
- * 爆弾の置き方の候補。
- *
- * 足元に1個置くのが基本だが、動物によっては別の置き方を持つ
- * （正面へ一列に並べる、など）。どの置き方でも、
- * 「置いたあと盤面に増える爆弾」と「そのためのボタンの押し方」の組で表す。
- * 共通の判断は、増える爆弾だけを見て逃げ切れるかを決める。
- */
-export interface BombOption {
-  readonly bombs: readonly HypotheticalBomb[];
-  readonly macro: ButtonMacro;
-}
+import { tacticOf } from './tactics/registry.js';
 
 /** 足元に1個置く。 */
 export function footBomb(ctx: CpuContext): BombOption {
   return {
     bombs: [{ cell: ctx.here, power: powerOf(ctx.me), fuse: BOMB_FUSE }],
-    macro: ButtonMacro.dropBomb(),
+    button: 'bomb',
   };
 }
 
 /**
- * その置き方で置いたあと、爆風の届かないマスまで逃げ切れるか。
+ * その置き方で置いたあと、爆風の届かないマスまで逃げ切れるか（原型 canEscapeAfterBomb）。
  *
  * 置いた爆弾は自分の逃げ道も塞ぐので、塞がれたものとして経路を探す。
  */
@@ -69,23 +57,28 @@ export function canPlaceHere(ctx: CpuContext): boolean {
 }
 
 /**
- * 爆弾を置きたいと判断していたら、置いてよいかを確かめて手順を返す。
+ * 爆弾を置きたいと判断していたら、置いてよいかを確かめて、押すボタンを返す（原型 cpuUpdate の「爆弾を置く」）。
  *
  * 置けなかった場合は、理由に応じて「しばらく爆弾を狙わない」を記憶に残す。
+ * 押すボタンを前の tick にも押していたら、この tick は何も決めずに待つ（押した瞬間でしか効かない）。
  *
- * @param options 試す順に並べた置き方
- * @returns 置くための押し方。置かないなら null
+ * @param facing この tick の移動のあとに向いている方向。一列に並べる置き方は、この向きに並ぶ
+ *   （原型も、経路を1歩進めて向きが変わってから並べる）
+ * @returns 押すボタン。置かないなら null
  */
-export function decideBomb(ctx: CpuContext, options: readonly BombOption[]): ButtonMacro | null {
+export function decideBomb(ctx: CpuContext, facing: Direction): BombOption['button'] | null {
   const memory = ctx.memory;
   if (!memory.wantBomb || ctx.inDanger || !canPlaceHere(ctx)) return null;
 
-  const chosen = options.find((option) => canEscapeAfter(ctx, option));
+  const option = tacticOf(ctx.me.animal).bombOption?.(ctx, facing) ?? footBomb(ctx);
+  if (!ctx.canPress(option.button)) return null;
   const now = ctx.world.now;
   const sameSpot =
     memory.lastBomb !== null &&
     sameCell(memory.lastBomb.cell, ctx.here) &&
     now - memory.lastBomb.at < SAME_SPOT_BAN;
+  // ⛔ 同じマスに置き直さない。逃げ切れても、置けない場所として扱う。
+  const escapes = canEscapeAfter(ctx, option) && !sameSpot;
 
   // ⛔ 「袋小路では置かない」という規則は入れない。
   // このゲームはブロックを壊して道を作るので、序盤はかならず袋小路になる。
@@ -100,15 +93,10 @@ export function decideBomb(ctx: CpuContext, options: readonly BombOption[]): But
   memory.path = [];
   memory.thinkIn = 0;
 
-  if (chosen !== undefined && !sameSpot && !tooMany) {
+  if (escapes && !tooMany) {
     memory.lastBomb = { cell: ctx.here, at: now };
-    return chosen.macro;
+    return option.button;
   }
-  memory.bombBan = chosen === undefined || sameSpot ? UNSAFE_SPOT_BAN : OUT_OF_BOMBS_BAN;
+  memory.bombBan = escapes ? OUT_OF_BOMBS_BAN : UNSAFE_SPOT_BAN;
   return null;
-}
-
-/** とくぎの長押しを始める手順。 */
-export function holdSpecial(ctx: CpuContext, still: boolean): ButtonMacro {
-  return ButtonMacro.hold(ctx.ability.holdTicks, still);
 }

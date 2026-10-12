@@ -1,24 +1,39 @@
-import type { Cell } from '../../domain/core/Coord.js';
-import type { BombOption } from '../BombPlacement.js';
-import type { ButtonMacro } from '../ButtonMacro.js';
+import type { Cell, Direction } from '../../domain/core/Coord.js';
 import type { CpuContext } from '../CpuContext.js';
+import type { BombOption, CpuButton } from '../CpuPlan.js';
+
+/**
+ * 考える前に使う技（`AnimalTactic.beforePlan`）。
+ *
+ * - `button` … 押すボタン
+ * - `endsTurn` … 使った tick はほかに何もしない（考え直さず、歩かず、爆弾も置かない）
+ * - `when` … この tick に使うか。前の tick に同じボタンを押していたら呼ばれない（押した瞬間でしか効かないので）
+ */
+export interface EarlyTechnique {
+  readonly button: Extract<CpuButton, 'action' | 'special'>;
+  readonly endsTurn: boolean;
+  readonly when: (ctx: CpuContext) => boolean;
+}
 
 /**
  * 動物ごとの CPU の戦い方。
  *
  * ## 共通の判断から動物の名前を追い出すための窓口
  *
- * 原型の CPU には「もぐらなら」「きつねなら」という分岐が8か所あった。
+ * 原型の CPU（cpuUpdate・planCPU）には「もぐらなら」「きつねなら」という分岐が8か所あった。
  * 動物を1匹足すたびに、共通の判断の中身を読んで書き足す必要があった。
  *
- * この版では、共通の判断（`ai/behaviors/`）は動物を知らない。
- * 動物によって違うのは次の3点だけで、それぞれをここで差し替える。
+ * この版では、共通の判断（`CpuInputSource`・`ai/behaviors/`）は動物を知らない。
+ * 原型の分岐は、どれも次のどこかに当たるので、それぞれをここで差し替える。
  *
- * | 差し替える点 | 省略したとき |
- * |---|---|
- * | 爆弾の置き方 | 足元に1個 |
- * | ブロックを壊しに行くときに立つ場所 | 壊せるブロックの隣 |
- * | 判断とは別に技を使う機会 | 使わない |
+ * | 差し替える点 | 原型の分岐 | 省略したとき |
+ * |---|---|---|
+ * | 考える前の技 | 考え直す前の、穴を掘る・舌を伸ばす・危ないときの突進 | 使わない |
+ * | 歩いたあとの技 | 爆弾のあとの、狐火・粘膜爆弾・撒く | 使わない |
+ * | 爆弾の置き方 | 一列に並べる | 足元に1個 |
+ * | ブロックを壊しに行くときに立つ場所 | 1マス空けた手前に立つ | 壊せるブロックの隣 |
+ * | 壊しに行くときに置くかの見直し | 並べる向きに壊せるブロックが無ければ置かない | 見直さない |
+ * | 振る舞いの最中も考えるか | 突進の最中も考え続ける（掘る・舌の間は待つ） | 待つ |
  *
  * 戦術を書いていない動物も、省略時の振る舞いでそのまま戦える。
  *
@@ -33,21 +48,39 @@ export interface AnimalTactic {
   readonly animal: string;
 
   /**
-   * 爆弾の置き方の候補を、試す順に返す。
+   * 考え直す前に使う技（原型 cpuUpdate の、考え直しより前の分岐）。
    *
-   * 共通の判断は先頭から順に「逃げ切れるか」を試し、最初に通ったものを使う。
+   * `when` は毎 tick 呼ばれる。動けない間と、待つ振る舞いの最中は呼ばれない。
    */
-  readonly bombOptions?: (ctx: CpuContext) => BombOption[];
+  readonly beforePlan?: EarlyTechnique;
+
+  /**
+   * 歩いて爆弾を置いたあとに、とくぎを直に出すか（原型 cpuUpdate の最後の分岐）。
+   *
+   * 毎 tick 呼ばれる。滑っている間、考える前の技を使った tick、前の tick にとくぎを出したときは呼ばれない。
+   */
+  readonly afterMove?: (ctx: CpuContext) => boolean;
+
+  /**
+   * 爆弾の置き方。null なら足元に1個。
+   *
+   * @param facing この tick の移動のあとに向いている方向
+   */
+  readonly bombOption?: (ctx: CpuContext, facing: Direction) => BombOption | null;
 
   /** ブロックを壊しに行くとき、そのマスに立てば壊せるか。 */
   readonly isBreakSpot?: (ctx: CpuContext, cell: Cell) => boolean;
 
+  /** ブロックを壊しに行く計画で「いまのマスで置く」と決めたあと、それでも置くか。 */
+  readonly confirmsBreakBomb?: (ctx: CpuContext) => boolean;
+
   /**
-   * 判断の周期とは別に、毎 tick 技を使う機会を見る。
+   * 移動を乗っ取る自分の振る舞いの最中も、考え続けるか。
    *
-   * 使うならボタンの押し方を返す。ボタン操作の途中では呼ばれない。
+   * 考え続けても、歩く・置くはゲームの側が止める。考えることで、記憶（経路・考え直すまでの間隔）が進み、
+   * 考える前の技も見る。
    */
-  readonly reflex?: (ctx: CpuContext) => ButtonMacro | null;
+  readonly thinksDuringAction?: boolean;
 }
 
 /** 戦術を書いていない動物に使う、省略時の戦い方。 */

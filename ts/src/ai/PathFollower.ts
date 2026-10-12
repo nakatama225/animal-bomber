@@ -1,51 +1,52 @@
-import { cellOf, opposite, sameCell, type Cell, type Direction } from '../domain/core/Coord.js';
+import { opposite, type Cell, type Direction } from '../domain/core/Coord.js';
 import type { PlayerState } from '../domain/state/PlayerState.js';
 
 /**
- * マスの中央からこの距離まで近づいたら、着いたとみなす。
+ * 経路の次のマスの中央からこの距離まで近づいたら、着いたとみなして並びから消す（原型 cpuUpdate の 0.15）。
  *
  * ⚠️ 1 tick に進む距離（最高速で約 0.157 マス）の半分より大きくしておく。
  * 小さいと、中央を挟んで行き過ぎと戻りを毎 tick 繰り返して止まらない。
  */
 const ARRIVED = 0.15;
 
+/** 縦と横の両方がこれより離れていたら、離れているほうの軸だけを押す（原型の 0.06）。 */
+const ONE_AXIS = 0.06;
+
+/** この距離より近い軸は押さない（原型の 0.03）。 */
+const DEAD_ZONE = 0.03;
+
 /**
- * 歩く予定のマスの並びを、この tick に押す向きに変える。
+ * 歩く予定のマスの並びを、この tick に押す向きに変える（原型 cpuUpdate の「経路追従」）。
  *
- * 着いたマスは並びの先頭から消していく（引数の配列を書き換える）。
+ * 並びの先頭のマスの中央を目指す。
  *
- * - 次のマスが隣なら、位置の違う軸だけを押す。通路の中央へ寄せるのは
- *   ゲームの側の移動処理が自動でやるので、直角の軸は押さない
- * - 次のマスが今いるマスなら、その中央へ寄る
- * - 並びが尽きたら、今いるマスの中央へ寄って止まる
+ * - 中央から `ARRIVED` 以内に来ていたら、先頭を並びから消し、この tick は歩かない（引数の配列を書き換える）
+ * - 縦と横の両方が `ONE_AXIS` より離れていたら、離れているほうの軸だけを押す
+ * - 残った軸のうち `DEAD_ZONE` より離れているものを押す。両方残ったら横を押す
+ *   （原型の movePlayer は斜めを横に丸める。この版の移動の処理も同じ）
  *
- * ⚠️ 並びが尽きたところで立ち止まらず、中央まで寄る。マスの端に立つと、
- * 体が隣のマスにはみ出していて、そこへ来た爆風に当たる。
+ * 並びが空なら歩かない。原型の CPU は、経路が尽きたその場に立ち止まる（マスの中央へは寄らない）。
+ * 経路の終わりのマスの中央から `ARRIVED` 以内に来てから並びを消すので、体が隣のマスへ
+ * はみ出したまま立ち止まることは無い（爆風の当たり判定の 0.14 より内側）。
  *
- * ⚠️ 縦と横を同時には押さない。ゲームの側は斜めの入力を横に丸めるので、
- * 両方押すと縦に進みたいときに横へ進んでしまう。
- *
- * @returns 押す向き。着いていて動く必要が無ければ null
+ * @returns 押す向き。歩かない tick なら null
  */
 export function directionAlong(player: PlayerState, path: Cell[]): Direction | null {
-  for (;;) {
-    const here = cellOf(player.position);
-    const next = path[0] ?? here;
-    if (!sameCell(next, here)) {
-      if (next.col !== here.col) return next.col > here.col ? 'right' : 'left';
-      return next.row > here.row ? 'down' : 'up';
-    }
-
-    const dx = here.col + 0.5 - player.position.x;
-    const dy = here.row + 0.5 - player.position.y;
-    if (Math.abs(dx) < ARRIVED && Math.abs(dy) < ARRIVED) {
-      if (path.length === 0) return null;
-      path.shift();
-      continue;
-    }
-    if (Math.abs(dx) >= Math.abs(dy)) return dx > 0 ? 'right' : 'left';
-    return dy > 0 ? 'down' : 'up';
+  const next = path[0];
+  if (next === undefined) return null;
+  let dx = next.col + 0.5 - player.position.x;
+  let dy = next.row + 0.5 - player.position.y;
+  if (Math.abs(dx) < ARRIVED && Math.abs(dy) < ARRIVED) {
+    path.shift();
+    return null;
   }
+  if (Math.abs(dx) > ONE_AXIS && Math.abs(dy) > ONE_AXIS) {
+    if (Math.abs(dx) >= Math.abs(dy)) dy = 0;
+    else dx = 0;
+  }
+  if (Math.abs(dx) > DEAD_ZONE) return dx > 0 ? 'right' : 'left';
+  if (Math.abs(dy) > DEAD_ZONE) return dy > 0 ? 'down' : 'up';
+  return null;
 }
 
 /**

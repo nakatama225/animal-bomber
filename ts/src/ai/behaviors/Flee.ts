@@ -1,17 +1,17 @@
-import { DIRECTIONS, step, type Cell } from '../../domain/core/Coord.js';
+import { SCAN_ORDER, step, type Cell } from '../../domain/core/Coord.js';
 import { isSolidFor } from '../../domain/query/BoardQuery.js';
 import type { CpuBehavior } from '../CpuBehavior.js';
 import type { CpuContext } from '../CpuContext.js';
 import { FALLBACK_MARGIN, FLEE_AVOID } from '../margins.js';
 
 /**
- * 爆風が届くマスに立っていたら、何をしていても逃げる。自分の爆弾も含む。
+ * 爆風が届くマスに立っていたら、何をしていても逃げる。自分の爆弾も含む（原型 planCPU の inDanger の分岐）。
  *
- * 逃げ先の探し方を、条件を緩めながら段階的に試す。
+ * 逃げ先の探し方を、条件を緩めながら段階的に試す（原型 nearestSafePath）。
  *
  * 1. いま燃えかけているマスと、踏むと損をするアイテムを避けて、完全に安全なマスへ
  * 2. アイテムは踏んでよいので、完全に安全なマスへ
- * 3. 遠回りでもよいので、完全に安全なマスへ（いま燃えているマスは通らない）
+ * 3. 遠回りでもよいので、完全に安全なマスへ（燃えかけているマスも通る）
  * 4. （弱い CPU だけ）いまより少しでも長く持つマスへ
  *
  * どこへも行けなければ、隣のマスのうちいちばん長く持つところへ1歩だけ動く。
@@ -21,8 +21,6 @@ export const FLEE: CpuBehavior = {
 
   decide(ctx) {
     if (!ctx.inDanger) return null;
-    // 立っているマスは安全で、体が隣にはみ出しているだけなら、中央へ寄れば済む。
-    if (ctx.danger.isSafe(ctx.here)) return { mode: 'flee', path: [], wantBomb: false };
     const path = safePath(ctx) ?? bestNeighbour(ctx);
     return { mode: 'flee', path, wantBomb: false };
   },
@@ -38,8 +36,7 @@ function safePath(ctx: CpuContext): Cell[] | null {
       avoidHarmfulItems: true,
     }) ??
     ctx.pathTo(safe, { maxDistance: 18, danger: ctx.danger, avoidWithin: FLEE_AVOID }) ??
-    // 遠回りしてでも逃げる。ただし、いま燃えているマスには入らない。
-    ctx.pathTo(safe, { maxDistance: 26, danger: ctx.danger, avoidWithin: 0 });
+    ctx.pathTo(safe, { maxDistance: 26 });
   if (found !== null) return found;
 
   // ⚠️ 強い CPU は「いまより少しましなマス」への妥協をしない。そこはまだ爆風の中で、
@@ -51,11 +48,11 @@ function safePath(ctx: CpuContext): Cell[] | null {
   return ctx.pathTo((cell) => ctx.danger.at(cell) > margin, { maxDistance: 18 });
 }
 
-/** 隣のマスのうち、爆風が届くまでいちばん長いところへ1歩。 */
+/** 隣のマスのうち、爆風が届くまでいちばん長いところへ1歩。同じ長さなら右・左・下・上の順で先のもの。 */
 function bestNeighbour(ctx: CpuContext): Cell[] {
   let best: Cell | null = null;
   let bestValue = -1;
-  for (const direction of DIRECTIONS) {
+  for (const direction of SCAN_ORDER) {
     const cell = step(ctx.here, direction);
     if (isSolidFor(ctx.world, cell, ctx.me, ctx.passesThrough)) continue;
     const value = ctx.danger.at(cell);

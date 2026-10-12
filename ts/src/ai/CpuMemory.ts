@@ -1,7 +1,6 @@
 import type { Cell } from '../domain/core/Coord.js';
 import type { Rng } from '../domain/core/Rng.js';
 import type { Tick } from '../domain/core/Tick.js';
-import type { ButtonMacro } from './ButtonMacro.js';
 import type { CpuMode } from './CpuPlan.js';
 
 /**
@@ -37,8 +36,6 @@ export interface CpuMemory {
   blind: number;
   /** 最後に爆弾を置いたマスと、その時刻。 */
   lastBomb: { readonly cell: Cell; readonly at: Tick } | null;
-  /** 進行中のボタン操作。 */
-  macro: ButtonMacro | null;
   /**
    * 判断の間隔の揺らぎ（0〜0.4）。
    *
@@ -59,7 +56,6 @@ export function freshMemory(rng: Rng): CpuMemory {
     skillCool: 0,
     blind: 0,
     lastBomb: null,
-    macro: null,
     jitter: rng.next() * 0.4,
   };
 }

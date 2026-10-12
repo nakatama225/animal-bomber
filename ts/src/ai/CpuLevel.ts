@@ -1,5 +1,3 @@
-import { secondsToTicks, type Tick } from '../domain/core/Tick.js';
-
 /**
  * CPU の強さ。
  *
@@ -19,8 +17,14 @@ export interface CpuLevel {
   readonly key: CpuLevelKey;
   /** 画面に出す名前。 */
   readonly label: string;
-  /** 次の判断までの間隔。長いほど反応が鈍い。 */
-  readonly thinkInterval: Tick;
+  /**
+   * 次の判断までの間隔（秒）。長いほど反応が鈍い。
+   *
+   * 秒のまま持つ。原型は、この秒数に 1 体ずつの揺らぎ（`CpuMemory.jitter`）を掛けてから
+   * 1/60 秒ずつ減らし、0 以下になったフレームで考え直す。先に tick へ丸めると、揺らぎを掛けたあとの
+   * 長さが原型と 1 tick ずれる。
+   */
+  readonly thinkSeconds: number;
   /** 危ないマスに立っているのに、気づかない確率（判断の機会ごと）。 */
   readonly sloppy: number;
   /** 敵を狙う・爆弾を置く判断に踏み切る確率。1 未満だと消極的になる。 */
@@ -57,15 +61,13 @@ export interface CpuLevel {
 export type CpuLevelKey = 'easy' | 'normal' | 'hard' | 'oni';
 
 /**
- * 強さの一覧。値は原型から持ってきた。
- *
- * 秒で書かれていた間隔は tick に直してある。
+ * 強さの一覧。値は原型（`legacy/animal-bomber.html` の `CPU_LEVELS`）から持ってきた。
  */
 export const CPU_LEVELS: Readonly<Record<CpuLevelKey, CpuLevel>> = {
   easy: {
     key: 'easy',
     label: 'よわい',
-    thinkInterval: secondsToTicks(0.52),
+    thinkSeconds: 0.52,
     sloppy: 0.55,
     aggression: 0.35,
     skillUse: 0.25,
@@ -80,7 +82,7 @@ export const CPU_LEVELS: Readonly<Record<CpuLevelKey, CpuLevel>> = {
   normal: {
     key: 'normal',
     label: 'ふつう',
-    thinkInterval: secondsToTicks(0.26),
+    thinkSeconds: 0.26,
     sloppy: 0.18,
     aggression: 0.8,
     skillUse: 0.7,
@@ -95,7 +97,7 @@ export const CPU_LEVELS: Readonly<Record<CpuLevelKey, CpuLevel>> = {
   hard: {
     key: 'hard',
     label: 'つよい',
-    thinkInterval: secondsToTicks(0.13),
+    thinkSeconds: 0.13,
     sloppy: 0,
     aggression: 1,
     skillUse: 1,
@@ -110,7 +112,7 @@ export const CPU_LEVELS: Readonly<Record<CpuLevelKey, CpuLevel>> = {
   oni: {
     key: 'oni',
     label: 'おに',
-    thinkInterval: secondsToTicks(0.05),
+    thinkSeconds: 0.05,
     sloppy: 0,
     aggression: 1,
     skillUse: 1,

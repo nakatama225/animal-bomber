@@ -11,6 +11,7 @@ import { isAlive } from '../domain/state/PlayerState.js';
 import type { WorldState } from '../domain/state/WorldState.js';
 import type { CpuLevel } from './CpuLevel.js';
 import type { CpuMemory } from './CpuMemory.js';
+import type { CpuButton } from './CpuPlan.js';
 
 /** とくぎの抽選に外れたあと、次に抽選するまで。 */
 const SKILL_RETRY = secondsToTicks(0.4);
@@ -58,6 +59,16 @@ export class CpuContext {
   /** 爆弾を狙う判断をしてよいか。直前に置けないと分かった場合は控える。 */
   get canBomb(): boolean {
     return this.memory.bombBan <= 0;
+  }
+
+  /**
+   * この tick にそのボタンを押せるか。
+   *
+   * ゲームの側は「前の tick は押していない」ときだけ押したと読む。前の tick に押したボタンは、
+   * この tick に押しても効かない。
+   */
+  canPress(button: CpuButton): boolean {
+    return !this.me.previousInput[button];
   }
 
   /**

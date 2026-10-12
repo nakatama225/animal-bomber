@@ -1,4 +1,29 @@
 import type { Cell } from '../domain/core/Coord.js';
+import type { HypotheticalBomb } from '../domain/query/DangerMap.js';
+
+/**
+ * CPU が押すボタン。
+ *
+ * - `bomb` … 爆弾のボタン（足元に1個）
+ * - `action` … 技のボタンを押した瞬間（通常技）
+ * - `special` … とくぎを直に出すボタン（原型の CPU が useSpecial を直に呼んでいたのと同じ出し方。`PlayerInput.special`）
+ *
+ * CPU は技のボタンを押し続けない。原型の CPU は長押しを使わず、とくぎは関数を直に呼んでいた。
+ */
+export type CpuButton = 'bomb' | 'action' | 'special';
+
+/**
+ * 爆弾の置き方。
+ *
+ * 足元に1個置くのが基本だが、動物によっては別の置き方を持つ
+ * （正面へ一列に並べる、など）。どの置き方でも、
+ * 「置いたあと盤面に増える爆弾」と「そのために押すボタン」の組で表す。
+ * 共通の判断は、増える爆弾だけを見て逃げ切れるかを決める。
+ */
+export interface BombOption {
+  readonly bombs: readonly HypotheticalBomb[];
+  readonly button: Extract<CpuButton, 'bomb' | 'action'>;
+}
 
 /**
  * CPU がいま何をしようとしているか。

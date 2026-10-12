@@ -28,6 +28,17 @@ export type Direction = 'up' | 'down' | 'left' | 'right';
 /** 4方向を、いつも同じ順で並べたもの。 */
 export const DIRECTIONS: readonly Direction[] = ['up', 'right', 'down', 'left'];
 
+/**
+ * 原型（`legacy/animal-bomber.html` の `DIRS`）と同じ右・左・下・上の順。
+ *
+ * 順で答えが変わる探し方（爆風を伸ばす順・CPU の経路探し・CPU が隣のマスを比べる順）は、この順で回す。
+ * 同じ長さの経路がいくつもあるとき、どれを選ぶかは隣を調べる順で決まる。`DIRECTIONS` の順のままだと、
+ * 原型の CPU と違う道を通る。
+ *
+ * ⚠️ `DIRECTIONS` そのものは並べ替えない。乱数で向きを選ぶ処理など、原型と順が対応していない所の答えまで変わる。
+ */
+export const SCAN_ORDER: readonly Direction[] = ['right', 'left', 'down', 'up'];
+
 /** 各方向へ1マス進んだときの差分。 */
 const STEP: Readonly<Record<Direction, Cell>> = {
   up: { col: 0, row: -1 },

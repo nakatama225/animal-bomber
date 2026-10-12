@@ -1,4 +1,5 @@
 import { secondsToTicks } from '../domain/core/Tick.js';
+import { BOMB_FUSE } from '../domain/rules/tuning.js';
 
 /**
  * CPU の判断に使う余裕の長さ。値は原型から持ってきた（秒を tick に直してある）。
@@ -64,8 +65,14 @@ export const UNSAFE_SPOT_BAN = secondsToTicks(0.8);
  */
 export const OUT_OF_BOMBS_BAN = secondsToTicks(0.35);
 
-/** 危ないときに判断を詰める場合の間隔。 */
-export const SHARP_THINK = secondsToTicks(0.03);
+/** 危ないときに判断を詰める場合の間隔（秒。`CpuLevel.thinkSeconds` と同じく、揺らぎを掛けてから tick にする）。 */
+export const SHARP_THINK_SECONDS = 0.03;
+
+/**
+ * 立っているマスに、この tick 数より早く爆風が届くなら「危ない」とみなす（原型 cpuUpdate の
+ * `danger[ty][tx] < BOMB_FUSE + 0.2`）。どの爆弾も導火線より長くは持たないので、爆風の届くマスはどれも危ない。
+ */
+export const NOTICE_WITHIN = BOMB_FUSE + secondsToTicks(0.2);
 
 /** 弱い CPU が危険に気づかない長さの、最短と揺れ幅（秒）。 */
 export const BLIND_MIN_SECONDS = 0.35;

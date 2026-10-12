@@ -1,15 +1,12 @@
-import { step, type Cell, type Direction } from '../core/Coord.js';
+import { SCAN_ORDER, step, type Cell, type Direction } from '../core/Coord.js';
 import type { WorldState } from '../state/WorldState.js';
 
 /**
- * 爆風を伸ばす向きの順。原型（`legacy/animal-bomber.html` の `DIRS`）と同じ右・左・下・上。
+ * 爆風を伸ばす向きの順。原型（`legacy/animal-bomber.html` の `DIRS`）と同じ右・左・下・上（`SCAN_ORDER`）。
  *
- * ⚠️ 移動や経路探しが使う `DIRECTIONS`（上・右・下・左）とは別に持つ。`DIRECTIONS` を
- * 並べ替えると、CPU の経路の選び方や、乱数で向きを選ぶ処理の答えまで変わる。
- * 爆風の順だけを原型に合わせるのは、この順が爆風が重なったマスで当てたプレイヤーを
- * 決めるため（自爆の割合の数え方が原型と同じになる）。
+ * この順が、爆風が重なったマスで当てたプレイヤーを決める（自爆の割合の数え方が原型と同じになる）。
  */
-const BLAST_DIRECTIONS: readonly Direction[] = ['right', 'left', 'down', 'up'];
+const BLAST_DIRECTIONS: readonly Direction[] = SCAN_ORDER;
 
 /**
  * 爆弾が爆発したとき、爆風がどのマスまで届くか。
