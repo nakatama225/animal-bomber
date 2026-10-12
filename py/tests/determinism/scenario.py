@@ -2,8 +2,10 @@
 
 人間の代わりに台本が操作する。4人とも違う周期で向きを替え、ときどき斜めに押し、
 ときどき向きのボタンを全部離し、爆弾と技のボタンも押す（爆弾は置かれて爆発し、ブロックを
-壊し、プレイヤーに当たる。技はまだ何も起きないが、記録には残る）。盤面にはアイテムを
-並べておく（拾う・効果をかける・悪い状態で動く・焼ける、を通すため）。
+壊し、プレイヤーに当たる）。技のボタンは、短く押す（通常技）のと、長く押し続ける
+（とくぎ。ぞうの長押しにも届く長さ）のを両方する。盤面にはアイテムを並べておく（拾う・
+効果をかける・悪い状態で動く・焼ける、を通すため）。とくぎを出せるよう、チキンを
+持たせて始める。
 
 ルールの層に処理を足したら、台本がその処理を通るようにする（`test_hashseed.py` は、
 台本が通らない処理の set の反復を見つけられない）。
@@ -18,6 +20,7 @@ from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.core.tick import MatchTick, Tick
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.input.sources import InputGatherer, InputSource
+from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.rules.match import MatchConfig
 from animal_bomber.domain.state.board import Tile
@@ -38,7 +41,8 @@ SEED = 4658
 手を離しても滑る・とまれないで進む・壁で滑りが終わる・反転して進む、をどれも通る種の
 うち、壊れるブロックがいちばん多いものを選んだ。
 """
-ANIMALS = ("rabbit", "elephant", "mole", "fox")
+ANIMALS = (Animal.RABBIT, Animal.ELEPHANT, Animal.MOLE, Animal.FOX)
+"""1ラウンドの台本（`new_world`）の4匹。かえるはラウンドをまたぐ台本（`MATCH_ANIMALS`）が通る。"""
 TICKS = 600
 SHOES = (0, 3, 9, 13)
 """プレイヤーごとの靴の段数。
@@ -51,6 +55,8 @@ POWERS = (1, 3, 2, 4)
 
 同じプレイヤーの爆弾が2つ以上同時に出て、誘爆するようにする。
 """
+CHICKENS = 3
+"""始めに持たせるチキン（とくぎの回数）。撒く・突進・掘る・炎のとくぎを通すため。"""
 
 _TURNS = (PlayerInput.RIGHT, PlayerInput.DOWN, PlayerInput.LEFT, PlayerInput.UP)
 _PERIODS = (37, 23, 29, 41)
@@ -86,7 +92,9 @@ def scripted(player_id: PlayerId, tick: MatchTick) -> PlayerInput:
         player_input &= ~_DIRECTIONS
     if tick % 70 == 0:
         player_input |= PlayerInput.BOMB
-    if tick % 90 < 3:
+    # 短く押す（通常技）のと、100 tick 押し続ける（どの動物もとくぎのしきい値に
+    # 届く）のと。
+    if tick % 90 < 3 or (tick + 37 * player_id) % 240 < 100:
         player_input |= PlayerInput.ACTION
     return player_input
 
@@ -139,6 +147,7 @@ def new_world(seed: int = SEED) -> WorldState:
         player.shoes = shoes
         player.max_bombs = max_bombs
         player.power = power
+        player.special_charges = CHICKENS
     return world
 
 
@@ -178,6 +187,12 @@ def replay(log: InputLog, ticks: int = TICKS, seed: int = SEED) -> WorldState:
 
 
 MATCH_TICKS = 1500
+MATCH_ANIMALS = (Animal.FROG, Animal.RABBIT, Animal.MOLE, Animal.FOX)
+"""ラウンドをまたぐ台本の4匹。台本どおりに動く 1P をかえるにして、舌を通す。
+
+ぞうを入れない。体力が多い（ハート1つ多い）ので、2ラウンド目の制限時間のうちに自分の
+爆弾で倒れきらず、試合が決まらない。
+"""
 MATCH_ROUND_LIMIT = Tick(600)
 """ラウンドをまたぐ台本の制限時間（tick）。1ラウンド目が時間切れで終わる長さ。"""
 SIT_FROM = 720
@@ -208,10 +223,15 @@ def play_match(ticks: int = MATCH_TICKS, seed: int = SEED) -> GameSession:
     通る。
     """
     config = MatchConfig(
-        seed=seed, animals=ANIMALS, round_limit=MATCH_ROUND_LIMIT, wins_to_take=1
+        seed=seed,
+        animals=MATCH_ANIMALS,
+        round_limit=MATCH_ROUND_LIMIT,
+        wins_to_take=1,
     )
     sources: list[InputSource] = [ScriptedSource(PLAYER_IDS[0])]
-    sources.extend(SittingSource(player) for player in PLAYER_IDS[1 : len(ANIMALS)])
+    sources.extend(
+        SittingSource(player) for player in PLAYER_IDS[1 : len(MATCH_ANIMALS)]
+    )
     session = GameSession(config, sources)
     for _ in range(ticks):
         session.tick()

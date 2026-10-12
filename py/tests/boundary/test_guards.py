@@ -255,9 +255,10 @@ class Test境界を守る検査:
         path = probe.write(
             "net",
             "from animal_bomber.domain.input.player_input import PlayerInput\n"
+            "from animal_bomber.domain.rules.animals import Animal\n"
             "from animal_bomber.domain.state.world import create_world\n"
             "from animal_bomber.net.input_log import InputLog\n\n"
-            'world = create_world(1, ["rabbit"])\n'
+            "world = create_world(1, [Animal.RABBIT])\n"
             "InputLog().record(world.now, 0, PlayerInput.IDLE)\n",
         )
         result = mypy()

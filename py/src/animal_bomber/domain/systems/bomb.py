@@ -10,6 +10,7 @@
 
 from collections.abc import Mapping
 
+from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import BombPlaced, SimEvent
 from animal_bomber.domain.input.player_input import PlayerInput
@@ -22,11 +23,11 @@ from animal_bomber.domain.query.board import (
 from animal_bomber.domain.rules.tuning import BOMB_FUSE
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.bomb import Bomb
-from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.player import (
     Life,
     PlayerId,
     PlayerState,
+    can_place_bomb,
     just_pressed,
     power_of,
 )
@@ -49,19 +50,15 @@ def _place(world: WorldState, inputs: Mapping[PlayerId, PlayerInput]) -> list[Si
     置くのは動いたあとのマス（原型の humanUpdate と同じ）。「勝手に設置」の拍に置くのは
     `systems/autobomb.py` で、動く前に置く。
 
-    ⚠️ 「勝手に設置」がかかっていると、「爆弾おけない」にも勝つ。2つの悪い状態が
-    重なったときにどちらが勝つかを決めておかないと、組み合わせで振る舞いが読めなく
-    なる（原型の 3.0.2 で決めた順）。拍の合間にボタンで置くこともできる（原型と同じ）。
-
-    ⚠️ 段階 5（動物の技）で、技の最中に置けるかの確かめと、落とし穴にはまっている間は
-    置かない確かめを足す（`systems/autobomb.py` にも同じものが要る。そちらの説明）。
+    置けない状態（落とし穴にはまっている・置けない振る舞いの最中・「爆弾おけない」）は
+    `can_place_bomb` が見る。「勝手に設置」がかかっていれば「爆弾おけない」に勝つので、
+    拍の合間にボタンでも置ける（原型と同じ）。
     """
     events: list[SimEvent] = []
     for player in world.players:
         if player.life is not Life.ALIVE:
             continue
-        forced = player.effects.has(EffectKind.AUTOBOMB)
-        if not forced and player.effects.has(EffectKind.NOBOMB):
+        if not can_place_bomb(player):
             continue
         if not just_pressed(player, inputs[player.id], PlayerInput.BOMB):
             continue
@@ -92,16 +89,35 @@ def _release_pass_through(world: WorldState) -> None:
 
 
 def place_bomb(world: WorldState, player: PlayerState) -> Bomb | None:
-    """そのプレイヤーの足元に爆弾を1つ置く。置けなければ何もせず None。
+    """そのプレイヤーの足元に爆弾を1つ置く。置けなければ何もせず None。"""
+    return place_bomb_at(world, player, player.position.cell())
 
-    置けないのは3つの場合。手持ちが無い（同時に置ける数だけ盤面に出ている）、足元の
-    マスが空いていない、足元に爆弾がもうある。
+
+def place_bomb_at(world: WorldState, player: PlayerState, cell: Cell) -> Bomb | None:
+    """そのマスに、そのプレイヤーの爆弾を1つ置く。置けなければ何もせず None。
+
+    置けないのは3つの場合。手持ちが無い（同時に置ける数だけ盤面に出ている）、マスが
+    空いていない、そのマスに爆弾がもうある。足元以外へ置く技（一列置き）のために、置く
+    マスを受け取る形を分けてある。
+
+    プレイヤーが置ける状態か（落とし穴・「爆弾おけない」など）は見ない。それは呼ぶ側が
+    `can_place_bomb` で見る。
     """
     if player.active_bombs >= player.max_bombs:
         return None
-    cell = player.position.cell()
     if world.board.at(cell) is not Tile.EMPTY or bomb_at(world, cell) is not None:
         return None
+    return spawn_bomb(world, player, cell)
+
+
+def spawn_bomb(world: WorldState, player: PlayerState, cell: Cell) -> Bomb:
+    """確かめずに、そのマスへそのプレイヤーの爆弾を1つ生やす。
+
+    技が爆発を起こすため（跳ね回る爆弾の爆発）に使う。手持ちを使い切っていても生やす
+    （原型の spawnBomb も手持ちを見ない）。生やした爆弾も盤面に出ている数に数えるので、
+    すぐ起こして取り除けば、差し引きで手持ちは変わらない。
+    ⚠️ 置けるかの確かめが要る場面（プレイヤーの操作で置く）では `place_bomb_at` を使う。
+    """
     # 置いたプレイヤー自身だけでなく、体の中心がそのマスにある全員を通り抜けの対象にする
     # （TypeScript 版と同じ。原型との違いと理由は `Bomb.pass_through`）。
     bomb = Bomb(

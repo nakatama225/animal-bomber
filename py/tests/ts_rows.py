@@ -3,24 +3,36 @@
 固定値は TypeScript 版の写しに同じ台本を流して出した JSON（`tests/systems/
 ts_simulation_values.json`・`tests/app/ts_session_values.json`）。ここで作る行の
 並びと、固定値を出した node のスクリプトの並びは揃えてある。
+
+振る舞いと盤面の物は、要約の文字列（`encode_action`・`encode_actor`）ごと比べる。
+TypeScript 版の写しには、振る舞いの中身を同じ形の文字列にする関数を足して出した
+（TypeScript 版の振る舞いは中身を外へ見せないため）。
 """
 
 from typing import assert_never
 
 from animal_bomber.domain.events import (
     BlockDestroyed,
+    BombDoused,
     BombPlaced,
     EffectApplied,
     Exploded,
     ItemBurned,
     ItemDropped,
+    ItemExpired,
     ItemTaken,
+    ItemWashed,
     MatchEnded,
     PlayerDown,
     PlayerHurt,
     RoundEnded,
     SimEvent,
+    Sprayed,
+    TechniqueMoment,
+    TechniqueUsed,
 )
+from animal_bomber.domain.state.actions import encode_action
+from animal_bomber.domain.state.actors import actor_name, encode_actor
 from animal_bomber.domain.state.world import WorldState
 
 
@@ -36,15 +48,30 @@ def event_row(event: SimEvent) -> list[object]:
         case ItemDropped(cell=cell, kind=kind):
             return ["itemDropped", cell.col, cell.row, kind.value]
         case ItemTaken(cell=cell, kind=kind, taker=taker):
+            if cell is None:
+                return ["itemTaken", None, None, kind.value, taker]
             return ["itemTaken", cell.col, cell.row, kind.value, taker]
         case ItemBurned(cell=cell, kind=kind):
             return ["itemBurned", cell.col, cell.row, kind.value]
+        case ItemExpired(cell=cell, kind=kind):
+            return ["itemExpired", cell.col, cell.row, kind.value]
+        case ItemWashed(cell=cell, kind=kind):
+            return ["itemWashed", cell.col, cell.row, kind.value]
+        case BombDoused(cell=cell, owner=owner):
+            return ["bombDoused", cell.col, cell.row, owner]
+        case Sprayed(player=player, cells=cells, facing=facing):
+            spots = [[cell.col, cell.row] for cell in cells]
+            return ["sprayed", player, spots, facing.name.lower()]
         case EffectApplied(target=target, effect=effect):
             return ["effectApplied", target, effect.value]
         case PlayerHurt(target=target, by=by, amount=amount):
             return ["playerHurt", target, by, amount]
         case PlayerDown(target=target, by=by):
             return ["playerDown", target, by]
+        case TechniqueUsed(player=player, special=special):
+            return ["techniqueUsed", player, special]
+        case TechniqueMoment(player=player, moment=moment):
+            return ["techniqueMoment", player, moment.value]
         case RoundEnded(round=number, winner=winner):
             return ["roundEnded", number, winner]
         case MatchEnded(champion=champion):
@@ -57,8 +84,8 @@ def world_rows(world: WorldState) -> dict[str, object]:
     """盤面の状態を、TypeScript 版の出力と同じ形に並べる。
 
     プレイヤー（位置・向き・体力・無敵の切れる tick・一時的な状態・強さ・「勝手に
-    設置」の待ち）・盤面の爆弾と爆風とアイテム（識別子も）・盤面の中身・発番した識別子の
-    数・乱数を引いた回数。
+    設置」の待ち・技の振る舞いと長押しと間隔）・盤面の爆弾と爆風とアイテム（識別子も）・
+    盤面の物・盤面の中身・発番した識別子の数・乱数を引いた回数。
     """
     return {
         "players": [
@@ -77,6 +104,10 @@ def world_rows(world: WorldState) -> dict[str, object]:
                 p.max_bombs,
                 p.shoes,
                 p.autobomb_wait,
+                None if p.action is None else encode_action(p.action),
+                p.action_held,
+                p.tap_voided,
+                p.ability_cooldown,
             ]
             for p in world.players
         ],
@@ -97,7 +128,19 @@ def world_rows(world: WorldState) -> dict[str, object]:
             [b.id, b.cell.col, b.cell.row, b.owner, b.is_center, b.remaining]
             for b in world.blasts
         ],
-        "items": [[i.id, i.cell.col, i.cell.row, i.kind.value] for i in world.items],
+        "items": [
+            [
+                i.id,
+                i.cell.col,
+                i.cell.row,
+                i.kind.value,
+                i.scattered_by,
+                i.expires_at,
+                i.melting_until,
+            ]
+            for i in world.items
+        ],
+        "actors": [[actor_name(a), encode_actor(a)] for a in world.actors],
         "board": world.board.encode(),
         "issued": world.ids.issued,
         "rngCalls": world.rng.calls,

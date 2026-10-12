@@ -25,7 +25,7 @@ class ItemKind(Enum):
     ONION = "onion"
     """涙で動けなくなる。"""
     CHICKEN = "chicken"
-    """とくぎを1回ぶん溜める（とくぎは段階 5）。"""
+    """とくぎを1回ぶん溜める。"""
     POOP = "poop"
     """悪い状態のどれかが、乱数でかかる。"""
 
@@ -42,7 +42,7 @@ class ItemDefinition:
     power_up: bool
     """強くなる系か。被弾したときに吐き出す候補を選ぶのに使う。"""
     harmful: bool
-    """拾うと損をするか。CPU が避ける判断に使う（段階 6）。"""
+    """拾うと損をするか。突進が抱えるかの判断と、CPU が避ける判断（段階 6）に使う。"""
 
 
 ITEM_DEFINITIONS: Final = (
@@ -75,6 +75,11 @@ POWER_UP_KINDS: Final = tuple(
     definition.kind for definition in ITEM_DEFINITIONS if definition.power_up
 )
 """被弾したときに吐き出す候補（爆弾・火力・靴）。"""
+
+HARMFUL_KINDS: Final = tuple(
+    definition.kind for definition in ITEM_DEFINITIONS if definition.harmful
+)
+"""拾うと損をする種類（バナナ・たまねぎ・うんこ）。突進が通り道で抱える種類でもある。"""
 
 DROP_CHANCE: Final = 0.55
 """壊せるブロックからアイテムが出る確率。

@@ -12,6 +12,7 @@ from animal_bomber.domain.core.tick import MatchTick, Tick
 from animal_bomber.domain.events import BombPlaced, MatchEnded, RoundEnded
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.input.sources import IdleSource
+from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.match import MatchConfig, seed_for_round
 from animal_bomber.domain.rules.tuning import (
     DUEL_SPAWN_ORDER,
@@ -21,7 +22,7 @@ from animal_bomber.domain.rules.tuning import (
 from animal_bomber.domain.state.player import Life, PlayerId
 from animal_bomber.domain.state.world import WorldState, create_world, hash_world
 
-ANIMALS = ("rabbit", "elephant")
+ANIMALS = (Animal.RABBIT, Animal.ELEPHANT)
 
 
 def _config(**overrides: object) -> MatchConfig:

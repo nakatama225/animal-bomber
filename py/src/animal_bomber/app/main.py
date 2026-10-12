@@ -23,8 +23,10 @@ import pygame
 
 from animal_bomber.app.session import GameSession
 from animal_bomber.domain.input.sources import EitherSource, InputSource
+from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.match import MatchConfig
 from animal_bomber.domain.rules.tuning import DUEL_SPAWN_ORDER
+from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.presentation.presenter import Presenter
 from animal_bomber.presentation.render.placeholder import SCREEN_SIZE, draw_match
 from animal_bomber.shell.gamepad import ControllerReader, GamepadSource, PadClaims
@@ -36,8 +38,8 @@ from animal_bomber.shell.keyboard import (
 )
 from animal_bomber.shell.loop import frames
 
-ANIMALS = ("rabbit", "elephant")
-"""段階 4 の2人の動物。動物を選ぶ画面は段階 10 で作る（技は段階 5）。"""
+ANIMALS = (Animal.RABBIT, Animal.ELEPHANT)
+"""2人の動物。動物を選ぶ画面は段階 10 で作る。"""
 
 
 def new_session(seed: int, keyboard: KeyboardWatcher) -> GameSession:
@@ -65,6 +67,12 @@ def new_session(seed: int, keyboard: KeyboardWatcher) -> GameSession:
     ]
     config = MatchConfig(seed=seed, animals=ANIMALS, spawn_order=DUEL_SPAWN_ORDER)
     return GameSession(config, sources)
+
+
+def animal_of(session: GameSession, player: PlayerId) -> Animal | None:
+    """その試合のそのプレイヤーの動物（技の音を選ぶのに使う）。いなければ None。"""
+    animals = session.config.animals
+    return animals[player] if player < len(animals) else None
 
 
 def run(
@@ -113,8 +121,10 @@ def main() -> None:
     # 種は起動のたびに変える。実時間を読むのは、ルールの層ではなくこの層の役目。
     seed = time.time_ns() & 0xFFFFFFFF
     keyboard = KeyboardWatcher()
+    session = new_session(seed, keyboard)
+    presenter = Presenter(animal_of=lambda player: animal_of(session, player))
     try:
-        run(screen, new_session(seed, keyboard), keyboard, Presenter(), frames())
+        run(screen, session, keyboard, presenter, frames())
     finally:
         pygame.quit()
 

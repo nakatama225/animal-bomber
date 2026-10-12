@@ -4,6 +4,7 @@ from animal_bomber.domain.core.coord import Cell, Point
 from animal_bomber.domain.events import BlockDestroyed
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.query.board import blast_at, bomb_at, is_solid_for
+from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.tuning import BLAST_DURATION, BOMB_FUSE
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.player import Life
@@ -355,7 +356,7 @@ class Test誘爆:
 
     def test_同じtickに導火線の尽きた爆弾は_置いた順に爆発する(self) -> None:
         """離れた2つの爆弾の導火線が同時に尽きると、置いた順に識別子が振られる。"""
-        world = make_world(animals=("rabbit", "elephant"))
+        world = make_world(animals=(Animal.RABBIT, Animal.ELEPHANT))
         clear_board(world)
         a, b = world.players
         later = put_bomb(world, b, Cell(15, 9))
@@ -379,8 +380,11 @@ class Test誘爆:
         （原型と同じ。2026-10-04 に段階 2 の上・右・下・左から替えたので、並びが
         変わった）。2匹とも爆弾の上で被弾してアイテムを1つずつ吐き出すので、識別子は
         段階 2 より2つ多い。
+
+        段階 3 には動物ごとの上乗せが無いので、火力と体力に上乗せの無い2匹で流す
+        （ぞうは火力 +2・体力 +2）。
         """
-        world = make_world(animals=("rabbit", "elephant"))
+        world = make_world(animals=(Animal.RABBIT, Animal.FOX))
         clear_board(world)
         a, b = world.players
         a.power = 2
@@ -427,7 +431,7 @@ class Test誘爆:
         """
         results = []
         for a_first in (True, False):
-            world = make_world(animals=("rabbit", "elephant"))
+            world = make_world(animals=(Animal.RABBIT, Animal.ELEPHANT))
             clear_board(world)
             world.board.put(Cell(5, 7), Tile.SOFT)
             world.board.put(Cell(5, 4), Tile.SOFT)

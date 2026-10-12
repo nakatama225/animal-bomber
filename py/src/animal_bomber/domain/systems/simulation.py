@@ -18,9 +18,14 @@
 順は結果を左右するので、並べ替えるときは何が変わるかを確かめる。なぜその順かは、下の
 一覧に、`step()` の並びと同じ番号で書く。
 
-1. 「勝手に設置」の拍に爆弾を置く（`autobomb.py`）。動く前に置く。原型は効果の時間を
-   進める処理の中で全員ぶんの勝手に設置を済ませてから、各プレイヤーを動かすので、
-   拍の tick にマスの境目をまたいでも、今までいたマスに置く（TypeScript 版と同じ）
+1. プレイヤーを乗っ取っている振る舞い（`state/actions.py`）を進め、新しく技を出す
+   （`actions.py`）。
+   振る舞いを進めた直後に1人ずつ「勝手に設置」の拍に爆弾を置き（`autobomb.py`）、
+   新しく技を出すのは全員ぶん置いたあと。振る舞いが位置を決めるので、動く（2.）より
+   先に進める。あとから移動の入力を当てると 1 tick ぶん食い違う。勝手に設置を動く前に
+   置くのは、原型が効果の時間を進める処理の中で、プレイヤーごとに「技を進める → 勝手に
+   設置」と回してから各プレイヤーを動かすため。拍の tick にマスの境目をまたいでも、
+   今までいたマスに置く（TypeScript 版と同じ。`actions.py` の説明）
 2. 動く（`movement.py`）
 3. ボタンの爆弾を置き、導火線を進める（`bomb.py`）。動いてから置く。逆にすると、押した
    tick にマスの境目をまたいだとき、動く前のマスに置かれる（通り抜けの対象から外すのも
@@ -28,17 +33,26 @@
 4. 導火線の尽きた爆弾を連鎖ごと爆発させ、爆風の残り時間を進める（`blast.py`）。置いた
    tick にも導火線を進めるので、置いた tick を1つ目と数えて `BOMB_FUSE` 個目の tick に
    爆発する
-5. 足元のアイテムを拾う（`items.py`）。爆発のあと。逆にすると、この tick の爆風で
-   焼けるはずのアイテムを、同じ tick に拾えてしまう
-6. 爆風に触れたプレイヤーの体力を減らす（`damage.py`）。爆発のあとなので、この tick に
+5. 盤面の物（落とし穴・炎・跳ねる爆弾・撒く本体・焼けた舌）を進める（`actors.py`）。
+   爆発のあと。この tick に出た爆風で、跳ねる爆弾が爆発するのも同じ tick になる
+6. 足元のアイテムを拾い、溶けきったもの・残る長さを過ぎたものを消す（`items.py`）。
+   爆発のあと。逆にすると、この tick の爆風で焼けるはずのアイテムを、同じ tick に
+   拾えてしまう
+7. 爆風に触れたプレイヤーの体力を減らす（`damage.py`）。爆発のあとなので、この tick に
    出た爆風にも当たる。拾うのより後。逆にすると、被弾して足元へ吐き出したアイテムを、
    同じ tick にそのまま拾い直す
-7. 一時的な状態の時間を進める（`effects.py`）。状態の作用を見る処理（1.〜3.）の
-   あと。5. でこの tick にかかった状態も、ここで 1 tick 進む（TypeScript 版と同じ）
-8. この tick の入力を、次の tick の「押した瞬間」の判定のために、前の入力として残す。
+8. 一時的な状態の時間を進める（`effects.py`）。状態の作用を見る処理（1.〜3.）の
+   あと。6. でこの tick にかかった状態も、ここで 1 tick 進む（TypeScript 版と同じ）。
+   ⚠️ 原型はプレイヤーごとに、技を進める前に減らす。違いが出るのは、原型のプレイヤー
+   ごとの処理（技を進める・勝手に設置）の中で、番号の大きいプレイヤーに状態がかかった
+   ときだけ。原型はそのフレームのうちにそのプレイヤーの分をもう一度減らすので、この版の
+   ほうが 1 tick 遅く切れる。違いは 1 tick なので、並びは変えていない（TypeScript 版と
+   同じ）
+9. この tick の入力を、次の tick の「押した瞬間」の判定のために、前の入力として残す。
    すべての処理が終わったあとに残す。途中で残すと、そのあとの処理から見て「押した
    瞬間」が消える（いま押した瞬間を見るのは 3. だけなので、4. の前に動かしても結果は
-   変わらないが、押した瞬間を見る処理を足すときに崩れないよう最後に置く）
+   変わらないが、押した瞬間を見る処理を足すときに崩れないよう最後に置く。技のボタンは
+   押した瞬間でなく押し続けた長さで見る）
 
 ## 起きたことを戻り値で返す
 
@@ -58,7 +72,8 @@ from animal_bomber.domain.events import SimEvent
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState
-from animal_bomber.domain.systems.autobomb import step_autobomb
+from animal_bomber.domain.systems.actions import step_actions
+from animal_bomber.domain.systems.actors import step_actors
 from animal_bomber.domain.systems.blast import step_blasts
 from animal_bomber.domain.systems.bomb import step_bombs
 from animal_bomber.domain.systems.damage import step_damage
@@ -77,10 +92,11 @@ def step(world: WorldState, inputs: Mapping[PlayerId, PlayerInput]) -> list[SimE
             が返すもの）。
     """
     events: list[SimEvent] = []
-    events.extend(step_autobomb(world))
+    events.extend(step_actions(world, inputs))
     move_players(world, inputs)
     events.extend(step_bombs(world, inputs))
     events.extend(step_blasts(world))
+    events.extend(step_actors(world))
     events.extend(step_items(world))
     events.extend(step_damage(world))
     step_effects(world)

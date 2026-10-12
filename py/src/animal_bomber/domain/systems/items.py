@@ -1,14 +1,30 @@
 """アイテムの抽選・配置・取得と、拾ったアイテムの効果。
 
-動物ごとの違い（効果が2倍になる、など）は、段階 5 で能力として差し込む。
+動物ごとの違い（効果が2倍になる）は、拾ったプレイヤーの動物の倍率
+（`AnimalStats.item_multiplier`）で掛ける。⚠️ 倍率は効果をかける関数（`apply_item`）の
+中で、効く側のプレイヤーから引く。足元で拾った・技で引き寄せた・体当たりで押しつけ
+られた、のどれで効いても同じ倍率になる（原型の applyItem も、効く側の動物の倍率を中で
+引く）。TypeScript 版は倍率を呼び出し側から渡す形で、体当たりで悪いアイテムを押しつけ
+られたときは、効果が2倍になる動物にも倍率が掛からない。
+
+⚠️ この処理は動物の種類を知らない（`tests/boundary/test_closed_kinds.py`）。動物の名前を
+書かず、能力で書く。
 """
 
 from typing import assert_never
 
 from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.core.tick import seconds_to_ticks
-from animal_bomber.domain.events import EffectApplied, ItemDropped, ItemTaken, SimEvent
+from animal_bomber.domain.events import (
+    EffectApplied,
+    ItemDropped,
+    ItemExpired,
+    ItemTaken,
+    ItemWashed,
+    SimEvent,
+)
 from animal_bomber.domain.query.board import blast_at, bomb_at, item_at
+from animal_bomber.domain.rules.animals import stats_of
 from animal_bomber.domain.rules.items import (
     DROP_CHANCE,
     ITEM_LOTTERY,
@@ -20,6 +36,7 @@ from animal_bomber.domain.rules.items import (
     ItemKind,
 )
 from animal_bomber.domain.rules.tuning import MAX_BOMBS, MAX_POWER, MAX_SHOES
+from animal_bomber.domain.state.actions import traits_of
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
@@ -49,18 +66,57 @@ SPIT_RING = (
 
 
 def step_items(world: WorldState) -> list[SimEvent]:
-    """生きているプレイヤーが、足元のアイテムを拾う。プレイヤー番号の順に拾う。"""
+    """足元のアイテムを拾い、溶けきったものと残る長さを過ぎたものを消す。
+
+    拾うのは生きているプレイヤーで、プレイヤー番号の順。消すのは拾ったあと（原型も、
+    拾ったあとに見る）。
+    """
+    events = _pick_up(world)
+    events.extend(_remove_expired(world))
+    return events
+
+
+def _pick_up(world: WorldState) -> list[SimEvent]:
     events: list[SimEvent] = []
     for player in world.players:
         if player.life is not Life.ALIVE:
+            continue
+        # 通り道のアイテムを自分で扱う振る舞いの最中は、ここでは拾わない
+        # （`ActionTraits.sweeps_items`）。
+        if player.action is not None and traits_of(player.action).sweeps_items:
             continue
         cell = player.position.cell()
         item = item_at(world, cell)
         if item is None:
             continue
+        # 撒いたプレイヤー自身は、自分の撒いたものを踏んでも拾わない（効かず、残る。
+        # 原型の pickupCheck）。鼻水で溶けている最中のものは、誰が踏んでも効かない。
+        if item.scattered_by == player.id or item.melting_until is not None:
+            continue
         world.items.remove(item)
         events.append(ItemTaken(cell=cell, kind=item.kind, taker=player.id))
         events.extend(apply_item(world, player, item.kind))
+    return events
+
+
+def _remove_expired(world: WorldState) -> list[SimEvent]:
+    """溶けきったものと、残る長さを過ぎた撒かれたものを消す。後ろから順に見る。
+
+    溶けているものは `melting_until` の tick に（その tick を含めて）消え、撒かれた
+    ものは `expires_at` を過ぎた tick に消える（TypeScript 版と同じ比べ方）。
+    """
+    events: list[SimEvent] = []
+    for item in reversed(world.items):
+        if item.melting_until is not None:
+            if world.now < item.melting_until:
+                continue
+            world.items.remove(item)
+            events.append(ItemWashed(cell=item.cell, kind=item.kind))
+            continue
+        if item.expires_at is None or world.now <= item.expires_at:
+            continue
+        world.items.remove(item)
+        events.append(ItemExpired(cell=item.cell, kind=item.kind))
     return events
 
 
@@ -79,38 +135,46 @@ def roll_drop(world: WorldState, cell: Cell) -> list[SimEvent]:
 def apply_item(
     world: WorldState, player: PlayerState, kind: ItemKind
 ) -> list[SimEvent]:
-    """拾ったアイテムの効果を、そのプレイヤーにかける。"""
+    """アイテムの効果を、そのプレイヤーにかける。
+
+    効く側の動物の倍率（`AnimalStats.item_multiplier`）を掛ける（モジュールの説明）。
+    """
+    times = stats_of(player.animal).item_multiplier
     match kind:
         case ItemKind.BOMB:
-            player.max_bombs = min(MAX_BOMBS, player.max_bombs + 1)
+            player.max_bombs = min(MAX_BOMBS, player.max_bombs + times)
             return []
         case ItemKind.FIRE:
-            player.power = min(MAX_POWER, player.power + 1)
+            player.power = min(MAX_POWER, player.power + times)
             return []
         case ItemKind.SHOE:
-            player.shoes = min(MAX_SHOES, player.shoes + 1)
+            player.shoes = min(MAX_SHOES, player.shoes + times)
             return []
         case ItemKind.BANANA:
-            _add_effect(player, EffectKind.SLIDE, SLIDE_SECONDS)
+            _add_effect(player, EffectKind.SLIDE, SLIDE_SECONDS * times)
             return [EffectApplied(target=player.id, effect=EffectKind.SLIDE)]
         case ItemKind.ONION:
             # 泣いている間は滑らない。同時にかかると、どちらの動きになるか読めない。
             player.effects.clear(EffectKind.SLIDE)
-            _add_effect(player, EffectKind.STUN, STUN_SECONDS)
+            _add_effect(player, EffectKind.STUN, STUN_SECONDS * times)
             return [EffectApplied(target=player.id, effect=EffectKind.STUN)]
         case ItemKind.CHICKEN:
-            player.special_charges += 1
+            player.special_charges += times
             return []
         case ItemKind.POOP:
             poop = world.rng.choice(POOP_EFFECTS)
-            _add_effect(player, poop.kind, poop.seconds)
+            _add_effect(player, poop.kind, poop.seconds * times)
             return [EffectApplied(target=player.id, effect=poop.kind)]
         case _:
             assert_never(kind)
 
 
 def _add_effect(player: PlayerState, kind: EffectKind, seconds: int) -> None:
-    """一時的な状態を、基本の秒数ぶん足す（`POOP_STACK_LIMIT` 倍で止める）。"""
+    """一時的な状態を `seconds` 秒ぶん足す（`POOP_STACK_LIMIT` 倍で止める）。
+
+    倍率の掛かった秒数を受け取る。上限も倍率の掛かった秒数から出すので、効果が2倍に
+    なる動物は、2倍の長さまで重ねられる（TypeScript 版と同じ）。
+    """
     player.effects.add(
         kind, seconds_to_ticks(seconds), seconds_to_ticks(seconds * POOP_STACK_LIMIT)
     )

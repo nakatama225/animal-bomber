@@ -24,9 +24,10 @@ TypeScript 版は、`type` という文字列の項目で種類を見分ける�
 """
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import TypeAlias
 
-from animal_bomber.domain.core.coord import Cell
+from animal_bomber.domain.core.coord import Cell, Direction
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.player import PlayerId
@@ -68,9 +69,14 @@ class ItemDropped:
 
 @dataclass(frozen=True, slots=True)
 class ItemTaken:
-    """プレイヤーがアイテムを拾った。"""
+    """プレイヤーがアイテムを拾った（効いた）。"""
 
-    cell: Cell
+    cell: Cell | None
+    """拾ったマス。舌で引き寄せたものは None。
+
+    舌で引き寄せたものは、戻りきってから効く（効いた瞬間には、どのマスにも無い）。
+    None なら煙を出さない（原型も出さない）。
+    """
     kind: ItemKind
     taker: PlayerId
 
@@ -84,6 +90,43 @@ class ItemBurned:
 
 
 @dataclass(frozen=True, slots=True)
+class ItemExpired:
+    """撒かれたアイテムが、残る長さを過ぎて消えた（`Item.expires_at`）。"""
+
+    cell: Cell
+    kind: ItemKind
+
+
+@dataclass(frozen=True, slots=True)
+class ItemWashed:
+    """流されて溶けていたアイテムが、溶けきって消えた（`Item.melting_until`）。"""
+
+    cell: Cell
+    kind: ItemKind
+
+
+@dataclass(frozen=True, slots=True)
+class BombDoused:
+    """爆弾の火が消されて、爆弾ごと消えた。置いたプレイヤーの手持ちは戻る。"""
+
+    cell: Cell
+    owner: PlayerId
+
+
+@dataclass(frozen=True, slots=True)
+class Sprayed:
+    """正面のマスへ水を吹きかけた（見た目のための知らせ）。
+
+    届いたマスを手前から順に運ぶ。柱のマス（とその先）は入らない。壊せるブロックの
+    マスは入る（そこで止まる）。
+    """
+
+    player: PlayerId
+    cells: tuple[Cell, ...]
+    facing: Direction
+
+
+@dataclass(frozen=True, slots=True)
 class EffectApplied:
     """プレイヤーに一時的な状態がかかった。"""
 
@@ -93,11 +136,14 @@ class EffectApplied:
 
 @dataclass(frozen=True, slots=True)
 class PlayerHurt:
-    """プレイヤーが爆風に当たって体力が減った。"""
+    """プレイヤーが傷を受けて体力が減った（爆風・体当たり・追いかける炎）。"""
 
     target: PlayerId
     by: PlayerId | None
-    """当てた爆風を出した爆弾を置いたプレイヤー。自分の爆弾なら自分の番号が入る。"""
+    """当てたプレイヤー。自分の爆弾なら自分の番号が入る。
+
+    爆風なら、その爆風を出した爆弾を置いたプレイヤー。
+    """
     amount: int
     """減った体力（半分の単位）。"""
 
@@ -108,6 +154,54 @@ class PlayerDown:
 
     target: PlayerId
     by: PlayerId | None
+
+
+@dataclass(frozen=True, slots=True)
+class TechniqueUsed:
+    """プレイヤーが技を出した。技が出なかった（間隔中に押した・跳べなかった）ときは返さない。"""
+
+    player: PlayerId
+    special: bool
+    """長押しのとくぎか。False なら押して離す通常技。"""
+
+
+class Moment(Enum):
+    """技の途中で起きたことの種類（`TechniqueMoment`）。
+
+    名前は動物ではなく技の働きで付ける。この列挙はどの動物も使う共通のものなので、
+    動物の名前を入れると、動物を足すたびに共通の型の意味が動物に縛られる
+    （TypeScript 版と同じ）。
+    """
+
+    TONGUE_CAUGHT = "tongueCaught"
+    """舌がアイテムを掴んだ。"""
+    DIG_STARTED = "digStarted"
+    """穴を掘り始めた（掘れないマスでとくぎを使ったときは知らせない）。"""
+    PIT_DUG = "pitDug"
+    """穴を掘り終えた。"""
+    SLIME_HOPPED = "slimeHopped"
+    """跳ね回る爆弾が跳ねた（跳べずにその場に留まったときも）。"""
+    ITEMS_SPAT = "itemsSpat"
+    """体当たりで抱えていた悪いアイテムを、止まった所の左右へ撒き散らした。"""
+    RAMMED = "rammed"
+    """体当たりが相手に当たった。"""
+    CHASER_CAST = "chaserCast"
+    """追いかける炎を放った（盤面に相手がいなくて出さなかったときは知らせない）。"""
+    CHASER_HIT = "chaserHit"
+    """追いかける炎が相手に当たった。"""
+
+
+@dataclass(frozen=True, slots=True)
+class TechniqueMoment:
+    """技の途中で起きたこと。音を鳴らすのに使う（原型は、それぞれの瞬間に専用の音を鳴らす）。
+
+    ⚠️ どのマスかは運ばない。掘り終えた穴の位置を描画の側に渡すと、見えないはずの穴が
+    ばれる。
+    """
+
+    player: PlayerId
+    """技を使ったプレイヤー。"""
+    moment: Moment
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,9 +233,15 @@ SimEvent: TypeAlias = (
     | ItemDropped
     | ItemTaken
     | ItemBurned
+    | ItemExpired
+    | ItemWashed
+    | BombDoused
+    | Sprayed
     | EffectApplied
     | PlayerHurt
     | PlayerDown
+    | TechniqueUsed
+    | TechniqueMoment
     | RoundEnded
     | MatchEnded
 )

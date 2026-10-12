@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 
 from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.input.player_input import PlayerInput
+from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.bomb import Bomb
 from animal_bomber.domain.state.player import PlayerId, PlayerState
@@ -13,7 +14,8 @@ from animal_bomber.domain.systems.bomb import place_bomb
 
 
 def make_world(
-    seed: int = 1234, animals: Sequence[str] = ("rabbit", "elephant")
+    seed: int = 1234,
+    animals: Sequence[Animal] = (Animal.RABBIT, Animal.ELEPHANT),
 ) -> WorldState:
     """テスト用の状態。種を変えなければ、何度作っても同じ盤面になる。
 
@@ -36,6 +38,11 @@ def only_for(
         player.id: player_input if player.id == player_id else PlayerInput.IDLE
         for player in world.players
     }
+
+
+def idle(world: WorldState) -> dict[PlayerId, PlayerInput]:
+    """全員が何も押していない入力。"""
+    return {player.id: PlayerInput.IDLE for player in world.players}
 
 
 def advance(

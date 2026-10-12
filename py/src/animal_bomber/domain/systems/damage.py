@@ -15,10 +15,12 @@ from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import PlayerDown, PlayerHurt, SimEvent
 from animal_bomber.domain.query.board import last_blast_at
 from animal_bomber.domain.rules.tuning import BLAST_DAMAGE, BLAST_HITBOX, INVULNERABLE
+from animal_bomber.domain.state.actions import traits_of
 from animal_bomber.domain.state.player import (
     Life,
     PlayerId,
     PlayerState,
+    is_blast_proof,
     is_invulnerable,
 )
 from animal_bomber.domain.state.world import WorldState
@@ -26,10 +28,16 @@ from animal_bomber.domain.systems.items import spit_power_up
 
 
 def step_damage(world: WorldState) -> list[SimEvent]:
-    """生きていて無敵でないプレイヤーが爆風に触れていたら、体力を減らす。"""
+    """生きていて無敵でないプレイヤーが爆風に触れていたら、体力を減らす。
+
+    跳び上がっている間（`is_blast_proof`）は当たらない。受ける傷に上限がある振る舞いの
+    最中は当たる（傷は上限で減る。`hurt`）。
+    """
     events: list[SimEvent] = []
     for player in world.players:
         if player.life is not Life.ALIVE or is_invulnerable(player, world.now):
+            continue
+        if is_blast_proof(player):
             continue
         by = _blast_owner_touching(world, player)
         if by is None:
@@ -78,18 +86,25 @@ def hurt(
 ) -> list[SimEvent]:
     """体力を `amount` 減らし、無敵にする。0 以下になったら倒れる。
 
+    爆風のほか、技の傷（体当たり・追いかける炎）もここを通る。乗っ取り中の振る舞いが
+    傷の上限を持っていれば（`ActionTraits.damage_cap`）、そこまでに抑える。⚠️ 上限は 0 に
+    しない。無敵と軽減を同じ仕組みで扱うと、「止まらないが痛い」が表せなくなる。
+
     被弾のたびに、強くなる系のアイテムを1つ近くへ吐き出す（倒れる被弾でも）。
 
     Args:
         world: 盤面の状態。
         player: 被弾したプレイヤー。
-        by: 当てた爆風を出した爆弾を置いたプレイヤー。自分の爆弾なら自分の番号。
-        amount: 減らす体力（半分の単位）。
+        by: 当てたプレイヤー（爆風なら、その爆風を出した爆弾を置いたプレイヤー）。自分の
+            爆弾なら自分の番号。
+        amount: 減らす体力（半分の単位）。上限で抑える前の値。
     """
-    player.hp -= amount
+    cap = None if player.action is None else traits_of(player.action).damage_cap
+    taken = amount if cap is None else min(amount, cap)
+    player.hp -= taken
     player.invulnerable_until = Tick(world.now + INVULNERABLE)
     player.last_hit_by = by
-    events: list[SimEvent] = [PlayerHurt(target=player.id, by=by, amount=amount)]
+    events: list[SimEvent] = [PlayerHurt(target=player.id, by=by, amount=taken)]
     events.extend(spit_power_up(world, player))
     if player.hp <= 0:
         player.hp = 0

@@ -1,29 +1,25 @@
-"""ラウンドをまたぐ試合の進行が、TypeScript 版の段階 4 と同じ結果になることの検査。
+"""ラウンドをまたぐ試合の進行が、TypeScript 版と同じ結果になることの検査。
 
 2人の試合を `GameSession` で流し、20 tick ごとに、試合の進み（`MatchState` のラウンドの
 番号・勝ち数・試合を取ったプレイヤー・試合が終わったか）・盤面の時刻・盤面の状態
 （`tests/ts_rows.py` の `world_rows`）と、その間に起きたイベントの並びを比べる。
 ラウンドごとの種の導き方・決着のあとの待ち・次の盤面の作り方のどれを変えても、盤面の
-中身か時刻かイベントがずれて
-失敗する。
+中身か時刻かイベントがずれて失敗する。
 
-期待する値は `ts_session_values.json`。TypeScript 版の段階 4（コミット 6e25fc2）に、
-段階 3 の固定値と同じ5つの直し（7825fac・32bf68b・bcb1567・爆風を伸ばす向き・勝手に
-設置を動く前に。`tests/systems/test_simulation_ts.py` の説明）と、次の2つを当て、同じ
-台本を流して出したもの。爆風を伸ばす向きの直しを当てないと、「決まる試合」が
-200 tick 目、「時間切れ」が 500 tick 目でずれる。勝手に設置の直しは、この台本の値を
-変えない。
+期待する値は `ts_session_values.json`。出どころは `tests/systems/test_simulation_ts.py`
+の説明と同じ（TypeScript 版の 37ac1a7 を写し、葱ボンと延長戦を止め、全員が下を向いて
+始まる形にして流したもの）。延長戦は、試合の設定で切った（`suddenDeath: false`。
+制限時間が来たら引き分け）。
 
-- 2人のときは左上と右下の対角から始める（HEAD の `DUEL_SPAWN_ORDER` と同じ）
-- 決着のあと 120 tick 盤面を止めてから次のラウンドを作る（c391fa1 と同じ）
+台本は2つ。「決まる試合」は、1P のうさぎが歩き回り、2P のもぐらが動かずに自分の爆弾で
+倒れる（503・1103 tick 目に 1P の勝ちでラウンドが決まり、2勝で試合が決まる）。
+「時間切れ」は、2人とも歩き回り、制限時間を 200 tick にして、引き分けが3回続く。
+段階 4 では 2P をぞうにしていたが、段階 5 で動物ごとの上乗せが効くと、ぞうは体力が
+1つ多いので制限時間のうちに倒れきらず、試合が決まらなくなった。そこでもぐらにした。
 
-台本は2つ。「決まる試合」は、1P が歩き回り、2P が動かずに自分の爆弾で倒れる
-（503・1103 tick 目に 1P の勝ちでラウンドが決まり、2勝で試合が決まる）。「時間切れ」は、
-2人とも歩き回り、制限時間を 200 tick にして、引き分けが3回続く。
-
-台本は試合通算の時刻（`MatchTick`）で決まる。TypeScript 版の段階 4 の窓口は時刻を
-受け取らないので、固定値を出したスクリプトは `tick()` を呼んだ回数を数えて台本に
-渡した。決着のあとの待ちの tick も数える（この版の `GameSession.clock` と同じ）。
+台本は試合通算の時刻（`MatchTick`）で決まる。TypeScript 版の窓口は時刻を受け取らない
+ので、固定値を出したスクリプトは `tick()` を呼んだ回数を数えて台本に渡した。決着のあとの
+待ちの tick も数える（この版の `GameSession.clock` と同じ）。
 """
 
 import json
@@ -36,6 +32,7 @@ import pytest
 from animal_bomber.app.session import GameSession
 from animal_bomber.domain.core.tick import MatchTick, Tick
 from animal_bomber.domain.input.player_input import PlayerInput
+from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.match import MatchConfig
 from animal_bomber.domain.rules.tuning import DUEL_SPAWN_ORDER
 from animal_bomber.domain.state.player import PLAYER_IDS, PlayerId
@@ -97,7 +94,7 @@ def test_同じ台本を流すと_TypeScript版と同じ試合になる(
 ) -> None:
     config = MatchConfig(
         seed=seed,
-        animals=("rabbit", "elephant"),
+        animals=(Animal.RABBIT, Animal.MOLE),
         spawn_order=DUEL_SPAWN_ORDER,
         round_limit=Tick(round_limit),
         wins_to_take=wins_to_take,

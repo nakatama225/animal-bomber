@@ -7,9 +7,11 @@
 
 期待する値は、TypeScript 版の段階 1（コミット 25586a4）の `Simulation` に同じ台本を
 流して出したもの。台本は、行き来・曲がり角・斜め押し・靴の段数の違う4人を含む。
-⚠️ 原型の値ではない。原型は動物ごとの速さの倍率を掛け（段階 5 で入れる）、分ける回数の
-決め方と動かす順も違うので、原型とは位置がずれる（`systems/movement.py` の「原型と
-違えた所」）。
+段階 1 には動物ごとの違いが無いので、速さの倍率が 1 で、壊せるブロックを抜けない動物
+（きつね・かえる）で流す。倍率の掛かった動き（うさぎ・ぞう・もぐら）は、段階 5 の
+TypeScript 版と比べる `test_simulation_ts.py` で確かめる。
+⚠️ 原型の値ではない。分ける回数の決め方と動かす順が原型と違うので、速さの違う
+プレイヤーがいると原型とは位置がずれる（`systems/movement.py` の「原型と違えた所」）。
 """
 
 from collections.abc import Callable
@@ -17,6 +19,7 @@ from collections.abc import Callable
 import pytest
 
 from animal_bomber.domain.input.player_input import PlayerInput
+from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.state.world import create_world
 from animal_bomber.domain.systems import simulation
 
@@ -48,13 +51,14 @@ def corners(tick: int, player: int) -> PlayerInput:
     return order[(tick // 45 + player) % len(order)]
 
 
-FOUR = ("rabbit", "elephant", "mole", "fox")
+FOUR = (Animal.FOX, Animal.FROG, Animal.FOX, Animal.FROG)
+"""速さの倍率が 1 で、壊せるブロックを抜けない動物だけの4人（段階 1 と同じ動き）。"""
 
 # 150 tick ごとの、プレイヤーごとの (x, y, 向き)。
-CASES: list[tuple[int, tuple[str, ...], list[int], Script, list[list[object]]]] = [
+CASES: list[tuple[int, tuple[Animal, ...], list[int], Script, list[list[object]]]] = [
     (
         4649,
-        ("rabbit", "elephant"),
+        (Animal.FOX, Animal.FROG),
         [0, 0],
         shuttle,
         [
@@ -134,7 +138,7 @@ CASES: list[tuple[int, tuple[str, ...], list[int], Script, list[list[object]]]] 
 @pytest.mark.parametrize(("seed", "animals", "shoes", "script", "expected"), CASES)
 def test_同じ台本を流すと_TypeScript版と同じ位置になる(
     seed: int,
-    animals: tuple[str, ...],
+    animals: tuple[Animal, ...],
     shoes: list[int],
     script: Script,
     expected: list[list[object]],

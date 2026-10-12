@@ -164,10 +164,13 @@ def detonate(world: WorldState, first: Bomb) -> Detonation:
 def _burn_items(world: WorldState) -> list[SimEvent]:
     """爆風（いま出ているすべて）の乗ったマスのアイテムを焼く。
 
-    後ろから順に見て焼く（TypeScript 版と同じ順。イベントもこの順に並ぶ）。
+    後ろから順に見て焼く（TypeScript 版と同じ順。イベントもこの順に並ぶ）。とくぎで
+    撒かれたアイテムは焼けない（原型も、撒かれたものは爆風で動かず消えない）。
     """
     events: list[SimEvent] = []
     for item in reversed(world.items):
+        if item.scattered_by is not None:
+            continue
         if blast_at(world, item.cell) is None:
             continue
         world.items.remove(item)

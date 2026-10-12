@@ -29,38 +29,47 @@
 
 ⚠️ そのため、速さの違うプレイヤーが同じ盤面にいると、原型とは位置がずれる（速い
 プレイヤーがいると、原型では遅いプレイヤーも2回に分けて動き、壁の手前で止まる位置が
-変わる）。動物ごとの速さの倍率が 1 のとき（原型を 60 Hz・倍速 1 で回したとき）、1人ずつ
-動かした位置は、原型とも小数のビットまで一致する（倍率は段階 5 で掛ける）。
+変わる）。全員の速さの倍率が 1 のとき（原型を 60 Hz・倍速 1 で回したとき）、1人ずつ
+動かした位置は、原型とも小数のビットまで一致する（動物ごとの倍率は `speed_of` が
+掛ける）。
 
 プレイヤーどうしはぶつからないので、動かす順は位置に効かない。
+
+プレイヤーを乗っ取る振る舞い（`state/actions.py`）が位置を決める間は、ここでは動かさ
+ない（`ActionTraits.drives_movement`）。⚠️ ここで振る舞いの種類を見ない。1つでも見る
+と、動物を足すたびにこの処理が増えていく（`tests/boundary/test_closed_kinds.py`）。
 
 爆弾の通り抜け（`Bomb.pass_through`。置かれた瞬間に体の中心がそのマスにあった
 プレイヤーは、そこから出るまで通れる）は、原型は細分の1回ごとに、体がマスから離れたら
 外す。この版は全員が動き終わったあと、爆弾を置く処理（`systems/bomb.py`）の中で
-1 tick に1回、体の中心がマスを出たら外す（TypeScript 版と同じ）。外す時と条件が
-違っても位置は変わらない。通り抜けの対象にいるプレイヤーは、体の中心が爆弾のマスに
-あり、1 tick の移動（最大 0.157 マス）は体の半径（0.36）より短いので、その tick の
-あいだ体が爆弾のマスにかかったままでいる。`collides` は体の重なっているマスを見ない
-ので、通り抜けの対象かどうかは、そもそも移動の結果に効かない。
+1 tick に1回、体の中心がマスを出たら外す（TypeScript 版と同じ）。爆弾のマスそのものに
+ついては、外す時と条件が違っても位置は変わらない。通り抜けの対象にいるプレイヤーは、
+体の中心が爆弾のマスにあり、1 tick の移動（最大 0.157 マス）は体の半径（0.36）より
+短いので、その tick のあいだ体が爆弾のマスにかかったままでいる。`body_collides`
+（`query/board.py`）は体の重なっているマスを見ないので、爆弾のマスについては、通り抜けの
+対象かどうかが移動の結果に効かない。
 
-⚠️ 通り抜けの対象を読む判定（`is_solid_for` に尋ねる処理。段階 5 のもぐらの「爆弾の
-となりのブロック」、段階 6 の CPU）を足したら、外す時と条件の違いが結果に効かないかを
-確かめ直す。
+⚠️ 段階 5 で、壊せるブロックを抜けられる動物の「ほかのプレイヤーの爆弾の隣のブロックは
+抜けられない」が、通り抜けの対象を読むようになった（`query/board.py` の
+`passes_soft_block`）。こちらは外す時と条件の違いが効きうる。中心が爆弾のマスを出たあと、
+体がまだかかっている間は、原型ではまだ自分の爆弾として数え、この版では数えない
+（TypeScript 版はこの版と同じ）。段階 6 で CPU が通り抜けの対象を読む判定を足したら、
+同じく確かめ直す。
 """
 
 import math
 from collections.abc import Mapping
 
-from animal_bomber.domain.core.coord import Cell, Direction, Point
+from animal_bomber.domain.core.coord import Direction, Point
 from animal_bomber.domain.input.player_input import PlayerInput
-from animal_bomber.domain.query.board import is_solid_for
+from animal_bomber.domain.query.board import body_collides
 from animal_bomber.domain.rules.tuning import (
     ALIGN_EPSILON,
     ALIGN_RATE_WHEN_MOVING,
     MOVE_SUBSTEP_DISTANCE,
-    PLAYER_RADIUS,
     SLIDE_SPEED_RATIO,
 )
+from animal_bomber.domain.state.actions import traits_of
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.player import (
     Life,
@@ -86,8 +95,11 @@ def _axis(player_input: PlayerInput, plus: PlayerInput, minus: PlayerInput) -> i
 
 
 def _move(world: WorldState, player: PlayerState, player_input: PlayerInput) -> None:
-    # 泣いている間は、どの入力も通らない。
+    # 泣いている・落とし穴にはまっている間は、どの入力も通らない。
     if is_frozen(player):
+        return
+    # 乗っ取られている間は、その振る舞いが位置を決める（種類は見ない）。
+    if player.action is not None and traits_of(player.action).drives_movement:
         return
     dx = _axis(player_input, PlayerInput.RIGHT, PlayerInput.LEFT)
     dy = _axis(player_input, PlayerInput.DOWN, PlayerInput.UP)
@@ -130,7 +142,7 @@ def _move(world: WorldState, player: PlayerState, player_input: PlayerInput) -> 
 def _try_move(world: WorldState, player: PlayerState, mx: float, my: float) -> bool:
     """1回ぶん動かす。通れないマスに当たって動けなければ動かさずに False。"""
     target = Point(player.position.x + mx, player.position.y + my)
-    if collides(world, player, player.position, target):
+    if body_collides(world, player, player.position, target):
         return False
     player.position = target
     return True
@@ -155,45 +167,5 @@ def _align_to_corridor(
         if abs(gap) <= ALIGN_EPSILON:
             return
         target = Point(position.x + math.copysign(min(abs(gap), rate), gap), position.y)
-    if not collides(world, player, position, target):
+    if not body_collides(world, player, position, target):
         player.position = target
-
-
-def collides(
-    world: WorldState, player: PlayerState, origin: Point, target: Point
-) -> bool:
-    """`origin` から `target` へ動いたとき、体がそのプレイヤーの通れないマスに重なるか。
-
-    何が通れないかはプレイヤーによって違う（爆弾の通り抜け、のちに動物ごとの能力）。
-    その判断は `query/board.py` の `is_solid_for` にまとめてあり、ここは体の形の計算
-    だけを持つ。
-
-    ⚠️ **いま体が重なっているマスは見ない**（原型と同じ）。足元のマスがあとから通れなく
-    なっても、閉じ込められないようにするため。そのマスから完全に出たあとは見る対象に
-    戻るので、もう戻れない。原型の注記の例は、もぐら（ブロックの中を進める。段階 5）が
-    自分の爆弾のとなりのブロックに入ったあと、爆弾から離れて、そのブロックが「爆弾の
-    となりのブロック」として通れなくなる場合。
-    """
-    origin_cols, origin_rows = _overlapped(origin)
-    target_cols, target_rows = _overlapped(target)
-    for row in target_rows:
-        for col in target_cols:
-            if col in origin_cols and row in origin_rows:
-                continue
-            if is_solid_for(world, Cell(col, row), player):
-                return True
-    return False
-
-
-def _overlapped(position: Point) -> tuple[range, range]:
-    """その位置で体が重なるマスの、列の範囲と行の範囲。"""
-    return (
-        range(
-            math.floor(position.x - PLAYER_RADIUS),
-            math.floor(position.x + PLAYER_RADIUS) + 1,
-        ),
-        range(
-            math.floor(position.y - PLAYER_RADIUS),
-            math.floor(position.y + PLAYER_RADIUS) + 1,
-        ),
-    )

@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from animal_bomber.domain.core.tick import Tick, seconds_to_ticks
+from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.tuning import ROUND_SECONDS, WINS_TO_TAKE_MATCH
 
 
@@ -12,7 +13,7 @@ class MatchConfig:
 
     seed: int
     """試合の種。ラウンドごとの種は、こことラウンドの番号から導く（`seed_for_round`）。"""
-    animals: tuple[str, ...]
+    animals: tuple[Animal, ...]
     """参加する動物。プレイヤー番号の順に並べる。"""
     spawn_order: tuple[int, ...] | None = None
     """始める隅の並び（`SPAWN_CELLS` の番号を、プレイヤー番号の順に）。

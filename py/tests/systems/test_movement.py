@@ -2,16 +2,19 @@
 
 from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.input.player_input import PlayerInput
+from animal_bomber.domain.query.board import body_collides
+from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.tuning import (
+    BASE_SPEED,
     MAX_SHOES,
     MAX_SPEED,
     MOVE_SUBSTEP_DISTANCE,
     PLAYER_RADIUS,
+    SHOE_STEP,
 )
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.player import Life, speed_of
 from animal_bomber.domain.systems.bomb import place_bomb
-from animal_bomber.domain.systems.movement import collides
 from tests.helpers import advance, make_world, only_for
 
 
@@ -125,13 +128,33 @@ class Test速さ:
         player.shoes = 3
         assert speed_of(player) > base
 
-    def test_靴を取りきっても_速さの上限には届かない(self) -> None:
-        # 動物ごとの倍率を掛けない段階 1 では、取りきった速さ（9.16 マス/秒）は上限
-        # （9.4）の下にある。原型のうさぎ（1.22 倍）は上限で止まるので、倍率を入れる
-        # 段階 5 で見直す。
-        player = make_world().players[0]
+    def test_倍率1の動物は_靴を取りきっても_速さの上限には届かない(self) -> None:
+        # 取りきった速さ（3.7 + 0.42 × 13 = 9.16 マス/秒）は上限（9.4）の下にある。
+        player = make_world(animals=(Animal.FOX, Animal.FROG)).players[0]
         player.shoes = MAX_SHOES
         assert speed_of(player) < MAX_SPEED
+
+    def test_うさぎは_靴を取りきると速さの上限で止まる(self) -> None:
+        # 倍率は靴を足す前の基本の速さにだけ掛かる（3.7 × 1.22 + 0.42 × 13 = 9.974）。
+        # 原型のうさぎも上限で止まる。
+        player = make_world(animals=(Animal.RABBIT, Animal.FOX)).players[0]
+        player.shoes = MAX_SHOES
+        assert speed_of(player) == MAX_SPEED
+
+    def test_動物ごとの倍率は_靴を足す前の基本の速さにだけ掛かる(self) -> None:
+        world = make_world(
+            animals=(Animal.RABBIT, Animal.ELEPHANT, Animal.MOLE, Animal.FOX)
+        )
+        for player in world.players:
+            player.shoes = 2
+        speeds = [speed_of(player) for player in world.players]
+        step = 2 * SHOE_STEP
+        assert speeds == [
+            BASE_SPEED * 1.22 + step,
+            BASE_SPEED * 0.92 + step,
+            BASE_SPEED * 0.9 + step,
+            BASE_SPEED * 1.0 + step,
+        ]
 
     def test_靴の段数がいくつでも_速さは上限で止まる(self) -> None:
         player = make_world().players[0]
@@ -145,27 +168,27 @@ class Test当たり判定:
         world = make_world()
         world.board.put(Cell(3, 3), Tile.SOFT)
         player = world.players[0]
-        assert not collides(world, player, Point(3.5, 3.5), Point(3.52, 3.5))
+        assert not body_collides(world, player, Point(3.5, 3.5), Point(3.52, 3.5))
 
     def test_出たあとは_そのマスへ戻れない(self) -> None:
         world = make_world()
         world.board.put(Cell(3, 3), Tile.SOFT)
         player = world.players[0]
-        assert collides(world, player, Point(4.5, 3.5), Point(3.9, 3.5))
+        assert body_collides(world, player, Point(4.5, 3.5), Point(3.9, 3.5))
 
     def test_空いたマスへは動ける(self) -> None:
         world = make_world()
         world.board.put(Cell(3, 3), Tile.EMPTY)
         world.board.put(Cell(4, 3), Tile.EMPTY)
         player = world.players[0]
-        assert not collides(world, player, Point(3.5, 3.5), Point(3.9, 3.5))
+        assert not body_collides(world, player, Point(3.5, 3.5), Point(3.9, 3.5))
 
     def test_爆弾のマスは_通り抜けの対象のプレイヤーにだけ通れる(self) -> None:
-        """`collides` が `is_solid_for` にプレイヤーを渡していることの検査。
+        """`body_collides` が `is_solid_for` にプレイヤーを渡していることの検査。
 
         動く前の位置（3.5, 3.5）は、置いたプレイヤーの実際の位置ではない。実際の試合
-        では、通り抜けの対象にいる間は体が爆弾のマスにかかっていて、`collides` はその
-        マスを見ないので、対象かどうかで答えは変わらない（`Bomb.pass_through`）。そこで
+        では、通り抜けの対象にいる間は体が爆弾のマスにかかっていて、`body_collides` は
+        そのマスを見ないので、対象かどうかで答えは変わらない（`Bomb.pass_through`）。そこで
         動く前の位置をわざと爆弾のマスの外に置き、対象にいるかどうかで答えが変わること
         だけを見る。
         """
@@ -176,5 +199,5 @@ class Test当たり判定:
         owner.position = Cell(4, 3).center()
         bomb = place_bomb(world, owner)
         assert bomb is not None
-        assert not collides(world, owner, Point(3.5, 3.5), Point(3.9, 3.5))
-        assert collides(world, other, Point(3.5, 3.5), Point(3.9, 3.5))
+        assert not body_collides(world, owner, Point(3.5, 3.5), Point(3.9, 3.5))
+        assert body_collides(world, other, Point(3.5, 3.5), Point(3.9, 3.5))

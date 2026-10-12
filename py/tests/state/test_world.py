@@ -8,61 +8,76 @@ from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.core.entity_id import EntityId
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.input.player_input import PlayerInput
+from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.rules.tuning import SPAWN_CELLS, STARTING_HP
+from animal_bomber.domain.state.actions import Action, Charge, Dig, Tongue
+from animal_bomber.domain.state.actors import (
+    Actor,
+    BurntTongue,
+    Foxfire,
+    Pit,
+    Scatter,
+    SlimeBomb,
+)
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.bomb import Blast, Bomb
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import Life
+from animal_bomber.domain.state.player import ACTION_LOCKED, Life
 from animal_bomber.domain.state.world import WorldState, create_world, hash_world
 from tests.helpers import make_world
+
+FOUR = (Animal.RABBIT, Animal.ELEPHANT, Animal.MOLE, Animal.FOX)
 
 
 class Test始めの状態:
     def test_プレイヤーは番号の順に_四隅のマスの中央から下を向いて始まる(self) -> None:
-        world = create_world(1, ["rabbit", "elephant", "mole", "fox"])
+        world = create_world(1, FOUR)
         assert [p.id for p in world.players] == [0, 1, 2, 3]
-        assert [p.animal for p in world.players] == [
-            "rabbit",
-            "elephant",
-            "mole",
-            "fox",
-        ]
+        assert [p.animal for p in world.players] == list(FOUR)
         assert [p.position for p in world.players] == [c.center() for c in SPAWN_CELLS]
         assert all(p.facing is Direction.DOWN for p in world.players)
         assert all(p.life is Life.ALIVE and p.shoes == 0 for p in world.players)
         assert world.now == 0
 
-    def test_爆弾は1つ_火力は1で始まり_盤面に爆弾も爆風も無い(self) -> None:
-        world = create_world(1, ["rabbit", "elephant"])
-        assert [(p.max_bombs, p.power, p.active_bombs) for p in world.players] == [
-            (1, 1, 0),
-            (1, 1, 0),
+    def test_爆弾の数と火力と体力は_動物ごとの上乗せを足して始まる(self) -> None:
+        """ぞうは火力 +2・体力 +2（ハート1つ）、きつねは爆弾 +1（原型の ANIMALS）。"""
+        world = create_world(1, (Animal.ELEPHANT, Animal.MOLE, Animal.FOX, Animal.FROG))
+        rows = [(p.max_bombs, p.power, p.hp, p.active_bombs) for p in world.players]
+        assert rows == [
+            (1, 3, STARTING_HP + 2, 0),
+            (1, 1, STARTING_HP, 0),
+            (2, 1, STARTING_HP, 0),
+            (1, 1, STARTING_HP, 0),
         ]
+
+    def test_盤面に爆弾も爆風も無く_爆弾のボタンを押していた扱いで始まる(self) -> None:
+        world = create_world(1, (Animal.RABBIT, Animal.ELEPHANT))
         # 前の tick の入力は、爆弾のボタンを押していた扱い（`HELD_AT_ROUND_START`）。
         assert all(p.previous_input is PlayerInput.BOMB for p in world.players)
         assert (world.bombs, world.blasts, world.ids.issued) == ([], [], 0)
 
-    def test_体力は満タンで_状態もアイテムも無く始まる(self) -> None:
-        world = create_world(1, ["rabbit", "elephant"])
+    def test_状態もアイテムも技も無く始まり_技のボタンはロックされている(self) -> None:
+        world = create_world(1, (Animal.RABBIT, Animal.ELEPHANT))
         for player in world.players:
-            assert player.hp == STARTING_HP
             assert player.invulnerable_until == 0
             assert player.effects.active() == []
             assert (player.special_charges, player.last_hit_by) == (0, None)
             assert player.autobomb_wait == 0
-        assert world.items == []
+            assert (player.action, player.action_held) == (None, ACTION_LOCKED)
+            assert (player.tap_voided, player.ability_cooldown) == (False, 0)
+        assert (world.items, world.actors) == ([], [])
 
     @pytest.mark.parametrize("count", [0, 5])
     def test_参加する数が1から4でなければ作れない(self, count: int) -> None:
         with pytest.raises(ValueError, match="参加する数"):
-            create_world(1, ["rabbit"] * count)
+            create_world(1, [Animal.RABBIT] * count)
 
     def test_盤面は人数によらず同じ(self) -> None:
         # 開始位置のまわりは、参加しない隅も空ける。人数で盤面が変わらないように。
-        one = create_world(4649, ["rabbit"])
-        four = create_world(4649, ["rabbit", "elephant", "mole", "fox"])
+        one = create_world(4649, [Animal.RABBIT])
+        four = create_world(4649, FOUR)
         assert one.board.encode() == four.board.encode()
 
 
@@ -108,7 +123,7 @@ def _shoes(world: WorldState) -> None:
 
 
 def _animal(world: WorldState) -> None:
-    world.players[1].animal = "fox"
+    world.players[1].animal = Animal.FOX
 
 
 def _power(world: WorldState) -> None:
@@ -154,6 +169,46 @@ def _last_hit_by(world: WorldState) -> None:
 
 def _autobomb_wait(world: WorldState) -> None:
     world.players[1].autobomb_wait = Tick(5)
+
+
+def _action(world: WorldState) -> None:
+    world.players[1].action = Charge(direction=Direction.UP, remaining=Tick(300))
+
+
+def _action_held(world: WorldState) -> None:
+    world.players[1].action_held = Tick(3)
+
+
+def _tap_voided(world: WorldState) -> None:
+    world.players[1].tap_voided = True
+
+
+def _ability_cooldown(world: WorldState) -> None:
+    world.players[1].ability_cooldown = Tick(60)
+
+
+def _with_charge(world: WorldState) -> WorldState:
+    """プレイヤー 1 が突進している状態。振る舞いの中身を変える確かめの土台。"""
+    world.players[1].action = Charge(direction=Direction.UP, remaining=Tick(300))
+    return world
+
+
+def _charge_remaining(world: WorldState) -> None:
+    action = world.players[1].action
+    assert isinstance(action, Charge)
+    action.remaining = Tick(299)
+
+
+def _charge_direction(world: WorldState) -> None:
+    action = world.players[1].action
+    assert isinstance(action, Charge)
+    action.direction = Direction.LEFT
+
+
+def _charge_carried(world: WorldState) -> None:
+    action = world.players[1].action
+    assert isinstance(action, Charge)
+    action.carried.append(ItemKind.ONION)
 
 
 def _with_bomb_and_blast(world: WorldState) -> WorldState:
@@ -248,6 +303,130 @@ def _item_kind(world: WorldState) -> None:
     world.items[0].kind = ItemKind.BOMB
 
 
+def _item_scattered(world: WorldState) -> None:
+    world.items[0].scattered_by = 0
+    world.items[0].expires_at = Tick(3600)
+
+
+def _item_melting(world: WorldState) -> None:
+    world.items[0].melting_until = Tick(27)
+
+
+def _with_actors(world: WorldState) -> WorldState:
+    """盤面の物を2つ置いた状態。盤面の物の中身と並びを変える確かめの土台。"""
+    world.actors.append(Pit(cell=Cell(3, 3), owner=0))
+    world.actors.append(Foxfire(cell=Cell(5, 5), owner=1))
+    return world
+
+
+def _pit_cell(world: WorldState) -> None:
+    pit = world.actors[0]
+    assert isinstance(pit, Pit)
+    pit.cell = Cell(3, 5)
+
+
+def _foxfire_steps(world: WorldState) -> None:
+    fire = world.actors[1]
+    assert isinstance(fire, Foxfire)
+    fire.steps = 1
+
+
+def _actors_order(world: WorldState) -> None:
+    world.actors.reverse()
+
+
+def _dig() -> Dig:
+    return Dig(cell=Cell(1, 1), remaining=Tick(90))
+
+
+def _tongue() -> Tongue:
+    return Tongue(origin=Cell(1, 1), direction=Direction.RIGHT)
+
+
+ACTION_FIELDS = [
+    pytest.param(_dig, "cell", Cell(1, 2), id="dig-cell"),
+    pytest.param(_dig, "remaining", Tick(89), id="dig-remaining"),
+    pytest.param(_tongue, "origin", Cell(1, 2), id="tongue-origin"),
+    pytest.param(_tongue, "direction", Direction.DOWN, id="tongue-direction"),
+    pytest.param(_tongue, "elapsed", Tick(1), id="tongue-elapsed"),
+    pytest.param(_tongue, "steps", 1, id="tongue-steps"),
+    pytest.param(_tongue, "length", 1, id="tongue-length"),
+    pytest.param(_tongue, "returning", True, id="tongue-returning"),
+    pytest.param(_tongue, "caught", ItemKind.FIRE, id="tongue-caught"),
+]
+"""突進のほかの振る舞いの、結果を左右する中身（作り方・変える項目・変えた値）。"""
+
+
+def _pit() -> Pit:
+    return Pit(cell=Cell(3, 3), owner=0)
+
+
+def _foxfire() -> Foxfire:
+    return Foxfire(cell=Cell(5, 5), owner=1)
+
+
+def _slime() -> SlimeBomb:
+    return SlimeBomb(cell=Cell(5, 5), owner=0, hops_left=6)
+
+
+def _scatter() -> Scatter:
+    return Scatter(center=Cell(5, 5), owner=0)
+
+
+def _burnt() -> BurntTongue:
+    return BurntTongue(owner=0, limit=5, until_regen=Tick(600))
+
+
+ACTOR_FIELDS = [
+    pytest.param(_pit, "owner", 1, id="pit-owner"),
+    pytest.param(_foxfire, "cell", Cell(5, 6), id="foxfire-cell"),
+    pytest.param(_foxfire, "owner", 0, id="foxfire-owner"),
+    pytest.param(_foxfire, "elapsed", Tick(1), id="foxfire-elapsed"),
+    pytest.param(_slime, "cell", Cell(5, 6), id="slime-cell"),
+    pytest.param(_slime, "hops_left", 5, id="slime-hops"),
+    pytest.param(_slime, "flown", Tick(1), id="slime-flown"),
+    pytest.param(_slime, "timer", Tick(1), id="slime-timer"),
+    pytest.param(_scatter, "center", Cell(5, 6), id="scatter-center"),
+    pytest.param(_scatter, "owner", 1, id="scatter-owner"),
+    pytest.param(_scatter, "elapsed", Tick(1), id="scatter-elapsed"),
+    pytest.param(_scatter, "ring", 0, id="scatter-ring"),
+    pytest.param(_burnt, "owner", 1, id="burnt-owner"),
+    pytest.param(_burnt, "limit", 4, id="burnt-limit"),
+    pytest.param(_burnt, "until_regen", Tick(599), id="burnt-regen"),
+]
+"""盤面の物の、結果を左右する中身（作り方・変える項目・変えた値）。
+
+跳ねる爆弾の投げた持ち主と次の区切りまでの間隔は混ぜない（TypeScript 版の `encode` と
+同じ並びにするため。持ち主は作ってから変わらず、間隔は残りの tick に写してから使う）。
+"""
+
+
+def _with_scattered_item(world: WorldState) -> WorldState:
+    """撒かれたアイテムを1つ置いた状態。"""
+    world.items.append(
+        Item(
+            id=world.ids.take(),
+            cell=Cell(3, 1),
+            kind=ItemKind.POOP,
+            scattered_by=0,
+            expires_at=Tick(3600),
+        )
+    )
+    return world
+
+
+def _scattered_owner(world: WorldState) -> None:
+    world.items[0].scattered_by = 1
+
+
+def _scattered_expiry(world: WorldState) -> None:
+    world.items[0].expires_at = Tick(3601)
+
+
+def _actor_removed(world: WorldState) -> None:
+    world.actors.pop()
+
+
 class Test状態の要約:
     def test_同じ種から作れば同じ値になる(self) -> None:
         assert hash_world(make_world(9)) == hash_world(make_world(9))
@@ -279,6 +458,10 @@ class Test状態の要約:
             _special_charges,
             _last_hit_by,
             _autobomb_wait,
+            _action,
+            _action_held,
+            _tap_voided,
+            _ability_cooldown,
         ],
     )
     def test_結果を左右するものが1つ変われば_値が変わる(
@@ -314,11 +497,68 @@ class Test状態の要約:
         change(world)
         assert hash_world(world) != before
 
-    @pytest.mark.parametrize("change", [_item_id, _item_cell, _item_kind])
+    @pytest.mark.parametrize(
+        "change",
+        [_item_id, _item_cell, _item_kind, _item_scattered, _item_melting],
+    )
     def test_アイテムの中身が1つ変われば_値が変わる(
         self, change: Callable[[WorldState], None]
     ) -> None:
         world = _with_item(make_world())
+        before = hash_world(world)
+        change(world)
+        assert hash_world(world) != before
+
+    @pytest.mark.parametrize("change", [_scattered_owner, _scattered_expiry])
+    def test_撒かれたアイテムの持ち主か消える時刻が変われば_値が変わる(
+        self, change: Callable[[WorldState], None]
+    ) -> None:
+        """撒かれたものになるときは2つ同時に入る。片方ずつ変えて、両方混ぜていることを見る。"""
+        world = _with_scattered_item(make_world())
+        before = hash_world(world)
+        change(world)
+        assert hash_world(world) != before
+
+    @pytest.mark.parametrize(("make", "field", "value"), ACTION_FIELDS)
+    def test_ほかの振る舞いも_中身が1つ変われば_値が変わる(
+        self, make: Callable[[], Action], field: str, value: object
+    ) -> None:
+        world = make_world()
+        action = make()
+        world.players[1].action = action
+        before = hash_world(world)
+        setattr(action, field, value)
+        assert hash_world(world) != before
+
+    @pytest.mark.parametrize(("make", "field", "value"), ACTOR_FIELDS)
+    def test_どの盤面の物も_中身が1つ変われば_値が変わる(
+        self, make: Callable[[], Actor], field: str, value: object
+    ) -> None:
+        world = make_world()
+        actor = make()
+        world.actors.append(actor)
+        before = hash_world(world)
+        setattr(actor, field, value)
+        assert hash_world(world) != before
+
+    @pytest.mark.parametrize(
+        "change", [_charge_remaining, _charge_direction, _charge_carried]
+    )
+    def test_振る舞いの中身が1つ変われば_値が変わる(
+        self, change: Callable[[WorldState], None]
+    ) -> None:
+        world = _with_charge(make_world())
+        before = hash_world(world)
+        change(world)
+        assert hash_world(world) != before
+
+    @pytest.mark.parametrize(
+        "change", [_pit_cell, _foxfire_steps, _actors_order, _actor_removed]
+    )
+    def test_盤面の物の中身か並びが変われば_値が変わる(
+        self, change: Callable[[WorldState], None]
+    ) -> None:
+        world = _with_actors(make_world())
         before = hash_world(world)
         change(world)
         assert hash_world(world) != before
@@ -349,6 +589,6 @@ class Test状態の要約:
         assert hash_world(base) != hash_world(other)
 
     def test_プレイヤーの数が違えば値が変わる(self) -> None:
-        one = create_world(4649, ["rabbit"])
-        two = create_world(4649, ["rabbit", "elephant"])
+        one = create_world(4649, [Animal.RABBIT])
+        two = create_world(4649, [Animal.RABBIT, Animal.ELEPHANT])
         assert hash_world(one) != hash_world(two)

@@ -10,7 +10,15 @@ from animal_bomber.domain.core.rng import Rng
 from animal_bomber.domain.core.statehash import StateHasher
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.input.player_input import PlayerInput
-from animal_bomber.domain.rules.tuning import SPAWN_CELLS
+from animal_bomber.domain.rules.animals import Animal, stats_of
+from animal_bomber.domain.rules.tuning import (
+    BASE_POWER,
+    SPAWN_CELLS,
+    START_BOMBS,
+    STARTING_HP,
+)
+from animal_bomber.domain.state.actions import encode_action
+from animal_bomber.domain.state.actors import Actor, actor_name, encode_actor
 from animal_bomber.domain.state.board import Board, build_board
 from animal_bomber.domain.state.bomb import Blast, Bomb
 from animal_bomber.domain.state.item import Item
@@ -31,7 +39,7 @@ class WorldState:
     足すと、通信対戦で突き合わせるものが無駄に増える。左右するものを足したら、
     `hash_world` にも足す（足さないと、その値がずれても気づけない）。
 
-    いまは段階 4 までで使うものだけを持つ。
+    いまは段階 5 までで使うものだけを持つ。
     """
 
     now: Tick
@@ -54,6 +62,11 @@ class WorldState:
     """いま出ている爆風。置かれた順に並ぶ。"""
     items: list[Item] = field(default_factory=list)
     """盤面に落ちているアイテム。落ちた順に並ぶ。"""
+    actors: list[Actor] = field(default_factory=list)
+    """盤面で自分の規則で動き続けるもの（落とし穴・炎・跳ねる爆弾…）。出た順に並ぶ。
+
+    ⚠️ 並びの順も結果の一部。この順に進める（`systems/actors.py`）。
+    """
     ids: IdSource = field(default_factory=IdSource)
     """盤面に置かれるもの（爆弾・爆風・アイテム）の識別子を発番する。"""
 
@@ -69,8 +82,8 @@ HELD_AT_ROUND_START: Final = PlayerInput.BOMB
 の startRound）。押したまま始まったボタンは、一度離して押し直すと効く（TypeScript 版は
 段階 11e の bcb1567 で直した）。
 
-技のボタンは含めない。技（段階 5）は押し続けた長さで決まるので、技を作るときに技の
-側で同じ扱いを入れる（TypeScript 版は押し続けた長さを -1 から始める）。
+技のボタンは含めない。技は押し続けた長さで決まるので、押し続けた長さを -1 から始めて
+同じ扱いにしている（`state/player.py` の `ACTION_LOCKED`。TypeScript 版と同じ）。
 
 ⚠️ 向きのボタンも含めない。押したまま次のラウンドに入ると、最初の tick から歩く
 （TypeScript 版と同じ）。原型の startRound は向きのキーの記録も捨てるが、注記のとおり
@@ -83,16 +96,18 @@ HELD_AT_ROUND_START: Final = PlayerInput.BOMB
 
 
 def create_world(
-    seed: int, animals: Sequence[str], spawn_order: Sequence[int] | None = None
+    seed: int, animals: Sequence[Animal], spawn_order: Sequence[int] | None = None
 ) -> WorldState:
     """ラウンドの始まりの状態を作る。ラウンドごとに作り直す（`app/session.py`）。
 
     ⚠️ 乱数を引く順が結果を決めるので、盤面を先に作る。あとでプレイヤーを置く処理が
     乱数を引くようになっても、同じ種から同じ盤面ができるように。
 
-    向きは全員が下で始まる（原型と同じ）。プレイヤーの状態はどれも始めの値で作るので、
-    原型がラウンドの始まりに戻していたもの（効果・手持ち・「勝手に設置」の待ちなど）は、
-    作り直すことで戻る。
+    向きは全員が下で始まる（原型と同じ。TypeScript 版は、下の隅から始まるプレイヤーが
+    上を向く）。体力・火力・同時に置ける爆弾の数には、動物ごとの上乗せを足す
+    （`rules/animals.py`）。プレイヤーの状態はどれも始めの値で作るので、原型がラウンドの
+    始まりに戻していたもの（効果・手持ち・「勝手に設置」の待ち・技の長押し・盤面の物
+    など）は、作り直すことで戻る。
 
     Args:
         seed: 盤面などに使う乱数の種。同じ種なら同じ盤面になる。
@@ -117,6 +132,9 @@ def create_world(
             position=SPAWN_CELLS[corners[index]].center(),
             facing=Direction.DOWN,
             previous_input=HELD_AT_ROUND_START,
+            hp=STARTING_HP + stats_of(animal).hp_bonus,
+            power=BASE_POWER + stats_of(animal).power_bonus,
+            max_bombs=START_BOMBS + stats_of(animal).bomb_bonus,
         )
         for index, animal in enumerate(animals)
     ]
@@ -155,7 +173,7 @@ def hash_world(world: WorldState) -> int:
     for player in world.players:
         (
             hasher.add_int(player.id)
-            .add_text(player.animal)
+            .add_text(player.animal.value)
             .add_float(player.position.x)
             .add_float(player.position.y)
             .add_text(player.facing.name)
@@ -171,6 +189,10 @@ def hash_world(world: WorldState) -> int:
             .add_int(player.special_charges)
             .add_int(-1 if player.last_hit_by is None else player.last_hit_by)
             .add_int(player.autobomb_wait)
+            .add_text("" if player.action is None else encode_action(player.action))
+            .add_int(player.action_held)
+            .add_bool(player.tap_voided)
+            .add_int(player.ability_cooldown)
         )
     # 並びの順も混ぜる。並びが違えば、導火線の尽きた爆弾の爆発する順が変わる。
     for bomb in world.bombs:
@@ -205,4 +227,13 @@ def hash_world(world: WorldState) -> int:
             .add_int(item.cell.row)
             .add_text(item.kind.value)
         )
+        # 撒かれたもの・溶けているものだけが持つ値は、持っているときだけ混ぜる
+        # （ふつうのアイテムの混ぜ方は変えない。TypeScript 版と同じ）。
+        if item.scattered_by is not None:
+            hasher.add_int(item.scattered_by)
+            hasher.add_int(-1 if item.expires_at is None else item.expires_at)
+        if item.melting_until is not None:
+            hasher.add_text("melting").add_int(item.melting_until)
+    for actor in world.actors:
+        hasher.add_text(actor_name(actor)).add_text(encode_actor(actor))
     return hasher.value

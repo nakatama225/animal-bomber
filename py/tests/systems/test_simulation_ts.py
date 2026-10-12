@@ -1,47 +1,39 @@
-"""1 tick の処理の全体が、TypeScript 版の段階 3 と同じ結果になることの検査。
+"""1 tick の処理の全体が、TypeScript 版と同じ結果になることの検査。
 
 同じ盤面に同じ台本を流し、20 tick ごとに、盤面の状態（`tests/ts_rows.py` の
 `world_rows`）と、その間に起きたイベントの並びを比べる。20 tick ごとにするのは、爆風が
 28 tick で消えるので、区切りの間が長いと、爆風の並びのずれを見逃すため。爆発の順・
-拾う順・被弾の順・状態の時間の進め方のどれを変えても、識別子かイベントの並びか乱数の
-回数がずれて失敗する。
+拾う順・被弾の順・状態の時間の進め方・技を進める順のどれを変えても、識別子かイベントの
+並びか乱数の回数がずれて失敗する。
 
-期待する値は `ts_simulation_values.json`。TypeScript 版の段階 3（コミット f95d2a5）に、
-あとから TypeScript 版を原型に合わせた次の直しを当て、同じ台本を流して出したもの。
+## 期待する値の出どころ
 
-1. 壊れたブロックの一覧に同じマスを1回だけ入れる（7825fac と同じもの。段階 3 では
-   `systems/BlastSystem.ts` の中にある）。当てないと、「まばらな盤面」が 500 tick 目、
-   「ブロックの詰まった盤面」が 160 tick 目でずれる（壊れたブロックからアイテムを
-   落とす抽選の回数が違う）。「アイテムを並べた盤面」は、当てなくても変わらない
-2. 「勝手に設置」は 0.5 秒に1回だけ置こうとし、重なった爆風ではあとから置かれた爆風の
-   持ち主を当てたプレイヤーにする（32bf68b と同じもの）。当てないと、「アイテムを並べた
-   盤面」が 20 tick 目でずれる。重なった爆風の持ち主の違いは、3つの台本のどれにも出ない
-   （別々のプレイヤーの爆風が重なったマスで当たる場面を通らない）ので、
-   `test_items_damage.py` で同じ場面を確かめる
-3. ラウンドの始まりは爆弾のボタンを押していた扱いにする（bcb1567 と同じもの）。当てて
-   あるが、この台本では効かない。台本の盤面は手を入れたラウンドの途中の盤面なので、
-   盤面を作った直後に、前の入力を何も押していない扱いに戻している（Python 版も
-   TypeScript 版の写しを流すスクリプトも同じ。`tests/helpers.py` の `make_world` と
-   同じ扱い）。
-   ラウンドの始まりの扱いは `tests/app/` のテストで確かめる
-4. 爆風を右・左・下・上の順に伸ばす（原型と同じ。いまの TypeScript 版の
-   `query/BlastReach.ts` の `BLAST_DIRECTIONS`。段階 3 では `systems/BlastSystem.ts` の
-   向きの繰り返しに当てる）。当てないと、3つの台本がどれも 160 tick 目でずれる
-   （爆風の識別子と並び。「ブロックの詰まった盤面」はアイテムとイベントの並びも）
-5. 「勝手に設置」の拍に置くのを、動く前にする（原型と同じ。いまの TypeScript 版の
-   `systems/AutobombSystem.ts`）。当てなくても、3つの台本の値は変わらない。拍の
-   tick に、マスの境目をまたぐ場面も、番号の小さいプレイヤーがボタンで置く爆弾と重なる
-   場面も通らないため。どちらの場面も `test_items_damage.py` で確かめる
+期待する値は `ts_simulation_values.json`。TypeScript 版の 37ac1a7（段階 5 の技を原型に
+合わせ切ったあと）の `domain/` と `app/GameSession.ts` を写し、この版の段階 5 に無い
+ものを止めて、同じ台本を流して出したもの。止めたのは2つ。
 
-（1・2・4・5 の「当てないと」は、ほかの直しを当てた写しから、その直しだけを外して
-測った。）
+- 倒れたプレイヤーが外周へ回る（葱ボン。段階 8）のを、退場にした
+  （`mutations/damage.ts` の1か所）
+- 下の隅から始まるプレイヤーが上を向いて始まるのを、全員が下を向いて始まる形にした
+  （この版は原型と同じく全員が下を向く。`state/world.py` の `create_world`）
+
+写しに当てる文字列の置き換えは、そのほかに、振る舞いの中身を文字列にする関数を足す
+（比べるため。`tests/ts_rows.py` の説明）だけ。
+
+段階 4 までは、段階 3 のコミット（f95d2a5）に、あとから TypeScript 版を原型に合わせた
+直し（7825fac・32bf68b・bcb1567・爆風を伸ばす向き・勝手に設置を動く前に）を当てて出して
+いた。段階 5 で、その間に入った名前の置き換え（7412fde）と葱ボン・延長戦（段階 8）のため
+に直しが当たらなくなったので、直しが全部入った HEAD から出す形に替えた。台本は段階 3 の
+ままで、段階 5 の動物ごとの上乗せと技（台本は技のボタンも押す）が効いた値になっている。
 
 ⚠️ 原型の値ではない（原型の乱数は種を与えられないので、同じ盤面を作れない）。
 
+## 台本
+
 3つ目の台本は、悪い状態の動き方を通すためのもの。空いたマスにアイテムを並べ、ときどき
-向きのボタンを全部離す。種 9 では、悪い状態が8つともかかり、チキンを拾い、手を離しても
-滑る・とまれないで進む・壁で滑りが終わる・反転して進む、をどれも通る（TypeScript 版の
-写しで数えて選び、今の固定値でも通ることを数え直した）。
+向きのボタンを全部離す。種 16 では、悪い状態が8つともかかり、チキンを拾い、手を離しても
+滑る・とまれないで進む・壁で滑りが終わる・反転して進む、をどれも通る（段階 5 の形で
+1〜40 を数えて選んだ。段階 4 までの種 9 では、反転ととまれないが、かからなくなった）。
 
 台本は `tests/determinism/scenario.py` と切り離して、このファイルに持つ。決定性の台本は
 ルールを足すたびに足していくので、それに頼ると、この固定値が意図せず変わる。
@@ -54,6 +46,7 @@ from pathlib import Path
 import pytest
 
 from animal_bomber.domain.input.player_input import PlayerInput
+from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.item import Item
@@ -65,7 +58,7 @@ from tests.ts_rows import event_row, world_rows
 EXPECTED = json.loads(
     (Path(__file__).parent / "ts_simulation_values.json").read_text(encoding="utf-8")
 )
-FOUR = ("rabbit", "elephant", "mole", "fox")
+FOUR = (Animal.RABBIT, Animal.ELEPHANT, Animal.MOLE, Animal.FOX)
 INTERVAL = 20
 """比べる区切りの間（tick）。爆風の寿命（28 tick）より短くする。"""
 
@@ -180,7 +173,7 @@ CASES = [
     ),
     pytest.param(
         "items",
-        9,
+        16,
         (1, 2, 4, 6),
         (2, 2, 3, 3),
         (2, 2, 3, 3),

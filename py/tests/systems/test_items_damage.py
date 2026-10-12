@@ -18,6 +18,7 @@ from animal_bomber.domain.events import (
     PlayerHurt,
 )
 from animal_bomber.domain.input.player_input import PlayerInput
+from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import (
     POOP_EFFECTS,
     POOP_STACK_LIMIT,
@@ -55,6 +56,11 @@ from tests.helpers import advance, clear_board, make_world, only_for, put_bomb
 
 IDLE = PlayerInput.IDLE
 RIGHT = PlayerInput.RIGHT
+PLAIN = (Animal.FOX, Animal.FOX)
+"""速さの倍率が 1 で、火力にも体力にも上乗せの無い2匹。
+
+歩いた距離や火力で結果を比べるテストで使う（うさぎは速さ 1.22 倍、ぞうは火力 +2）。
+"""
 
 
 def _add(player: PlayerState, kind: EffectKind, seconds: int) -> None:
@@ -212,7 +218,7 @@ class Test悪い状態の作用:
         assert player.position.x > 1.5
 
     def test_手を離して滑るときは_速さが上がる(self) -> None:
-        world = make_world()
+        world = make_world(animals=PLAIN)
         _open_row(world)
         walking, sliding = world.players
         for player in (walking, sliding):
@@ -225,7 +231,7 @@ class Test悪い状態の作用:
         assert slid == pytest.approx(walked * SLIDE_SPEED_RATIO)
 
     def test_滑っている間に向きを押すと_ふつうの速さでその向きへ進む(self) -> None:
-        world = make_world()
+        world = make_world(animals=PLAIN)
         _open_row(world)
         walking, sliding = world.players
         for player in (walking, sliding):
@@ -276,7 +282,7 @@ class Test悪い状態の作用:
 
         原型は 0.5 秒に1回で、素の速さで歩くと1マスおきに並ぶ。
         """
-        world = make_world()
+        world = make_world(animals=PLAIN)
         clear_board(world)
         player = world.players[0]
         player.max_bombs = 3
@@ -307,7 +313,7 @@ class Test悪い状態の作用:
 
     def test_勝手に設置の拍の合間でも_ボタンを押せば置ける(self) -> None:
         """原型も、ボタンで置く処理と勝手に設置は別々に置こうとする。"""
-        world = make_world()
+        world = make_world(animals=PLAIN)
         clear_board(world)
         player = world.players[0]
         player.max_bombs = 3
@@ -373,7 +379,7 @@ class Test悪い状態の作用:
         self,
     ) -> None:
         """ボタンの爆弾の側でも、勝手に設置が爆弾おけないに勝つ（`bomb.py`）。"""
-        world = make_world()
+        world = make_world(animals=PLAIN)
         clear_board(world)
         player = world.players[0]
         player.max_bombs = 3
@@ -686,7 +692,7 @@ class Test拾う:
         assert events == [ItemTaken(cell=Cell(1, 1), kind=ItemKind.FIRE, taker=0)]
 
     def test_同じマスに2匹いれば_番号の小さいプレイヤーが拾う(self) -> None:
-        world = make_world()
+        world = make_world(animals=PLAIN)
         first, second = world.players
         second.position = first.position
         _drop(world, Cell(1, 1), ItemKind.FIRE)
