@@ -4,9 +4,9 @@ import type { SimEvent } from '../../events/SimEvent.js';
 import { addBlast, detonate } from '../../mutations/explode.js';
 import { spawnBomb } from '../../mutations/bombs.js';
 import { bombAt } from '../../query/BoardQuery.js';
-import type { PlayerState } from '../../state/PlayerState.js';
+import type { PlayerId, PlayerState } from '../../state/PlayerState.js';
 import type { WorldState } from '../../state/WorldState.js';
-import type { WorldActor } from '../WorldActor.js';
+import { ACTOR_TURNS, type WorldActor } from '../WorldActor.js';
 
 /**
  * 投げてから着地するまでの長さ。
@@ -50,6 +50,7 @@ const HOP_MAX = 8;
  */
 export class SlimeBombActor implements WorldActor {
   readonly kind = 'slime';
+  readonly turn = ACTOR_TURNS.slime;
   #cell: Cell;
   readonly #from: Point;
   #hopsLeft: number;
@@ -66,13 +67,18 @@ export class SlimeBombActor implements WorldActor {
    */
   constructor(
     start: Cell,
-    private readonly owner: PlayerState,
+    private readonly shooter: PlayerState,
     hops: number,
     from: Point = centerOf(start),
   ) {
     this.#cell = start;
     this.#hopsLeft = hops;
     this.#from = { ...from };
+  }
+
+  /** 投げたプレイヤー。爆発の火力は、爆発するときのこのプレイヤーの火力。 */
+  get owner(): PlayerId {
+    return this.shooter.id;
   }
 
   /** いま乗っているマス（飛んでいる間は着地するマス）。描画のために読むだけで、結果には関わらない。 */
@@ -140,7 +146,7 @@ export class SlimeBombActor implements WorldActor {
     this.#hop(world);
     this.#startInterval(world);
     // 跳べずに留まったときも鳴らす（原型も跳ぶ先を試したあと必ず鳴らす）。
-    return { events: [{ type: 'techniqueMoment', player: this.owner.id, moment: 'slimeHopped' }], done: false };
+    return { events: [{ type: 'techniqueMoment', player: this.shooter.id, moment: 'slimeHopped' }], done: false };
   }
 
   /** 次の区切りまでの間隔を引く。 */
@@ -191,14 +197,14 @@ export class SlimeBombActor implements WorldActor {
         (next) => !blocked(next),
       );
       if (landing === undefined) {
-        addBlast(world, cell, this.owner.id, true);
-        return [{ type: 'exploded', cell, owner: this.owner.id, chained: 1 }];
+        addBlast(world, cell, this.shooter.id, true);
+        return [{ type: 'exploded', cell, owner: this.shooter.id, chained: 1 }];
       }
       cell = landing;
     }
-    const result = detonate(world, spawnBomb(world, this.owner, cell));
+    const result = detonate(world, spawnBomb(world, this.shooter, cell));
     return [
-      { type: 'exploded', cell, owner: this.owner.id, chained: result.chained },
+      { type: 'exploded', cell, owner: this.shooter.id, chained: result.chained },
       ...result.events,
     ];
   }

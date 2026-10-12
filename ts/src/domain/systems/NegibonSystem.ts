@@ -6,7 +6,7 @@ import { laneSpot, laneStep, wrapAlong } from '../negibon/lane.js';
 import { LeekActor } from '../negibon/LeekActor.js';
 import { LANE_SPEED, LEEK_COOLDOWN } from '../rules/negibon.js';
 import { OUT } from '../state/Life.js';
-import type { PlayerId, PlayerState } from '../state/PlayerState.js';
+import type { PlayerState } from '../state/PlayerState.js';
 import { justPressed } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 
@@ -20,27 +20,33 @@ import type { WorldState } from '../state/WorldState.js';
  * 飛んでいる葱は自律物（`LeekActor`）として `ActorSystem` が進める。
  */
 export class NegibonSystem {
-  step(world: WorldState, playerInputs: ReadonlyMap<PlayerId, PlayerInput>): SimEvent[] {
-    if (!lanesOpen(world)) return closeLanes(world);
+  /** 残り時間が短くなっていたら、外周を閉じる。プレイヤーを動かす番の前に呼ぶ。 */
+  closeIfDue(world: WorldState): SimEvent[] {
+    return lanesOpen(world) ? [] : closeLanes(world);
+  }
 
+  /**
+   * 1人ぶん。外周にいるプレイヤーを動かし、葱を撃たせる。
+   *
+   * 盤面のプレイヤーが動く番と同じ番に、番号の順に呼ぶ（原型の update も、入力の処理の中で
+   * 外周のプレイヤーを動かす）。外周が閉じていれば何もしない。
+   */
+  stepFor(world: WorldState, player: PlayerState, playerInput: PlayerInput = IDLE_INPUT): SimEvent[] {
+    const life = player.life;
+    if (life.kind !== 'negibon' || !lanesOpen(world)) return [];
+
+    const along = wrapAlong(life.along + laneStep(laneSpot(life.along).side, playerInput) * LANE_SPEED);
+    let readyAt = life.readyAt;
     const events: SimEvent[] = [];
-    for (const player of world.players) {
-      const life = player.life;
-      if (life.kind !== 'negibon') continue;
-      const playerInput = playerInputs.get(player.id) ?? IDLE_INPUT;
-
-      const along = wrapAlong(life.along + laneStep(laneSpot(life.along).side, playerInput) * LANE_SPEED);
-      let readyAt = life.readyAt;
-      // 動いてから撃つ。撃つ位置は動いたあとの位置になる。
-      if (wantsToThrow(player, playerInput) && world.now >= readyAt) {
-        const spot = laneSpot(along);
-        world.actors.push(new LeekActor(spot.position, spot.facing, player.id));
-        readyAt = tick(world.now + LEEK_COOLDOWN);
-        events.push({ type: 'leekThrown', player: player.id, from: { ...spot.position }, facing: spot.facing });
-      }
-      // 値は書き換えず、丸ごと差し替える（`Life` の約束）。
-      player.life = { kind: 'negibon', along, readyAt };
+    // 動いてから撃つ。撃つ位置は動いたあとの位置になる。
+    if (wantsToThrow(player, playerInput) && world.now >= readyAt) {
+      const spot = laneSpot(along);
+      world.actors.push(new LeekActor(spot.position, spot.facing, player.id));
+      readyAt = tick(world.now + LEEK_COOLDOWN);
+      events.push({ type: 'leekThrown', player: player.id, from: { ...spot.position }, facing: spot.facing });
     }
+    // 値は書き換えず、丸ごと差し替える（`Life` の約束）。
+    player.life = { kind: 'negibon', along, readyAt };
     return events;
   }
 }

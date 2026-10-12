@@ -1,3 +1,4 @@
+import type { PlayerState } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 
 /**
@@ -11,9 +12,20 @@ import type { WorldState } from '../state/WorldState.js';
  * 作用は担当ごとに違う。
  */
 export class EffectSystem {
+  /** 全員ぶん（番号の順）。 */
   step(world: WorldState): void {
-    for (const player of world.players) {
-      player.effects.advance();
-    }
+    for (const player of world.players) this.advanceFor(player);
+  }
+
+  /**
+   * 1人ぶん。そのプレイヤーの振る舞いを進める前に呼ぶ（原型の update は、プレイヤーごとに
+   * 「効果の時間を減らす → 技を進める → 勝手に設置」と回す）。
+   *
+   * そのため、番号の小さいプレイヤーの技で番号の大きいプレイヤーに状態がかかると、その tick の
+   * うちに1回減り、番号の大きいプレイヤーの技で小さいプレイヤーにかかると、減るのは次の tick
+   * から（原型と同じ。かかる側の番号で1 tick 違う）。
+   */
+  advanceFor(player: PlayerState): void {
+    player.effects.advance();
   }
 }

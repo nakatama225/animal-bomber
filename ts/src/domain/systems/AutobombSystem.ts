@@ -14,8 +14,8 @@ import type { WorldState } from '../state/WorldState.js';
  * 勝手に設置」と回し、そのあとで各プレイヤーを入力で動かして技を始める（`legacy/animal-bomber.html`
  * の update）。ボタンの爆弾は動いたあとに見る（humanUpdate）。
  *
- * `Simulation` はこれを `ActionSystem` に渡し、技を進めた直後に1人ずつ呼ばせる。新しく技を
- * 始めるのと、入力で動く（`MovementSystem`）のは、全員ぶんの勝手に設置のあと。そのため、
+ * `Simulation` は、プレイヤーごとに技を進めた直後にこれを呼ぶ。新しく技を始めるのと、入力で
+ * 動く（`MovementSystem`）のは、全員ぶんの勝手に設置のあと。そのため、
  *
  * - 拍の tick にマスの境目をまたいでも、置くのは今までいたマス
  * - 技を始める tick に拍が来たら、置いてから技を始める

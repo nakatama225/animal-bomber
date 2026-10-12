@@ -116,15 +116,16 @@ describe('キツネ跳び（原型 useSpecial のきつね・isBlastProof）', (
     return { world, fox, sim };
   }
 
-  it('跳んでいるのは 1 秒（原型 59 フレーム、この版は出した tick の終わりから数えて 59 tick）', () => {
+  it('跳んでいるのは 1 秒（出した tick を含めて 60 tick。原型は出したフレームのあと 59 フレーム）', () => {
+    // 出した tick には状態の時間が減らず（減らすのは次の tick の頭。原型も同じ）、そのあと 59 tick 続く。
     const { world, fox, sim } = leap();
     expect(fox.effects.has('leap')).toBe(true);
-    let leaping = 1;
+    let after = 0;
     for (let t = 0; t < 120; t += 1) {
       sim.step(world, sameForAll(world, press({})));
-      if (fox.effects.has('leap')) leaping += 1;
+      if (fox.effects.has('leap')) after += 1;
     }
-    expect(leaping).toBe(59);
+    expect(after).toBe(59);
   });
 
   it('盤面に相手が1人もいなければ、跳ぶだけで炎は出さない（原型の castFoxfire。チキンは使う）', () => {

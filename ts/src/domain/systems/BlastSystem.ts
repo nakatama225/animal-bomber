@@ -14,14 +14,8 @@ import type { WorldState } from '../state/WorldState.js';
  * 1 tick の中でまとめて処理する。
  */
 export class BlastSystem {
-  step(world: WorldState): SimEvent[] {
-    const events = this.#detonateExpired(world);
-    this.#expireBlasts(world);
-    return events;
-  }
-
   /** 導火線が尽きた爆弾を、連鎖ごと爆発させる。 */
-  #detonateExpired(world: WorldState): SimEvent[] {
+  detonateExpired(world: WorldState): SimEvent[] {
     // 走査中に world.bombs が変わるので、対象を先に確定させる。
     const expired = world.bombs.filter((bomb) => bomb.fuse <= 0 && !bomb.chained);
     const events: SimEvent[] = [];
@@ -38,7 +32,7 @@ export class BlastSystem {
   }
 
   /** 爆風の残り時間を進め、尽きたものを消す。 */
-  #expireBlasts(world: WorldState): void {
+  expireBlasts(world: WorldState): void {
     for (const blast of world.blasts) {
       blast.remaining = tick(blast.remaining - 1);
     }

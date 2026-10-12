@@ -352,11 +352,13 @@ describe('舌の長さと時間（原型 startTongue・updateTongue・tongueBurn
   it('伸びている舌に爆風が来ると焼き切れる：手前までに短くなり、泣き、10 秒ごとに1マス戻る', () => {
     // 原型：40 フレームで 5 マス伸びた舌の 2 マス目に爆風を置くと、次のフレームで舌が消え、
     // そのラウンドは 1 マスまで・3 秒泣く（動けないのは 181 フレーム）・10 秒たつごとに1マス戻る。
+    // 焼けたかを見るのは、その tick の最後（被弾を見たあと。`afterDamage`）。
     const { world, frog } = frogAt();
     const action = tongueOf(world, frog);
     for (let t = 1; t <= 40; t += 1) action.tick(world, frog);
     addBlast(world, { col: 5, row: 5 }, 1, false);
-    expect(action.tick(world, frog).done).toBe(true);
+    expect(action.tick(world, frog).done).toBe(false);
+    expect(action.afterDamage(world, frog).done).toBe(true);
     expect(tongueReachOf(world, frog)).toBe(1);
     expect(frog.effects.remaining('stun')).toBe(180);
 
@@ -384,6 +386,7 @@ describe('舌の長さと時間（原型 startTongue・updateTongue・tongueBurn
       for (let t = 1; t <= 40; t += 1) action.tick(world, frog);
       addBlast(world, { col: 5, row: 5 }, 1, false);
       action.tick(world, frog);
+      action.afterDamage(world, frog);
       expect(frog.effects.remaining('stun'), `前に ${before} tick`).toBe(after);
     }
   });
@@ -400,7 +403,8 @@ describe('舌の長さと時間（原型 startTongue・updateTongue・tongueBurn
     }
     expect(t).toBe(31);
     addBlast(world, { col: 4, row: 5 }, 1, false);
-    expect(action.tick(world, frog).done).toBe(true);
+    expect(action.tick(world, frog).done).toBe(false);
+    expect(action.afterDamage(world, frog).done).toBe(true);
     expect(frog.power - before).toBe(0);
     expect(world.items).toEqual([]);
     expect(tongueReachOf(world, frog)).toBe(0);
@@ -467,12 +471,13 @@ describe('舌の長さと時間（原型 startTongue・updateTongue・tongueBurn
       const log: string[] = [];
       for (let t = 1; t <= 60; t += 1) {
         if (burn && t === 25) addBlast(world, { col: 4, row: 5 }, 1, false);
-        const { events, done } = action.tick(world, frog);
-        for (const event of events) {
+        const advanced = action.tick(world, frog);
+        const checked = advanced.done ? { events: [], done: true } : action.afterDamage(world, frog);
+        for (const event of [...advanced.events, ...checked.events]) {
           if (event.type === 'techniqueMoment') log.push(`${t}:${event.moment}`);
           if (event.type === 'itemTaken') log.push(`${t}:itemTaken(${event.cell === null ? 'null' : 'cell'})`);
         }
-        if (done) break;
+        if (checked.done) break;
       }
       return log;
     };

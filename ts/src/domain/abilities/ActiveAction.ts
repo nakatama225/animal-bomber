@@ -85,4 +85,13 @@ export interface ActiveAction {
    * といった処理をここに書く。
    */
   readonly finish?: (world: WorldState, player: PlayerState) => SimEvent[];
+
+  /**
+   * 被弾を見たあと（1 tick の最後）に、爆風に触れたかを見る。触れて終わるなら done を true にする
+   * （終わったら `finish` も呼ばれる）。
+   *
+   * 爆風が出た tick のうちに見るため、`tick` とは別にしてある（原型も、被弾を見た直後に
+   * 伸びている舌が焼けたかを見る）。
+   */
+  readonly afterDamage?: (world: WorldState, player: PlayerState) => { events: SimEvent[]; done: boolean };
 }

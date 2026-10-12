@@ -47,8 +47,12 @@ export class ButtonMacro {
   /** 長押し（とくぎ）の手順か。押して離すだけの手順なら false。 */
   readonly isHold: boolean;
 
-  private constructor(steps: readonly MacroStep[], isHold = false) {
-    this.#steps = [...steps, RELEASE];
+  /**
+   * @param releaseStill 最後の「離す」tick も歩かないか。押して離す技は離した tick に出るので、
+   *   その tick に歩くと、向きが変わってから技が出る（ゲームの側は動いてから技を始める）
+   */
+  private constructor(steps: readonly MacroStep[], isHold = false, releaseStill = false) {
+    this.#steps = [...steps, releaseStill ? { ...RELEASE, still: true } : RELEASE];
     this.isHold = isHold;
   }
 
@@ -57,9 +61,13 @@ export class ButtonMacro {
     return new ButtonMacro([{ ...RELEASE, bomb: true, still: true }]);
   }
 
-  /** 技のボタンを軽く押して離す（通常技。通常技の無い動物では、チキンがあればとくぎ）。 */
+  /**
+   * 技のボタンを軽く押して離す（通常技。通常技の無い動物では、チキンがあればとくぎ）。
+   *
+   * 技は離した tick に出るので、離す tick も歩かない（原型の CPU も、技を使うフレームは歩かない）。
+   */
   static tap(): ButtonMacro {
-    return new ButtonMacro([{ ...RELEASE, action: true, still: true }]);
+    return new ButtonMacro([{ ...RELEASE, action: true, still: true }], false, true);
   }
 
   /**
@@ -84,9 +92,11 @@ export class ButtonMacro {
    * しまうので、使う側がマスの中央付近にいることを確かめてから使う。
    */
   static facing(direction: Direction, then: ButtonMacro): ButtonMacro {
+    const last = then.#steps.at(-1);
     return new ButtonMacro(
       [{ ...RELEASE, face: direction }, ...then.#steps.slice(0, -1)],
       then.isHold,
+      last?.still === true,
     );
   }
 

@@ -37,6 +37,8 @@ function stepsBy(elapsed: Tick): number {
  */
 export class BurntTongueActor implements WorldActor {
   readonly kind = 'burntTongue';
+  /** 持ち主の番に、状態の時間を減らす前に戻す（原型はプレイヤーごとの効果の処理の中で戻す）。 */
+  readonly turn = 'owner';
   #limit: number;
   #untilRegen: Tick = REGEN_TIME;
 
@@ -133,9 +135,6 @@ export class TongueAction implements ActiveAction {
   }
 
   tick(world: WorldState, player: PlayerState): { events: SimEvent[]; done: boolean } {
-    const burnt = this.#burntAt(world);
-    if (burnt !== null) return { events: this.#burn(world, player, burnt), done: true };
-
     this.#elapsed = tick(this.#elapsed + 1);
     const events: SimEvent[] = [];
     while (this.#steps < stepsBy(this.#elapsed)) {
@@ -182,6 +181,17 @@ export class TongueAction implements ActiveAction {
     // その時の長さで見る（原型の updateTongue も1マスごとに tongueReach を読む）。
     if (this.#length >= tongueReachOf(world, player)) this.#returning = true;
     return [];
+  }
+
+  /**
+   * 伸びている舌の上に爆風があれば焼き切れる（原型の tongueBurnCheck）。
+   *
+   * 1 tick の最後（被弾を見たあと）に見るので、爆風が出た tick のうちに焼き切れる（原型も同じ）。
+   */
+  afterDamage(world: WorldState, player: PlayerState): { events: SimEvent[]; done: boolean } {
+    const burnt = this.#burntAt(world);
+    if (burnt === null) return { events: [], done: false };
+    return { events: this.#burn(world, player, burnt), done: true };
   }
 
   /** 伸びている舌の上の、いちばん手前の爆風のマス数（1 が根元の隣）。無ければ null。 */

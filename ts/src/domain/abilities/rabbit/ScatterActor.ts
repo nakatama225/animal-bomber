@@ -4,7 +4,7 @@ import type { SimEvent } from '../../events/SimEvent.js';
 import { bombAt } from '../../query/BoardQuery.js';
 import type { PlayerId } from '../../state/PlayerState.js';
 import type { WorldState } from '../../state/WorldState.js';
-import type { WorldActor } from '../WorldActor.js';
+import { ACTOR_TURNS, type WorldActor } from '../WorldActor.js';
 
 /** 撒く範囲（中心からのマス数）。2 なら 5×5 の 25 マス。 */
 const RANGE = 2;
@@ -42,6 +42,7 @@ const SCATTERED_LIFETIME: Tick = tick(3600);
  */
 export class ScatterActor implements WorldActor {
   readonly kind = 'scatter';
+  readonly turn = ACTOR_TURNS.scatter;
   #elapsed: Tick = tick(0);
   /** 撒き終えた輪。-1 はまだ1つも撒いていない。 */
   #ring = -1;

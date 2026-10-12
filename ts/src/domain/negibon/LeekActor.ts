@@ -1,4 +1,4 @@
-import type { WorldActor } from '../abilities/WorldActor.js';
+import { ACTOR_TURNS, type WorldActor } from '../abilities/WorldActor.js';
 import { cellOf, step, type Cell, type Direction, type Point } from '../core/Coord.js';
 import { tick, type Tick } from '../core/Tick.js';
 import type { SimEvent } from '../events/SimEvent.js';
@@ -37,6 +37,7 @@ export type LeekStop = 'wall' | 'blast' | 'bomb' | 'range';
  */
 export class LeekActor implements WorldActor {
   readonly kind = 'leek';
+  readonly turn = ACTOR_TURNS.leek;
   #position: Point;
   #travelled = 0;
   #remaining: Tick = LEEK_LIFETIME;

@@ -33,13 +33,18 @@ import type { Direction } from '../core/Coord.js';
  * というのがこの配置の主張になっている。
  */
 export class MovementSystem {
+  /** 全員を番号の順に動かす（1人ぶんは `moveFor`）。 */
   step(world: WorldState, playerInputs: ReadonlyMap<PlayerId, PlayerInput>): void {
     for (const player of world.players) {
-      if (!isAlive(player)) continue;
       const playerInput = playerInputs.get(player.id);
-      if (playerInput === undefined) continue;
-      this.#movePlayer(world, player, playerInput);
+      if (playerInput !== undefined) this.moveFor(world, player, playerInput);
     }
+  }
+
+  /** 1人ぶん。盤面にいるプレイヤーだけを、入力のとおりに動かす。 */
+  moveFor(world: WorldState, player: PlayerState, playerInput: PlayerInput): void {
+    if (!isAlive(player)) return;
+    this.#movePlayer(world, player, playerInput);
   }
 
   #movePlayer(world: WorldState, player: PlayerState, playerInput: PlayerInput): void {

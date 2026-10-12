@@ -7,7 +7,7 @@ import type { PlayerState } from '../../state/PlayerState.js';
 import { isAlive } from '../../state/PlayerState.js';
 import type { WorldState } from '../../state/WorldState.js';
 import type { ActiveAction } from '../ActiveAction.js';
-import type { WorldActor } from '../WorldActor.js';
+import { ACTOR_TURNS, type WorldActor } from '../WorldActor.js';
 
 /** 掘り終わるまでの長さ。 */
 const DIG_TIME: Tick = tick(90);
@@ -45,6 +45,7 @@ export function pitAt(world: Readonly<WorldState>, cell: Cell): PitActor | undef
  */
 export class PitActor implements WorldActor {
   readonly kind = 'pit';
+  readonly turn = ACTOR_TURNS.pit;
 
   constructor(
     readonly cell: Cell,

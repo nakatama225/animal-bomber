@@ -5,7 +5,7 @@ import { hurt } from '../../mutations/damage.js';
 import type { PlayerId } from '../../state/PlayerState.js';
 import { isAlive, isBlastProof, isInvulnerable } from '../../state/PlayerState.js';
 import type { WorldState } from '../../state/WorldState.js';
-import type { WorldActor } from '../WorldActor.js';
+import { ACTOR_TURNS, type WorldActor } from '../WorldActor.js';
 
 /**
  * 追いかける長さ（原型の FOXFIRE_LIFE 1.5 秒）。
@@ -54,6 +54,7 @@ const SEARCH_ORDER: readonly Cell[] = [
  */
 export class FoxfireActor implements WorldActor {
   readonly kind = 'foxfire';
+  readonly turn = ACTOR_TURNS.chaser;
   #cell: Cell;
   #elapsed: Tick = tick(0);
   #steps = 0;

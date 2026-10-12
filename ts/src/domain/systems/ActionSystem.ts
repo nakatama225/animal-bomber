@@ -2,7 +2,7 @@ import { abilityOf } from '../abilities/registry.js';
 import { tick } from '../core/Tick.js';
 import type { SimEvent } from '../events/SimEvent.js';
 import type { PlayerInput } from '../input/PlayerInput.js';
-import type { PlayerId, PlayerState } from '../state/PlayerState.js';
+import type { PlayerState } from '../state/PlayerState.js';
 import { isAlive, isFrozen } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 
@@ -45,11 +45,10 @@ import type { WorldState } from '../state/WorldState.js';
  *
  * ## 進めるのと始めるのを分ける
  *
- * 続いている振る舞いを進めるのを先に全員ぶん済ませ、ボタンを見て新しく始めるのはそのあと。
- * 原型も、効果の処理の中で全員の技を進め、そのあとの入力の処理で技を始める。
- * 進めるときは1人ずつ、そのプレイヤーの「あとで呼ぶ処理」（`Simulation` が「勝手に設置」を
- * 渡す）をすぐに呼ぶ。原型はプレイヤーごとに「技を進める → 勝手に設置」と回すので、番号の
- * 大きいプレイヤーの技が番号の小さいプレイヤーを押しのけたり、その爆弾を起爆したりする順まで同じになる。
+ * 続いている振る舞いを進める（`advanceFor`）のと、ボタンを見て新しく始める（`watchFor`）のは
+ * 別の番にある。原型は、プレイヤーごとの効果の処理の中で技を進め、全員ぶん済ませたあとの、
+ * プレイヤーごとの入力の処理（動く → 爆弾を置く → 技を始める）で技を始める。どちらの番で
+ * 呼ぶかは `Simulation` が決める。
  *
  * ⚠️ この tick に振る舞いを進めたプレイヤーは、同じ tick には新しく始めない（終わった tick でも）。
  * 原型は、技が終わったフレームのうちに次の技を始められる。1 tick の違いで、今までの形のままにしてある。
@@ -61,34 +60,42 @@ import type { WorldState } from '../state/WorldState.js';
  */
 export class ActionSystem {
   /**
-   * @param afterAdvance 1人ぶんの振る舞いを進めた直後に呼ぶ処理。番号の順に全員ぶん呼ぶ
-   *   （振る舞いが無いプレイヤーも、入力が無いプレイヤーも）
+   * 1人ぶん。技の間隔を1 tick 減らし、乗っ取り中の振る舞いを1 tick 進める。
+   *
+   * 間隔を減らすのは、入力を受け取っているプレイヤーだけ（通信対戦で入力の届いていない番は
+   * 進めない。今までと同じ）。
+   *
+   * @returns 起きたイベントと、振る舞いを進めたか（進めたら、この tick は新しく始めない）
    */
-  step(
-    world: WorldState,
-    playerInputs: ReadonlyMap<PlayerId, PlayerInput>,
-    afterAdvance: (player: PlayerState) => SimEvent[] = () => [],
-  ): SimEvent[] {
-    const events: SimEvent[] = [];
-    const advanced = new Set<PlayerId>();
-    for (const player of world.players) {
-      if (playerInputs.has(player.id)) {
-        if (player.abilityCooldown > 0) {
-          player.abilityCooldown = tick(player.abilityCooldown - 1);
-        }
-        if (player.action !== null) {
-          advanced.add(player.id);
-          events.push(...this.#advance(world, player));
-        }
-      }
-      events.push(...afterAdvance(player));
+  advanceFor(world: WorldState, player: PlayerState, hasInput: boolean): { events: SimEvent[]; advanced: boolean } {
+    if (!hasInput) return { events: [], advanced: false };
+    if (player.abilityCooldown > 0) {
+      player.abilityCooldown = tick(player.abilityCooldown - 1);
     }
+    if (player.action === null) return { events: [], advanced: false };
+    return { events: this.#advance(world, player), advanced: true };
+  }
 
+  /** 1人ぶん。技のボタンの押し方を見て、技を出す。盤面にいるプレイヤーだけ。 */
+  watchFor(world: WorldState, player: PlayerState, playerInput: PlayerInput): SimEvent[] {
+    if (!isAlive(player)) return [];
+    return this.#watchButton(world, player, playerInput);
+  }
+
+  /**
+   * 被弾を見たあとに、振る舞いが爆風に触れたかを見る（`ActiveAction.afterDamage`）。
+   * 盤面にいるプレイヤーだけ。終わったら後始末を呼んで外す。
+   */
+  afterDamage(world: WorldState): SimEvent[] {
+    const events: SimEvent[] = [];
     for (const player of world.players) {
-      const playerInput = playerInputs.get(player.id);
-      if (playerInput === undefined || advanced.has(player.id)) continue;
-      if (!isAlive(player)) continue;
-      events.push(...this.#watchButton(world, player, playerInput));
+      const action = player.action;
+      if (action === null || action.afterDamage === undefined || !isAlive(player)) continue;
+      const result = action.afterDamage(world, player);
+      events.push(...result.events);
+      if (!result.done) continue;
+      if (action.finish !== undefined) events.push(...action.finish(world, player));
+      player.action = null;
     }
     return events;
   }
