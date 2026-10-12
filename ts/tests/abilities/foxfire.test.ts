@@ -90,6 +90,8 @@ describe('狐火の進み方（原型 foxfireStep・updateFoxfires）', () => {
     const { world, p0: fox, p1: elephant } = arena(['fox', 'elephant']);
     place(fox, { col: 3, row: 7 });
     place(elephant, { col: 12, row: 7 });
+    // 原型を測ったときと同じ体力（爆風3回ぶん＋ぞうの上乗せ1回ぶん）。
+    elephant.hp = 8;
     elephant.facing = 'left';
     elephant.action = new ChargeAction('left');
     world.actors.push(new FoxfireActor(fox.position, fox.id));
@@ -161,6 +163,9 @@ describe('突進どうしの体当たり（原型 updateCharge は相手の突�
     const { world, p0: a, p1: b } = arena(['elephant', 'elephant']);
     place(a, { col: 3, row: 7 });
     place(b, { col: 9, row: 7 });
+    // 原型を測ったときと同じ体力（爆風3回ぶん＋ぞうの上乗せ1回ぶん）。
+    a.hp = 8;
+    b.hp = 8;
     a.facing = 'right';
     b.facing = 'left';
     a.action = new ChargeAction('right');

@@ -415,6 +415,8 @@ describe('技を進める・勝手に設置・技を始める、の順（原型 
     const world = arena(['elephant', 'rabbit']);
     const [elephant, rabbit] = world.players as [PlayerState, PlayerState];
     rabbit.position = { x: 3.5, y: 1.5 };
+    // 原型を測ったときと同じ体力（爆風3回ぶん）。体当たりの傷で倒れると、置くところまで進まない。
+    rabbit.hp = 6;
     elephant.position = { x: 4.3, y: 1.5 };
     elephant.action = new ChargeAction('left');
     rabbit.effects.add('autobomb', itemEffectTicks(4), itemEffectTicks(12));

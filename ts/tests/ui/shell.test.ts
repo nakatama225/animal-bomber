@@ -806,6 +806,15 @@ describe('ゲームパッドとロビーでメニューを動かす', () => {
     const pad = fakePad();
     const { shell, elements } = mount('both', () => [], pad.read);
     shell.showMenu();
+    // 先頭の行（1P の爆風の回数）を、マウスで1つ目（1回）でない値にしておく。既定は1つ目と同じ 1回 なので、
+    // そのままでは押されたかどうかを見分けられない。
+    press(elements.menu, '[data-choice="solo"]');
+    press(elements.menu, '[data-action="next"]');
+    press(elements.menu, '[data-field="hits-p1"] [data-value="3"]');
+    press(elements.menu, '[data-action="back"]');
+    press(elements.menu, '[data-action="back"]');
+    shell.draw(0);
+    expect(screenOf(elements)).toBe('title');
     tap(shell, pad, A);
     tap(shell, pad, A);
     expect(screenOf(elements)).toBe('pick');

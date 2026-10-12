@@ -330,6 +330,8 @@ describe('突進で押しのける先（原型 updateCharge の collides）', ()
     const [elephant, victim] = world.players as [PlayerState, PlayerState];
     elephant.position = centerOf({ col: setup.from, row: 5 });
     victim.position = centerOf({ col: setup.victimAt, row: 5 });
+    // 原型を測ったときと同じ体力（爆風3回ぶん）。体当たりの傷で倒れると、押される先を見られない。
+    victim.hp = 6;
     if (setup.soft !== undefined) world.board.set({ col: setup.soft, row: 5 }, 'soft');
     if (setup.bomb !== undefined) {
       const owner = world.players[setup.bomb.owner]!;

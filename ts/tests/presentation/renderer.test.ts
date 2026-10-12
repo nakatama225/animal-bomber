@@ -28,16 +28,18 @@ import { fakeCanvas, type FakeCanvas } from './fakeCanvas.js';
  */
 describe('描画', () => {
   it('CPU どうしの試合を毎 tick 描いても例外が出ず、状態も変わらない', () => {
-    // すべての技と外周の葱ボン・葱が現れるまで、種を順に替えて試合を回す（上限 8 試合）。現れたものは
+    // すべての技と外周の葱ボン・葱が現れるまで、種を順に替えて試合を回す（上限 40 試合）。現れたものは
     // 試合をまたいで数える。種を1つに決め打ちすると、技や CPU の判断を直して試合の流れが変わるたびに
     // 現れないものが出て、種を選び直すことになる（2026-10-04・10-11 に選び直した）。
     // 12 から始めるのは、2026-10-11 の時点で1試合ですべて現れた種だったため。
+    // 上限は、体力の既定を爆風1回にして試合が短くなったときに 8 から広げた（2026-10-13。8 試合では
+    // 追いかける炎が一度も現れなかった）。
     const animals = ['rabbit', 'frog', 'elephant', 'fox'];
     const wanted = ['tongue', 'slime', 'charge', 'scatter', 'foxfire', 'negibon', 'leek'];
     const canvas = fakeCanvas({ keepLog: false });
     const seen = new Set<string>();
     let matches = 0;
-    for (let seed = 12; seed < 20 && !wanted.every((kind) => seen.has(kind)); seed += 1) {
+    for (let seed = 12; seed < 52 && !wanted.every((kind) => seen.has(kind)); seed += 1) {
       const game = new GameSession({ ...defaultMatchConfig(seed, animals), winsToTake: 2 });
       game.world.players.forEach((player) =>
         game.attach(new CpuInputSource(player.id, CPU_LEVELS.oni, cpuSeed(seed, player.id))),

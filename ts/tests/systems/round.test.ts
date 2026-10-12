@@ -252,6 +252,12 @@ describe('プレイヤーごとの体力', () => {
     expect(game.world.players.map((p) => p.hp)).toEqual([2, 10 + ELEPHANT_BONUS]);
   });
 
+  it('体力の既定は爆風1回ぶん（原型の既定 hpP1・hpP2・hpCPU = 1）。ぞうは上乗せで2回ぶん', () => {
+    const game = session();
+    expect(game.world.players.map((p) => p.hp)).toEqual([2, 2 + ELEPHANT_BONUS]);
+    expect(createWorld({ seed: 1, animals: ['rabbit'] }).players[0]!.hp).toBe(2);
+  });
+
   it('次のラウンドも、設定した体力で始まる', () => {
     // 1ラウンド目だけ正しいと、2ラウンド目から全員が既定の体力に戻る。
     // 原型では、体力を1人ずつ変えられるようにしたときに、この形の誤りを避けた。
