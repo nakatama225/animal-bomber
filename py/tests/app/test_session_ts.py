@@ -98,6 +98,8 @@ def test_同じ台本を流すと_TypeScript版と同じ試合になる(
         spawn_order=DUEL_SPAWN_ORDER,
         round_limit=Tick(round_limit),
         wins_to_take=wins_to_take,
+        # 写しの台本と同じ体力（爆風3回ぶん。写しは startingHp: [6, 6] で流す）。
+        starting_hp=(6, 6),
     )
     sources = [
         _ScriptSource(player, script)

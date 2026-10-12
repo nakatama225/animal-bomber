@@ -13,6 +13,11 @@ humanUpdate と同じ）。
 原型も同じ。通常技がボタンを受け付けない振る舞い（`ActionTraits.blocks_buttons`）を
 始める動物は、その振る舞いがしきい値より前に終わらない限り、押し続けてもとくぎが出ない。
 
+もう1つ、とくぎを直に出すボタン（`PlayerInput.SPECIAL`）がある。押した瞬間に、通常技を
+挟まずにとくぎが出る。人間の操作には割り当てず、CPU だけが押す（原型の CPU はボタンを
+通らずにとくぎを呼んでいた）。出せる条件（動けない間・ボタンを受け付けない振る舞いの最中・
+チキンが無い）は長押しのとくぎと同じ。
+
 何がどちらになるかは `domain/abilities/` の動物ごとの技が決める。とくぎはチキンを拾って
 溜めた回数（`PlayerState.special_charges`）ぶんだけ出せる。しきい値は押し方1回につき
 1回だけ見る（`PlayerState.action_fired`）。届いた tick に出せなければ（動けない・
@@ -134,6 +139,14 @@ def _watch_button(
 ) -> list[SimEvent]:
     """技のボタンの押し方を見て、通常技ととくぎを呼び分ける（原型の humanUpdate）。"""
     events: list[SimEvent] = []
+    # とくぎを直に出すボタン（人間の操作には無い。`PlayerInput.SPECIAL`）。
+    # 技のボタンの長さには触れない。
+    if (
+        just_pressed(player, player_input, PlayerInput.SPECIAL)
+        and _accepts(player)
+        and player.special_charges > 0
+    ):
+        events.extend(_special(world, player))
     if just_pressed(player, player_input, PlayerInput.ACTION):
         events.extend(_tap(world, player))
     if PlayerInput.ACTION not in player_input:

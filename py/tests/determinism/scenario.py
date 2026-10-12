@@ -57,6 +57,11 @@ POWERS = (1, 3, 2, 4)
 """
 CHICKENS = 3
 """始めに持たせるチキン（とくぎの回数）。撒く・突進・掘る・炎のとくぎを通すため。"""
+SCRIPT_HP = (6, 6, 6, 6)
+"""台本の体力の始めの値（爆風3回ぶん）。既定（1回ぶん）より多くして、被弾のあとも動かす。
+
+ラウンドをまたぐ台本も同じ値で始める（4匹の数はどちらの台本も4）。
+"""
 
 _TURNS = (PlayerInput.RIGHT, PlayerInput.DOWN, PlayerInput.LEFT, PlayerInput.UP)
 _PERIODS = (37, 23, 29, 41)
@@ -124,8 +129,11 @@ def new_world(seed: int = SEED) -> WorldState:
     押していない」にする（`tests/helpers.py` の `make_world` と同じ）。ラウンドの
     始まり（爆弾のボタンを押していた扱い）は、ラウンドをまたぐ台本（`play_match`）が
     通る。
+
+    体力は爆風3回ぶんで始める（`SCRIPT_HP`）。既定の1回ぶんでは、最初の被弾で倒れて、
+    被弾のあとの処理（無敵・吐き出し）を通らない。
     """
-    world = create_world(seed, ANIMALS)
+    world = create_world(seed, ANIMALS, starting_hp=SCRIPT_HP)
     for player in world.players:
         player.previous_input = PlayerInput.IDLE
     for cell, tile in list(world.board.cells()):
@@ -227,6 +235,7 @@ def play_match(ticks: int = MATCH_TICKS, seed: int = SEED) -> GameSession:
         animals=MATCH_ANIMALS,
         round_limit=MATCH_ROUND_LIMIT,
         wins_to_take=1,
+        starting_hp=SCRIPT_HP,
     )
     sources: list[InputSource] = [ScriptedSource(PLAYER_IDS[0])]
     sources.extend(

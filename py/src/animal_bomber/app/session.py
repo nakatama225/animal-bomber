@@ -118,4 +118,5 @@ class GameSession:
             seed_for_round(config, self._match.round),
             config.animals,
             config.spawn_order,
+            config.starting_hp,
         )

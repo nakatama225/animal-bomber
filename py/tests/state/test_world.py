@@ -52,6 +52,21 @@ class Test始めの状態:
             (1, 1, STARTING_HP, 0),
         ]
 
+    def test_体力の既定は爆風1回ぶん_ぞうは上乗せで2回ぶん(self) -> None:
+        """原型の既定（hpP1・hpP2・hpCPU = 1、ぞうの hpBonus 1）と同じ。"""
+        world = create_world(1, (Animal.RABBIT, Animal.ELEPHANT))
+        assert [p.hp for p in world.players] == [2, 4]
+
+    def test_体力の始めの値を渡すと_上乗せはその上に足す(self) -> None:
+        world = create_world(1, (Animal.RABBIT, Animal.ELEPHANT), starting_hp=(6, 10))
+        assert [p.hp for p in world.players] == [6, 12]
+
+    @pytest.mark.parametrize("hp", [(6,), (6, 6, 6)], ids=["短い", "長い"])
+    def test_体力の数が人数と合わなければ作れない(self, hp: tuple[int, ...]) -> None:
+        """足りない人を既定で埋める・余りを捨てると、並びのずれに気づけない。"""
+        with pytest.raises(ValueError, match="初期体力の数"):
+            create_world(1, (Animal.RABBIT, Animal.ELEPHANT), starting_hp=hp)
+
     def test_盤面に爆弾も爆風も無く_ボタンを押していた扱いで始まる(self) -> None:
         world = create_world(1, (Animal.RABBIT, Animal.ELEPHANT))
         # 前の tick の入力は、爆弾と技のボタンを押していた扱い

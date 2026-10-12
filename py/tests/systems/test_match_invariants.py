@@ -43,9 +43,11 @@ def _corners_bombing(player_id: PlayerId, tick: int) -> PlayerInput:
 
 
 def _full_board() -> WorldState:
-    """ブロックを全部残した盤面。全員が爆弾 3 つ・火力 2・靴 2 段。"""
+    """ブロックを全部残した盤面。全員が爆弾 3 つ・火力 2・靴 2 段・体力 爆風3回ぶん。"""
     world = create_world(
-        20261003, (Animal.RABBIT, Animal.ELEPHANT, Animal.MOLE, Animal.FOX)
+        20261003,
+        (Animal.RABBIT, Animal.ELEPHANT, Animal.MOLE, Animal.FOX),
+        starting_hp=(6, 6, 6, 6),
     )
     for player in world.players:
         player.shoes, player.max_bombs, player.power = 2, 3, 2

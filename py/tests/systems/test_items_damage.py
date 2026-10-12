@@ -997,6 +997,8 @@ class Test拾う:
         world = make_world()
         clear_board(world)
         player = world.players[0]
+        # 1回の被弾で倒れない体力にする（倒れると拾わない）。
+        player.hp = 6
         player.position = Point(1.9, 1.5)
         add_blast(world, Cell(2, 1), 1, is_center=True)
         first = simulation.step(world, only_for(world, 0, IDLE))

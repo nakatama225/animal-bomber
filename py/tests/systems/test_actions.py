@@ -557,6 +557,8 @@ class Test技を進める_勝手に設置_技を始めるの順:
         world = arena((Animal.ELEPHANT, Animal.RABBIT))
         elephant, rabbit = world.players
         rabbit.position = Point(3.5, 1.5)
+        # 原型を測ったときと同じ体力（爆風3回ぶん）。体当たりの傷で倒れると置かない。
+        rabbit.hp = 6
         elephant.position = Point(4.3, 1.5)
         elephant.action = Charge(direction=Direction.LEFT, remaining=CHARGE_DURATION)
         rabbit.effects.add(EffectKind.AUTOBOMB, Tick(240), Tick(720))

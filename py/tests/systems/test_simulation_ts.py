@@ -67,6 +67,8 @@ EXPECTED = json.loads(
     (Path(__file__).parent / "ts_simulation_values.json").read_text(encoding="utf-8")
 )
 FOUR = (Animal.RABBIT, Animal.ELEPHANT, Animal.MOLE, Animal.FOX)
+SCRIPT_HP = (6, 6, 6, 6)
+"""台本の体力の始めの値（爆風3回ぶん）。写しの台本にも同じ値を渡す。"""
 INTERVAL = 20
 """比べる区切りの間（tick）。爆風の寿命（28 tick）より短くする。"""
 
@@ -206,8 +208,12 @@ def set_up(
     sparse: bool,
     items: bool,
 ) -> WorldState:
-    """台本を流す前の盤面。"""
-    world = create_world(seed, FOUR)
+    """台本を流す前の盤面。
+
+    体力は爆風3回ぶんで始める（`SCRIPT_HP`）。既定の1回ぶんでは、台本の途中で倒れて、
+    爆発や拾う処理を通る場面が減る。
+    """
+    world = create_world(seed, FOUR, starting_hp=SCRIPT_HP)
     for player in world.players:
         player.previous_input = PlayerInput.IDLE
     if sparse:

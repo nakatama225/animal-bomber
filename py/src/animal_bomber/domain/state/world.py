@@ -96,7 +96,10 @@ HELD_AT_ROUND_START: Final = PlayerInput.BOMB | PlayerInput.ACTION
 
 
 def create_world(
-    seed: int, animals: Sequence[Animal], spawn_order: Sequence[int] | None = None
+    seed: int,
+    animals: Sequence[Animal],
+    spawn_order: Sequence[int] | None = None,
+    starting_hp: Sequence[int] | None = None,
 ) -> WorldState:
     """ラウンドの始まりの状態を作る。ラウンドごとに作り直す（`app/session.py`）。
 
@@ -114,15 +117,22 @@ def create_world(
         animals: 参加する動物を、プレイヤー番号の順に並べたもの。
         spawn_order: 始める隅（`SPAWN_CELLS` の番号）を、プレイヤー番号の順に並べた
             もの。省くと番号の順。1台で2人なら `DUEL_SPAWN_ORDER`（対角）。
+        starting_hp: 体力の始めの値（半分の単位。動物ごとの上乗せの前）を、プレイヤー
+            番号の順に並べたもの。省くと全員 `STARTING_HP`（TypeScript 版の
+            `startingHp` と同じ）。
 
     Raises:
         ValueError: 動物の数が 1 から開始位置の数（4）までに入らないとき。始める隅の
             並びが人数と合わない・隅の番号でない・重なるとき（黙って番号の順に戻すと、
-            1台だけ並びを取り違えても試合が始まり、気づけない）。
+            1台だけ並びを取り違えても試合が始まり、気づけない）。体力の数が人数と
+            合わないとき（足りない人を既定で埋めると、並びのずれに気づけない）。
     """
     if not 1 <= len(animals) <= len(SPAWN_CELLS):
         raise ValueError(f"参加する数は 1〜{len(SPAWN_CELLS)}: {len(animals)}")
     corners = _spawn_corners(len(animals), spawn_order)
+    if starting_hp is not None and len(starting_hp) != len(animals):
+        raise ValueError(f"初期体力の数が人数と合わない: {len(starting_hp)}")
+    base_hp = [STARTING_HP] * len(animals) if starting_hp is None else list(starting_hp)
     rng = Rng(seed)
     board = build_board(rng, SPAWN_CELLS)
     players = [
@@ -132,7 +142,7 @@ def create_world(
             position=SPAWN_CELLS[corners[index]].center(),
             facing=Direction.DOWN,
             previous_input=HELD_AT_ROUND_START,
-            hp=STARTING_HP + stats_of(animal).hp_bonus,
+            hp=base_hp[index] + stats_of(animal).hp_bonus,
             power=BASE_POWER + stats_of(animal).power_bonus,
             max_bombs=START_BOMBS + stats_of(animal).bomb_bonus,
         )

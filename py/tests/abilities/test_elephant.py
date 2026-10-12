@@ -367,6 +367,9 @@ def knock(
     elephant, target = world.players
     elephant.position = Cell(start, 5).center()
     target.position = Cell(victim_at, 5).center()
+    # 原型を測ったときと同じ体力（爆風3回ぶん）。体当たりの傷で倒れると、
+    # 押される先を見られない。
+    target.hp = 6
     if soft is not None:
         world.board.put(Cell(soft, 5), Tile.SOFT)
     if bomb is not None:

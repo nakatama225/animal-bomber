@@ -215,6 +215,17 @@ class Testラウンドの始まり:
         assert all(p.previous_input == held for p in world.players)
 
 
+class Test体力の始めの値:
+    def test_設定した体力で始まり_次のラウンドも同じ値で始まる(self) -> None:
+        """1ラウンド目だけ正しいと、2ラウンド目から全員が既定の体力に戻る。"""
+        session = _session(starting_hp=(2, 10))
+        assert [p.hp for p in session.world.players] == [2, 12]
+        _finish_round(session)
+        _wait_intermission(session)
+        assert session.match.round == 2
+        assert [p.hp for p in session.world.players] == [2, 12]
+
+
 class Test始める隅:
     def test_既定は番号の順(self) -> None:
         world = create_world(1, ANIMALS)

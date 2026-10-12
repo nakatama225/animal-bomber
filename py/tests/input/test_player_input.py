@@ -15,6 +15,7 @@ class Test入力:
             ("RIGHT", 8),
             ("BOMB", 16),
             ("ACTION", 32),
+            ("SPECIAL", 64),
         ]
 
     def test_何も押していない入力は0で_偽として扱える(self) -> None:
@@ -27,13 +28,13 @@ class Test入力:
         assert PlayerInput.RIGHT in held
         assert PlayerInput.LEFT not in held
 
-    @pytest.mark.parametrize("bits", [64, 65, 128, 255])
+    @pytest.mark.parametrize("bits", [128, 129, 255, 256])
     def test_決めていないビットを含む整数からは作れない(self, bits: int) -> None:
         # 既定の IntFlag は黙って受け付ける。壊れた記録や通信の値を読んだ時点で止める。
         with pytest.raises(ValueError):
             PlayerInput(bits)
 
-    @pytest.mark.parametrize(("bits", "expected"), [(-1, 63), (-64, 0)])
+    @pytest.mark.parametrize(("bits", "expected"), [(-1, 127), (-128, 0)])
     def test_負の整数は_補数として受け付けてしまう(
         self, bits: int, expected: int
     ) -> None:
@@ -44,12 +45,13 @@ class Test入力:
         """
         assert int(PlayerInput(bits)) == expected
 
-    def test_6つのボタンを全部押した値までは作れる(self) -> None:
-        assert PlayerInput(63) == (
+    def test_7つのボタンを全部押した値までは作れる(self) -> None:
+        assert PlayerInput(127) == (
             PlayerInput.UP
             | PlayerInput.DOWN
             | PlayerInput.LEFT
             | PlayerInput.RIGHT
             | PlayerInput.BOMB
             | PlayerInput.ACTION
+            | PlayerInput.SPECIAL
         )

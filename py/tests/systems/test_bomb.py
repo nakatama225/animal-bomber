@@ -402,6 +402,10 @@ class Test誘爆:
         world = make_world(animals=(Animal.RABBIT, Animal.FOX))
         clear_board(world)
         a, b = world.players
+        # 値を出したときと同じ体力（爆風3回ぶん）。被弾で倒れると、吐き出す
+        # アイテムと体力が変わる。
+        a.hp = 6
+        b.hp = 6
         a.power = 2
         put_bomb(world, a, Cell(5, 5))
         put_bomb(world, b, Cell(7, 5))

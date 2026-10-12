@@ -24,6 +24,11 @@ class MatchConfig:
     """1ラウンドの制限時間（tick）。過ぎたら引き分け（`systems/round.py`）。"""
     wins_to_take: int = WINS_TO_TAKE_MATCH
     """何勝で試合を取るか。"""
+    starting_hp: tuple[int, ...] | None = None
+    """体力の始めの値（半分の単位。動物ごとの上乗せの前）を、プレイヤー番号の順に。
+
+    None なら全員 `STARTING_HP`（爆風1回ぶん）。毎ラウンドこの値で始める。
+    """
 
 
 def seed_for_round(config: MatchConfig, round_number: int) -> int:

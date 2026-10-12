@@ -171,6 +171,8 @@ class Test炎の進み方:
         world, (fox, elephant) = arena((Animal.FOX, Animal.ELEPHANT))
         place(fox, Cell(3, 7))
         place(elephant, Cell(12, 7))
+        # 原型を測ったときと同じ体力（爆風3回ぶん＋上乗せ1回ぶん）。
+        elephant.hp = 8
         elephant.facing = Direction.LEFT
         elephant.action = Charge(direction=Direction.LEFT, remaining=CHARGE_DURATION)
         world.actors.append(Foxfire(cell=Cell(3, 7), owner=0))
@@ -284,6 +286,9 @@ class Test突進どうしの体当たり:
         world, (a, b) = arena((Animal.ELEPHANT, Animal.ELEPHANT))
         place(a, Cell(3, 7))
         place(b, Cell(9, 7))
+        # 原型を測ったときと同じ体力（爆風3回ぶん＋上乗せ1回ぶん）。
+        a.hp = 8
+        b.hp = 8
         a.action = Charge(direction=Direction.RIGHT, remaining=CHARGE_DURATION)
         b.action = Charge(direction=Direction.LEFT, remaining=CHARGE_DURATION)
         hp = []
