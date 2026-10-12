@@ -216,6 +216,11 @@ export class TongueAction implements ActiveAction {
     // 泣く長さは「足す」ではなく「少なくとも 3 秒」（原型は残りと 3 秒の長いほう）。
     const left = player.effects.remaining('stun');
     if (left < BURN_STUN) player.effects.add('stun', tick(BURN_STUN - left), BURN_STUN);
-    return [{ type: 'effectApplied', target: player.id, effect: 'stun' }];
+    // 焼けたマスに煙を出す（原型の puff）。
+    const cell = step(this.#origin, this.#direction, at);
+    return [
+      { type: 'burntOff', player: player.id, cell },
+      { type: 'effectApplied', target: player.id, effect: 'stun' },
+    ];
   }
 }

@@ -139,6 +139,10 @@ export class ParticleField {
       case 'itemBurned':
         puff(out, rng, event.cell, '#6b5443', '🌑');
         return;
+      case 'burntOff':
+        // 焼き切れた舌（原型の tongueBurnCheck の puff）。
+        puff(out, rng, event.cell, '#ff7a5a', '👅');
+        return;
       case 'playerHurt':
         this.#addShake(6);
         return;

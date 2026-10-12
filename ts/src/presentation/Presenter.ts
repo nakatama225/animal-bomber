@@ -128,6 +128,9 @@ export class Presenter {
       case 'techniqueMoment':
         this.sounds.play(MOMENT_SOUNDS[event.moment]);
         return;
+      case 'burntOff':
+        // 音は泣く状態（`effectApplied`）で鳴らす。ここは煙を出すためのもので、絵の側が扱う。
+        return;
       case 'leekThrown':
         this.sounds.play('leek');
         return;

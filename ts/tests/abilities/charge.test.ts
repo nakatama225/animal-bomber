@@ -286,6 +286,37 @@ describe('突進で壊したブロックの抽選（原型 destroySoft）', () =
   });
 });
 
+describe('突進でぶつけたアイテム（原型 updateCharge の applyItem）', () => {
+  /** ぞうを (3,5) から右へ、たまねぎを抱えて突進させ、(8,5) の相手にぶつける。相手が泣いた tick と長さ。 */
+  function ram(victimAnimal: string): { hitAt: number | null; ticks: number | null } {
+    const world = chargeArena(['elephant', victimAnimal]);
+    const [elephant, victim] = world.players as [PlayerState, PlayerState];
+    elephant.position = centerOf({ col: 3, row: 5 });
+    victim.position = centerOf({ col: 8, row: 5 });
+    // 傷は見ない（ぶつけたアイテムは無敵でも効く）。
+    victim.invulnerableUntil = tick(9999);
+    putItem(world, { col: 4, row: 5 }, 'onion');
+    elephant.action = new ChargeAction('right');
+    const sim = new Simulation();
+    let hitAt: number | null = null;
+    for (let t = 1; t <= 800; t += 1) {
+      sim.step(world, sameForAll(world, press({})));
+      if (hitAt === null && victim.effects.has('stun')) hitAt = t;
+      if (hitAt !== null && !victim.effects.has('stun')) return { hitAt, ticks: t - hitAt };
+    }
+    return { hitAt, ticks: null };
+  }
+
+  it('ぶつけられた側の倍率がかかる：効果が2倍の動物は、ぶつけられたたまねぎで2倍泣く', () => {
+    // 原型：たまねぎを抱えた突進を (8,5) の相手に当てると、うさぎ 180・かえる 360 フレーム泣く
+    // （原型は小数の引き算で1フレーム長く出る。この版は 179・359。差の 180 は同じ）。
+    const rabbit = ram('rabbit');
+    const frog = ram('frog');
+    expect(frog.hitAt).toBe(rabbit.hitAt);
+    expect({ rabbit: rabbit.ticks, frog: frog.ticks }).toEqual({ rabbit: 179, frog: 359 });
+  });
+});
+
 describe('突進で押しのける先（原型 updateCharge の collides）', () => {
   /** ぞうを (from,5) から右へ突進させ、押される側を (victimAt,5) に置く。押された最初の tick を返す。 */
   function knock(setup: {

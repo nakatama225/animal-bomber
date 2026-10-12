@@ -333,6 +333,13 @@ describe('粒子と画面の揺れ', () => {
     }
   });
 
+  it('舌が焼き切れたときに、焼けたマスで煙を出す（原型の tongueBurnCheck の puff）', () => {
+    const world = makeWorld();
+    const field = new ParticleField(new CosmeticRng());
+    field.onEvents([{ type: 'burntOff', player: 0, cell: { col: 5, row: 5 } }], world);
+    expect(paintedParticles(field)).toBeGreaterThan(0);
+  });
+
   it('鼻水で爆弾の火が消えたときと、うんこが溶けきったときに、しずくを出す', () => {
     const world = makeWorld();
     for (const event of [

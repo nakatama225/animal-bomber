@@ -148,6 +148,17 @@ export type SimEvent =
       readonly moment: TechniqueMoment;
     }
   | {
+      /**
+       * 伸ばしていた技が爆風に触れて焼き切れた。焼けたマスに煙を出すのに使う（原型の
+       * tongueBurnCheck の puff）。泣くことは別に `effectApplied` で知らせる。
+       */
+      readonly type: 'burntOff';
+      /** 技を使っていたプレイヤー。 */
+      readonly player: PlayerId;
+      /** 焼けたマス（いちばん手前の爆風のマス）。 */
+      readonly cell: Cell;
+    }
+  | {
       readonly type: 'leekThrown';
       /** 撃った葱ボン。 */
       readonly player: PlayerId;

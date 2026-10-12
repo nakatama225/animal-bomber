@@ -202,7 +202,7 @@ export class ChargeAction implements ActiveAction {
     const events: SimEvent[] = [
       { type: 'itemTaken', cell, kind: item.kind, taker: player.id },
     ];
-    events.push(...applyItem(world, player, item.kind));
+    events.push(...applyItem(world, player, item.kind, lookupAbility(player.animal)?.itemMultiplier ?? 1));
     return events;
   }
 
@@ -227,13 +227,16 @@ export class ChargeAction implements ActiveAction {
       };
       // 未登録なら抜けられる特例なしで判定する。試合では、盤面を作るときに能力を引いて
       // （動物ごとの初期の加算。`GameSession` の startingBonusOf）登録を済ませているので起きない。
-      const passesThrough = lookupAbility(other.animal)?.passesThrough;
-      if (!bodyCollides(world, other, other.position, pushed, passesThrough)) {
+      const ability = lookupAbility(other.animal);
+      if (!bodyCollides(world, other, other.position, pushed, ability?.passesThrough)) {
         other.position = pushed;
       }
 
+      // ぶつけたアイテムには、ぶつけられた側の倍率がかかる（原型の applyItem。効果が2倍の
+      // 動物なら、たまねぎで泣く長さも2倍）。
       if (this.#carried.length > 0) {
-        for (const kind of this.#carried) events.push(...applyItem(world, other, kind));
+        const multiplier = ability?.itemMultiplier ?? 1;
+        for (const kind of this.#carried) events.push(...applyItem(world, other, kind, multiplier));
         this.#carried.length = 0;
       }
 

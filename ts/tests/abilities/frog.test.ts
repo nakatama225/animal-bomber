@@ -356,7 +356,13 @@ describe('舌の長さと時間（原型 startTongue・updateTongue・tongueBurn
     for (let t = 1; t <= 40; t += 1) action.tick(world, frog);
     addBlast(world, { col: 5, row: 5 }, 1, false);
     expect(action.tick(world, frog).done).toBe(false);
-    expect(action.afterDamage(world, frog).done).toBe(true);
+    const burnt = action.afterDamage(world, frog);
+    expect(burnt.done).toBe(true);
+    // 焼けたマスを知らせる（煙を出すため。原型の puff）。泣くことはそのあと。
+    expect(burnt.events).toEqual([
+      { type: 'burntOff', player: frog.id, cell: { col: 5, row: 5 } },
+      { type: 'effectApplied', target: frog.id, effect: 'stun' },
+    ]);
     expect(tongueReachOf(world, frog)).toBe(1);
     expect(frog.effects.remaining('stun')).toBe(180);
 
