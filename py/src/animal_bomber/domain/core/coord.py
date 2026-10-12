@@ -15,6 +15,7 @@
 import math
 from dataclasses import dataclass
 from enum import Enum
+from typing import Final
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,8 +50,9 @@ class Point:
 class Direction(Enum):
     """移動と爆風が伸びる4方向。
 
-    列挙の順（上・右・下・左）が、4方向を順に試すときの順になる。爆風を伸ばす順は
-    別に持つ（原型と同じ右・左・下・上。`systems/blast.py` の `BLAST_DIRECTIONS`）。
+    列挙の順（上・右・下・左）は TypeScript 版の `DIRECTIONS` と同じ。順で答えが変わる
+    探し方（爆風を伸ばす順・CPU の経路探し・CPU が隣のマスを比べる順）は、原型と同じ
+    右・左・下・上の `SCAN_ORDER` で回す。
 
     ⚠️ `set` に入れて取り出さない。`Enum` の要素の hash は名前の文字列の hash なので、
     取り出す順がプロセスごとに変わる。4方向を順に扱うときは `Direction` そのもの
@@ -72,6 +74,18 @@ class Direction(Enum):
         """向かい合う方向。"""
         d_col, d_row = self.value
         return Direction((-d_col, -d_row))
+
+
+SCAN_ORDER: Final = (Direction.RIGHT, Direction.LEFT, Direction.DOWN, Direction.UP)
+"""原型（`legacy/animal-bomber.html` の `DIRS`）と同じ右・左・下・上の順。
+
+順で答えが変わる探し方は、この順で回す。爆風を伸ばす順（`query/blast_reach.py`）は、
+爆風が重なったマスで当てたプレイヤーを決める。CPU の経路探し（`query/path.py`）は、
+同じ長さの経路がいくつもあるとき、どれを選ぶかを決める（TypeScript 版の `SCAN_ORDER`）。
+
+⚠️ `Direction` の定義順そのものは並べ替えない。原型と順が対応していない所の答えまで
+変わる。
+"""
 
 
 def distance(a: Point, b: Point) -> float:

@@ -60,7 +60,7 @@ def _blast_owner_touching(world: WorldState, player: PlayerState) -> PlayerId | 
     置いた爆風が先に消えることは無い。TypeScript 版は 32bf68b で合わせた。
 
     ⚠️ どちらが「あと」かは、誘爆した爆弾を待ち行列に積む順で決まり、その順は爆風を
-    伸ばす向きの順（`systems/blast.py` の `BLAST_DIRECTIONS`）で決まる。同じ爆弾に誘爆
+    伸ばす向きの順（`core/coord.py` の `SCAN_ORDER`）で決まる。同じ爆弾に誘爆
     された2つの爆弾の爆風が重なるマスでも原型と同じ持ち主になるように、この順を原型と
     同じ右・左・下・上にしてある。そのため、誘爆された自分の爆弾のマスでも、あとから
     積まれた兄弟の爆弾の腕がそのマスに届けば、その腕の持ち主になり、自爆にならない
