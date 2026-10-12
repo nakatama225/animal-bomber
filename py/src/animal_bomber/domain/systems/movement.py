@@ -70,6 +70,7 @@ from animal_bomber.domain.rules.tuning import (
     SLIDE_SPEED_RATIO,
 )
 from animal_bomber.domain.state.actions import traits_of
+from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.player import (
     Life,
@@ -122,7 +123,7 @@ def _move(world: WorldState, player: PlayerState, player_input: PlayerInput) -> 
         dy = 0
     player.facing = Direction((dx, dy))
 
-    speed = speed_of(player)
+    speed = speed_of(player, _standing_on(world, player))
     substeps = max(1, math.ceil(speed / MOVE_SUBSTEP_DISTANCE))
     per_step = speed / substeps
     for _ in range(substeps):
@@ -160,7 +161,7 @@ def _slide(world: WorldState, player: PlayerState) -> None:
     （原型の loop が時間を分ける）ので、原型の答えも1つに決まらない。
     """
     dx, dy = player.facing.delta
-    base = speed_of(player)
+    base = speed_of(player, _standing_on(world, player))
     speed = base * SLIDE_SPEED_RATIO
     substeps = max(1, math.ceil(speed / MOVE_SUBSTEP_DISTANCE))
     per_step = speed / substeps
@@ -172,6 +173,15 @@ def _slide(world: WorldState, player: PlayerState) -> None:
         _align_to_corridor(world, player, horizontal=dx != 0, rate=base / substeps)
     if not moved_any:
         player.effects.clear(EffectKind.SLIDE)
+
+
+def _standing_on(world: WorldState, player: PlayerState) -> Tile:
+    """体の中心があるマス。
+
+    速さは移動を始める前のマスで決まる（ブロックの中なら遅い。`speed_of`）。原型も
+    移動の前に測る。
+    """
+    return world.board.at(player.position.cell())
 
 
 def _try_move(world: WorldState, player: PlayerState, mx: float, my: float) -> bool:

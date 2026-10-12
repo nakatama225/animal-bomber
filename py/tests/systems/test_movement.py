@@ -1,6 +1,9 @@
 """プレイヤーの移動と、移動の当たり判定の検査。"""
 
+import pytest
+
 from animal_bomber.domain.core.coord import Cell, Direction, Point
+from animal_bomber.domain.core.tick import TICKS_PER_SECOND, Tick
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.query.board import body_collides
 from animal_bomber.domain.rules.animals import Animal
@@ -13,9 +16,10 @@ from animal_bomber.domain.rules.tuning import (
     SHOE_STEP,
 )
 from animal_bomber.domain.state.board import Tile
+from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.player import Life, speed_of
 from animal_bomber.domain.systems.bomb import place_bomb
-from tests.helpers import advance, make_world, only_for
+from tests.helpers import advance, clear_board, make_world, only_for
 
 
 class Test移動:
@@ -160,6 +164,69 @@ class Test速さ:
         player = make_world().players[0]
         player.shoes = 9999
         assert speed_of(player) == MAX_SPEED
+
+    # 以下の期待値は、原型（legacy/animal-bomber.html の getSpeed）を画面なしで動かして
+    # 測った値（マス/秒。TypeScript 版の `movement.test.ts` と同じ場面）。この版は
+    # 1 tick あたりで持つので、60 を掛けて比べる。
+
+    @pytest.mark.parametrize(
+        ("shoes", "plain", "slow"),
+        [
+            (10, 8.714, 3.65988),
+            (11, 9.134, 3.83628),
+            (12, 9.4, 4.01268),
+            (13, 9.4, 4.18908),
+        ],
+    )
+    def test_上限で止めるのは最後(self, shoes: int, plain: float, slow: float) -> None:
+        """靴で上限を超える動物が「超スロー」を踏んだとき、先に上限で止めない。"""
+        rabbit = make_world(animals=(Animal.RABBIT, Animal.FOX)).players[0]
+        rabbit.shoes = shoes
+        assert speed_of(rabbit) * TICKS_PER_SECOND == pytest.approx(plain, abs=5e-6)
+        rabbit.effects.add(EffectKind.SLOW, Tick(100), Tick(100))
+        assert speed_of(rabbit) * TICKS_PER_SECOND == pytest.approx(slow, abs=5e-6)
+
+    @pytest.mark.parametrize(
+        ("shoes", "effects", "tile", "expected"),
+        [
+            (0, (), Tile.EMPTY, 3.33),
+            (0, (EffectKind.RUNAWAY,), Tile.EMPTY, 8.648),
+            (0, (), Tile.SOFT, 0.5994),
+            (5, (), Tile.SOFT, 0.9774),
+            (0, (EffectKind.SLOW,), Tile.SOFT, 0.42),
+            (0, (EffectKind.RUNAWAY,), Tile.SOFT, 0.5994),
+            (13, (EffectKind.SLOW,), Tile.SOFT, 0.664524),
+        ],
+    )
+    def test_ブロックの中では0点18倍_超スローは効き_とまれないは効かず_下限は0点42(
+        self, shoes: int, effects: tuple[EffectKind, ...], tile: Tile, expected: float
+    ) -> None:
+        mole = make_world(animals=(Animal.MOLE, Animal.FOX)).players[0]
+        mole.shoes = shoes
+        for effect in effects:
+            mole.effects.add(effect, Tick(100), Tick(100))
+        speed = speed_of(mole, tile) * TICKS_PER_SECOND
+        assert speed == pytest.approx(expected, abs=5e-6)
+
+    def test_ブロックの中へ入ると_体の中心が入った次のtickから遅くなる(self) -> None:
+        """(3,7) の中央から右へ。(4,7) と (5,7) は壊せるブロック。
+
+        体の中心が (4,7) に入るのは 10 tick 目。
+        """
+        world = make_world(5, (Animal.MOLE, Animal.FROG))
+        clear_board(world)
+        world.board.put(Cell(4, 7), Tile.SOFT)
+        world.board.put(Cell(5, 7), Tile.SOFT)
+        mole = world.players[0]
+        mole.position = Point(3.5, 7.5)
+        world.players[1].position = Point(19.5, 13.5)
+        xs = []
+        for t in range(1, 61):
+            advance(world, only_for(world, 0, PlayerInput.RIGHT), 1)
+            if t % 10 == 0:
+                xs.append(mole.position.x)
+        expected = [4.055, 4.1549, 4.2548, 4.3547, 4.4546, 4.5545]
+        assert xs == pytest.approx(expected, abs=5e-6)
 
 
 class Test当たり判定:

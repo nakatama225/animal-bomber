@@ -20,7 +20,9 @@ from animal_bomber.domain.rules.animals import Animal, stats_of
 from animal_bomber.domain.rules.tuning import (
     BASE_POWER,
     BASE_SPEED,
+    IN_BLOCK_SPEED_RATIO,
     MAX_SPEED,
+    MIN_SPEED,
     RUNAWAY_SPEED_FLOOR_RATIO,
     SHOE_STEP,
     SLOW_FACTOR,
@@ -29,6 +31,7 @@ from animal_bomber.domain.rules.tuning import (
     WEAKENED_POWER,
 )
 from animal_bomber.domain.state.actions import Action, traits_of
+from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectBag, EffectKind
 
 PlayerId = Literal[0, 1, 2, 3]
@@ -154,30 +157,42 @@ def just_pressed(
     return button in player_input and button not in player.previous_input
 
 
-def speed_of(player: PlayerState) -> float:
-    """そのプレイヤーが 1 tick に進む距離（マス）。
+def speed_of(player: PlayerState, standing_on: Tile = Tile.EMPTY) -> float:
+    """そのプレイヤーが 1 tick に進む距離（マス）。原型の getSpeed と同じ順で出す。
 
-    靴の段数だけ速くなり、上限で止まる。動物ごとの倍率は、靴を足す前の基本の速さ
-    （`BASE_SPEED`）にだけ掛ける（原型の getSpeed）。
+    1. 足の速さと靴の段数ぶんを足す。動物ごとの倍率は、靴を足す前の基本の速さ
+       （`BASE_SPEED`）にだけ掛ける
+    2. 「超スロー」の倍率を掛ける
+    3. 「とまれない」なら下限を敷く。⚠️ 下限にも超スローの倍率を掛ける
+       （`RUNAWAY_SPEED_FLOOR_RATIO`）。掛けないと、超スローを踏んだあとに「とまれない」を
+       踏んだプレイヤーが速くなる
+    4. 壊せるブロックの中（壁の中も）にいれば、1. を `IN_BLOCK_SPEED_RATIO` 倍したものに
+       置き換え、「超スロー」だけを掛け直す（「とまれない」は効かない）
+    5. 最後に下限（`MIN_SPEED`）と上限（`MAX_SPEED`）で挟む
 
-    「超スロー」は速さに倍率を掛け、「とまれない」は速さに下限を敷く。⚠️ 下限にも
-    超スローの倍率を掛ける（`RUNAWAY_SPEED_FLOOR_RATIO`）。掛けないと、超スローを
-    踏んだあとに「とまれない」を踏んだプレイヤーが速くなる。
+    ⚠️ 上限で止めるのは最後。先に止めると、靴で上限を超えるほど速い動物が「超スロー」を
+    踏んだとき、原型より遅くなる（靴 12 段のうさぎで、原型 4.01・先に止めると 3.95
+    マス/秒）。TypeScript 版も同じ形。
 
-    ⚠️ 上限で止めてから超スローの倍率を掛ける。原型は倍率と下限を当てたあと、最後に上限で
-    止める。違いが出るのは、靴を取って上限を超えた動物（うさぎの 12 段から）に超スローが
-    かかったときだけで、原型より遅くなる（13 段で原型 4.19、この版 3.95 マス/秒）。
-    TypeScript 版も同じ形で、まだ原型に揃えていない。
+    Args:
+        player: 速さを出すプレイヤー。
+        standing_on: 体の中心があるマス。移動を始める前のマスを渡す（原型も移動の前に
+            測る）。
     """
-    base = BASE_SPEED * stats_of(player.animal).speed_multiplier
-    speed = min(MAX_SPEED, base + player.shoes * SHOE_STEP)
+    multiplier = stats_of(player.animal).speed_multiplier
+    legs = BASE_SPEED * multiplier + player.shoes * SHOE_STEP
     slow = player.effects.has(EffectKind.SLOW)
+    speed = legs
     if slow:
         speed *= SLOW_FACTOR
     if player.effects.has(EffectKind.RUNAWAY):
         floor = MAX_SPEED * RUNAWAY_SPEED_FLOOR_RATIO * (SLOW_FACTOR if slow else 1)
         speed = max(speed, floor)
-    return speed
+    if standing_on is not Tile.EMPTY:
+        speed = legs * IN_BLOCK_SPEED_RATIO
+        if slow:
+            speed *= SLOW_FACTOR
+    return min(MAX_SPEED, max(MIN_SPEED, speed))
 
 
 def power_of(player: PlayerState) -> int:

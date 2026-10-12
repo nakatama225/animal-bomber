@@ -474,8 +474,9 @@ class Testブロックの通り抜け:
         world.board.put(Cell(3, 1), Tile.SOFT)
         assert not is_solid_for(world, Cell(3, 1), mole)
         assert is_solid_for(world, Cell(3, 1), rabbit)
-        advance(world, only_for(world, 0, PlayerInput.RIGHT), 60)
-        assert mole.position.x > 3.5
+        # ブロックの中はとても遅い（`IN_BLOCK_SPEED_RATIO`）ので、抜けきるまで進める。
+        advance(world, only_for(world, 0, PlayerInput.RIGHT), 240)
+        assert mole.position.x > 4.5
 
     def test_柱は抜けられない(self) -> None:
         world = arena((Animal.MOLE, Animal.RABBIT))
