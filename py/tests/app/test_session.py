@@ -208,9 +208,11 @@ class Testラウンドの始まり:
         assert not any(isinstance(event, BombPlaced) for event in events)
         assert session.world.bombs == []
 
-    def test_ラウンドの始まりは_爆弾のボタンだけを押していた扱い(self) -> None:
+    def test_ラウンドの始まりは_爆弾と技のボタンだけを押していた扱い(self) -> None:
+        """向きのボタンは含めない（`state/world.py` の `HELD_AT_ROUND_START`）。"""
         world = create_world(1, ANIMALS)
-        assert all(p.previous_input is PlayerInput.BOMB for p in world.players)
+        held = PlayerInput.BOMB | PlayerInput.ACTION
+        assert all(p.previous_input == held for p in world.players)
 
 
 class Test始める隅:

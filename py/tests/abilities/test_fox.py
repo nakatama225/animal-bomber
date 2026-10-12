@@ -315,9 +315,9 @@ class Test突進どうしの体当たり:
 
 
 def line(effects: tuple[EffectKind, ...]) -> tuple[list[Cell], int]:
-    """きつねを (1, 1) で右に向け、手持ち 3。状態をかけてから押して離す。
+    """きつねを (1, 1) で右に向け、手持ち 3。状態をかけてから押す。
 
-    置いた爆弾のマスと、通常技の間隔を返す。
+    押した tick（一列に置く tick）のあとの、置いた爆弾のマスと、通常技の間隔を返す。
     """
     world, (fox, rabbit) = arena((Animal.FOX, Animal.RABBIT), seed=1234)
     place(fox, Cell(1, 1))
@@ -330,7 +330,6 @@ def line(effects: tuple[EffectKind, ...]) -> tuple[list[Cell], int]:
     fox.autobomb_wait = Tick(99)
     simulation.step(world, idle(world))
     simulation.step(world, only_for(world, 0, ACTION))
-    simulation.step(world, idle(world))
     return [bomb.cell for bomb in world.bombs], fox.ability_cooldown
 
 

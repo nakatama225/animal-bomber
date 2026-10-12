@@ -127,7 +127,12 @@ def spray(world: WorldState, player: PlayerState) -> Started:
 
 
 def start_charge(world: WorldState, player: PlayerState) -> Started:
-    """とくぎ。向いている方向へ突進し始める。"""
+    """とくぎ。向いている方向へ突進し始める。
+
+    突進の最中に出すと、最初からやり直しになる（原型の elephantCharge）。新しい突進に
+    差し替わり、前の突進の後始末（`finish_charge`）は呼ばれないので、抱えていた悪い
+    アイテムは撒かれずに消える。
+    """
     return Started(action=Charge(direction=player.facing, remaining=CHARGE_DURATION))
 
 

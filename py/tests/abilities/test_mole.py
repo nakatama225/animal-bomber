@@ -30,7 +30,6 @@ from animal_bomber.domain.systems.bomb import place_bomb
 from animal_bomber.domain.systems.items import apply_item
 from tests.helpers import advance, clear_board, idle, make_world, only_for
 
-MOLE_HOLD = stats_of(Animal.MOLE).hold_ticks
 RABBIT_HOLD = stats_of(Animal.RABBIT).hold_ticks
 ACTION = PlayerInput.ACTION
 
@@ -43,11 +42,15 @@ def arena(animals: tuple[Animal, Animal]) -> WorldState:
     return world
 
 
-def hold_special(world: WorldState, who: int, ticks: int = MOLE_HOLD) -> None:
-    """1人に技のボタンを長押しさせて、とくぎを出す（ロックを外すため、まず離す）。"""
+def press_special(world: WorldState, who: int) -> None:
+    """1人に技のボタンを押させて、とくぎを出す。
+
+    もぐらは通常技が無いので、押した瞬間にとくぎが出る（原型の doAction）。押した
+    tick で終わる（離す tick は呼んだ側が進める）。
+    """
     player = world.players[who].id
     simulation.step(world, idle(world))
-    advance(world, only_for(world, player, ACTION), ticks)
+    simulation.step(world, only_for(world, player, ACTION))
 
 
 def pit_cells(world: WorldState) -> list[Cell]:
@@ -84,7 +87,7 @@ class Test掘る:
         place(mole, Cell(5, 5))
         place(rabbit, Cell(19, 13))
         mole.special_charges = 1
-        hold_special(world, 0)
+        press_special(world, 0)
         assert isinstance(mole.action, Dig)
         advance(world, only_for(world, 0, PlayerInput.RIGHT), 30)
         assert mole.position == Cell(5, 5).center()
@@ -99,7 +102,7 @@ class Test掘る:
         place(mole, Cell(5, 5))
         place(rabbit, Cell(19, 13))
         mole.special_charges = 1
-        hold_special(world, 0)
+        press_special(world, 0)
         advance(world, idle(world), 89)
         assert (isinstance(mole.action, Dig), pit_cells(world)) == (True, [])
         simulation.step(world, idle(world))
@@ -117,9 +120,9 @@ class Test掘る:
         place(mole, Cell(5, 5))
         place(rabbit, Cell(19, 13))
         mole.special_charges = 2
-        hold_special(world, 0)
+        press_special(world, 0)
         advance(world, idle(world), 100)
-        hold_special(world, 0)
+        press_special(world, 0)
         # 2回目は掘り始めない。掘り終わりの確かめだけに任せると、何も生まない掘りで
         # 90 tick 動けなくなる。
         assert mole.action is None
@@ -137,7 +140,7 @@ class Test掘る:
         place(rabbit, Cell(19, 13))
         world.board.put(Cell(5, 5), Tile.SOFT)
         mole.special_charges = 1
-        hold_special(world, 0)
+        press_special(world, 0)
         assert mole.action is None
         advance(world, idle(world), 100)
         assert mole.special_charges == 0
@@ -152,7 +155,7 @@ class Test掘る:
         assert bomb is not None
         bomb.fuse = Tick(9999)
         mole.special_charges = 1
-        hold_special(world, 0)
+        press_special(world, 0)
         assert mole.action is None
         advance(world, idle(world), 100)
         assert mole.special_charges == 0
@@ -164,7 +167,7 @@ class Test掘る:
         place(mole, Cell(5, 5))
         place(rabbit, Cell(19, 13))
         mole.special_charges = 1
-        hold_special(world, 0)
+        press_special(world, 0)
         assert isinstance(mole.action, Dig)
         advance(world, idle(world), 30)
         place(mole, Cell(7, 5))
@@ -187,7 +190,7 @@ class Test掘る:
             place(mole, Cell(5, 5))
             place(rabbit, Cell(19, 13))
             mole.special_charges = 1
-            hold_special(world, 0)
+            press_special(world, 0)
             assert isinstance(mole.action, Dig)
             for tick in range(100):
                 if tick == at:
@@ -215,15 +218,15 @@ class Test掘る:
         m0.special_charges = m1.special_charges = 1
         simulation.step(world, idle(world))
         both = {player.id: ACTION for player in world.players}
-        advance(world, both, MOLE_HOLD)
+        simulation.step(world, both)
         assert isinstance(m0.action, Dig)
         assert isinstance(m1.action, Dig)
         advance(world, idle(world), 100)
         assert pit_cells(world) == [Cell(5, 5)]
         assert (is_frozen(m0), is_frozen(m1)) == (False, False)
 
-    def test_ポン押しでも_チキンがあれば掘る(self) -> None:
-        """通常技の無い動物は、ポン押しでもとくぎが出る（原型の doAction）。"""
+    def test_押した瞬間に_チキンがあれば掘り始める(self) -> None:
+        """通常技の無い動物は、押した瞬間にとくぎが出る（原型の doAction）。"""
         world = arena((Animal.MOLE, Animal.RABBIT))
         mole, rabbit = world.players
         place(mole, Cell(5, 5))
@@ -231,18 +234,17 @@ class Test掘る:
         mole.special_charges = 1
         simulation.step(world, idle(world))
         simulation.step(world, only_for(world, 0, ACTION))
-        simulation.step(world, idle(world))
         assert isinstance(mole.action, Dig)
         assert mole.special_charges == 0
 
-    def test_ポン押しでも_チキンが無ければ何もしない(self) -> None:
+    def test_押しても_チキンが無ければ何もしない(self) -> None:
         world = arena((Animal.MOLE, Animal.RABBIT))
         mole, rabbit = world.players
         place(mole, Cell(5, 5))
         place(rabbit, Cell(19, 13))
         simulation.step(world, idle(world))
-        simulation.step(world, only_for(world, 0, ACTION))
-        events = simulation.step(world, idle(world))
+        events = simulation.step(world, only_for(world, 0, ACTION))
+        events.extend(simulation.step(world, idle(world)))
         assert mole.action is None
         assert events == []
 
@@ -370,7 +372,10 @@ class Test落ちる:
             place(rabbit, Cell(5, 5))
             place(mole, Cell(1, 3))
             rabbit.special_charges = 1
-            hold_special(world, 0, RABBIT_HOLD)
+            # 押した瞬間の跳躍は、間隔の途中にして出さない（その場で撒かせる）。
+            rabbit.ability_cooldown = Tick(600)
+            simulation.step(world, idle(world))
+            advance(world, only_for(world, 0, ACTION), RABBIT_HOLD)
             assert rabbit.effects.has(EffectKind.SCATTERING)
             if with_pit:
                 world.actors.append(Pit(cell=Cell(5, 5), owner=mole.id))

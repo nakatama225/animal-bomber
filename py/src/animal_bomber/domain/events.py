@@ -185,7 +185,7 @@ class TechniqueUsed:
 
     player: PlayerId
     special: bool
-    """長押しのとくぎか。False なら押して離す通常技。"""
+    """長押しのとくぎか。False なら押した瞬間の通常技。"""
 
 
 class Moment(Enum):

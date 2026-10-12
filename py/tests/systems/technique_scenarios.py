@@ -30,7 +30,6 @@ from dataclasses import dataclass
 from typing import Final
 
 from animal_bomber.domain.core.coord import Cell
-from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
@@ -190,7 +189,6 @@ def set_up(scenario: TechniqueScenario) -> WorldState:
     for player, cell in zip(world.players, scenario.cells, strict=True):
         player.previous_input = PlayerInput.IDLE
         player.special_charges = scenario.chickens
-        player.action_held = Tick(0)
         player.hp = HP
         player.position = cell.center()
     return world

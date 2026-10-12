@@ -110,7 +110,7 @@ def world_rows(world: WorldState) -> dict[str, object]:
                 p.autobomb_wait,
                 None if p.action is None else encode_action(p.action),
                 p.action_held,
-                p.tap_voided,
+                p.action_fired,
                 p.ability_cooldown,
             ]
             for p in world.players

@@ -54,17 +54,22 @@ def place(player: PlayerState, cell: Cell) -> None:
 
 
 def hold_special(world: WorldState) -> None:
-    """0番に技のボタンを長押しさせて、とくぎを出す（ロックを外すため、まず離す）。"""
+    """0番に技のボタンを長押しさせて、とくぎを出す。
+
+    ラウンドの始まりの「とくぎを出し終えた扱い」を外すため、まず離す。押した瞬間の
+    通常技（跳躍）は、間隔の途中にして出さない（その場で撒かせる）。
+    """
     player = world.players[0]
     player.special_charges = 1
+    player.ability_cooldown = Tick(600)
     simulation.step(world, idle(world))
     advance(world, only_for(world, 0, ACTION), stats_of(player.animal).hold_ticks)
 
 
 def tap(world: WorldState) -> None:
-    """0番に技のボタンを押して離させる（離した tick に通常技が出る）。"""
-    simulation.step(world, only_for(world, 0, ACTION))
+    """0番に技のボタンを離させてから押させる（押した tick に通常技が出る）。"""
     simulation.step(world, idle(world))
+    simulation.step(world, only_for(world, 0, ACTION))
 
 
 def scattered_cells(world: WorldState) -> list[Cell]:
@@ -170,7 +175,9 @@ class Test撒く順と時刻:
         hold_special(world)
         assert rabbit.action is None
         assert rabbit.effects.has(EffectKind.SCATTERING)
+        assert rabbit.position.x == 3.5
         advance(world, idle(world), 10)
+        rabbit.ability_cooldown = Tick(0)
         tap(world)
         assert rabbit.position.x == 5.5
         assert any(isinstance(actor, Scatter) for actor in world.actors)

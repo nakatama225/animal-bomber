@@ -29,11 +29,10 @@
 判定を変える。同じ入れ物に入れると、移動・爆弾・被弾・アイテムのそれぞれに種類ごとの
 分岐が生えていく（原型では突進の判定だけで 11 か所に散っていた）。
 
-⚠️ 最中に技のボタンを見ない（`systems/actions.py`）のは、原型と違う。原型は舌の間だけ
-ボタンを止め、突進中は鼻水を吹け、とくぎのボタンでは突進が最初からやり直しになり、
-掘っている間はチキンだけ減る。多くはチキンが減るだけの数え違いで、写すと損をするだけに
-なる。目に見えるのは主に突進中の鼻水（柱に当たるまでの1〜2秒）。TypeScript 版と同じ扱い
-（`ts/src/domain/abilities/ActiveAction.ts`）。
+最中も技のボタンは見る（`systems/actions.py`。原型と同じ）。舌の間は通常技もとくぎも
+出ない（`ActionTraits.blocks_buttons`）。突進中は鼻水を吹け、とくぎのボタンでは突進が
+最初からやり直しになる（抱えていた悪いアイテムは撒かれずに消える）。掘っている間は、押すと
+チキンだけ減る。どれも動物ごとの技（`domain/abilities/`）の側が決める。
 """
 
 from dataclasses import dataclass, field
@@ -110,6 +109,12 @@ class ActionTraits:
     """受ける傷の上限（半分の単位）。None なら減らさない。"""
     can_place_bomb: bool
     """最中に爆弾を置けるか（ボタン・「勝手に設置」・技で並べる爆弾のどれも）。"""
+    blocks_buttons: bool
+    """True の間、技のボタンを押しても通常技もとくぎも出ない。
+
+    原型の doAction・doSpecial の `if (p.tongue) return;`。押した長さは数え続け、
+    しきい値に届けば、その押し方のとくぎはそれきりになる。
+    """
     sweeps_items: bool
     """True なら、足元のアイテムをふつうの拾い（`systems/items.py`）では拾わない。
 
@@ -125,10 +130,22 @@ _CHARGE_TRAITS: Final = ActionTraits(
     drives_movement=True,
     damage_cap=CHARGE_DAMAGE_CAP,
     can_place_bomb=False,
+    blocks_buttons=False,
     sweeps_items=True,
 )
-_STILL_TRAITS: Final = ActionTraits(
-    drives_movement=True, damage_cap=None, can_place_bomb=False, sweeps_items=False
+_DIG_TRAITS: Final = ActionTraits(
+    drives_movement=True,
+    damage_cap=None,
+    can_place_bomb=False,
+    blocks_buttons=False,
+    sweeps_items=False,
+)
+_TONGUE_TRAITS: Final = ActionTraits(
+    drives_movement=True,
+    damage_cap=None,
+    can_place_bomb=False,
+    blocks_buttons=True,
+    sweeps_items=False,
 )
 
 
@@ -137,6 +154,7 @@ def traits_of(action: Action) -> ActionTraits:
 
     いまの振る舞いはどれも位置を決め、爆弾を置けない（原型の canPlaceBomb も、掘る・舌・
     突進の最中は置けない）。性質を分けてあるのは、そうでない振る舞いを足すため。
+    技のボタンを止めるのは舌だけ（原型の doAction・doSpecial）。
 
     ⚠️ 葱が当たらないか（原型の isUntouchable。突進は当たらない）は、葱ボンを作る段階 8
     で足す。爆風が当たらないか（`state/player.py` の `is_blast_proof`）とは別のもので、
@@ -146,8 +164,10 @@ def traits_of(action: Action) -> ActionTraits:
     match action:
         case Charge():
             return _CHARGE_TRAITS
-        case Dig() | Tongue():
-            return _STILL_TRAITS
+        case Dig():
+            return _DIG_TRAITS
+        case Tongue():
+            return _TONGUE_TRAITS
         case _:
             assert_never(action)
 

@@ -44,9 +44,10 @@ Technique: TypeAlias = Callable[[WorldState, PlayerState], Started]
 
 
 def tap_technique(animal: Animal) -> Technique | None:
-    """押して離したときの通常技。
+    """技のボタンを押した瞬間の通常技。
 
-    通常技の無い動物は None（ポン押しでもとくぎが出る。`systems/actions.py`）。
+    通常技の無い動物は None（押した瞬間にとくぎが出る。`systems/actions.py`）。
+    振る舞いの最中にも呼ばれる（技のボタンを受け付けない振る舞いの間は呼ばれない）。
     """
     match animal:
         case Animal.RABBIT:
@@ -64,7 +65,11 @@ def tap_technique(animal: Animal) -> Technique | None:
 
 
 def hold_technique(animal: Animal) -> Technique:
-    """長押しでしきい値に届いたときのとくぎ。"""
+    """長押しでしきい値に届いたときのとくぎ。
+
+    振る舞いの最中にも呼ばれるので、最中にどうするか（やり直す・何もしない）も技の側で
+    決める。
+    """
     match animal:
         case Animal.RABBIT:
             return rabbit.start_scatter

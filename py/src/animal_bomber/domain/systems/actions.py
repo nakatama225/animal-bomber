@@ -1,63 +1,54 @@
 """技のボタンを見て、動物ごとの技を出す。乗っ取り中の振る舞いを進める。
 
-## 押して離すのと、押し続けるのを1つのボタンで分ける
+## 通常技ととくぎを1つのボタンで分ける
 
-ボタンを増やさずに2つの技を持たせるため、押した長さで分ける。
+ボタンを増やさずに2つの技を持たせるため、押した瞬間と押し続けた長さで分ける（原型の
+humanUpdate と同じ）。
 
-- 押して離す … 通常技（通常技の無い動物は、チキンがあればとくぎ。原型の doAction）
-- 押し続ける … とくぎ（動物ごとに要る長さが違う。`AnimalStats.hold_ticks`）
+- 押した瞬間 … 通常技（通常技の無い動物は、チキンがあればとくぎ。原型の doAction）
+- 押し続けてしきい値に届いた瞬間 … とくぎ（動物ごとに要る長さが違う。
+  `AnimalStats.hold_ticks`。原型の doSpecial）
+
+⚠️ とくぎを出そうと押し続けると、押した瞬間の通常技も出る（跳んでから撒く、など）。
+原型も同じ。通常技がボタンを受け付けない振る舞い（`ActionTraits.blocks_buttons`）を
+始める動物は、その振る舞いがしきい値より前に終わらない限り、押し続けてもとくぎが出ない。
 
 何がどちらになるかは `domain/abilities/` の動物ごとの技が決める。とくぎはチキンを拾って
-溜めた回数（`PlayerState.special_charges`）ぶんだけ出せる。
-
-⚠️ 通常技は離した瞬間に出す。原型は押した瞬間に出す。押した瞬間に出すと、長押しの
-とくぎを出すつもりで押すたびに通常技も出てしまう（TypeScript 版と同じ形）。
+溜めた回数（`PlayerState.special_charges`）ぶんだけ出せる。しきい値は押し方1回につき
+1回だけ見る（`PlayerState.action_fired`）。届いた tick に出せなければ（動けない・
+チキンが無い・ボタンを受け付けない振る舞いの最中）、その押し方のとくぎはそれきり。
+離すと数え直す。
 
 ## ラウンドの始まりに押していたボタンは、一度離すまで効かない
 
-押した長さが `ACTION_LOCKED`（-1）の間は数え始めない（`state/player.py` の説明）。
+ラウンドの始まりは、前の tick にボタンを押していた扱い（押した瞬間にならない。
+`state/world.py` の `HELD_AT_ROUND_START`）と、とくぎを出し終えた扱い（`action_fired` の
+始めの値 True）にしてある。一度離すと、どちらも元に戻る（原型の startRound と同じ）。
 
 ## 動けない間（泣いている・落とし穴にはまっている）は技を出さない
 
-原型は押した瞬間に通常技を、しきい値に届いた瞬間にとくぎを出し、どちらも動けなければ
-何もせずに帰る。その押し方の分は捨てる（あとから遅れて出ない。チキンも減らない）。この版は
-離した瞬間に通常技を出すので、次の3か所で見る。
-
-- 押し始めた tick に動けなければ、その押し方では通常技を出さない（`tap_voided`）
-- しきい値に届いた tick に動けなければ、とくぎを出さない（その押し方のとくぎはそれきり）
-- 離した tick に動けなければ、通常技を出さない
-
-⚠️ 3つ目は原型と揃わない。原型は押した瞬間（動けるうち）に通常技を出し終えている。
-この版で出すと泣いたまま技が出る（跳んで逃げる、など）ので、出さないことにした。押し始めに
-動けなくても、動けるようになってからしきい値に届けば、とくぎは出る（原型と同じ）。
+押した瞬間・しきい値に届いた瞬間に動けなければ、何もしない。あとから遅れて出ない
+（チキンも減らない）。押し始めに動けなくても、動けるようになってからしきい値に届けば、
+とくぎは出る。どれも原型と同じ。
 
 ## 進めるのと始めるのを分ける
 
-続いている振る舞いを進める（`advance_for`）のと、ボタンを見て新しく始める
-（`watch_for`）のは、1 tick の中で番が違う。原型は、プレイヤーごとの効果の処理の中で
-技を進め、全員ぶん済ませたあとの、プレイヤーごとの入力の処理（動く → 爆弾を置く →
-技を始める）で技を始める。どちらの番で呼ぶかは `systems/simulation.py` が決める
-（TypeScript 版の `ActionSystem` と同じ）。
+続いている振る舞いを進める（`advance_for`）のと、ボタンを見て技を出す（`watch_for`）
+のは、1 tick の中で番が違う。原型は、プレイヤーごとの効果の処理の中で技を進め、全員ぶん
+済ませたあとの、プレイヤーごとの入力の処理（動く → 爆弾を置く → 技を始める）で技を
+出す。どちらの番で呼ぶかは `systems/simulation.py` が決める（TypeScript 版の
+`ActionSystem` と同じ）。
+
+振る舞いの最中もボタンは見る。振る舞いが終わった tick のうちに押せば、次の技が出る
+（原型と同じ）。
 
 伸びている舌が爆風で焼き切れたかは、1 tick の最後（被弾を見たあと）に見る
 （`after_damage`。原型の tongueBurnCheck）。
 
-⚠️ この tick に振る舞いを進めたプレイヤーは、同じ tick には新しく始めない（終わった tick
-でも）。原型は、技が終わったフレームのうちに次の技を始められる。1 tick の違いで、
-TypeScript 版と同じ形のままにしてある。
-
-⚠️ 振る舞いの最中はボタンを見ないので、押した長さ（`action_held`）は始めたときの値の
-まま残る（長押しで始めればしきい値、ポン押しで始めれば 0）。最中に押し、終わったあとも
-押し続けると、長押しで始めた振る舞いのあとは離すまで何も出ず、ポン押しで始めた振る舞いの
-あとは終わってから数え直してとくぎが出る。始め方で結果が逆になる。原型は最中も押した
-長さを数え、しきい値が最中に来たら、その押し方のとくぎは出さない（チキンも減らさない。
-舌を伸ばしている間にしきい値が来れば、戻ったあとも離すまで出ない）。TypeScript 版も
-同じ形で、まだ原型に揃えていない。
-
 ## この処理は動物の種類を知らない
 
 何の技かは `abilities/techniques.py` が振り分け、始まった振る舞いもそこを通して進める。
-ここは押した長さを数えて呼び分けるだけ。
+ここは押し方を見て呼び分けるだけ。
 """
 
 from animal_bomber.domain.abilities.results import Started
@@ -72,22 +63,20 @@ from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import SimEvent, TechniqueUsed
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import stats_of
-from animal_bomber.domain.state.player import Life, PlayerState, is_frozen
+from animal_bomber.domain.state.actions import traits_of
+from animal_bomber.domain.state.player import Life, PlayerState, is_frozen, just_pressed
 from animal_bomber.domain.state.world import WorldState
 
 
-def advance_for(world: WorldState, player: PlayerState) -> tuple[list[SimEvent], bool]:
+def advance_for(world: WorldState, player: PlayerState) -> list[SimEvent]:
     """1人ぶん。通常技の間隔を 1 tick 減らし、乗っ取り中の振る舞いを 1 tick 進める。
 
-    返すのは、起きたイベントと、振る舞いを進めたか（進めたら、この tick は新しく始め
-    ない）。通常技の間隔（`ability_cooldown`）は、盤面にいないプレイヤーの分も減らす
+    通常技の間隔（`ability_cooldown`）は、盤面にいないプレイヤーの分も減らす
     （TypeScript 版と同じ。入力を受け取っているプレイヤーの分を減らす）。
     """
     if player.ability_cooldown > 0:
         player.ability_cooldown = Tick(player.ability_cooldown - 1)
-    if player.action is None:
-        return [], False
-    return _advance(world, player), True
+    return _advance(world, player)
 
 
 def watch_for(
@@ -143,39 +132,39 @@ def _advance(world: WorldState, player: PlayerState) -> list[SimEvent]:
 def _watch_button(
     world: WorldState, player: PlayerState, player_input: PlayerInput
 ) -> list[SimEvent]:
-    """技のボタンの押し方を見て、通常技ととくぎを呼び分ける。"""
-    pressed = PlayerInput.ACTION in player_input
-    # ラウンドの始まりから押しっぱなしのぶんは、離すまで数え始めない。
-    if player.action_held < 0:
-        if not pressed:
-            player.action_held = Tick(0)
-        return []
-    hold_ticks = stats_of(player.animal).hold_ticks
-    frozen = is_frozen(player)
-    if pressed:
-        player.action_held = Tick(player.action_held + 1)
-        # 押し始めに動けなければ、この押し方では通常技を出さない（離すまで覚えておく）。
-        if player.action_held == 1:
-            player.tap_voided = frozen
-        # 長押しがしきい値に届いた瞬間に1回だけ出す。動けなければ出さない（チキンは
-        # 減らさず、この押し方のとくぎはそれきり）。
-        if (
-            player.action_held == hold_ticks
-            and player.special_charges > 0
-            and not frozen
-        ):
-            return _special(world, player)
-        return []
-    # 離した。しきい値に届いていなければ通常技。
-    held = player.action_held
-    player.action_held = Tick(0)
-    if held <= 0 or held >= hold_ticks:
-        return []
-    # 動けない間に離した押し方と、動けない間に押し始めた押し方は捨てる。
-    if frozen or player.tap_voided:
+    """技のボタンの押し方を見て、通常技ととくぎを呼び分ける（原型の humanUpdate）。"""
+    events: list[SimEvent] = []
+    if just_pressed(player, player_input, PlayerInput.ACTION):
+        events.extend(_tap(world, player))
+    if PlayerInput.ACTION not in player_input:
+        player.action_held = Tick(0)
+        player.action_fired = False
+        return events
+    player.action_held = Tick(player.action_held + 1)
+    if (
+        player.action_held >= stats_of(player.animal).hold_ticks
+        and not player.action_fired
+    ):
+        # ⚠️ 出せるかを見る前に立てる。出せなくても、この押し方のとくぎはそれきり。
+        player.action_fired = True
+        if _accepts(player) and player.special_charges > 0:
+            events.extend(_special(world, player))
+    return events
+
+
+def _accepts(player: PlayerState) -> bool:
+    """技のボタンが効くか。動けない間と、ボタンを受け付けない振る舞いの最中は効かない。"""
+    if is_frozen(player):
+        return False
+    return player.action is None or not traits_of(player.action).blocks_buttons
+
+
+def _tap(world: WorldState, player: PlayerState) -> list[SimEvent]:
+    """押した瞬間。通常技（原型の doAction）。"""
+    if not _accepts(player):
         return []
     tap = tap_technique(player.animal)
-    # 通常技の無い動物は、ポン押しでもとくぎが出る（チキンがあれば。原型の doAction）。
+    # 通常技の無い動物は、押した瞬間にとくぎが出る（チキンがあれば）。
     if tap is None:
         return _special(world, player) if player.special_charges > 0 else []
     cooldown_before = player.ability_cooldown

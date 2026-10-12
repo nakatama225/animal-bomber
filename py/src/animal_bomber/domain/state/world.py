@@ -71,19 +71,19 @@ class WorldState:
     """盤面に置かれるもの（爆弾・爆風・アイテム）の識別子を発番する。"""
 
 
-HELD_AT_ROUND_START: Final = PlayerInput.BOMB
-"""ラウンドの始まりの「前の tick に押していたボタン」。爆弾のボタンを押していた扱い。
+HELD_AT_ROUND_START: Final = PlayerInput.BOMB | PlayerInput.ACTION
+"""ラウンドの始まりの「前の tick に押していたボタン」。爆弾と技のボタンを押していた。
 
-⚠️ 何も押していない扱い（`PlayerInput.IDLE`）にすると、爆弾のボタンを押したまま
+⚠️ 何も押していない扱い（`PlayerInput.IDLE`）にすると、ボタンを押したまま
 ラウンドが始まったとき、最初の tick が「押した瞬間」になり、開始位置に爆弾を置く
-（逃げ場が無く詰む）。決着のあとの待ち（`ROUND_INTERMISSION`）の間も押し続けていれば、
-実際の試合でも起きる。原型も、決着の幕を Space で送った押下が次のラウンドの最初に
-届いて同じことが起き、ラウンドの始まりに押下の記録を消していた（`legacy/animal-bomber.html`
-の startRound）。押したまま始まったボタンは、一度離して押し直すと効く（TypeScript 版は
-段階 11e の bcb1567 で直した）。
+（逃げ場が無く詰む。技のボタンなら通常技を出す）。決着のあとの待ち（`ROUND_INTERMISSION`）の
+間も押し続けていれば、実際の試合でも起きる。原型も、決着の幕を Space で送った押下が次の
+ラウンドの最初に届いて同じことが起き、ラウンドの始まりに押下の記録を消していた
+（`legacy/animal-bomber.html` の startRound）。押したまま始まったボタンは、一度離して
+押し直すと効く（TypeScript 版は段階 11e の bcb1567 で直した）。
 
-技のボタンは含めない。技は押し続けた長さで決まるので、押し続けた長さを -1 から始めて
-同じ扱いにしている（`state/player.py` の `ACTION_LOCKED`。TypeScript 版と同じ）。
+技のボタンの長押し（とくぎ）は、`PlayerState.action_fired` の始めの値（True）が止める
+（原型の startRound も同じ）。
 
 ⚠️ 向きのボタンも含めない。押したまま次のラウンドに入ると、最初の tick から歩く
 （TypeScript 版と同じ）。原型の startRound は向きのキーの記録も捨てるが、注記のとおり
@@ -191,7 +191,7 @@ def hash_world(world: WorldState) -> int:
             .add_int(player.autobomb_wait)
             .add_text("" if player.action is None else encode_action(player.action))
             .add_int(player.action_held)
-            .add_bool(player.tap_voided)
+            .add_bool(player.action_fired)
             .add_int(player.ability_cooldown)
         )
     # 並びの順も混ぜる。並びが違えば、導火線の尽きた爆弾の爆発する順が変わる。

@@ -153,12 +153,16 @@ class Test技を使ったイベント:
         assert used(tap_events(world)) == []
 
     def test_とくぎが出たら_とくぎとして知らせる(self) -> None:
+        """押した瞬間の通常技は、とくぎではない技として先に知らせる。"""
         world = make_world(3, (Animal.ELEPHANT, Animal.RABBIT))
         world.players[0].special_charges = 1
         events = simulation.step(world, idle(world))
         for _ in range(stats_of(Animal.ELEPHANT).hold_ticks):
             events.extend(simulation.step(world, only_for(world, 0, ACTION)))
-        assert used(events) == [TechniqueUsed(player=0, special=True)]
+        assert used(events) == [
+            TechniqueUsed(player=0, special=False),
+            TechniqueUsed(player=0, special=True),
+        ]
 
     def test_掘ったもぐらは自分の穴で止まらない(self) -> None:
         world = make_world(2468, (Animal.MOLE, Animal.RABBIT))

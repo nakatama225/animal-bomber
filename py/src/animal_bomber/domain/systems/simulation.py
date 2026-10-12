@@ -31,12 +31,13 @@ TypeScript 版の `Simulation` と同じ）。
    （`effects.py` の説明）。焼けた舌が戻るのは振る舞いを進める前なので、戻る tick に
    伸びる舌は、戻った長さまで伸びる。拍の tick にマスの境目をまたいでも、今までいた
    マスに置く（`autobomb.py`）
-2. プレイヤーごとに：動く（`movement.py`）→ ボタンの爆弾を置く（`bomb.py`）→ 技を
-   始める（`actions.py` の `watch_for`）→ 足元のアイテムを拾う（`items.py`）。原型の
-   「入力 / AI」の輪。動いてから置くので、押した tick にマスの境目をまたいだら、動いた
-   あとのマスに置く。動いてから技を始めるので、技が出る tick に向きを押せば、押した
-   向きへ出る。1人ずつ済ませるので、番号の小さいプレイヤーが置いた爆弾は、同じ tick
-   にあとから動くプレイヤーの壁になる
+2. プレイヤーごとに：動く（`movement.py`）→ ボタンの爆弾を置く（`bomb.py`）→ 技の
+   ボタンを見る（`actions.py` の `watch_for`）→ 足元のアイテムを拾う（`items.py`）。
+   原型の「入力 / AI」の輪。動いてから置くので、押した tick にマスの境目をまたいだら、
+   動いたあとのマスに置く。動いてから技を出すので、技が出る tick に向きを押せば、
+   押した向きへ出る。振る舞いの最中もボタンを見るので、振る舞いが終わった tick（1.）の
+   うちに押せば、次の技が出る。1人ずつ済ませるので、番号の小さいプレイヤーが置いた
+   爆弾は、同じ tick にあとから動くプレイヤーの壁になる
 3. 爆弾のマスから出たプレイヤーを通り抜けの対象から外し（`bomb.py`）、盤面の物（落とし
    穴・炎・撒く本体・跳ねる爆弾）を `actor_turn` の順に進める（`actors.py`）。拾った
    あとに落とし穴に落ちる（穴が滑りを消すので、穴の上のバナナを踏んでも、穴を抜けた
@@ -53,9 +54,8 @@ TypeScript 版の `Simulation` と同じ）。
    拾うのは、次の tick（2.）
 8. この tick の入力を、次の tick の「押した瞬間」の判定のために、前の入力として残す。
    すべての処理が終わったあとに残す。途中で残すと、そのあとの処理から見て「押した
-   瞬間」が消える（いま押した瞬間を見るのは 2. の爆弾だけだが、押した瞬間を見る処理
-   を足すときに崩れないよう最後に置く。技のボタンは押した瞬間でなく押し続けた長さで
-   見る）
+   瞬間」が消える（いま押した瞬間を見るのは 2. の爆弾と技のボタンだけだが、押した瞬間を
+   見る処理を足すときに崩れないよう最後に置く）
 
 ## 起きたことを戻り値で返す
 
@@ -101,22 +101,17 @@ def step(world: WorldState, inputs: Mapping[PlayerId, PlayerInput]) -> list[SimE
     """
     events: list[SimEvent] = []
     # 1.
-    advanced: list[PlayerId] = []
     for player in world.players:
         events.extend(step_owned_actors(world, player))
         advance_effects_for(player)
-        advanced_events, did_advance = advance_for(world, player)
-        if did_advance:
-            advanced.append(player.id)
-        events.extend(advanced_events)
+        events.extend(advance_for(world, player))
         events.extend(autobomb_for(world, player))
-    # 2. この tick に振る舞いを進めたプレイヤーは、新しく始めない（`actions.py`）。
+    # 2.
     for player in world.players:
         player_input = inputs[player.id]
         move_player(world, player, player_input)
         events.extend(place_for(world, player, player_input))
-        if player.id not in advanced:
-            events.extend(watch_for(world, player, player_input))
+        events.extend(watch_for(world, player, player_input))
         events.extend(pick_up_for(world, player))
     # 3.
     release_pass_through(world)

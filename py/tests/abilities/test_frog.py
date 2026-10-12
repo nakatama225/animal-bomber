@@ -20,6 +20,7 @@ from animal_bomber.domain.abilities.frog import (
     tongue_reach_of,
 )
 from animal_bomber.domain.abilities.results import Progress
+from animal_bomber.domain.abilities.techniques import hold_technique
 from animal_bomber.domain.core.coord import Cell, Direction
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import (
@@ -29,7 +30,7 @@ from animal_bomber.domain.events import (
     TechniqueMoment,
 )
 from animal_bomber.domain.input.player_input import PlayerInput
-from animal_bomber.domain.rules.animals import Animal, stats_of
+from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.state.actions import Tongue
 from animal_bomber.domain.state.actors import BurntTongue, SlimeBomb
@@ -44,7 +45,6 @@ from animal_bomber.domain.systems.bomb import place_bomb_at
 from tests.helpers import advance, clear_board, idle, make_world, only_for
 
 ACTION = PlayerInput.ACTION
-FROG_HOLD = stats_of(Animal.FROG).hold_ticks
 NEIGHBOURS = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1))
 
 
@@ -186,9 +186,11 @@ class Test粘膜爆弾の跳ぶ先:
         for seed in range(1, 201):
             world = make_world(seed, (Animal.FROG, Animal.RABBIT))
             frog = world.players[0]
-            frog.special_charges = 1
             simulation.step(world, idle(world))
-            advance(world, only_for(world, 0, ACTION), FROG_HOLD)
+            # ボタンを通さずに投げる。長押しすると押した瞬間に舌が出て、舌の最中は
+            # とくぎが出ない。
+            started = hold_technique(Animal.FROG)(world, frog)
+            assert started.action is None
             exploded = False
             for _ in range(400):
                 events = simulation.step(world, idle(world))

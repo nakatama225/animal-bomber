@@ -24,7 +24,7 @@ from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.bomb import Blast, Bomb
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import ACTION_LOCKED, Life
+from animal_bomber.domain.state.player import Life
 from animal_bomber.domain.state.world import WorldState, create_world, hash_world
 from tests.helpers import make_world
 
@@ -52,21 +52,23 @@ class Test始めの状態:
             (1, 1, STARTING_HP, 0),
         ]
 
-    def test_盤面に爆弾も爆風も無く_爆弾のボタンを押していた扱いで始まる(self) -> None:
+    def test_盤面に爆弾も爆風も無く_ボタンを押していた扱いで始まる(self) -> None:
         world = create_world(1, (Animal.RABBIT, Animal.ELEPHANT))
-        # 前の tick の入力は、爆弾のボタンを押していた扱い（`HELD_AT_ROUND_START`）。
-        assert all(p.previous_input is PlayerInput.BOMB for p in world.players)
+        # 前の tick の入力は、爆弾と技のボタンを押していた扱い
+        # （`HELD_AT_ROUND_START`）。
+        held = PlayerInput.BOMB | PlayerInput.ACTION
+        assert all(p.previous_input == held for p in world.players)
         assert (world.bombs, world.blasts, world.ids.issued) == ([], [], 0)
 
-    def test_状態もアイテムも技も無く始まり_技のボタンはロックされている(self) -> None:
+    def test_状態もアイテムも技も無く始まり_とくぎは出し終えた扱い(self) -> None:
         world = create_world(1, (Animal.RABBIT, Animal.ELEPHANT))
         for player in world.players:
             assert player.invulnerable_until == 0
             assert player.effects.active() == []
             assert (player.special_charges, player.last_hit_by) == (0, None)
             assert player.autobomb_wait == 0
-            assert (player.action, player.action_held) == (None, ACTION_LOCKED)
-            assert (player.tap_voided, player.ability_cooldown) == (False, 0)
+            assert (player.action, player.action_held) == (None, 0)
+            assert (player.action_fired, player.ability_cooldown) == (True, 0)
         assert (world.items, world.actors) == ([], [])
 
     @pytest.mark.parametrize("count", [0, 5])
@@ -179,8 +181,8 @@ def _action_held(world: WorldState) -> None:
     world.players[1].action_held = Tick(3)
 
 
-def _tap_voided(world: WorldState) -> None:
-    world.players[1].tap_voided = True
+def _action_fired(world: WorldState) -> None:
+    world.players[1].action_fired = False
 
 
 def _ability_cooldown(world: WorldState) -> None:
@@ -467,7 +469,7 @@ class Test状態の要約:
             _autobomb_wait,
             _action,
             _action_held,
-            _tap_voided,
+            _action_fired,
             _ability_cooldown,
         ],
     )

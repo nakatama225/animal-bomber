@@ -45,11 +45,14 @@ DigsPits: TypeAlias = Callable[[Animal], bool]
 def dig(world: WorldState, player: PlayerState) -> Started:
     """とくぎ。足元に穴を掘り始める。
 
-    掘れないマス（`can_dig_at`）では掘らない。⚠️ 掘らなくてもチキンは減る（呼ぶ側が先に
-    減らす）。原型も、とくぎを使った時点で減らしてから掘れるかを見ていた。掘る音は、
-    掘り始めたときだけ鳴らす（`DIG_STARTED`。原型の startDigPit も、掘れなければ音の
-    手前で帰る）。
+    掘っている最中と、掘れないマス（`can_dig_at`）では掘らない。⚠️ 掘らなくてもチキンは
+    減る（呼ぶ側が先に減らす）。原型も、とくぎを使った時点で減らしてから掘れるかを見て
+    いた（startDigPit は掘っている最中なら最初に帰る）。掘っている最中に押すと、チキン
+    だけ減って掘るのは続く。掘る音は、掘り始めたときだけ鳴らす（`DIG_STARTED`。原型の
+    startDigPit も、掘れなければ音の手前で帰る）。
     """
+    if isinstance(player.action, Dig):
+        return NOTHING
     cell = player.position.cell()
     if not can_dig_at(world, cell):
         return NOTHING

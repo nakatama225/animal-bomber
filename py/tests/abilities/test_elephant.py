@@ -3,9 +3,8 @@
 「原型の答え」とある期待値は、原型（`legacy/animal-bomber.html`）を画面なしで動かして
 測った値（TypeScript 版の `tests/abilities/charge.test.ts`・`snot.test.ts` と同じ
 場面）。
-原型は技のボタンを押した瞬間に通常技を出すので、そのフレームを 0 と数えた。この版は
-離した tick に出すので、その tick を 0 と数える。突進は振る舞いを直に入れて始める
-（原型の elephantCharge と同じ時点）。
+技のボタンを押した瞬間に通常技を出すので、そのフレーム（tick）を 0 と数える。突進は
+振る舞いを直に入れて始める（原型の elephantCharge と同じ時点）。
 """
 
 from animal_bomber.domain.abilities.elephant import CHARGE_DURATION, finish_charge
@@ -54,7 +53,7 @@ def elephant_world() -> WorldState:
 def trigger_charge(world: WorldState) -> None:
     """技のボタンを押し続けて、とくぎ（突進）を出す。チキンを1つ持たせる。"""
     world.players[0].special_charges = 1
-    # ラウンドの始まりのロックを外すため、まず 1 tick 離す。
+    # ラウンドの始まりの「とくぎを出し終えた扱い」を外すため、まず 1 tick 離す。
     simulation.step(world, idle(world))
     advance(world, only_for(world, 0, ACTION), ELEPHANT_HOLD)
 
@@ -517,10 +516,12 @@ def snot_world() -> tuple[WorldState, PlayerState, PlayerState]:
 
 
 def snot(world: WorldState) -> list[SimEvent]:
-    """0 番に技のボタンを押して離させる。吹いた tick（離した tick）のイベントを返す。"""
+    """0 番に技のボタンを押させる。吹いた tick（押した tick）のイベントを返す。
+
+    離すのは、呼んだ側が次に進める tick。
+    """
     simulation.step(world, idle(world))
-    simulation.step(world, only_for(world, 0, ACTION))
-    return simulation.step(world, idle(world))
+    return simulation.step(world, only_for(world, 0, ACTION))
 
 
 def long_bomb(world: WorldState, owner: PlayerState, cell: Cell) -> None:
@@ -611,8 +612,8 @@ class Test鼻水噴射:
             world, _, rabbit = snot_world()
             snot(world)
             long_bomb(world, rabbit, Cell(4, 7))
-            # snot は「離す・押す・離す」の3 tick なので、その手前まで何もしない。
-            advance(world, idle(world), gap - 3)
+            # snot は「離す・押す」の2 tick なので、その手前まで何もしない。
+            advance(world, idle(world), gap - 2)
             snot(world)
             return bomb_cells(world) == []
 

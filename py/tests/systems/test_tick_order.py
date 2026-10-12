@@ -73,7 +73,9 @@ class Test1tickの中の並び:
         frog.position = Cell(19, 13).center()
         elephant.facing = Direction.DOWN
         elephant.special_charges = 1
-        elephant.action_held = Tick(0)
+        # ラウンドの途中の、何も押していない状態にする（ラウンドの始まりは、とくぎを出し
+        # 終えた扱い）。
+        elephant.action_fired = False
         hold = stats_of(Animal.ELEPHANT).hold_ticks
         for t in range(1, hold + 1):
             pressed = PlayerInput.ACTION | (PlayerInput.RIGHT if t == hold else IDLE)
