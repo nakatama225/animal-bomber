@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
+import { ChargeAction } from '../../src/domain/abilities/elephant/ChargeAction.js';
+import { TongueAction } from '../../src/domain/abilities/frog/TongueAction.js';
+import { PitAction } from '../../src/domain/abilities/mole/PitAction.js';
 import { centerOf, sameCell, type Cell } from '../../src/domain/core/Coord.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
 import { AUTOBOMB_INTERVAL, MAX_BOMBS, MAX_POWER, MAX_SHOES } from '../../src/domain/rules/tuning.js';
 import { itemEffectTicks, POOP_LIFETIME, POOP_STACK_LIMIT, type ItemKind } from '../../src/domain/rules/items.js';
 import type { WorldState } from '../../src/domain/state/WorldState.js';
 import { OUT } from '../../src/domain/state/Life.js';
-import { isAlive, powerOf, speedOf } from '../../src/domain/state/PlayerState.js';
+import { isAlive, powerOf, speedOf, type PlayerState } from '../../src/domain/state/PlayerState.js';
 import { NEGIBON_CUTOFF } from '../../src/domain/rules/negibon.js';
 import { tick } from '../../src/domain/core/Tick.js';
 import { addBlast, detonate } from '../../src/domain/mutations/explode.js';
@@ -172,6 +175,90 @@ describe('悪い状態の作用', () => {
     player.effects.add('slide', itemEffectTicks(3), itemEffectTicks(9));
     advance(world, onlyFor(world, 0, press({})), 5);
     expect(player.effects.has('slide')).toBe(false);
+  });
+});
+
+/*
+ * 滑っている間の動き（原型の humanUpdate の滑りの枝）。期待値は、原型を画面なしで動かして
+ * 同じ場面で測った位置（どれも (3,7) の中央から右向きに滑り始める）。
+ */
+describe('滑っている間の動き', () => {
+  function slideArena(animal: string): { world: WorldState; player: PlayerState } {
+    const world = makeWorld(5, [animal, 'frog']);
+    clearBoard(world);
+    world.items = [];
+    const player = world.players[0]!;
+    player.position = centerOf({ col: 3, row: 7 });
+    player.facing = 'right';
+    world.players[1]!.position = centerOf({ col: 19, row: 13 });
+    applyItem(world, player, 'banana');
+    return { world, player };
+  }
+
+  it('向きを押しても曲がらず、向きも変わらず、滑る速さで進む', () => {
+    const { world, player } = slideArena('fox');
+    const sim = new Simulation();
+    const xs: number[] = [];
+    for (let i = 0; i < 6; i += 1) {
+      sim.step(world, onlyFor(world, 0, press({ up: true })));
+      xs.push(player.position.x);
+      expect(player.position.y).toBe(7.5);
+      expect(player.facing).toBe('right');
+    }
+    [3.577083, 3.654167, 3.73125, 3.808333, 3.885417, 3.9625].forEach((x, i) => expect(xs[i]).toBeCloseTo(x, 5));
+  });
+
+  it('通路の中央へ寄せる強さはふだんの速さで、歩いた距離（足の動きの絵）は増えない', () => {
+    const { world, player } = slideArena('fox');
+    player.position = { x: 3.5, y: 7.6 };
+    player.walked = 0;
+    const sim = new Simulation();
+    sim.step(world, onlyFor(world, 0, press({})));
+    expect(player.position.x).toBeCloseTo(3.577083, 5);
+    expect(player.position.y).toBeCloseTo(7.538333, 5);
+    sim.step(world, onlyFor(world, 0, press({})));
+    expect(player.position.y).toBe(7.5);
+    expect(player.walked).toBe(0);
+  });
+
+  it('泣いている間にバナナを拾うと、泣いたまま滑る', () => {
+    const { world, player } = slideArena('fox');
+    player.effects.clear('slide');
+    applyItem(world, player, 'onion');
+    applyItem(world, player, 'banana');
+    advance(world, onlyFor(world, 0, press({})), 4);
+    expect(player.position.x).toBeCloseTo(3.808333, 5);
+    expect(player.effects.has('stun')).toBe(true);
+  });
+
+  it('穴を掘っている最中も滑り、マスを出た次の tick に掘りが取り消される', () => {
+    const { world, player } = slideArena('mole');
+    player.action = new PitAction({ col: 3, row: 7 });
+    advance(world, onlyFor(world, 0, press({})), 8);
+    expect(player.position.x).toBeCloseTo(4.055, 5);
+    expect(player.action?.kind).toBe('dig');
+    advance(world, onlyFor(world, 0, press({})), 1);
+    expect(player.position.x).toBeCloseTo(4.124375, 5);
+    expect(player.action).toBeNull();
+    expect(world.actors).toEqual([]);
+  });
+
+  it('舌を伸ばしている最中も滑る（舌は出したマスから伸びる）', () => {
+    const { world, player } = slideArena('frog');
+    player.action = new TongueAction({ col: 3, row: 7 }, 'right');
+    advance(world, onlyFor(world, 0, press({})), 6);
+    expect(player.position.x).toBeCloseTo(3.9625, 5);
+    expect(player.action?.kind).toBe('tongue');
+  });
+
+  it('ブロックを壊しながら進む技の最中は、その技と滑りの両方で進む', () => {
+    const { world, player } = slideArena('elephant');
+    player.action = new ChargeAction('right');
+    const sim = new Simulation();
+    for (const x of [3.76675, 4.0335, 4.30025, 4.567]) {
+      sim.step(world, onlyFor(world, 0, press({})));
+      expect(player.position.x).toBeCloseTo(x, 5);
+    }
   });
 
   it('爆弾おけない状態では置けない', () => {

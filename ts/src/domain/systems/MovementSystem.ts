@@ -42,6 +42,12 @@ export class MovementSystem {
   }
 
   #movePlayer(world: WorldState, player: PlayerState, playerInput: PlayerInput): void {
+    // 滑っている間は、何よりも先に滑る（下の `#slide`）。
+    if (player.effects.has('slide')) {
+      this.#slide(world, player);
+      return;
+    }
+
     // 泣いている・落とし穴にはまっている間（`isFrozen`）は、どの入力も通らない。
     if (isFrozen(player)) return;
 
@@ -59,14 +65,12 @@ export class MovementSystem {
       dy = -dy;
     }
 
-    // 「滑る」「とまれない」は、手を離していても向いている方向へ進み続ける。
-    let sliding = false;
+    // 「とまれない」は、手を離していても向いている方向へ進み続ける。
     if (dx === 0 && dy === 0) {
-      if (!player.effects.has('slide') && !player.effects.has('runaway')) return;
+      if (!player.effects.has('runaway')) return;
       const forward = STEP_OF[player.facing];
       dx = forward.dx;
       dy = forward.dy;
-      sliding = player.effects.has('slide');
     }
 
     // 斜めは水平を優先して1軸に丸める。斜めに進めるようにすると、
@@ -79,9 +83,7 @@ export class MovementSystem {
     else if (dy > 0) player.facing = 'down';
     else if (dy < 0) player.facing = 'up';
 
-    const speed =
-      speedOf(player, abilityOf(player.animal).speedMultiplier) *
-      (sliding ? SLIDE_SPEED_RATIO : 1);
+    const speed = speedOf(player, abilityOf(player.animal).speedMultiplier);
     const substeps = Math.max(1, Math.ceil(speed / MOVE_SUBSTEP_DISTANCE));
     const perStep = speed / substeps;
 
@@ -96,9 +98,43 @@ export class MovementSystem {
     }
 
     if (movedAny) player.walked += speed;
-    // 壁にぶつかったら滑りは終わる。ぶつかっても滑り続けると、
-    // 壁ぎわで復帰できないまま爆風を待つことになる。
-    else if (sliding) player.effects.clear('slide');
+  }
+
+  /**
+   * バナナで滑る（原型の humanUpdate の滑りの枝）。
+   *
+   * 原型は、滑っている間は移動の関数（movePlayer）を通らず、向いている方向へ直接動かす。
+   * そのため次の4つが、ふつうの移動と違う。
+   *
+   * - 入力を見ない。向きを押しても曲がらず、向きも変わらない（拾ったときの向きのまま滑る）
+   * - 泣いている間も、位置を決める振る舞いの最中も滑る。穴を掘っている最中なら、滑って
+   *   マスを出るので掘りが取り消される。ブロックを壊しながら進む技の最中なら、その技と
+   *   滑りの両方で進む
+   * - 速さは、ふだんの速さの `SLIDE_SPEED_RATIO` 倍。通路の中央へ寄せる強さは、ふだんの速さ
+   * - 歩いた距離（足の動きの絵）は増やさない
+   *
+   * 進めなかったら（壁・ブロック・爆弾にぶつかったら）滑りは終わる。ぶつかっても滑り続けると、
+   * 壁ぎわで復帰できないまま爆風を待つことになる。
+   *
+   * ⚠️ 原型は1フレームぶんを1回で動かし、行き先が壁に重なれば動かずに滑りを終える。この版は
+   * 細かく分けて動かす（上の説明）ので、分けた1回ぶんが通らなくなった所で止まる（原型より
+   * 壁に近い所で止まりうる）。原型の1回の大きさは、画面の更新の間隔と最速のプレイヤーの速さで
+   * 変わる（原型の loop が時間を分ける）ので、原型の答えも1つに決まらない。
+   */
+  #slide(world: WorldState, player: PlayerState): void {
+    const forward = STEP_OF[player.facing];
+    const base = speedOf(player, abilityOf(player.animal).speedMultiplier);
+    const speed = base * SLIDE_SPEED_RATIO;
+    const substeps = Math.max(1, Math.ceil(speed / MOVE_SUBSTEP_DISTANCE));
+    const perStep = speed / substeps;
+
+    let movedAny = false;
+    for (let i = 0; i < substeps; i += 1) {
+      if (!this.#tryMove(world, player, forward.dx * perStep, forward.dy * perStep)) break;
+      movedAny = true;
+      this.#alignToCorridor(world, player, forward.dx, forward.dy, base / substeps);
+    }
+    if (!movedAny) player.effects.clear('slide');
   }
 
   /** 1回ぶん動かす。動けたら true。 */
