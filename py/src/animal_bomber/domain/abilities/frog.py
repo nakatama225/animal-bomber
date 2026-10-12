@@ -6,6 +6,7 @@ from animal_bomber.domain.abilities.results import NOTHING, Progress, Started
 from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import (
+    BurntOff,
     EffectApplied,
     Exploded,
     ItemTaken,
@@ -169,7 +170,10 @@ def check_tongue_burn(
     burnt_at = _blast_on_tongue(world, tongue)
     if burnt_at is None:
         return Progress()
-    return Progress(events=tuple(_burn(world, player, burnt_at)), done=True)
+    # 焼けたマスに煙を出す（原型の puff）。泣くことは `_burn` が知らせる。
+    cell = tongue.origin.step(tongue.direction, burnt_at)
+    events = [BurntOff(player=player.id, cell=cell), *_burn(world, player, burnt_at)]
+    return Progress(events=tuple(events), done=True)
 
 
 def _extend(world: WorldState, player: PlayerState, tongue: Tongue) -> list[SimEvent]:

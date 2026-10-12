@@ -16,6 +16,7 @@ from animal_bomber.domain.events import (
     BlockDestroyed,
     BombDoused,
     BombPlaced,
+    BurntOff,
     EffectApplied,
     Exploded,
     ItemBlown,
@@ -76,6 +77,8 @@ def event_row(event: SimEvent) -> list[object]:
             return ["techniqueUsed", player, special]
         case TechniqueMoment(player=player, moment=moment):
             return ["techniqueMoment", player, moment.value]
+        case BurntOff(player=player, cell=cell):
+            return ["burntOff", player, cell.col, cell.row]
         case RoundEnded(round=number, winner=winner):
             return ["roundEnded", number, winner]
         case MatchEnded(champion=champion):

@@ -31,6 +31,7 @@ from animal_bomber.domain.events import (
     BlockDestroyed,
     BombDoused,
     BombPlaced,
+    BurntOff,
     EffectApplied,
     Exploded,
     ItemBlown,
@@ -350,6 +351,9 @@ class Presenter:
                     self._sounds.play(sound)
             case TechniqueMoment(moment=moment):
                 self._sounds.play(moment_sound(moment))
+            case BurntOff():
+                # 音は泣く状態（`EffectApplied`）で鳴らす。煙は絵の側が出す（段階 7）。
+                pass
             case RoundEnded(round=number, winner=winner):
                 self._sounds.play(SoundName.ROUND_END)
                 if winner is None:

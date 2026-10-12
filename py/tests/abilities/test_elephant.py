@@ -430,6 +430,47 @@ class Test突進で押しのける先:
         assert tiles[20] is Tile.EMPTY
 
 
+def ram(victim_animal: Animal) -> tuple[int | None, int | None]:
+    """ぞうを (3, 5) から右へ、たまねぎを抱えて突進させ、(8, 5) の相手にぶつける。
+
+    相手が泣いた tick と、泣いていた長さを返す。
+    """
+    world = arena((Animal.ELEPHANT, victim_animal))
+    elephant, victim = world.players
+    for player in world.players:
+        player.invulnerable_until = Tick(0)
+    elephant.position = Cell(3, 5).center()
+    victim.position = Cell(8, 5).center()
+    # 傷は見ない（ぶつけたアイテムは無敵でも効く）。
+    victim.invulnerable_until = Tick(9999)
+    put_item(world, Cell(4, 5), ItemKind.ONION)
+    elephant.action = Charge(direction=Direction.RIGHT, remaining=CHARGE_DURATION)
+    hit_at = None
+    for tick in range(1, 801):
+        simulation.step(world, idle(world))
+        stunned = victim.effects.has(EffectKind.STUN)
+        if hit_at is None and stunned:
+            hit_at = tick
+        if hit_at is not None and not stunned:
+            return hit_at, tick - hit_at
+    return hit_at, None
+
+
+class Test突進でぶつけたアイテム:
+    """原型の updateCharge の applyItem。"""
+
+    def test_ぶつけられた側の倍率がかかる(self) -> None:
+        """効果が2倍の動物は、ぶつけられたたまねぎで2倍泣く。
+
+        原型の答え：うさぎ 180・かえる 360 フレーム（原型は小数の引き算で1フレーム長く
+        出る。この版は 179・359。差の 180 は同じ。TypeScript 版と同じ場面）。
+        """
+        rabbit_hit, rabbit = ram(Animal.RABBIT)
+        frog_hit, frog = ram(Animal.FROG)
+        assert frog_hit == rabbit_hit
+        assert (rabbit, frog) == (179, 359)
+
+
 class Test突進どうし:
     def test_止まったぞうの撒いたものを_突進中のもう1頭は抱えて運ぶ(self) -> None:
         """原型の答え：泣くのは止まっていた側で、f30。"""

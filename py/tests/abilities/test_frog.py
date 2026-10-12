@@ -24,6 +24,8 @@ from animal_bomber.domain.abilities.techniques import hold_technique
 from animal_bomber.domain.core.coord import Cell, Direction
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import (
+    BurntOff,
+    EffectApplied,
     Exploded,
     ItemTaken,
     SimEvent,
@@ -433,7 +435,13 @@ class Test舌の長さと時間:
             advance_tongue(world, frog, tongue)
         add_blast(world, Cell(5, 5), 1, is_center=False)
         assert not advance_tongue(world, frog, tongue).done
-        assert check_tongue_burn(world, frog, tongue).done
+        burnt = check_tongue_burn(world, frog, tongue)
+        assert burnt.done
+        # 焼けたマスを知らせる（煙を出すため。原型の puff）。泣くことはそのあと。
+        assert burnt.events == (
+            BurntOff(player=frog.id, cell=Cell(5, 5)),
+            EffectApplied(target=frog.id, effect=EffectKind.STUN),
+        )
         assert tongue_reach_of(world, frog) == 1
         assert frog.effects.remaining(EffectKind.STUN) == 180
         reaches = []

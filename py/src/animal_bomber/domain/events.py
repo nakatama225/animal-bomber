@@ -228,6 +228,20 @@ class TechniqueMoment:
 
 
 @dataclass(frozen=True, slots=True)
+class BurntOff:
+    """伸ばしていた技が爆風に触れて焼き切れた。
+
+    焼けたマスに煙を出すのに使う（原型は焼けたマスで煙を出す）。泣くことは別に
+    `EffectApplied` で知らせる。
+    """
+
+    player: PlayerId
+    """技を使っていたプレイヤー。"""
+    cell: Cell
+    """焼けたマス（いちばん手前の爆風のマス）。"""
+
+
+@dataclass(frozen=True, slots=True)
 class RoundEnded:
     """ラウンドが決まった。
 
@@ -266,6 +280,7 @@ SimEvent: TypeAlias = (
     | PlayerDown
     | TechniqueUsed
     | TechniqueMoment
+    | BurntOff
     | RoundEnded
     | MatchEnded
 )
