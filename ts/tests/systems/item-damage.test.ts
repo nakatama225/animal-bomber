@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import { centerOf } from '../../src/domain/core/Coord.js';
+import { centerOf, sameCell, type Cell } from '../../src/domain/core/Coord.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
 import { AUTOBOMB_INTERVAL, MAX_BOMBS, MAX_POWER, MAX_SHOES } from '../../src/domain/rules/tuning.js';
-import { itemEffectTicks, POOP_STACK_LIMIT } from '../../src/domain/rules/items.js';
+import { itemEffectTicks, POOP_LIFETIME, POOP_STACK_LIMIT, type ItemKind } from '../../src/domain/rules/items.js';
+import type { WorldState } from '../../src/domain/state/WorldState.js';
 import { OUT } from '../../src/domain/state/Life.js';
 import { isAlive, powerOf, speedOf } from '../../src/domain/state/PlayerState.js';
 import { NEGIBON_CUTOFF } from '../../src/domain/rules/negibon.js';
 import { tick } from '../../src/domain/core/Tick.js';
-import { detonate } from '../../src/domain/mutations/explode.js';
+import { addBlast, detonate } from '../../src/domain/mutations/explode.js';
 import { placeBomb } from '../../src/domain/mutations/bombs.js';
-import { applyItem, spitPowerUp } from '../../src/domain/mutations/items.js';
+import { applyItem, placedItem, spitPowerUp } from '../../src/domain/mutations/items.js';
 import { DamageSystem } from '../../src/domain/systems/DamageSystem.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
 import { Presenter } from '../../src/presentation/Presenter.js';
@@ -353,6 +354,147 @@ describe('アイテムの焼却と抽選の順序', () => {
   });
 });
 
+/*
+ * うんこのアイテムは、焼けずに吹き飛び、15 秒で消える（原型の blowPoop・POOP_LIFE）。
+ * 盤面を空にして、プレイヤー0の爆弾を置いて爆発させる。吹き飛ぶ先は、原型を画面なしで
+ * 動かして同じ場面で測った答え（爆心の上の場面は、原型も乱数で向きを選ぶ）。
+ */
+describe('うんこのアイテム', () => {
+  function poopArena(): WorldState {
+    const world = makeWorld();
+    clearBoard(world);
+    world.items = [];
+    return world;
+  }
+
+  function putItem(world: WorldState, cell: Cell, kind: ItemKind): void {
+    world.items.push({ id: world.ids.take(), cell, kind });
+  }
+
+  function explodeAt(world: WorldState, cell: Cell, power: number): SimEvent[] {
+    const player = world.players[0]!;
+    player.position = centerOf(cell);
+    player.power = power;
+    const bomb = placeBomb(world, player)!;
+    return detonate(world, bomb).events;
+  }
+
+  it('爆風に触れても焼けず、爆心から外向きに1マス吹き飛ぶ。残る長さは吹き飛んだ tick から数え直す', () => {
+    const world = poopArena();
+    world.now = tick(40);
+    world.items.push({ ...placedItem(world, { col: 5, row: 3 }, 'poop'), expiresAt: tick(3) });
+    const events = explodeAt(world, { col: 3, row: 3 }, 3);
+    expect(events.filter((e) => e.type === 'itemBurned')).toEqual([]);
+    expect(events).toContainEqual({ type: 'itemBlown', from: { col: 5, row: 3 }, to: { col: 6, row: 3 }, kind: 'poop' });
+    expect(world.items.map((item) => [item.cell.col, item.cell.row, item.expiresAt])).toEqual([
+      [6, 3, 40 + POOP_LIFETIME],
+    ]);
+  });
+
+  it('外向きのマスへ行けなければ、右・左・下・上の順に試す', () => {
+    const world = poopArena();
+    // 外向き（右）はブロック、左は別のアイテムで塞ぐ。下へ飛ぶ。
+    world.board.set({ col: 6, row: 3 }, 'soft');
+    putItem(world, { col: 4, row: 3 }, 'fire');
+    putItem(world, { col: 5, row: 3 }, 'poop');
+    const events = explodeAt(world, { col: 3, row: 3 }, 2);
+    expect(events).toContainEqual({ type: 'itemBlown', from: { col: 5, row: 3 }, to: { col: 5, row: 4 }, kind: 'poop' });
+    // 左を塞いでいたアイテムは、吹き飛んだあとで焼ける（配列の後ろから順に見る）。
+    expect(events).toContainEqual({ type: 'itemBurned', cell: { col: 4, row: 3 }, kind: 'fire' });
+  });
+
+  it('いちばん近い爆心が斜めの位置にあれば、斜めに飛ぶ（爆心は、いま盤面にある爆風から選ぶ）', () => {
+    const world = poopArena();
+    // 残っている爆風の爆心 (5,4) までは2歩、いま爆発する (1,3) までは3歩。
+    addBlast(world, { col: 5, row: 4 }, 1, true);
+    putItem(world, { col: 4, row: 3 }, 'poop');
+    const events = explodeAt(world, { col: 1, row: 3 }, 3);
+    expect(events).toContainEqual({ type: 'itemBlown', from: { col: 4, row: 3 }, to: { col: 3, row: 2 }, kind: 'poop' });
+  });
+
+  it('同じ近さの爆心が2つあれば、先に置かれた爆風の爆心から外向きに飛ぶ', () => {
+    const world = poopArena();
+    // 残っている爆風の爆心 (6,3) と、いま爆発する (2,3) は、どちらも2歩。
+    addBlast(world, { col: 6, row: 3 }, 1, true);
+    putItem(world, { col: 4, row: 3 }, 'poop');
+    const events = explodeAt(world, { col: 2, row: 3 }, 2);
+    expect(events).toContainEqual({ type: 'itemBlown', from: { col: 4, row: 3 }, to: { col: 3, row: 3 }, kind: 'poop' });
+  });
+
+  it('爆弾のあるマスへは飛ばない（爆風の届かない爆弾が外向きのマスにあれば、次の向きへ）', () => {
+    const world = poopArena();
+    const far = world.players[1]!;
+    far.position = centerOf({ col: 6, row: 3 });
+    placeBomb(world, far);
+    far.position = centerOf({ col: 11, row: 9 });
+    putItem(world, { col: 5, row: 3 }, 'poop');
+    const events = explodeAt(world, { col: 3, row: 3 }, 2);
+    expect(events).toContainEqual({ type: 'itemBlown', from: { col: 5, row: 3 }, to: { col: 4, row: 3 }, kind: 'poop' });
+    expect(world.bombs.map((bomb) => bomb.cell)).toEqual([{ col: 6, row: 3 }]);
+  });
+
+  it('爆心の上にあれば、向きを試合の乱数で1回だけ引いて選ぶ', () => {
+    const world = poopArena();
+    putItem(world, { col: 3, row: 3 }, 'poop');
+    const before = world.rng.calls;
+    const events = explodeAt(world, { col: 3, row: 3 }, 1);
+    expect(world.rng.calls).toBe(before + 1);
+    const blown = events.find((e) => e.type === 'itemBlown');
+    expect(blown?.type === 'itemBlown' ? [blown.to] : []).toEqual([world.items[0]!.cell]);
+    expect(
+      [
+        { col: 4, row: 3 },
+        { col: 2, row: 3 },
+        { col: 3, row: 4 },
+        { col: 3, row: 2 },
+      ].some((cell) => sameCell(cell, world.items[0]!.cell)),
+    ).toBe(true);
+  });
+
+  it('どこへも行けなければ、焼けずにその場に残る（残る長さも数え直さない）', () => {
+    const world = poopArena();
+    // 隅の (1,1)。外は壁、右と下はブロック。
+    world.board.set({ col: 2, row: 1 }, 'soft');
+    world.board.set({ col: 1, row: 2 }, 'soft');
+    world.items.push({ ...placedItem(world, { col: 1, row: 1 }, 'poop'), expiresAt: tick(7) });
+    const events = explodeAt(world, { col: 1, row: 1 }, 1);
+    expect(events.filter((e) => e.type === 'itemBurned' || e.type === 'itemBlown')).toEqual([]);
+    const poop = world.items.filter((item) => item.kind === 'poop');
+    expect(poop.map((item) => [item.cell.col, item.cell.row, item.expiresAt])).toEqual([[1, 1, 7]]);
+  });
+
+  it('置いた tick を 0 として、15 秒（900 tick）を過ぎた 901 tick 目に消える。ほかのアイテムは消えない', () => {
+    // 原型は「いまの時刻 − 置いた時刻 > 15 秒」で消す。60 tick で1秒なので、901 tick 目
+    // （原型は小数の足し算の誤差で 900 tick 目になる時刻もある。POOP_LIFETIME の説明）。
+    const world = poopArena();
+    const sim = new Simulation();
+    world.items.push(placedItem(world, { col: 9, row: 5 }, 'poop'), placedItem(world, { col: 9, row: 7 }, 'fire'));
+    expect(world.items.map((item) => item.expiresAt)).toEqual([POOP_LIFETIME, undefined]);
+    for (let i = 0; i <= POOP_LIFETIME; i += 1) sim.step(world, onlyFor(world, 0, press({})));
+    expect(world.items.map((item) => item.kind)).toEqual(['poop', 'fire']);
+    expect(world.now).toBe(POOP_LIFETIME + 1);
+    const events = sim.step(world, onlyFor(world, 0, press({})));
+    expect(events).toContainEqual({ type: 'itemExpired', cell: { col: 9, row: 5 }, kind: 'poop', scattered: false });
+    expect(world.items.map((item) => item.kind)).toEqual(['fire']);
+  });
+
+  it('壊したブロックから落ちたうんこにも、残る長さが付く', () => {
+    // うんこが落ちる種を順に探す（種で盤面の乱数が変わる）。
+    for (let seed = 0; seed < 200; seed += 1) {
+      const world = makeWorld(seed);
+      clearBoard(world);
+      world.items = [];
+      world.board.set({ col: 5, row: 3 }, 'soft');
+      const events = explodeAt(world, { col: 3, row: 3 }, 3);
+      const dropped = events.find((e) => e.type === 'itemDropped');
+      if (dropped?.type !== 'itemDropped' || dropped.kind !== 'poop') continue;
+      expect(world.items.map((item) => item.expiresAt)).toEqual([world.now + POOP_LIFETIME]);
+      return;
+    }
+    throw new Error('うんこが落ちる場面が見つからない');
+  });
+});
+
 describe('被弾', () => {
   it('爆風が重なったマスでは、あとから置かれた爆風の持ち主が当てたことになる', () => {
     // 相手の爆風に誘爆された自分の爆弾のマスで当たったら、自爆として数える。
@@ -553,6 +695,8 @@ describe('イベントの受け取り', () => {
       { type: 'itemDropped', cell: { col: 2, row: 1 }, kind: 'fire' },
       { type: 'itemTaken', cell: { col: 2, row: 1 }, kind: 'fire', taker: 0 },
       { type: 'itemBurned', cell: { col: 2, row: 1 }, kind: 'fire' },
+      { type: 'itemBlown', from: { col: 2, row: 1 }, to: { col: 3, row: 1 }, kind: 'poop' },
+      { type: 'itemExpired', cell: { col: 3, row: 1 }, kind: 'poop', scattered: false },
       { type: 'effectApplied', target: 0, effect: 'slow' },
       { type: 'playerHurt', target: 0, by: 1, amount: 2 },
       { type: 'playerDown', target: 0, by: 1, at: { x: 1.5, y: 1.5 } },

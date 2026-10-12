@@ -10,11 +10,14 @@
  */
 
 import { sameCell, type Cell } from '../core/Coord.js';
+import { tick } from '../core/Tick.js';
 import type { SimEvent } from '../events/SimEvent.js';
 import { blastReach } from '../query/BlastReach.js';
 import { bombAt } from '../query/BoardQuery.js';
+import { POOP_LIFETIME } from '../rules/items.js';
 import { BLAST_DURATION } from '../rules/tuning.js';
 import type { Blast, Bomb } from '../state/Bomb.js';
+import type { Item } from '../state/Item.js';
 import type { WorldState } from '../state/WorldState.js';
 import { removeBomb } from './bombs.js';
 import { rollDrop } from './items.js';
@@ -76,6 +79,11 @@ export function detonate(
     // とくぎで撒かれたアイテムは爆風で焼けない（原型も、撒かれたものは爆風で動かず消えない）。
     if (item.scatteredBy !== undefined) continue;
     if (!world.blasts.some((blast) => sameCell(blast.cell, item.cell))) continue;
+    // うんこは焼けずに吹き飛ぶ（原型の blowPoop）。
+    if (item.kind === 'poop') {
+      events.push(...blowAway(world, index, item));
+      continue;
+    }
     world.items.splice(index, 1);
     events.push({ type: 'itemBurned', cell: item.cell, kind: item.kind });
   }
@@ -87,6 +95,55 @@ export function detonate(
   }
 
   return { chained, destroyed, events };
+}
+
+/** 吹き飛ぶ向きを、外向きの次に試す順（右・左・下・上。原型の DIRS）。 */
+const BLOW_ORDER: readonly Cell[] = [
+  { col: 1, row: 0 },
+  { col: -1, row: 0 },
+  { col: 0, row: 1 },
+  { col: 0, row: -1 },
+];
+
+/**
+ * 爆風に触れたうんこを、いちばん近い爆心から外向きに1マス吹き飛ばす（原型の blowPoop）。
+ *
+ * - いちばん近い爆心は、いま盤面にある爆風の爆心の中から、縦横の歩数で選ぶ（同じ近さなら先に
+ *   置かれた爆風）。この連鎖の爆心に限らない（焼くかどうかも、いまある爆風のどれかで見ている）
+ * - 外向きは、縦と横それぞれの差の符号。爆心が斜めの位置にあれば斜めに飛ぶ
+ * - 爆心の上にあるときは向きが決まらないので、試合の乱数で右・左・下・上から選ぶ
+ * - 外向きのマスへ行けなければ右・左・下・上の順に試す。壁・ブロック・爆弾・ほかのアイテムの
+ *   あるマスへは行かない。どこへも行けなければ、焼けずにその場に残る
+ *
+ * 吹き飛んだら、残る長さをその tick から数え直す（原型も置いた時刻を書き換える）。
+ * 配列の中の位置は変えない（原型も同じ要素の座標を書き換える）。
+ */
+function blowAway(world: WorldState, index: number, item: Item): SimEvent[] {
+  let nearest = item.cell;
+  let best = Infinity;
+  for (const blast of world.blasts) {
+    if (!blast.isCenter) continue;
+    const distance =
+      Math.abs(blast.cell.col - item.cell.col) + Math.abs(blast.cell.row - item.cell.row);
+    if (distance < best) {
+      best = distance;
+      nearest = blast.cell;
+    }
+  }
+  let away: Cell = {
+    col: Math.sign(item.cell.col - nearest.col),
+    row: Math.sign(item.cell.row - nearest.row),
+  };
+  if (away.col === 0 && away.row === 0) away = world.rng.pick(BLOW_ORDER);
+  for (const step of [away, ...BLOW_ORDER]) {
+    const cell = { col: item.cell.col + step.col, row: item.cell.row + step.row };
+    if (world.board.at(cell) !== 'empty') continue;
+    if (bombAt(world, cell) !== undefined) continue;
+    if (world.items.some((other) => sameCell(other.cell, cell))) continue;
+    world.items[index] = { ...item, cell, expiresAt: tick(world.now + POOP_LIFETIME) };
+    return [{ type: 'itemBlown', from: item.cell, to: cell, kind: item.kind }];
+  }
+  return [];
 }
 
 /** そのマスに爆風を置く。盤面の外には置かない。 */

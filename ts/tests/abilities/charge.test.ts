@@ -7,7 +7,7 @@ import { tick } from '../../src/domain/core/Tick.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
 import { placeBomb, placeBombAt } from '../../src/domain/mutations/bombs.js';
 import { hurt } from '../../src/domain/mutations/damage.js';
-import { itemEffectTicks, type ItemKind } from '../../src/domain/rules/items.js';
+import { itemEffectTicks, POOP_LIFETIME, type ItemKind } from '../../src/domain/rules/items.js';
 import { isAlive, isBlastProof, isUntouchable, type PlayerState } from '../../src/domain/state/PlayerState.js';
 import type { WorldState } from '../../src/domain/state/WorldState.js';
 import { ItemSystem } from '../../src/domain/systems/ItemSystem.js';
@@ -215,6 +215,27 @@ describe('突進と通り道のアイテム', () => {
     advance(world, onlyFor(world, 0, press({})), 200);
     // 止まったあと、どこかに撒かれている。
     expect(world.items.some((item) => item.kind === 'onion')).toBe(true);
+  });
+
+  it('撒いたうんこには、ふつうのうんこと同じ残る長さが付く（ほかの悪いアイテムには付かない）', () => {
+    const world = elephantWorld();
+    const player = world.players[0]!;
+    clearBoard(world);
+    world.items = [];
+    player.position = centerOf({ col: 1, row: 3 });
+    player.action = new ChargeAction('right');
+    world.items.push({ id: world.ids.take(), cell: { col: 3, row: 3 }, kind: 'poop' });
+    world.items.push({ id: world.ids.take(), cell: { col: 4, row: 3 }, kind: 'onion' });
+    const sim = new Simulation();
+    let spatAt = -1;
+    for (let i = 0; i < 200 && spatAt < 0; i += 1) {
+      const now = world.now;
+      const events = sim.step(world, onlyFor(world, 0, press({})));
+      if (events.some((e) => e.type === 'techniqueMoment' && e.moment === 'itemsSpat')) spatAt = now;
+    }
+    expect(spatAt).toBeGreaterThan(0);
+    const expiry = Object.fromEntries(world.items.map((item) => [item.kind, item.expiresAt]));
+    expect(expiry).toEqual({ poop: spatAt + POOP_LIFETIME, onion: undefined });
   });
 });
 

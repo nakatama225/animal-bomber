@@ -113,7 +113,11 @@ export class ParticleField {
         return;
       }
       case 'itemExpired':
-        puff(out, rng, event.cell, '#f7a8c4', '💨');
+        // 撒かれたものは桃色、ふつうのうんこは茶色（原型と同じ）。
+        puff(out, rng, event.cell, event.scattered ? '#f7a8c4' : '#8a6a3a', '💨');
+        return;
+      case 'itemBlown':
+        puff(out, rng, event.to, '#8a6a3a', '💩');
         return;
       case 'itemWashed':
       case 'bombDoused':

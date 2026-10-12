@@ -81,8 +81,16 @@ export type SimEvent =
       readonly taker: PlayerId;
     }
   | { readonly type: 'itemBurned'; readonly cell: Cell; readonly kind: ItemKind }
-  /** 撒かれたアイテムが、残る長さを過ぎて消えた（`Item.expiresAt`）。 */
-  | { readonly type: 'itemExpired'; readonly cell: Cell; readonly kind: ItemKind }
+  /** 爆風に触れたアイテムが、焼けずに隣のマスへ吹き飛んだ（うんこ。`mutations/explode.ts`）。 */
+  | { readonly type: 'itemBlown'; readonly from: Cell; readonly to: Cell; readonly kind: ItemKind }
+  /** アイテムが、残る長さを過ぎて消えた（`Item.expiresAt`。うんこと、撒かれたもの）。 */
+  | {
+      readonly type: 'itemExpired';
+      readonly cell: Cell;
+      readonly kind: ItemKind;
+      /** とくぎで撒かれたものか（消えるときの煙の色が違う）。 */
+      readonly scattered: boolean;
+    }
   /** 流されて溶けていたアイテムが、溶けきって消えた（`Item.meltingUntil`）。 */
   | { readonly type: 'itemWashed'; readonly cell: Cell; readonly kind: ItemKind }
   /** 爆弾の火が消されて、爆弾ごと消えた。置いたプレイヤーの手持ちは戻る。 */

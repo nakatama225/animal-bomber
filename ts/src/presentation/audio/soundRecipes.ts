@@ -59,6 +59,11 @@ export const SOUND_RECIPES: Readonly<Record<SoundName, Recipe>> = {
     v.noiseBurst({ dur: 0.1, f0: 4200, f1: 1800, vol: 0.07, type: 'bandpass', q: 0.9 });
   },
 
+  blowPoop(v) {
+    v.noiseBurst({ dur: 0.22, f0: 700, f1: 160, vol: 0.2 });
+    v.tone({ f0: 300, f1: 520, type: 'sine', dur: 0.18, vol: 0.14 });
+  },
+
   hurt(v) {
     v.tone({ f0: 520, f1: 90, type: 'sawtooth', dur: 0.3, vol: 0.3 });
     v.noiseBurst({ dur: 0.2, f0: 900, f1: 200, vol: 0.25 });

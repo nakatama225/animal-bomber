@@ -425,7 +425,7 @@ describe('状態の要約', () => {
     expect(hashWorld(world)).not.toBe(base);
   });
 
-  it('撒かれたもの・溶けているアイテムは、撒いたプレイヤー・消える時刻・溶けきる時刻も見る', () => {
+  it('撒かれたもの・消える時刻のあるもの・溶けているアイテムは、撒いたプレイヤー・消える時刻・溶けきる時刻も見る', () => {
     // アイテムの種類と位置だけを混ぜると、撒いたものが消える時刻や、溶けている最中かがずれても検出できない。
     const world = createWorld({ seed: SEED, animals: ANIMALS });
     const plain = { id: world.ids.take(), cell: { col: 5, row: 5 }, kind: 'poop' as const };
@@ -440,6 +440,14 @@ describe('状態の要約', () => {
     expect(hashWorld(world)).not.toBe(scatteredHash);
     world.items = [{ ...scattered, expiresAt: tick(101) }];
     expect(hashWorld(world)).not.toBe(scatteredHash);
+
+    // ふつうのうんこは、消える時刻だけを持つ。
+    world.items = [{ ...plain, expiresAt: tick(100) }];
+    const expiringHash = hashWorld(world);
+    expect(expiringHash).not.toBe(base);
+    expect(expiringHash).not.toBe(scatteredHash);
+    world.items = [{ ...plain, expiresAt: tick(101) }];
+    expect(hashWorld(world)).not.toBe(expiringHash);
 
     world.items = [{ ...plain, meltingUntil: tick(27) }];
     const meltingHash = hashWorld(world);

@@ -274,8 +274,9 @@ export function hashWorld(world: WorldState): number {
   }
   for (const item of world.items) {
     hasher.int(item.id).int(item.cell.col).int(item.cell.row).text(item.kind);
-    // 撒かれたもの・溶けているものだけが持つ値は、持っているときだけ混ぜる（ふつうのアイテムの要約は変えない）。
-    if (item.scatteredBy !== undefined) hasher.int(item.scatteredBy).int(item.expiresAt ?? -1);
+    // 一部のアイテムだけが持つ値は、持っているときだけ混ぜる（持たないアイテムの要約は変えない）。
+    if (item.scatteredBy !== undefined) hasher.text('scattered').int(item.scatteredBy);
+    if (item.expiresAt !== undefined) hasher.text('expires').int(item.expiresAt);
     if (item.meltingUntil !== undefined) hasher.text('melting').int(item.meltingUntil);
   }
   for (const actor of world.actors) {

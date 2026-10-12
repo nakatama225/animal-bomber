@@ -10,6 +10,7 @@
  */
 
 import { cellOf, sameCell, type Cell } from '../core/Coord.js';
+import { tick } from '../core/Tick.js';
 import type { SimEvent } from '../events/SimEvent.js';
 import { bombAt } from '../query/BoardQuery.js';
 import {
@@ -17,6 +18,7 @@ import {
   itemEffectTicks,
   ITEM_LOTTERY,
   POOP_EFFECTS,
+  POOP_LIFETIME,
   POOP_STACK_LIMIT,
   POWER_UP_KINDS,
   SLIDE_SECONDS,
@@ -24,6 +26,7 @@ import {
   type ItemKind,
 } from '../rules/items.js';
 import { MAX_BOMBS, MAX_POWER, MAX_SHOES } from '../rules/tuning.js';
+import type { Item } from '../state/Item.js';
 import type { PlayerState } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 
@@ -31,8 +34,20 @@ import type { WorldState } from '../state/WorldState.js';
 export function rollDrop(world: WorldState, cell: Cell): SimEvent[] {
   if (!world.rng.chance(DROP_CHANCE)) return [];
   const kind = world.rng.pick(ITEM_LOTTERY);
-  world.items.push({ id: world.ids.take(), cell, kind });
+  world.items.push(placedItem(world, cell, kind));
   return [{ type: 'itemDropped', cell, kind }];
+}
+
+/**
+ * 盤面に置くアイテムを作る（ブロックから落ちる・被弾して吐き出す・抱えて運んだものを技が撒く）。
+ *
+ * うんこには残る長さを付ける（`POOP_LIFETIME`。原型の POOP_LIFE）。とくぎで撒かれたうんこは
+ * 撒く側が自分で作る（残る長さが違う）。
+ */
+export function placedItem(world: WorldState, cell: Cell, kind: ItemKind): Item {
+  const item: Item = { id: world.ids.take(), cell, kind };
+  if (kind !== 'poop') return item;
+  return { ...item, expiresAt: tick(world.now + POOP_LIFETIME) };
 }
 
 /** 拾ったアイテムの効果を適用する。 */
@@ -126,7 +141,7 @@ export function spitPowerUp(world: WorldState, player: PlayerState): SimEvent[] 
       if (bombAt(world, cell) !== undefined) continue;
       if (world.items.some((item) => sameCell(item.cell, cell))) continue;
       if (avoidBlast && world.blasts.some((blast) => sameCell(blast.cell, cell))) continue;
-      world.items.push({ id: world.ids.take(), cell, kind });
+      world.items.push(placedItem(world, cell, kind));
       return [{ type: 'itemDropped', cell, kind }];
     }
   }

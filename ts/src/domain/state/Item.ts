@@ -16,7 +16,10 @@ export interface Item {
    * 爆風で焼けない・`expiresAt` を過ぎると消える。ほかのプレイヤーが踏めば、ふつうのアイテムと同じく効いて消える。
    */
   readonly scatteredBy?: PlayerId;
-  /** この tick を過ぎたら盤面から消える（撒かれたアイテムだけ）。 */
+  /**
+   * この tick を過ぎたら盤面から消える。うんこ（`rules/items.ts` の `POOP_LIFETIME`。原型の POOP_LIFE）と、
+   * とくぎで撒かれたものだけが持つ。ほかのアイテムは消えない。
+   */
   readonly expiresAt?: Tick;
   /**
    * 鼻水で流されて溶けている最中なら、消える tick（原型の melt）。溶けている間は盤面に残るが、

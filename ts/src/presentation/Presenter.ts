@@ -100,6 +100,9 @@ export class Presenter {
       case 'itemBurned':
         this.sounds.play('burn');
         return;
+      case 'itemBlown':
+        this.sounds.play('blowPoop');
+        return;
       case 'itemExpired':
       case 'itemWashed':
       case 'bombDoused':

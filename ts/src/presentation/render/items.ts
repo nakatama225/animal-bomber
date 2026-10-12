@@ -57,8 +57,8 @@ const TONES: Readonly<Record<BadgeTone, ToneColors>> = {
   },
 };
 
-/** 撒かれたアイテムが、消える前に点滅を始める残り時間。原型と同じ値。 */
-const SCATTERED_BLINK = secondsToTicks(3.5);
+/** 残る長さのあるアイテムが、消える前に点滅を始める残り時間。原型と同じ値。 */
+const EXPIRY_BLINK = secondsToTicks(3.5);
 
 /** 流されたうんこが溶けきるまでの長さ。ルールの層（ぞうの鼻水）と揃える。 */
 const MELT_TICKS = 27;
@@ -66,25 +66,23 @@ const MELT_TICKS = 27;
 /**
  * 盤面に落ちているアイテムを描く。
  *
- * とくぎで撒かれたものは桃色の枠にし、消える前の 3.5 秒は点滅させる（原型と同じ）。
+ * とくぎで撒かれたものは桃色の枠にする。うんこと撒かれたものは、消える前の 3.5 秒は点滅させる（原型と同じ）。
  *
- * @param now いまの tick。撒かれたものの残り時間を出すのに使う
+ * @param now いまの tick。消えるまでの残り時間を出すのに使う
  */
 export function drawItem(frame: Frame, item: Item, now: Tick): void {
   const definition = itemDefinition(item.kind);
+  // 残る長さのあるもの（うんこ・撒かれたもの）は、消える前の 3.5 秒だけ点滅させる（原型と同じ）。
+  const left = item.expiresAt === undefined ? Infinity : item.expiresAt - now;
+  const blink = left < EXPIRY_BLINK ? 0.35 + 0.65 * Math.abs(Math.sin(frame.time * 9)) : 1;
   if (item.meltingUntil !== undefined) {
     // 鼻水で流されて溶けている。溶けきるまでの残りに合わせて薄れていく（原型は下へずり落ちて消える）。
-    const left = Math.max(0, Math.min(1, (item.meltingUntil - now) / MELT_TICKS));
-    drawBadge(frame, item.cell, definition.emoji, 'harmful', left);
+    const melt = Math.max(0, Math.min(1, (item.meltingUntil - now) / MELT_TICKS));
+    drawBadge(frame, item.cell, definition.emoji, 'harmful', blink * melt);
     return;
   }
-  if (item.scatteredBy === undefined) {
-    drawBadge(frame, item.cell, definition.emoji, definition.harmful ? 'harmful' : 'good', 1);
-    return;
-  }
-  const left = item.expiresAt === undefined ? Infinity : item.expiresAt - now;
-  const alpha = left < SCATTERED_BLINK ? 0.35 + 0.65 * Math.abs(Math.sin(frame.time * 9)) : 1;
-  drawBadge(frame, item.cell, definition.emoji, 'scattered', alpha);
+  const tone = item.scatteredBy !== undefined ? 'scattered' : definition.harmful ? 'harmful' : 'good';
+  drawBadge(frame, item.cell, definition.emoji, tone, blink);
 }
 
 /**

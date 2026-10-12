@@ -11,6 +11,7 @@ export type SoundName =
   | 'item'
   | 'chicken'
   | 'burn'
+  | 'blowPoop'
   | 'hurt'
   | 'down'
   | 'slip'
@@ -51,6 +52,7 @@ export const SOUND_NAMES: readonly SoundName[] = [
   'item',
   'chicken',
   'burn',
+  'blowPoop',
   'hurt',
   'down',
   'slip',

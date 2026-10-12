@@ -33,7 +33,7 @@ export class ItemSystem {
       events.push(...applyItem(world, player, item.kind, multiplier));
     }
 
-    // 溶けきったものと、残る長さを過ぎた撒かれたものを消す。拾うのが先（原型も、拾ったあとに見る）。
+    // 溶けきったものと、残る長さを過ぎたもの（うんこ・撒かれたもの）を消す。拾うのが先（原型も、拾ったあとに見る）。
     for (let index = world.items.length - 1; index >= 0; index -= 1) {
       const item = world.items[index] as Item;
       if (item.meltingUntil !== undefined) {
@@ -44,7 +44,12 @@ export class ItemSystem {
       }
       if (item.expiresAt === undefined || world.now <= item.expiresAt) continue;
       world.items.splice(index, 1);
-      events.push({ type: 'itemExpired', cell: item.cell, kind: item.kind });
+      events.push({
+        type: 'itemExpired',
+        cell: item.cell,
+        kind: item.kind,
+        scattered: item.scatteredBy !== undefined,
+      });
     }
     return events;
   }

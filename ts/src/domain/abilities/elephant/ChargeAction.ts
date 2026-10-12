@@ -9,7 +9,7 @@ import { isAlive, isBlastProof, isInvulnerable } from '../../state/PlayerState.j
 import type { WorldState } from '../../state/WorldState.js';
 import { hurt } from '../../mutations/damage.js';
 import { detonate } from '../../mutations/explode.js';
-import { applyItem, rollDrop } from '../../mutations/items.js';
+import { applyItem, placedItem, rollDrop } from '../../mutations/items.js';
 import type { ActiveAction } from '../ActiveAction.js';
 // ⚠️ 能力は登録表（registry）からではなく Ability から引く。registry はこのファイルを読み込む
 // （ElephantAbility 経由）ので、registry を読むと循環になる。
@@ -167,7 +167,7 @@ export class ChargeAction implements ActiveAction {
           if (world.board.at(cell) !== 'empty') continue;
           if (bombAt(world, cell) !== undefined) continue;
           if (world.items.some((item) => sameCell(item.cell, cell))) continue;
-          world.items.push({ id: world.ids.take(), cell, kind });
+          world.items.push(placedItem(world, cell, kind));
           events.push({ type: 'itemDropped', cell, kind });
           placed = true;
           break;

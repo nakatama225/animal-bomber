@@ -140,7 +140,7 @@ describe('撒いたうんこ（原型の poro のアイテム）', () => {
       if (placedAt === null && atCenter()) placedAt = t;
       if (placedAt !== null && !atCenter()) {
         goneAt = t;
-        expect(events).toContainEqual({ type: 'itemExpired', cell: { col: 7, row: 7 }, kind: 'poop' });
+        expect(events).toContainEqual({ type: 'itemExpired', cell: { col: 7, row: 7 }, kind: 'poop', scattered: true });
       }
     }
     expect(placedAt).toBe(1);

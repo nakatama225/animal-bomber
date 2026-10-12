@@ -87,7 +87,7 @@ describe('アイテム', () => {
     expect(count(canvas, 'stroke')).toBeGreaterThan(0);
   });
 
-  it('撒かれたものは桃色で描き、消える前の 3.5 秒は点滅する（ふつうのアイテムは点滅しない）', () => {
+  it('撒かれたものは桃色で描き、消える前の 3.5 秒は点滅する（消える時刻の無いアイテムは点滅しない）', () => {
     // 偽の canvas は代入の最後の値を残す。札の不透明度は最初に1回だけ入れ、下地の色味は最後の塗りに残る。
     // frameOn の時刻 0.5 秒では、点滅の sin が 1 から遠いので薄くなる。
     const drawn = (item: Parameters<typeof drawItem>[1], now: number): { alpha: unknown; tint: unknown } => {
@@ -100,6 +100,11 @@ describe('アイテム', () => {
     expect(drawn(scattered, 0)).toEqual({ alpha: 1, tint: 'rgba(255,150,200,.34)' });
     expect(drawn(scattered, 3500).alpha).toBeLessThan(1);
     expect(drawn(plain, 3500)).toEqual({ alpha: 1, tint: 'rgba(255,105,80,.34)' });
+    // ふつうのうんこ（消える時刻だけ持つ）も、損をする色のまま、消える前は点滅する（原型と同じ）。
+    const expiring = { ...plain, expiresAt: tick(900) };
+    expect(drawn(expiring, 0)).toEqual({ alpha: 1, tint: 'rgba(255,105,80,.34)' });
+    expect(drawn(expiring, 800)).toEqual({ alpha: expect.any(Number), tint: 'rgba(255,105,80,.34)' });
+    expect(drawn(expiring, 800).alpha).toBeLessThan(1);
   });
 
   it('鼻水で溶けているうんこは、溶けきるまでの残りに合わせて薄れていく', () => {
@@ -312,8 +317,20 @@ describe('粒子と画面の揺れ', () => {
     expect(paintedParticles(placed)).toBeGreaterThan(0);
 
     const expired = new ParticleField(new CosmeticRng());
-    expired.onEvents([{ type: 'itemExpired', cell: { col: 5, row: 5 }, kind: 'poop' }], world);
+    expired.onEvents([{ type: 'itemExpired', cell: { col: 5, row: 5 }, kind: 'poop', scattered: true }], world);
     expect(paintedParticles(expired)).toBeGreaterThan(0);
+  });
+
+  it('ふつうのうんこが消えたときと、爆風で吹き飛んだときにも煙を出す', () => {
+    const world = makeWorld();
+    for (const event of [
+      { type: 'itemExpired', cell: { col: 5, row: 5 }, kind: 'poop', scattered: false },
+      { type: 'itemBlown', from: { col: 5, row: 5 }, to: { col: 6, row: 5 }, kind: 'poop' },
+    ] as const) {
+      const field = new ParticleField(new CosmeticRng());
+      field.onEvents([event], world);
+      expect(paintedParticles(field), event.type).toBeGreaterThan(0);
+    }
   });
 
   it('鼻水で爆弾の火が消えたときと、うんこが溶けきったときに、しずくを出す', () => {

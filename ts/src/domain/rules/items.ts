@@ -107,6 +107,19 @@ export const POOP_EFFECTS: readonly { kind: EffectKind; label: string; seconds: 
 /** 同じ悪い状態を重ねて踏んだときの、積み上げの上限（基本秒数の何倍まで）。 */
 export const POOP_STACK_LIMIT = 3;
 
+/**
+ * 盤面に落ちたうんこが残る長さ（原型の POOP_LIFE 15 秒。理由の記録は無い）。
+ *
+ * 置いた tick から数えて、これを過ぎた tick に消える。爆風で吹き飛んだら、吹き飛んだ tick から
+ * 数え直す（原型の blowPoop）。ほかのアイテムは消えない。とくぎで撒かれたうんこは別の長さ
+ * （`abilities/rabbit/ScatterActor.ts`）。
+ *
+ * ⚠️ 原型は経過秒を小数で足し続けて「置いてから 15 秒より長い」かを比べるので、足し算の誤差で、
+ * 置いた時刻によっては 900 tick 目に消える（測ると 900 と 901 が混ざる）。この版は 15 秒ちょうどを
+ * 過ぎた 901 tick 目にそろえる（撒かれたうんこの 60 秒も同じ扱い）。
+ */
+export const POOP_LIFETIME: Tick = secondsToTicks(15);
+
 /** バナナで滑る時間。 */
 export const SLIDE_SECONDS = 3;
 /** たまねぎで動けない時間。 */
