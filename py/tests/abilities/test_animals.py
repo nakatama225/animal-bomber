@@ -6,7 +6,7 @@ from animal_bomber.domain.abilities.elephant import CHARGE_DURATION
 from animal_bomber.domain.abilities.techniques import hold_technique, tap_technique
 from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.core.tick import seconds_to_ticks
-from animal_bomber.domain.events import SimEvent, TechniqueUsed
+from animal_bomber.domain.events import EffectApplied, SimEvent, TechniqueUsed
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import Animal, stats_of
 from animal_bomber.domain.rules.items import STUN_SECONDS, ItemKind
@@ -103,12 +103,23 @@ class Testアイテムの効き方:
         charge.carried.append(ItemKind.ONION)
         elephant.action = charge
         stunned_for = 0
-        for _ in range(60):
-            simulation.step(world, idle(world))
+        stuns: list[SimEvent] = []
+        # 壁で止まるまで進める。
+        for _ in range(200):
+            events = simulation.step(world, idle(world))
+            stuns.extend(
+                event
+                for event in events
+                if event == EffectApplied(target=frog.id, effect=EffectKind.STUN)
+            )
             if frog.effects.has(EffectKind.STUN) and stunned_for == 0:
                 stunned_for = frog.effects.remaining(EffectKind.STUN)
         # かかった tick の終わりに 1 tick 進むので、見えるのは 2倍の長さより1つ短い。
         assert stunned_for == seconds_to_ticks(STUN_SECONDS * 2) - 1
+        # 押しつけたものは手放す（原型も押しつける前に抱えたものを空にする）。残すと、
+        # 押しのけるたびに押しつけ直し、止まった所でも撒く。
+        assert len(stuns) == 1
+        assert [item for item in world.items if item.kind is ItemKind.ONION] == []
 
 
 def tap_events(world: WorldState) -> list[SimEvent]:

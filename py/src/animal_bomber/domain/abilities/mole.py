@@ -35,15 +35,11 @@ DIG_TIME: Final = Tick(90)
 HOLD_TIME: Final = Tick(180)
 """落ちた相手が動けない長さ（原型の PIT_HOLD 3 秒）。"""
 
-DIGGER: Final = Animal.MOLE
-"""穴を掘れる動物。
-
-掘れる側は、自分の穴にもほかのもぐらの穴にも落ちない（原型の pitfallCheck）。自分の穴で
-自分が止まると、掘る判断がそもそも成り立たなくなる。
-"""
-
 AbortAction: TypeAlias = Callable[[WorldState, PlayerState], list[SimEvent]]
 """乗っ取り中の振る舞いを打ち切る処理（後始末も呼ぶ）。`techniques.py` から受け取る。"""
+
+DigsPits: TypeAlias = Callable[[Animal], bool]
+"""その動物が穴を掘れるか。`techniques.py` から受け取る。"""
 
 
 def dig(world: WorldState, player: PlayerState) -> Started:
@@ -121,7 +117,9 @@ def finish_dig(world: WorldState, player: PlayerState, digging: Dig) -> list[Sim
     return [TechniqueMoment(player=player.id, moment=Moment.PIT_DUG)]
 
 
-def advance_pit(world: WorldState, pit: Pit, abort: AbortAction) -> Progress:
+def advance_pit(
+    world: WorldState, pit: Pit, abort: AbortAction, digs_pits: DigsPits
+) -> Progress:
     """落とし穴を 1 tick 進める。踏んだプレイヤーを止め、穴は埋まる。
 
     踏んだプレイヤーが2人いれば、番号の順に最初の1人が落ちる。穴に寿命は無い。消えるのは
@@ -137,9 +135,13 @@ def advance_pit(world: WorldState, pit: Pit, abort: AbortAction) -> Progress:
             ないので、掘る・舌・突進は止まる（抱えていたものを撒く、などの後始末も呼ぶ）。
             打ち切り方を受け取るのは、このモジュールがほかの動物の振る舞いを知らずに
             済むようにするため。
+        digs_pits: その動物が穴を掘れるか。掘れる動物は、自分の穴にもほかの掘れる
+            動物の穴にも落ちない（原型の pitfallCheck）。自分の穴で自分が止まると、
+            掘る判断がそもそも成り立たなくなる。動物の名前で比べずに受け取るのは、
+            どの動物が掘れるかを技の割り当て（`techniques.py`）の1か所で決めるため。
     """
     for player in world.players:
-        if player.animal is DIGGER or player.life is not Life.ALIVE:
+        if digs_pits(player.animal) or player.life is not Life.ALIVE:
             continue
         if player.effects.has(EffectKind.PITFALL):
             continue

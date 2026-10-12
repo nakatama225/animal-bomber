@@ -2,7 +2,9 @@
 
 ## 振り分けを1か所に集める
 
-動物・振る舞い・盤面の物の種類で分ける所は、このファイルの `match` だけにしてある。
+ルールの層で動物・振る舞い・盤面の物の種類で分ける所は、どこも `match` で書き、
+このファイル（技と、振る舞い・盤面の物の進め方）と、数値（`rules/animals.py` の
+`stats_of`）・性質と要約（`state/actions.py`・`state/actors.py`）に集めてある。
 どの `match` も最後に `assert_never` を置くので、動物（`rules/animals.py` の
 `Animal`）・振る舞い（`state/actions.py` の `Action`）・盤面の物（`state/actors.py` の
 `Actor`）のどれかに種類を1つ足すと、扱いを書いていない所が型検査（mypy）で失敗する。
@@ -78,6 +80,16 @@ def hold_technique(animal: Animal) -> Technique:
             assert_never(animal)
 
 
+def digs_pits(animal: Animal) -> bool:
+    """その動物が穴を掘れるか。掘れる動物は落とし穴に落ちない（`mole.advance_pit`）。
+
+    原型は動物の表の1つの印（pit）で、穴を掘る技と穴に落ちないことの両方を決めていた。
+    この版は技の割り当て（`hold_technique`）から決める。とくぎが穴掘りの動物が掘れる
+    動物なので、技を割り当てた時点で落ちないことも決まり、2つが別々にずれることはない。
+    """
+    return hold_technique(animal) is mole.dig
+
+
 def advance_action(world: WorldState, player: PlayerState, action: Action) -> Progress:
     """乗っ取り中の振る舞いを 1 tick 進める。"""
     match action:
@@ -119,7 +131,7 @@ def advance_actor(world: WorldState, actor: Actor) -> Progress:
     """盤面の物を 1 tick 進める。"""
     match actor:
         case Pit():
-            return mole.advance_pit(world, actor, abort_action)
+            return mole.advance_pit(world, actor, abort_action, digs_pits)
         case Foxfire():
             return fox.advance_foxfire(world, actor)
         case SlimeBomb():

@@ -20,7 +20,7 @@ from animal_bomber.domain.query.board import is_solid_for
 from animal_bomber.domain.rules.animals import Animal, stats_of
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.state.actions import Charge, Dig
-from animal_bomber.domain.state.actors import Pit
+from animal_bomber.domain.state.actors import Foxfire, Pit, SlimeBomb
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
@@ -512,8 +512,12 @@ class Testブロックの通り抜け:
         assert is_solid_for(world, Cell(5, 3), mole)
 
     def test_穴は型で探す(self) -> None:
-        """盤面の物の要約の文字列が同じ形でも、穴でなければ穴と見なさない。"""
+        """同じマスにいても、穴でない盤面の物（炎・跳ねる爆弾）は穴と見なさない。"""
         world = arena((Animal.MOLE, Animal.RABBIT))
         world.actors.append(Pit(cell=Cell(5, 5), owner=0))
+        world.actors.append(Foxfire(cell=Cell(7, 5), owner=0))
+        world.actors.append(SlimeBomb(cell=Cell(9, 5), owner=0, hops_left=3))
         assert pit_at(world, Cell(5, 5)) is not None
         assert pit_at(world, Cell(5, 6)) is None
+        assert pit_at(world, Cell(7, 5)) is None
+        assert pit_at(world, Cell(9, 5)) is None

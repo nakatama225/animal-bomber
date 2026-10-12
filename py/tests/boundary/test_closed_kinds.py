@@ -15,21 +15,46 @@
 ⚠️ ファイルの文字列をそのまま見ていて、コードとコメントを区別しない。コメントに動物の
 名前を書くだけでも失敗する。原型の逸話を書くときも動物の名前は出さず、「ブロックを通り
 抜ける動物」「効果が2倍になる動物」のように能力で書く。
+
+名前を書かずに種類を見分ける書き方も禁じる。名前の文字列で比べる（`action_name`・
+`actor_name`・`encode_action`・`encode_actor` の値）、型や属性の有無で見分ける
+（`isinstance`・`hasattr`・`getattr`）の2つ。
 """
 
 import re
 from pathlib import Path
+from typing import get_args
+
+import pytest
+
+from animal_bomber.domain.rules.animals import Animal
+from animal_bomber.domain.state.actions import Action
+from animal_bomber.domain.state.actors import Actor
 
 ROOT = Path(__file__).resolve().parents[2]
 DOMAIN = ROOT / "src" / "animal_bomber" / "domain"
 
+KIND_NAMES = (
+    *(animal.value for animal in Animal),
+    *(kind.__name__ for kind in (*get_args(Action), *get_args(Actor))),
+)
+"""動物の名前と、振る舞い・盤面の物のクラスの名前。
+
+列挙と union から作るので、種類を足すと見張る名前も増える。
+"""
+
 KIND_WORDS = re.compile(
     r"Animal\."
-    r"|\b(?:Charge|Dig|Tongue|Pit|Foxfire|SlimeBomb|Scatter|BurntTongue)\b"
-    r"|(?i:\b(?:rabbit|elephant|mole|fox|frog)\b)"
-    r"|うさぎ|ぞう|もぐら|きつね|かえる|突進"
+    rf"|\b(?:{'|'.join(KIND_NAMES)})\b"
+    r"|\b(?:action_name|actor_name|encode_action|encode_actor"
+    r"|isinstance|hasattr|getattr)\b"
+    r"|うさぎ|ぞう|もぐら|きつね|かえる|突進",
+    # 大文字と小文字を区別しない（`Charge` も `charge` も拾う）。`\b` は英数字と `_`
+    # だけを単語の文字として扱う。既定の `\b` はかなと漢字も単語の文字として扱うので、
+    # 「`Charge`の」のように日本語に続けて書いた名前を見落とす。
+    re.IGNORECASE | re.ASCII,
 )
-"""動物の名前と、振る舞い・盤面の物のクラスの名前。"""
+"""種類の名前と、名前を書かずに種類を見分ける書き方。"""
 
 
 def watched() -> list[Path]:
@@ -70,3 +95,41 @@ class Test種類が閉じていること:
         for name in ("abilities/elephant.py", "abilities/techniques.py"):
             text = (DOMAIN / name).read_text(encoding="utf-8")
             assert KIND_WORDS.search(text), name
+
+    def test_見張る名前に_どの種類も入っている(self) -> None:
+        """列挙や union から名前を取り出しそこねると、見張りが黙って狭くなる。"""
+        assert len(KIND_NAMES) == len(Animal) + len(get_args(Action)) + len(
+            get_args(Actor)
+        )
+        assert {"rabbit", "frog", "Charge", "Tongue", "Pit", "BurntTongue"} <= set(
+            KIND_NAMES
+        )
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "# `Charge`の最中は止まる",
+            "# moleの穴",
+            'if action_name(player.action) == "charge":',
+            'if actor_name(actor) == "slime":',
+            "if isinstance(player.action, Moving):",
+            'if hasattr(player.action, "carried"):',
+            "case charge():",
+        ],
+    )
+    def test_日本語に続けた名前と_名前を書かずに種類を見分ける書き方も拾う(
+        self, line: str
+    ) -> None:
+        assert KIND_WORDS.search(line), line
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "player.special_charges -= 1",
+            "Moment.DIG_STARTED",
+            "EffectKind.PITFALL",
+            "# 火力を足す（spit ではない）",
+        ],
+    )
+    def test_種類の名前を含むだけの別の言葉は拾わない(self, line: str) -> None:
+        assert KIND_WORDS.search(line) is None, line

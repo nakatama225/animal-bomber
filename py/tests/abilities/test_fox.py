@@ -11,7 +11,7 @@ from animal_bomber.domain.abilities.elephant import CHARGE_DURATION
 from animal_bomber.domain.abilities.fox import advance_foxfire
 from animal_bomber.domain.core.coord import Cell, Direction
 from animal_bomber.domain.core.tick import Tick
-from animal_bomber.domain.events import SimEvent
+from animal_bomber.domain.events import Moment, SimEvent, TechniqueMoment
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import Animal, stats_of
 from animal_bomber.domain.state.actions import Charge
@@ -127,6 +127,23 @@ class Test炎の進み方:
         cells, _ = run_fire(world, Foxfire(cell=Cell(3, 3), owner=0), 11)
         assert changes(cells) == ["1:3,3", "11:4,3"]
 
+    def test_道を探すのは22マス先まで(self) -> None:
+        """原型の foxfireStep（深さ 22 で打ち切る）。
+
+        (1, 1) から (21, 3) へは 22 マス、(21, 4) へは 23 マス。22 マス先の相手へは
+        最初の1マスを進み、23 マス先の相手へは進まない。
+        """
+
+        def moves(target: Cell) -> list[str]:
+            world, (fox, rabbit) = arena((Animal.FOX, Animal.RABBIT))
+            place(fox, Cell(1, 15))
+            place(rabbit, target)
+            cells, _ = run_fire(world, Foxfire(cell=Cell(1, 1), owner=0), 11)
+            return changes(cells)
+
+        assert moves(Cell(21, 3)) == ["1:1,1", "11:2,1"]
+        assert moves(Cell(21, 4)) == ["1:1,1"]
+
     def test_放ったプレイヤーには当たらない(self) -> None:
         """炎は放った位置から出るので、持ち主を除かないと放った瞬間に自分が焼ける。"""
         world, (fox, rabbit) = arena((Animal.FOX, Animal.RABBIT))
@@ -200,27 +217,29 @@ class Test炎の進み方:
         assert hit_by(leaping=False) == [f"1:{hp}", f"21:{hp - 2}"]
 
 
-def leap() -> tuple[WorldState, PlayerState]:
-    """きつねにとくぎを出させた盤面（出した tick のあと）。"""
+def leap() -> tuple[WorldState, PlayerState, list[SimEvent]]:
+    """きつねにとくぎを出させた盤面（出した tick のあと）と、出した tick のイベント。"""
     world, (fox, rabbit) = arena((Animal.FOX, Animal.RABBIT))
     place(fox, Cell(3, 7))
     place(rabbit, Cell(19, 7))
     fox.special_charges = 1
     simulation.step(world, idle(world))
-    advance(world, only_for(world, 0, ACTION), FOX_HOLD)
-    return world, fox
+    advance(world, only_for(world, 0, ACTION), FOX_HOLD - 1)
+    events = simulation.step(world, only_for(world, 0, ACTION))
+    return world, fox, events
 
 
 class Testキツネ跳び:
     """原型の useSpecial のきつね・isBlastProof。"""
 
     def test_とくぎで炎を放ち_炎の音を知らせる(self) -> None:
-        world, _ = leap()
+        world, _, events = leap()
         assert [type(actor) for actor in world.actors] == [Foxfire]
+        assert TechniqueMoment(player=0, moment=Moment.CHASER_CAST) in events
 
     def test_跳んでいるのは1秒(self) -> None:
         """原型の答え：59 フレーム。この版は出した tick の終わりから数えて 59 tick。"""
-        world, fox = leap()
+        world, fox, _ = leap()
         assert fox.effects.has(EffectKind.LEAP)
         leaping = 1
         for _ in range(120):
@@ -241,7 +260,7 @@ class Testキツネ跳び:
         assert world.actors == []
 
     def test_跳んでいる間は爆風が当たらない_跳び終わったあとは当たる(self) -> None:
-        world, fox = leap()
+        world, fox, _ = leap()
         before = fox.hp
         add_blast(world, fox.position.cell(), 1, is_center=False)
         advance(world, idle(world), 10)
@@ -312,7 +331,11 @@ def line(effects: tuple[EffectKind, ...]) -> tuple[list[Cell], int]:
 
 
 class Test一列置き:
-    """原型の foxLineShot。"""
+    """原型の foxLineShot。
+
+    ⚠️ 置いたあとの 1 秒の間隔は原型に無い（TypeScript 版と同じ値。
+    `fox.LINE_COOLDOWN`）。
+    """
 
     def test_1マス前から_手持ちのぶん並べ_1秒の間隔が始まる(self) -> None:
         assert line(()) == ([Cell(2, 1), Cell(3, 1), Cell(4, 1)], 60)

@@ -8,7 +8,7 @@
 （原型の elephantCharge と同じ時点）。
 """
 
-from animal_bomber.domain.abilities.elephant import CHARGE_DURATION
+from animal_bomber.domain.abilities.elephant import CHARGE_DURATION, finish_charge
 from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import (
@@ -261,6 +261,27 @@ class Test突進と通り道のアイテム:
         advance(world, idle(world), 200)
         assert any(item.kind is ItemKind.ONION for item in world.items)
 
+    def test_止まって撒く先は_左右それぞれ4マス先まで(self) -> None:
+        """原型の chargeDrop（4 マス先まで探す）。
+
+        3 マス先まで埋まっていれば 4 マス先へ撒き、4 マス先まで埋まっていれば消える。
+        """
+
+        def spilled(blocked: int) -> list[Cell]:
+            world = arena((Animal.ELEPHANT, Animal.RABBIT))
+            elephant = world.players[0]
+            elephant.position = Cell(3, 7).center()
+            for distance in range(1, blocked + 1):
+                world.board.put(Cell(3, 7 - distance), Tile.SOFT)
+                world.board.put(Cell(3, 7 + distance), Tile.SOFT)
+            charge = Charge(direction=Direction.RIGHT, remaining=Tick(0))
+            charge.carried.append(ItemKind.ONION)
+            finish_charge(world, elephant, charge)
+            return [item.cell for item in world.items]
+
+        assert spilled(3) == [Cell(3, 3)]
+        assert spilled(4) == []
+
     def test_突進中はふつうの拾いをしない_していなければ拾う(self) -> None:
         """原型の update の `if (!p.effects.charge) pickupCheck(p)`。"""
         world = make_world(1, (Animal.ELEPHANT, Animal.RABBIT))
@@ -286,7 +307,11 @@ class Test突進と通り道のアイテム:
         charge = Charge(direction=Direction.RIGHT, remaining=CHARGE_DURATION)
         elephant.action = charge
         advance(world, idle(world), 60)
+        # まだ突進している。止まると抱えた6つを撒くので、ループは延ばさない。
+        assert elephant.action is charge
         assert len(charge.carried) == 6
+        # 7つ目からも盤面から外す（原型は抱えられるかを見る前に盤面から取り除く）。
+        assert world.items == []
 
 
 class Test突進で壊したブロックの抽選:
