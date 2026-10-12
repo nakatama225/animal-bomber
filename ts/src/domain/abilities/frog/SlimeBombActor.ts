@@ -198,13 +198,13 @@ export class SlimeBombActor implements WorldActor {
       );
       if (landing === undefined) {
         addBlast(world, cell, this.shooter.id, true);
-        return [{ type: 'exploded', cell, owner: this.shooter.id, chained: 1 }];
+        return [{ type: 'exploded', cell, owner: this.shooter.id, chained: 1, blocks: 0 }];
       }
       cell = landing;
     }
     const result = detonate(world, spawnBomb(world, this.shooter, cell));
     return [
-      { type: 'exploded', cell, owner: this.shooter.id, chained: result.chained },
+      { type: 'exploded', cell, owner: this.shooter.id, chained: result.chained, blocks: result.destroyed.length },
       ...result.events,
     ];
   }

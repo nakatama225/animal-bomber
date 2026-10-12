@@ -53,12 +53,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundName, Recipe>> = {
     arpeggio(v, 440, [0, 5, 9, 12], 0.07, { type: 'triangle', dur: 0.16, vol: 0.2 });
   },
 
-  burn(v) {
-    // 原型には無い音。アイテムが焼けるのは爆発と同じ瞬間なので、
-    // 爆発の音の陰でかすかに聞こえる程度の、短く高いジュッという音にする。
-    v.noiseBurst({ dur: 0.1, f0: 4200, f1: 1800, vol: 0.07, type: 'bandpass', q: 0.9 });
-  },
-
   blowPoop(v) {
     v.noiseBurst({ dur: 0.22, f0: 700, f1: 160, vol: 0.2 });
     v.tone({ f0: 300, f1: 520, type: 'sine', dur: 0.18, vol: 0.14 });
@@ -170,13 +164,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundName, Recipe>> = {
 
   special(v) {
     arpeggio(v, 392, [0, 3, 7, 10, 12], 0.05, { type: 'square', dur: 0.11, vol: 0.17 });
-  },
-
-  scatter(v) {
-    // 原型の「うんこが爆風で吹き飛んだ」音。撒く技には専用の音が無く、
-    // 悪い状態にかかったときの音（poop）とは分けておきたいので、これを当てる。
-    v.noiseBurst({ dur: 0.22, f0: 700, f1: 160, vol: 0.2 });
-    v.tone({ f0: 300, f1: 520, type: 'sine', dur: 0.18, vol: 0.14 });
   },
 
   charge(v) {

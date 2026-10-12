@@ -14,6 +14,7 @@ import type { ItemKind } from '../rules/items.js';
  * - `rammed` … 体当たりが相手に当たった
  * - `chaserCast` … 追いかける炎を放った（盤面に相手がいなくて出さなかったときは知らせない）
  * - `chaserHit` … 追いかける炎が相手に当たった
+ * - `ringScattered` … 周りに撒く技が、輪を1つ撒いた（その輪に1つも撒けなかったときは知らせない）
  *
  * 名前は動物ではなく技の働きで付ける。この型はどの動物も使う共通の型なので、
  * 動物の名前を入れると、動物を足すたびに共通の型の意味が動物に縛られる。
@@ -26,7 +27,8 @@ export type TechniqueMoment =
   | 'itemsSpat'
   | 'rammed'
   | 'chaserCast'
-  | 'chaserHit';
+  | 'chaserHit'
+  | 'ringScattered';
 
 /**
  * 試合の中で起きたイベント。
@@ -67,6 +69,11 @@ export type SimEvent =
       readonly owner: PlayerId;
       /** 連鎖した爆弾の数。多いほど大きな音を鳴らす。 */
       readonly chained: number;
+      /**
+       * この連鎖で壊したブロックの数。ブロックの壊れる音は、連鎖1回につき1回だけ鳴らす
+       * （原型の explodeChain。壊したブロックごとの `blockDestroyed` では鳴らさない）。
+       */
+      readonly blocks: number;
     }
   | { readonly type: 'blockDestroyed'; readonly cell: Cell }
   | { readonly type: 'itemDropped'; readonly cell: Cell; readonly kind: ItemKind }

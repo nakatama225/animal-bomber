@@ -209,7 +209,10 @@ describe('粒子と画面の揺れ', () => {
     const bomb = placeBombAt(world, player, { col: 1, row: 3 });
     if (bomb === undefined) throw new Error('爆弾を置けない');
     const result = detonate(world, bomb);
-    return [{ type: 'exploded', cell: bomb.cell, owner: bomb.owner, chained: result.chained }, ...result.events];
+    return [
+      { type: 'exploded', cell: bomb.cell, owner: bomb.owner, chained: result.chained, blocks: result.destroyed.length },
+      ...result.events,
+    ];
   }
 
   it('爆発で粒子が出て、時間が経てばすべて消える', () => {

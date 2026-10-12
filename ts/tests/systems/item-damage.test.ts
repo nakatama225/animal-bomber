@@ -808,7 +808,7 @@ describe('イベントの受け取り', () => {
     });
     const all: SimEvent[] = [
       { type: 'bombPlaced', cell: { col: 1, row: 1 }, owner: 0 },
-      { type: 'exploded', cell: { col: 1, row: 1 }, owner: 0, chained: 2 },
+      { type: 'exploded', cell: { col: 1, row: 1 }, owner: 0, chained: 2, blocks: 1 },
       { type: 'blockDestroyed', cell: { col: 2, row: 1 } },
       { type: 'itemDropped', cell: { col: 2, row: 1 }, kind: 'fire' },
       { type: 'itemTaken', cell: { col: 2, row: 1 }, kind: 'fire', taker: 0 },
@@ -826,6 +826,8 @@ describe('イベントの受け取り', () => {
       { type: 'lanesClosed', players: [0] },
       { type: 'techniqueUsed', player: 0, special: true },
       { type: 'techniqueUsed', player: 1, special: false },
+      { type: 'techniqueMoment', player: 0, moment: 'ringScattered' },
+      { type: 'burntOff', player: 0, cell: { col: 2, row: 1 } },
       { type: 'roundEnded', round: 1, winner: null },
       { type: 'matchEnded', champion: 0 },
     ];

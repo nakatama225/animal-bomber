@@ -25,7 +25,7 @@ export class BlastSystem {
       const cell = bomb.cell;
       const owner = bomb.owner;
       const result = detonate(world, bomb);
-      events.push({ type: 'exploded', cell, owner, chained: result.chained });
+      events.push({ type: 'exploded', cell, owner, chained: result.chained, blocks: result.destroyed.length });
       events.push(...result.events);
     }
     return events;

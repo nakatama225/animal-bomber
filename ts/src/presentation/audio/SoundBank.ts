@@ -10,7 +10,6 @@ export type SoundName =
   | 'breakBlock'
   | 'item'
   | 'chicken'
-  | 'burn'
   | 'blowPoop'
   | 'hurt'
   | 'down'
@@ -26,7 +25,6 @@ export type SoundName =
   | 'lineBombs'
   | 'tongue'
   | 'special'
-  | 'scatter'
   | 'charge'
   | 'dig'
   | 'foxfire'
@@ -51,7 +49,6 @@ export const SOUND_NAMES: readonly SoundName[] = [
   'breakBlock',
   'item',
   'chicken',
-  'burn',
   'blowPoop',
   'hurt',
   'down',
@@ -67,7 +64,6 @@ export const SOUND_NAMES: readonly SoundName[] = [
   'lineBombs',
   'tongue',
   'special',
-  'scatter',
   'charge',
   'dig',
   'foxfire',

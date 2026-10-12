@@ -6,6 +6,7 @@ import { FoxfireActor } from '../../src/domain/abilities/fox/FoxfireActor.js';
 import { SlimeBombActor } from '../../src/domain/abilities/frog/SlimeBombActor.js';
 import { TongueAction } from '../../src/domain/abilities/frog/TongueAction.js';
 import { PitAction } from '../../src/domain/abilities/mole/PitAction.js';
+import { ScatterActor } from '../../src/domain/abilities/rabbit/ScatterActor.js';
 import { cellOf, centerOf } from '../../src/domain/core/Coord.js';
 import { tick } from '../../src/domain/core/Tick.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
@@ -69,6 +70,7 @@ describe('イベントから音へ', () => {
         { type: 'techniqueMoment', player: 0, moment: 'rammed' },
         { type: 'techniqueMoment', player: 0, moment: 'chaserCast' },
         { type: 'techniqueMoment', player: 0, moment: 'chaserHit' },
+        { type: 'techniqueMoment', player: 0, moment: 'ringScattered' },
         { type: 'effectApplied', target: 1, effect: 'pitfall' },
         { type: 'effectApplied', target: 1, effect: 'stun' },
       ],
@@ -83,9 +85,37 @@ describe('イベントから音へ', () => {
       'charge',
       'foxfire',
       'foxfireHit',
+      'poop',
       'pitFall',
       'cry',
     ]);
+  });
+
+  it('爆発でブロックを壊したら、壊した数によらず連鎖1回につき1回だけブロックの音を鳴らす（原型の explodeChain）', () => {
+    const { played, presenter } = recorder();
+    presenter.consume(
+      [
+        { type: 'exploded', cell: { col: 3, row: 3 }, owner: 0, chained: 2, blocks: 3 },
+        { type: 'blockDestroyed', cell: { col: 3, row: 4 } },
+        { type: 'blockDestroyed', cell: { col: 4, row: 3 } },
+        { type: 'blockDestroyed', cell: { col: 2, row: 3 } },
+        { type: 'exploded', cell: { col: 9, row: 9 }, owner: 1, chained: 1, blocks: 0 },
+      ],
+      makeWorld(),
+    );
+    expect(played).toEqual(['explode', 'breakBlock', 'explode']);
+  });
+
+  it('体当たりで壊したブロックと、爆風で焼けたアイテムには、音を鳴らさない（原型と同じ）', () => {
+    const { played, presenter } = recorder();
+    presenter.consume(
+      [
+        { type: 'blockDestroyed', cell: { col: 3, row: 4 } },
+        { type: 'itemBurned', cell: { col: 3, row: 5 }, kind: 'fire' },
+      ],
+      makeWorld(),
+    );
+    expect(played).toEqual([]);
   });
 });
 
@@ -150,6 +180,13 @@ describe('技の途中で起きたことを、ルールの層が知らせる', (
       const fire = new FoxfireActor(fox.position, fox.id);
       for (let t = 0; t < 40; t += 1) collect(fire.tick(world).events);
     }
+    // 撒く（輪を撒いたとき）
+    {
+      const world = makeWorld(5, ['rabbit', 'fox']);
+      clearBoard(world);
+      const scatter = new ScatterActor({ col: 9, row: 7 }, 0);
+      for (let t = 0; t < 130; t += 1) collect(scatter.tick(world).events);
+    }
 
     expect([...moments].sort()).toEqual(
       [
@@ -159,10 +196,36 @@ describe('技の途中で起きたことを、ルールの層が知らせる', (
         'itemsSpat',
         'pitDug',
         'rammed',
+        'ringScattered',
         'slimeHopped',
         'tongueCaught',
       ].sort(),
     );
+  });
+
+  it('撒く技は、1つでも撒けた輪ごとに知らせる（原型 1・40・80 tick 目。撒けない輪は知らせない）', () => {
+    const rings = (blocked: boolean): number[] => {
+      const world = makeWorld(5, ['rabbit', 'fox']);
+      clearBoard(world);
+      world.items = [];
+      // 2周目の輪をすべて塞ぐ。
+      if (blocked) {
+        for (let col = 7; col <= 11; col += 1) {
+          for (let row = 5; row <= 9; row += 1) {
+            if (Math.max(Math.abs(col - 9), Math.abs(row - 7)) === 2) world.board.set({ col, row }, 'soft');
+          }
+        }
+      }
+      const scatter = new ScatterActor({ col: 9, row: 7 }, 0);
+      const at: number[] = [];
+      for (let t = 1; t <= 130; t += 1) {
+        const events = scatter.tick(world).events;
+        if (events.some((e) => e.type === 'techniqueMoment' && e.moment === 'ringScattered')) at.push(t);
+      }
+      return at;
+    };
+    expect(rings(false)).toEqual([1, 40, 80]);
+    expect(rings(true)).toEqual([1, 40]);
   });
 });
 
@@ -190,6 +253,10 @@ describe('とくぎが空振りしたときの音（原型の useSpecial：技�
     alone.players[1]!.life = OUT;
     expect(soundsOfSpecial(alone)).toEqual(['special', 'foxLeap']);
     expect(soundsOfSpecial(makeWorld(5, ['fox', 'rabbit']))).toEqual(['special', 'foxLeap', 'foxfire']);
+  });
+
+  it('うさぎは、共通の音とうんこを踏んだときの音を鳴らし、足元の輪を撒いた音も同じ tick に鳴らす（原型の rabbitPoroporo）', () => {
+    expect(soundsOfSpecial(makeWorld(5, ['rabbit', 'fox']))).toEqual(['special', 'poop', 'poop']);
   });
 
   it('掘れないマス（壊せるブロックの中）のもぐらは、共通の音だけ（対照：掘れるマスなら掘る音も鳴る）', () => {

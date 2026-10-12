@@ -86,6 +86,8 @@ export class ScatterActor implements WorldActor {
         events.push({ type: 'itemDropped', cell, kind: 'poop' });
       }
     }
+    // 1つでも撒けた輪だけ知らせる（原型も、輪に1つでも置けたときだけうんこの音を鳴らす）。
+    if (events.length > 0) events.push({ type: 'techniqueMoment', player: this.owner, moment: 'ringScattered' });
     return events;
   }
 

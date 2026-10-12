@@ -127,6 +127,22 @@ describe('爆発', () => {
     ]);
   });
 
+  it('爆発を知らせるときに、その連鎖で壊したブロックの数も知らせる（ブロックの音を連鎖1回に1回鳴らすため）', () => {
+    const world = makeWorld();
+    clearBoard(world);
+    const player = world.players[0]!;
+    player.position = centerOf({ col: 5, row: 5 });
+    world.board.set({ col: 6, row: 5 }, 'soft');
+    world.board.set({ col: 5, row: 6 }, 'soft');
+    placeBomb(world, player);
+    const sim = new Simulation();
+    const exploded = [];
+    for (let t = 0; t <= BOMB_FUSE; t += 1) {
+      exploded.push(...sim.step(world, onlyFor(world, 0, press({}))).filter((e) => e.type === 'exploded'));
+    }
+    expect(exploded).toEqual([{ type: 'exploded', cell: { col: 5, row: 5 }, owner: 0, chained: 1, blocks: 2 }]);
+  });
+
   it('爆発すると手持ちが戻る', () => {
     const world = makeWorld();
     const player = world.players[0]!;

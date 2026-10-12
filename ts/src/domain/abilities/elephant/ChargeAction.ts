@@ -101,7 +101,13 @@ export class ChargeAction implements ActiveAction {
     const bomb = bombAt(world, ahead);
     if (bomb !== undefined && !bomb.chained) {
       const result = detonate(world, bomb);
-      events.push({ type: 'exploded', cell: bomb.cell, owner: bomb.owner, chained: result.chained });
+      events.push({
+        type: 'exploded',
+        cell: bomb.cell,
+        owner: bomb.owner,
+        chained: result.chained,
+        blocks: result.destroyed.length,
+      });
       events.push(...result.events);
     }
 

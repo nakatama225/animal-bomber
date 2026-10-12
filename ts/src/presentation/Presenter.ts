@@ -86,9 +86,12 @@ export class Presenter {
       case 'exploded':
         // 連鎖数を渡す。まとめて爆発したときに大きな音になる。
         this.sounds.play('explode', event.chained);
+        // ブロックの壊れる音は、1つでも壊した連鎖に1回だけ（原型の explodeChain）。
+        if (event.blocks > 0) this.sounds.play('breakBlock');
         return;
       case 'blockDestroyed':
-        this.sounds.play('breakBlock');
+        // ここでは鳴らさない。爆発で壊したぶんは上の 'exploded' でまとめて鳴らす。体当たりで
+        // 壊したブロックには、原型も音を鳴らさない。
         return;
       case 'itemDropped':
         // 落ちた瞬間は鳴らさない。壊した音と重なってうるさくなる。
@@ -98,7 +101,7 @@ export class Presenter {
         this.sounds.play(event.kind === 'chicken' ? 'chicken' : 'item');
         return;
       case 'itemBurned':
-        this.sounds.play('burn');
+        // 原型も、焼けたアイテムには音を鳴らさない（煙だけ）。
         return;
       case 'itemBlown':
         this.sounds.play('blowPoop');

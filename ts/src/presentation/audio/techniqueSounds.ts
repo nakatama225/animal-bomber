@@ -10,11 +10,11 @@ import type { SoundName } from './SoundBank.js';
  * とくぎは、どの動物でも共通の音（'special'）を先に鳴らし、そのあと動物ごとの音を鳴らす（原型の useSpecial）。
  * ここに書くのは、とくぎを使えば必ず鳴る音だけ。技が出なければ鳴らない音（掘る音・炎の音）は、
  * 技が出たときの techniqueMoment の側で鳴らす（下の MOMENT_SOUNDS）。
- * うさぎのとくぎは原型ではうんこを踏んだときと同じ音だが、悪い状態にかかったときの音と分けたいので
- * 'scatter' を当てている。
+ * うさぎのとくぎは、うんこを踏んだときと同じ音（原型の rabbitPoroporo）。撒く輪ごとにも同じ音を鳴らす
+ * （ringScattered）。
  */
 const TABLE: Readonly<Record<string, { readonly tap?: SoundName; readonly special: readonly SoundName[] }>> = {
-  rabbit: { tap: 'hop', special: ['scatter'] },
+  rabbit: { tap: 'hop', special: ['poop'] },
   elephant: { tap: 'snot', special: ['charge'] },
   // 掘る音は、掘り始めたとき（digStarted）だけ。
   mole: { special: [] },
@@ -44,4 +44,5 @@ export const MOMENT_SOUNDS: Readonly<Record<TechniqueMoment, SoundName>> = {
   rammed: 'charge',
   chaserCast: 'foxfire',
   chaserHit: 'foxfireHit',
+  ringScattered: 'poop',
 };
