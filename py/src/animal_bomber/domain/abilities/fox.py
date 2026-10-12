@@ -27,7 +27,12 @@ from animal_bomber.domain.systems.bomb import place_bomb_at
 from animal_bomber.domain.systems.damage import hurt
 
 LINE_COOLDOWN: Final = seconds_to_ticks(1)
-"""一列に置いたあとの間隔。"""
+"""一列に置いたあとの間隔。
+
+⚠️ 原型の foxLineShot には間隔が無い。列が途中のブロックで止まって手持ちが残ったとき、
+原型はすぐ向きを変えて残りを並べられるが、この版は 1 秒待つ。TypeScript 版から写した
+値で、TypeScript 版にも理由の記録は無い。まだ原型に揃えていない。
+"""
 
 LEAP_TIME: Final = seconds_to_ticks(1)
 """とくぎを放つときに跳び上がっている長さ（原型の FOX_LEAP 1 秒）。"""

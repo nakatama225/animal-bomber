@@ -101,6 +101,12 @@ def _move(world: WorldState, player: PlayerState, player_input: PlayerInput) -> 
     # 乗っ取られている間は、その振る舞いが位置を決める（種類は見ない）。
     if player.action is not None and traits_of(player.action).drives_movement:
         return
+    # ⚠️ 上の2つで帰るので、泣いている間と乗っ取られている間は滑らない。原型は、CPU で
+    # ないプレイヤーなら、滑っている間はこの2つを通らずに滑り続ける（掘っている・舌を
+    # 伸ばしている間も。ブロックを壊しながら進む技の最中は、その移動に滑りが足される）。
+    # 原型の CPU は泣いている・掘っている・舌の間は先に帰り、この版と同じく滑らない。
+    # 原型の中で2通りあり、この版は CPU の側と同じ（TypeScript 版も同じ）。どちらに
+    # 揃えるかは、まだ決めていない。
     dx = _axis(player_input, PlayerInput.RIGHT, PlayerInput.LEFT)
     dy = _axis(player_input, PlayerInput.DOWN, PlayerInput.UP)
     # 「そうさ反転」がかかっていると、押した向きと逆へ進む。

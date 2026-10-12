@@ -163,6 +163,11 @@ def speed_of(player: PlayerState) -> float:
     「超スロー」は速さに倍率を掛け、「とまれない」は速さに下限を敷く。⚠️ 下限にも
     超スローの倍率を掛ける（`RUNAWAY_SPEED_FLOOR_RATIO`）。掛けないと、超スローを
     踏んだあとに「とまれない」を踏んだプレイヤーが速くなる。
+
+    ⚠️ 上限で止めてから超スローの倍率を掛ける。原型は倍率と下限を当てたあと、最後に上限で
+    止める。違いが出るのは、靴を取って上限を超えた動物（うさぎの 12 段から）に超スローが
+    かかったときだけで、原型より遅くなる（13 段で原型 4.19、この版 3.95 マス/秒）。
+    TypeScript 版も同じ形で、まだ原型に揃えていない。
     """
     base = BASE_SPEED * stats_of(player.animal).speed_multiplier
     speed = min(MAX_SPEED, base + player.shoes * SHOE_STEP)

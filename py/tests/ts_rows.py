@@ -1,8 +1,9 @@
 """状態とイベントを、TypeScript 版の出力と同じ形の行にする（比べるテストで使う）。
 
 固定値は TypeScript 版の写しに同じ台本を流して出した JSON（`tests/systems/
-ts_simulation_values.json`・`tests/app/ts_session_values.json`）。ここで作る行の
-並びと、固定値を出した node のスクリプトの並びは揃えてある。
+ts_simulation_values.json`・`tests/systems/ts_technique_values.json`・
+`tests/app/ts_session_values.json`）。ここで作る行の並びと、固定値を出した node の
+スクリプトの並びは揃えてある。
 
 振る舞いと盤面の物は、要約の文字列（`encode_action`・`encode_actor`）ごと比べる。
 TypeScript 版の写しには、振る舞いの中身を同じ形の文字列にする関数を足して出した

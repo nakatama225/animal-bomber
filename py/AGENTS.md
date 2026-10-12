@@ -173,7 +173,9 @@ set の反復は、import でも構文木でも止められません。`tests/de
   のをやめ、止めたものと理由をテストの説明に書いてください
 - `tests/boundary/test_closed_kinds.py` は、試合を進める処理（`domain/systems/`）・盤面への
   問い合わせ（`domain/query/`）・イベント（`domain/events.py`）に、動物の名前と振る舞い・
-  盤面の物のクラスの名前が現れないことを見ます。コメントも含みます。共通の処理は種類を
+  盤面の物のクラスの名前が現れないことを見ます。コメントも含みます。名前を書かずに種類を
+  見分ける書き方（`action_name`・`actor_name`・`encode_action`・`encode_actor`・
+  `isinstance`・`hasattr`・`getattr`）も失敗にします。共通の処理は種類を
   見ず、性質（`state/actions.py` の `traits_of`・`rules/animals.py` の数値）だけを見ます。
   逸話を書くときも、動物の名前を出さず能力で書いてください（「ブロックを通り抜ける動物」）
 - `tests/systems/test_match_invariants.py` は、試合を通して崩れない約束（同じマスにアイテムが
