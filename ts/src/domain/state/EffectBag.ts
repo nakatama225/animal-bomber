@@ -83,18 +83,28 @@ export class EffectBag {
   }
 
   /**
-   * 状態をかける。すでにかかっていれば残り時間を足す。
+   * 状態をかける。すでにかかっていれば残り時間を足す（うんこでかかる状態）。
    *
-   * ⚠️ 上書きではなく加算にしている。原型では上書きだったため、
-   * 悪い状態をいくつ踏んでも常に1つぶんの時間で済んでしまい、
-   * 「踏むコスト」が頭打ちになっていた。その結果、CPU が
-   * 悪いアイテムの密集地帯へ平然と突っ込んでくる挙動が出た。
+   * ⚠️ うんこの状態は、上書きではなく加算にしている（原型も 2026-08-23 から加算）。
+   * 原型が上書きだった頃は、悪い状態をいくつ踏んでも常に1つぶんの時間で済んでしまい、
+   * 「踏むコスト」が頭打ちになっていた。その結果、CPU が悪いアイテムの密集地帯へ
+   * 平然と突っ込んでくる挙動が出た。バナナとたまねぎは、原型のいまも上書き（`set`）。
    *
    * @param cap 積み上げの上限。青天井にすると復帰できなくなる
    */
   add(kind: EffectKind, duration: Tick, cap: Tick): void {
     const next = Math.min(this.remaining(kind) + duration, cap);
     this.#remaining.set(kind, tick(next));
+  }
+
+  /**
+   * 状態をかける。すでにかかっていれば、残り時間を `duration` に置き換える（足さない）。
+   *
+   * バナナ（滑る）とたまねぎ（泣く）はこちら（原型の applyItem も、残り時間を代入する）。
+   */
+  set(kind: EffectKind, duration: Tick): void {
+    if (duration <= 0) this.#remaining.delete(kind);
+    else this.#remaining.set(kind, duration);
   }
 
   /** 状態を解く。 */

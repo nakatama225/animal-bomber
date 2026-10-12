@@ -42,9 +42,40 @@ describe('アイテムの効果', () => {
     expect(player.effects.has('stun')).toBe(true);
   });
 
-  it('悪い状態は重ねると伸びる', () => {
+  it('バナナとたまねぎは、かかっている間に拾い直しても足さず、残りを3秒に戻す（原型の applyItem）', () => {
+    const world = makeWorld();
+    const player = world.players[0]!;
+    for (const [kind, effect] of [
+      ['banana', 'slide'],
+      ['onion', 'stun'],
+    ] as const) {
+      player.effects.clear(effect);
+      applyItem(world, player, kind);
+      // 残りを減らしてから拾い直す（どちらも3秒）。
+      player.effects.set(effect, tick(100));
+      applyItem(world, player, kind);
+      expect(player.effects.remaining(effect), kind).toBe(itemEffectTicks(3));
+      applyItem(world, player, kind);
+      expect(player.effects.remaining(effect), kind).toBe(itemEffectTicks(3));
+    }
+  });
+
+  it('効果が2倍の動物は、バナナとたまねぎも2倍の長さに置き換える（足さない）', () => {
+    const world = makeWorld(1234, ['frog', 'rabbit']);
+    const player = world.players[0]!;
+    for (const [kind, effect] of [
+      ['banana', 'slide'],
+      ['onion', 'stun'],
+    ] as const) {
+      applyItem(world, player, kind, 2);
+      applyItem(world, player, kind, 2);
+      expect(player.effects.remaining(effect), kind).toBe(itemEffectTicks(6));
+    }
+  });
+
+  it('うんこの悪い状態は重ねると伸びる', () => {
     // 上書きにすると、何個踏んでも1つぶんの時間で済んでしまい、
-    // 踏むコストが頭打ちになる。
+    // 踏むコストが頭打ちになる（原型も 2026-08-23 から足す形）。
     const world = makeWorld();
     const player = world.players[0]!;
     player.effects.add('slow', itemEffectTicks(4), itemEffectTicks(4 * POOP_STACK_LIMIT));

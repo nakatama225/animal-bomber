@@ -74,20 +74,14 @@ export function applyItem(
       player.shoes = Math.min(MAX_SHOES, player.shoes + multiplier);
       return [];
     case 'banana':
-      player.effects.add(
-        'slide',
-        itemEffectTicks(SLIDE_SECONDS * multiplier),
-        itemEffectTicks(SLIDE_SECONDS * multiplier * POOP_STACK_LIMIT),
-      );
+      // 足さずに置き換える（原型の applyItem。滑っている間に拾い直すと、残りが3秒に戻る）。
+      player.effects.set('slide', itemEffectTicks(SLIDE_SECONDS * multiplier));
       return [{ type: 'effectApplied', target: player.id, effect: 'slide' }];
     case 'onion':
       // 泣いている間は滑らない。同時にかかると動きが読めなくなる。
       player.effects.clear('slide');
-      player.effects.add(
-        'stun',
-        itemEffectTicks(STUN_SECONDS * multiplier),
-        itemEffectTicks(STUN_SECONDS * multiplier * POOP_STACK_LIMIT),
-      );
+      // 足さずに置き換える（原型の applyItem）。
+      player.effects.set('stun', itemEffectTicks(STUN_SECONDS * multiplier));
       return [{ type: 'effectApplied', target: player.id, effect: 'stun' }];
     case 'chicken':
       player.specialCharges += multiplier;
