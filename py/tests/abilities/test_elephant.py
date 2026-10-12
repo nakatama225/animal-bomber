@@ -20,7 +20,7 @@ from animal_bomber.domain.events import (
 )
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import Animal, stats_of
-from animal_bomber.domain.rules.items import ItemKind
+from animal_bomber.domain.rules.items import POOP_LIFETIME, ItemKind
 from animal_bomber.domain.state.actions import CHARGE_DAMAGE_CAP, Charge, traits_of
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
@@ -281,6 +281,18 @@ class Test突進と通り道のアイテム:
 
         assert spilled(3) == [Cell(3, 3)]
         assert spilled(4) == []
+
+    def test_撒いたうんこには_ふつうのうんこと同じ残る長さが付く(self) -> None:
+        """ほかの悪いアイテムには付かない（`rules/items.py` の `POOP_LIFETIME`）。"""
+        world = arena((Animal.ELEPHANT, Animal.RABBIT))
+        world.now = Tick(50)
+        elephant = world.players[0]
+        elephant.position = Cell(3, 7).center()
+        charge = Charge(direction=Direction.RIGHT, remaining=Tick(0))
+        charge.carried.extend([ItemKind.POOP, ItemKind.ONION])
+        finish_charge(world, elephant, charge)
+        expiry = {item.kind: item.expires_at for item in world.items}
+        assert expiry == {ItemKind.POOP: 50 + POOP_LIFETIME, ItemKind.ONION: None}
 
     def test_突進中はふつうの拾いをしない_していなければ拾う(self) -> None:
         """原型の update の `if (!p.effects.charge) pickupCheck(p)`。"""

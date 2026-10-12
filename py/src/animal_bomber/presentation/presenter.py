@@ -33,6 +33,7 @@ from animal_bomber.domain.events import (
     BombPlaced,
     EffectApplied,
     Exploded,
+    ItemBlown,
     ItemBurned,
     ItemDropped,
     ItemExpired,
@@ -67,6 +68,7 @@ class SoundName(Enum):
     ITEM = "item"
     CHICKEN = "chicken"
     BURN = "burn"
+    BLOW_POOP = "blow_poop"
     SLIP = "slip"
     CRY = "cry"
     POOP = "poop"
@@ -330,6 +332,8 @@ class Presenter:
                 self._sounds.play(SoundName.CHICKEN if is_chicken else SoundName.ITEM)
             case ItemBurned():
                 self._sounds.play(SoundName.BURN)
+            case ItemBlown():
+                self._sounds.play(SoundName.BLOW_POOP)
             case ItemExpired() | ItemWashed() | BombDoused() | Sprayed():
                 # 原型も、これらには音を鳴らさない（煙・しぶきだけ）。鼻水の音は技を
                 # 使ったとき（`TechniqueUsed`）に鳴らす。

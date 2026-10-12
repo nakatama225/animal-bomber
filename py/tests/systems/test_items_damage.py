@@ -11,16 +11,20 @@ from animal_bomber.domain.core.tick import Tick, seconds_to_ticks
 from animal_bomber.domain.events import (
     BombPlaced,
     EffectApplied,
+    ItemBlown,
     ItemBurned,
     ItemDropped,
+    ItemExpired,
     ItemTaken,
     PlayerDown,
     PlayerHurt,
+    SimEvent,
 )
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import (
     POOP_EFFECTS,
+    POOP_LIFETIME,
     POOP_STACK_LIMIT,
     POWER_UP_KINDS,
     SLIDE_SECONDS,
@@ -49,6 +53,7 @@ from animal_bomber.domain.systems.damage import hurt, step_damage
 from animal_bomber.domain.systems.items import (
     SPIT_RING,
     apply_item,
+    placed_item,
     roll_drop,
     spit_power_up,
 )
@@ -475,6 +480,148 @@ class Testアイテムを焼く_落とす:
         before = world.rng.calls
         events = roll_drop(world, Cell(3, 1))
         assert world.rng.calls == before + (2 if events else 1)
+
+
+def _poop_arena(seed: int = 1234) -> WorldState:
+    world = make_world(seed)
+    clear_board(world)
+    world.items = []
+    return world
+
+
+def _explode_at(world: WorldState, cell: Cell, power: int) -> list[SimEvent]:
+    player = world.players[0]
+    player.power = power
+    return list(detonate(world, put_bomb(world, player, cell)).events)
+
+
+class Testうんこのアイテム:
+    """焼けずに吹き飛び、15 秒で消える（原型の blowPoop・POOP_LIFE）。
+
+    吹き飛ぶ先は、原型を画面なしで動かして同じ場面で測った答え（爆心の上の場面は、
+    原型も乱数で向きを選ぶ）。TypeScript 版の `item-damage.test.ts` と同じ場面。
+    """
+
+    def test_焼けず_爆心から外向きに1マス吹き飛ぶ_残る長さは数え直す(self) -> None:
+        world = _poop_arena()
+        world.now = Tick(40)
+        poop = placed_item(world, Cell(5, 3), ItemKind.POOP)
+        poop.expires_at = Tick(3)
+        world.items.append(poop)
+        events = _explode_at(world, Cell(3, 3), 3)
+        assert not any(isinstance(e, ItemBurned) for e in events)
+        blown = ItemBlown(from_cell=Cell(5, 3), to_cell=Cell(6, 3), kind=ItemKind.POOP)
+        assert blown in events
+        assert [(i.cell, i.expires_at) for i in world.items] == [
+            (Cell(6, 3), 40 + POOP_LIFETIME)
+        ]
+
+    def test_外向きへ行けなければ_右_左_下_上の順に試す(self) -> None:
+        world = _poop_arena()
+        # 外向き（右）はブロック、左は別のアイテムで塞ぐ。下へ飛ぶ。
+        world.board.put(Cell(6, 3), Tile.SOFT)
+        _drop(world, Cell(4, 3), ItemKind.FIRE)
+        _drop(world, Cell(5, 3), ItemKind.POOP)
+        events = _explode_at(world, Cell(3, 3), 2)
+        assert (
+            ItemBlown(from_cell=Cell(5, 3), to_cell=Cell(5, 4), kind=ItemKind.POOP)
+            in events
+        )
+        # 左を塞いでいたアイテムは、吹き飛んだあとで焼ける（後ろから順に見る）。
+        assert ItemBurned(cell=Cell(4, 3), kind=ItemKind.FIRE) in events
+
+    def test_いちばん近い爆心が斜めなら_斜めに飛ぶ(self) -> None:
+        world = _poop_arena()
+        # 残っている爆風の爆心 (5,4) までは2歩、いま爆発する (1,3) までは3歩。
+        add_blast(world, Cell(5, 4), 1, is_center=True)
+        _drop(world, Cell(4, 3), ItemKind.POOP)
+        events = _explode_at(world, Cell(1, 3), 3)
+        assert (
+            ItemBlown(from_cell=Cell(4, 3), to_cell=Cell(3, 2), kind=ItemKind.POOP)
+            in events
+        )
+
+    def test_同じ近さの爆心が2つなら_先に置かれた爆風から外向き(self) -> None:
+        world = _poop_arena()
+        # 残っている爆風の爆心 (6,3) と、いま爆発する (2,3) は、どちらも2歩。
+        add_blast(world, Cell(6, 3), 1, is_center=True)
+        _drop(world, Cell(4, 3), ItemKind.POOP)
+        events = _explode_at(world, Cell(2, 3), 2)
+        assert (
+            ItemBlown(from_cell=Cell(4, 3), to_cell=Cell(3, 3), kind=ItemKind.POOP)
+            in events
+        )
+
+    def test_爆弾のあるマスへは飛ばない(self) -> None:
+        world = _poop_arena()
+        # 爆風の届かない爆弾が外向き（右）のマスにある。左へ飛ぶ。
+        far = world.players[1]
+        put_bomb(world, far, Cell(6, 3))
+        far.position = Cell(11, 9).center()
+        _drop(world, Cell(5, 3), ItemKind.POOP)
+        events = _explode_at(world, Cell(3, 3), 2)
+        assert (
+            ItemBlown(from_cell=Cell(5, 3), to_cell=Cell(4, 3), kind=ItemKind.POOP)
+            in events
+        )
+        assert [bomb.cell for bomb in world.bombs] == [Cell(6, 3)]
+
+    def test_爆心の上にあれば_向きを試合の乱数で1回だけ引いて選ぶ(self) -> None:
+        world = _poop_arena()
+        poop = _drop(world, Cell(3, 3), ItemKind.POOP)
+        before = world.rng.calls
+        events = _explode_at(world, Cell(3, 3), 1)
+        assert world.rng.calls == before + 1
+        assert [e.to_cell for e in events if isinstance(e, ItemBlown)] == [poop.cell]
+        assert poop.cell in (Cell(4, 3), Cell(2, 3), Cell(3, 4), Cell(3, 2))
+
+    def test_どこへも行けなければ_焼けずに残る_残る長さも数え直さない(self) -> None:
+        world = _poop_arena()
+        # 隅の (1,1)。外は壁、右と下はブロック。
+        world.board.put(Cell(2, 1), Tile.SOFT)
+        world.board.put(Cell(1, 2), Tile.SOFT)
+        poop = _drop(world, Cell(1, 1), ItemKind.POOP)
+        poop.expires_at = Tick(7)
+        events = _explode_at(world, Cell(1, 1), 1)
+        assert not any(isinstance(e, ItemBurned | ItemBlown) for e in events)
+        assert (poop.cell, poop.expires_at) == (Cell(1, 1), 7)
+        assert poop in world.items
+
+    def test_置いたtickを0として_901tick目に消える_ほかのアイテムは消えない(
+        self,
+    ) -> None:
+        """原型は「いまの時刻 − 置いた時刻 > 15 秒」で消す。
+
+        60 tick で1秒なので 901 tick 目（原型は小数の足し算の誤差で 900 tick 目に
+        なる時刻もある。`POOP_LIFETIME` の説明）。
+        """
+        world = _poop_arena()
+        world.items = [
+            placed_item(world, Cell(9, 5), ItemKind.POOP),
+            placed_item(world, Cell(9, 7), ItemKind.FIRE),
+        ]
+        assert [item.expires_at for item in world.items] == [POOP_LIFETIME, None]
+        advance(world, only_for(world, 0, IDLE), POOP_LIFETIME + 1)
+        assert [item.kind for item in world.items] == [ItemKind.POOP, ItemKind.FIRE]
+        assert world.now == POOP_LIFETIME + 1
+        events = simulation.step(world, only_for(world, 0, IDLE))
+        expired = ItemExpired(cell=Cell(9, 5), kind=ItemKind.POOP, scattered=False)
+        assert expired in events
+        assert [item.kind for item in world.items] == [ItemKind.FIRE]
+
+    def test_壊したブロックから出たうんこにも_残る長さが付く(self) -> None:
+        for seed in range(200):
+            world = _poop_arena(seed)
+            world.board.put(Cell(5, 3), Tile.SOFT)
+            events = _explode_at(world, Cell(3, 3), 3)
+            dropped = [e for e in events if isinstance(e, ItemDropped)]
+            if not dropped or dropped[0].kind is not ItemKind.POOP:
+                continue
+            assert [item.expires_at for item in world.items] == [
+                world.now + POOP_LIFETIME
+            ]
+            return
+        pytest.fail("うんこが出る場面が見つからない")
 
 
 class Test被弾:

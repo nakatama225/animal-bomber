@@ -28,7 +28,11 @@ class Item:
     プレイヤーが踏めば、ふつうのアイテムと同じく効いて消える（TypeScript 版と同じ）。
     """
     expires_at: Tick | None = None
-    """この盤面の時刻を過ぎたら消える（撒かれたアイテムだけ）。"""
+    """この盤面の時刻を過ぎたら消える。
+
+    うんこ（`rules/items.py` の `POOP_LIFETIME`。原型の POOP_LIFE）と、とくぎで撒かれた
+    ものだけが持つ。ほかのアイテムは消えない。
+    """
     melting_until: Tick | None = None
     """鼻水で流されて溶けている最中なら、消える盤面の時刻（原型の melt）。
 

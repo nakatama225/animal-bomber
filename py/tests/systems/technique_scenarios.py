@@ -20,7 +20,9 @@ TypeScript 版と比べる `test_techniques_ts.py` と、起動のしかたを�
 - 「体当たり」：ぞう・きつね・ぞう・かえる。ぞうが突進を続け、ほかは止まっている。
   体当たりが当たる・押しのける・抱えたものを撒く、を通る
 
-種は、TypeScript 版の写しで1から順に流し、上の場面を通るものを選んだ。
+種は、TypeScript 版の写しで1から順に流し、上の場面を通るものを選んだ。ルールを変えると
+通る場面も変わるので、固定値を出し直すたびに選び直す（うんこが焼けずに吹き飛ぶように
+したとき、前の種では体当たり・鼻水で爆弾を消す・舌が焼き切れる、を通らなくなった）。
 """
 
 from collections.abc import Callable
@@ -141,7 +143,7 @@ SCENARIOS: Final = (
     TechniqueScenario(
         "specials",
         "とくぎ",
-        1,
+        12,
         (Animal.ELEPHANT, Animal.MOLE, Animal.FOX, Animal.FROG),
         techniques,
         3,
@@ -150,7 +152,7 @@ SCENARIOS: Final = (
     TechniqueScenario(
         "tongue-and-scatter",
         "舌と撒く",
-        5,
+        22,
         (Animal.FROG, Animal.RABBIT, Animal.MOLE, Animal.ELEPHANT),
         taps,
         2,
@@ -159,7 +161,7 @@ SCENARIOS: Final = (
     TechniqueScenario(
         "rams",
         "体当たり",
-        1,
+        17,
         (Animal.ELEPHANT, Animal.FOX, Animal.ELEPHANT, Animal.FROG),
         charges,
         5,

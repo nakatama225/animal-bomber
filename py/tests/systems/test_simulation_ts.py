@@ -8,9 +8,10 @@
 
 ## 期待する値の出どころ
 
-期待する値は `ts_simulation_values.json`。TypeScript 版の 37ac1a7（段階 5 の技を原型に
-合わせ切ったあと）の `domain/` と `app/GameSession.ts` を写し、この版の段階 5 に無い
-ものを止めて、同じ台本を流して出したもの。止めたのは2つ。
+期待する値は `ts_simulation_values.json`。このファイルと同じコミットの TypeScript 版
+（`ts/`）の `domain/` と `app/GameSession.ts` を写し、この版の段階 5 に無いものを
+止めて、同じ台本を流して出したもの（TypeScript 版を直したら、その形を写して出し
+直す）。止めたのは2つ。
 
 - 倒れたプレイヤーが外周へ回る（葱ボン。段階 8）のを、退場にした
   （`mutations/damage.ts` の1か所）

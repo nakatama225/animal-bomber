@@ -312,6 +312,11 @@ def _item_melting(world: WorldState) -> None:
     world.items[0].melting_until = Tick(27)
 
 
+def _item_expiring(world: WorldState) -> None:
+    """消える時刻だけを持たせる（ふつうのうんこの形）。"""
+    world.items[0].expires_at = Tick(900)
+
+
 def _with_actors(world: WorldState) -> WorldState:
     """盤面の物を2つ置いた状態。盤面の物の中身と並びを変える確かめの土台。"""
     world.actors.append(Pit(cell=Cell(3, 3), owner=0))
@@ -501,7 +506,14 @@ class Test状態の要約:
 
     @pytest.mark.parametrize(
         "change",
-        [_item_id, _item_cell, _item_kind, _item_scattered, _item_melting],
+        [
+            _item_id,
+            _item_cell,
+            _item_kind,
+            _item_scattered,
+            _item_melting,
+            _item_expiring,
+        ],
     )
     def test_アイテムの中身が1つ変われば_値が変わる(
         self, change: Callable[[WorldState], None]
@@ -509,6 +521,13 @@ class Test状態の要約:
         world = _with_item(make_world())
         before = hash_world(world)
         change(world)
+        assert hash_world(world) != before
+
+    def test_消える時刻だけを持つアイテムは_その時刻が変われば値が変わる(self) -> None:
+        world = _with_item(make_world())
+        _item_expiring(world)
+        before = hash_world(world)
+        world.items[0].expires_at = Tick(901)
         assert hash_world(world) != before
 
     @pytest.mark.parametrize("change", [_scattered_owner, _scattered_expiry])

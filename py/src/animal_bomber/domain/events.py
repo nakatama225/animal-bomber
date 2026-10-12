@@ -98,11 +98,22 @@ class ItemBurned:
 
 
 @dataclass(frozen=True, slots=True)
+class ItemBlown:
+    """爆風に触れたアイテムが、焼けずに隣のマスへ吹き飛んだ（うんこ。`systems/blast.py`）。"""
+
+    from_cell: Cell
+    to_cell: Cell
+    kind: ItemKind
+
+
+@dataclass(frozen=True, slots=True)
 class ItemExpired:
-    """撒かれたアイテムが、残る長さを過ぎて消えた（`Item.expires_at`）。"""
+    """アイテムが、残る長さを過ぎて消えた（`Item.expires_at`。うんこと、撒かれたもの）。"""
 
     cell: Cell
     kind: ItemKind
+    scattered: bool
+    """とくぎで撒かれたものか（消えるときの煙の色が違う）。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,6 +256,7 @@ SimEvent: TypeAlias = (
     | ItemDropped
     | ItemTaken
     | ItemBurned
+    | ItemBlown
     | ItemExpired
     | ItemWashed
     | BombDoused

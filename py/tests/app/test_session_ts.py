@@ -7,7 +7,7 @@
 中身か時刻かイベントがずれて失敗する。
 
 期待する値は `ts_session_values.json`。出どころは `tests/systems/test_simulation_ts.py`
-の説明と同じ（TypeScript 版の 37ac1a7 を写し、葱ボンと延長戦を止め、全員が下を向いて
+の説明と同じ（同じコミットの TypeScript 版を写し、葱ボンと延長戦を止め、全員が下を向いて
 始まる形にして流したもの）。延長戦は、試合の設定で切った（`suddenDeath: false`。
 制限時間が来たら引き分け）。
 

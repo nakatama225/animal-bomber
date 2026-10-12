@@ -36,13 +36,16 @@ from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import (
     BlockDestroyed,
     Exploded,
+    ItemBlown,
     ItemBurned,
     SimEvent,
 )
-from animal_bomber.domain.query.board import blast_at, bomb_at
+from animal_bomber.domain.query.board import blast_at, bomb_at, item_at
+from animal_bomber.domain.rules.items import POOP_LIFETIME, ItemKind
 from animal_bomber.domain.rules.tuning import BLAST_DURATION
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.bomb import Blast, Bomb
+from animal_bomber.domain.state.item import Item
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems.bomb import remove_bomb
@@ -165,7 +168,8 @@ def _burn_items(world: WorldState) -> list[SimEvent]:
     """爆風（いま出ているすべて）の乗ったマスのアイテムを焼く。
 
     後ろから順に見て焼く（TypeScript 版と同じ順。イベントもこの順に並ぶ）。とくぎで
-    撒かれたアイテムは焼けない（原型も、撒かれたものは爆風で動かず消えない）。
+    撒かれたアイテムは焼けない（原型も、撒かれたものは爆風で動かず消えない）。うんこは
+    焼けずに吹き飛ぶ（`_blow_away`。原型の blowPoop）。
     """
     events: list[SimEvent] = []
     for item in reversed(world.items):
@@ -173,9 +177,64 @@ def _burn_items(world: WorldState) -> list[SimEvent]:
             continue
         if blast_at(world, item.cell) is None:
             continue
+        if item.kind is ItemKind.POOP:
+            events.extend(_blow_away(world, item))
+            continue
         world.items.remove(item)
         events.append(ItemBurned(cell=item.cell, kind=item.kind))
     return events
+
+
+BLOW_ORDER: Final = ((1, 0), (-1, 0), (0, 1), (0, -1))
+"""吹き飛ぶ向きを、外向きの次に試す順（列と行の差。右・左・下・上。原型の DIRS）。"""
+
+
+def _blow_away(world: WorldState, item: Item) -> list[SimEvent]:
+    """爆風に触れたうんこを、いちばん近い爆心から外向きに1マス吹き飛ばす。
+
+    原型の blowPoop。
+
+    - いちばん近い爆心は、いま盤面にある爆風の爆心の中から、縦横の歩数で選ぶ（同じ近さ
+      なら先に置かれた爆風）。この連鎖の爆心に限らない（焼くかどうかも、いまある爆風の
+      どれかで見ている）
+    - 外向きは、縦と横それぞれの差の符号。爆心が斜めの位置にあれば斜めに飛ぶ
+    - 爆心の上にあるときは向きが決まらないので、試合の乱数で右・左・下・上から選ぶ
+    - 外向きのマスへ行けなければ右・左・下・上の順に試す。壁・ブロック・爆弾・ほかの
+      アイテムのあるマスへは行かない。どこへも行けなければ、焼けずにその場に残る
+
+    吹き飛んだら、残る長さをその tick から数え直す（原型も置いた時刻を書き換える）。
+    盤面の一覧の中の位置は変えない（原型も同じ要素の座標を書き換える）。
+    """
+    nearest = item.cell
+    best: int | None = None
+    for blast in world.blasts:
+        if not blast.is_center:
+            continue
+        distance = abs(blast.cell.col - item.cell.col) + abs(
+            blast.cell.row - item.cell.row
+        )
+        if best is None or distance < best:
+            best = distance
+            nearest = blast.cell
+    away = (_sign(item.cell.col - nearest.col), _sign(item.cell.row - nearest.row))
+    if away == (0, 0):
+        away = world.rng.choice(BLOW_ORDER)
+    for d_col, d_row in (away, *BLOW_ORDER):
+        cell = Cell(item.cell.col + d_col, item.cell.row + d_row)
+        if world.board.at(cell) is not Tile.EMPTY:
+            continue
+        if bomb_at(world, cell) is not None or item_at(world, cell) is not None:
+            continue
+        origin = item.cell
+        item.cell = cell
+        item.expires_at = Tick(world.now + POOP_LIFETIME)
+        return [ItemBlown(from_cell=origin, to_cell=cell, kind=item.kind)]
+    return []
+
+
+def _sign(value: int) -> int:
+    """整数の符号（-1・0・1）。"""
+    return (value > 0) - (value < 0)
 
 
 def add_blast(

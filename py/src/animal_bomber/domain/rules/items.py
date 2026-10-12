@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Final
 
+from animal_bomber.domain.core.tick import seconds_to_ticks
 from animal_bomber.domain.state.effects import EffectKind
 
 
@@ -120,6 +121,19 @@ POOP_STACK_LIMIT: Final = 3
 上限が要るのは、うさぎのとくぎ（うんこを 25 マスに撒く。段階 5）があるため。上限が
 無いと、踏み抜いたプレイヤーが1分以上まともに動けなくなり、試合が壊れる（原型の
 注記）。
+"""
+
+POOP_LIFETIME: Final = seconds_to_ticks(15)
+"""盤面に落ちたうんこが残る長さ（tick）。900。原型の POOP_LIFE 15 秒。
+
+理由の記録は無い。置いた tick から数えて、これを過ぎた tick に消える。爆風で吹き
+飛んだら、吹き飛んだ tick から数え直す（原型の blowPoop）。ほかのアイテムは消えない。
+とくぎで撒かれたうんこは別の長さ（`abilities/rabbit.py`）。
+
+⚠️ 原型は経過秒を小数で足し続けて「置いてから 15 秒より長い」かを比べるので、足し算の
+誤差で、置いた時刻によっては 900 tick 目に消える（測ると 900 と 901 が混ざる）。この版は
+15 秒ちょうどを過ぎた 901 tick 目にそろえる（撒かれたうんこの 60 秒も同じ扱い。
+TypeScript 版と同じ）。
 """
 
 SLIDE_SECONDS: Final = 3

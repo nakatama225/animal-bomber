@@ -14,7 +14,7 @@
 from typing import assert_never
 
 from animal_bomber.domain.core.coord import Cell
-from animal_bomber.domain.core.tick import seconds_to_ticks
+from animal_bomber.domain.core.tick import Tick, seconds_to_ticks
 from animal_bomber.domain.events import (
     EffectApplied,
     ItemDropped,
@@ -29,6 +29,7 @@ from animal_bomber.domain.rules.items import (
     DROP_CHANCE,
     ITEM_LOTTERY,
     POOP_EFFECTS,
+    POOP_LIFETIME,
     POOP_STACK_LIMIT,
     POWER_UP_KINDS,
     SLIDE_SECONDS,
@@ -100,10 +101,11 @@ def _pick_up(world: WorldState) -> list[SimEvent]:
 
 
 def _remove_expired(world: WorldState) -> list[SimEvent]:
-    """溶けきったものと、残る長さを過ぎた撒かれたものを消す。後ろから順に見る。
+    """溶けきったものと、残る長さを過ぎたもの（うんこ・撒かれたもの）を消す。
 
-    溶けているものは `melting_until` の tick に（その tick を含めて）消え、撒かれた
-    ものは `expires_at` を過ぎた tick に消える（TypeScript 版と同じ比べ方）。
+    後ろから順に見る。溶けているものは `melting_until` の tick に（その tick を含めて）
+    消え、残る長さのあるものは `expires_at` を過ぎた tick に消える（TypeScript 版と同じ
+    比べ方）。
     """
     events: list[SimEvent] = []
     for item in reversed(world.items):
@@ -116,7 +118,11 @@ def _remove_expired(world: WorldState) -> list[SimEvent]:
         if item.expires_at is None or world.now <= item.expires_at:
             continue
         world.items.remove(item)
-        events.append(ItemExpired(cell=item.cell, kind=item.kind))
+        events.append(
+            ItemExpired(
+                cell=item.cell, kind=item.kind, scattered=item.scattered_by is not None
+            )
+        )
     return events
 
 
@@ -128,8 +134,20 @@ def roll_drop(world: WorldState, cell: Cell) -> list[SimEvent]:
     if not world.rng.chance(DROP_CHANCE):
         return []
     kind = world.rng.choice(ITEM_LOTTERY)
-    world.items.append(Item(id=world.ids.take(), cell=cell, kind=kind))
+    world.items.append(placed_item(world, cell, kind))
     return [ItemDropped(cell=cell, kind=kind)]
+
+
+def placed_item(world: WorldState, cell: Cell, kind: ItemKind) -> Item:
+    """盤面に置くアイテムを作る（ブロックから出る・被弾して吐き出す・抱えたものを撒く）。
+
+    うんこには残る長さを付ける（`POOP_LIFETIME`。原型の POOP_LIFE）。とくぎで撒かれた
+    うんこは、撒く側が自分で作る（残る長さが違う）。
+    """
+    item = Item(id=world.ids.take(), cell=cell, kind=kind)
+    if kind is ItemKind.POOP:
+        item.expires_at = Tick(world.now + POOP_LIFETIME)
+    return item
 
 
 def apply_item(
@@ -201,6 +219,6 @@ def spit_power_up(world: WorldState, player: PlayerState) -> list[SimEvent]:
                 continue
             if avoid_blast and blast_at(world, cell) is not None:
                 continue
-            world.items.append(Item(id=world.ids.take(), cell=cell, kind=kind))
+            world.items.append(placed_item(world, cell, kind))
             return [ItemDropped(cell=cell, kind=kind)]
     return []

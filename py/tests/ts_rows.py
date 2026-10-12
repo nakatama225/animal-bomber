@@ -18,6 +18,7 @@ from animal_bomber.domain.events import (
     BombPlaced,
     EffectApplied,
     Exploded,
+    ItemBlown,
     ItemBurned,
     ItemDropped,
     ItemExpired,
@@ -54,8 +55,10 @@ def event_row(event: SimEvent) -> list[object]:
             return ["itemTaken", cell.col, cell.row, kind.value, taker]
         case ItemBurned(cell=cell, kind=kind):
             return ["itemBurned", cell.col, cell.row, kind.value]
-        case ItemExpired(cell=cell, kind=kind):
-            return ["itemExpired", cell.col, cell.row, kind.value]
+        case ItemBlown(from_cell=start, to_cell=end, kind=kind):
+            return ["itemBlown", start.col, start.row, end.col, end.row, kind.value]
+        case ItemExpired(cell=cell, kind=kind, scattered=scattered):
+            return ["itemExpired", cell.col, cell.row, kind.value, scattered]
         case ItemWashed(cell=cell, kind=kind):
             return ["itemWashed", cell.col, cell.row, kind.value]
         case BombDoused(cell=cell, owner=owner):

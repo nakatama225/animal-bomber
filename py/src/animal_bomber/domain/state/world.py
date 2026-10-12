@@ -227,11 +227,12 @@ def hash_world(world: WorldState) -> int:
             .add_int(item.cell.row)
             .add_text(item.kind.value)
         )
-        # 撒かれたもの・溶けているものだけが持つ値は、持っているときだけ混ぜる
-        # （ふつうのアイテムの混ぜ方は変えない。TypeScript 版と同じ）。
+        # 一部のアイテムだけが持つ値は、持っているときだけ混ぜる（持たないアイテムの
+        # 混ぜ方は変えない。TypeScript 版と同じ）。
         if item.scattered_by is not None:
-            hasher.add_int(item.scattered_by)
-            hasher.add_int(-1 if item.expires_at is None else item.expires_at)
+            hasher.add_text("scattered").add_int(item.scattered_by)
+        if item.expires_at is not None:
+            hasher.add_text("expires").add_int(item.expires_at)
         if item.melting_until is not None:
             hasher.add_text("melting").add_int(item.melting_until)
     for actor in world.actors:

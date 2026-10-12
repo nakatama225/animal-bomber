@@ -32,7 +32,6 @@ from animal_bomber.domain.rules.items import HARMFUL_KINDS, ItemKind
 from animal_bomber.domain.rules.tuning import MAX_SPEED, PLAYER_RADIUS
 from animal_bomber.domain.state.actions import Charge
 from animal_bomber.domain.state.board import Tile
-from animal_bomber.domain.state.item import Item
 from animal_bomber.domain.state.player import (
     Life,
     PlayerState,
@@ -43,7 +42,7 @@ from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems.blast import detonate
 from animal_bomber.domain.systems.bomb import remove_bomb
 from animal_bomber.domain.systems.damage import hurt
-from animal_bomber.domain.systems.items import apply_item, roll_drop
+from animal_bomber.domain.systems.items import apply_item, placed_item, roll_drop
 
 SNOT_RANGE: Final = 2
 """鼻水が届くマス数（原型の SNOT_RANGE）。"""
@@ -200,7 +199,7 @@ def finish_charge(
         cell = _spill_cell(world, origin, order)
         if cell is None:
             continue
-        world.items.append(Item(id=world.ids.take(), cell=cell, kind=kind))
+        world.items.append(placed_item(world, cell, kind))
         events.append(ItemDropped(cell=cell, kind=kind))
     charge.carried.clear()
     return events

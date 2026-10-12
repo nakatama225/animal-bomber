@@ -224,7 +224,10 @@ class Test撒いたうんこ:
                 placed_at = tick
             if placed_at is not None and not at_center():
                 gone_at = tick
-                assert ItemExpired(cell=Cell(7, 7), kind=ItemKind.POOP) in events
+                expired = ItemExpired(
+                    cell=Cell(7, 7), kind=ItemKind.POOP, scattered=True
+                )
+                assert expired in events
                 break
         assert (placed_at, gone_at) == (1, 3602)
 

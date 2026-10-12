@@ -160,9 +160,9 @@ set の反復は、import でも構文木でも止められません。`tests/de
   `event_row`（`tests/ts_rows.py`）が mypy で失敗します。扱いを書いてから完了として
   ください。`case _:` には `assert_never` だけを置きます
 - TypeScript 版と比べる固定値（`tests/systems/test_simulation_ts.py`・
-  `test_techniques_ts.py`・`tests/app/test_session_ts.py`）は、TypeScript 版の 37ac1a7
-  （段階 5 の技を原型に合わせ切ったあと）の `domain/` と `app/GameSession.ts` を写し、
-  この版にまだ無いものを止めて、同じ台本を流して出したものです。止めたのは、倒れた
+  `test_techniques_ts.py`・`tests/app/test_session_ts.py`）は、同じコミットの TypeScript 版
+  （`ts/`）の `domain/` と `app/GameSession.ts` を写し、この版にまだ無いものを止めて、同じ
+  台本を流して出したものです。TypeScript 版を直したら、その形を写して出し直します。止めたのは、倒れた
   プレイヤーが外周へ回ること（葱ボン。写しの `mutations/damage.ts` で退場にする）と、
   延長戦（試合の設定で切る）。もう1つ、写しでは全員が下を向いて始まる形にします（この版は
   原型と同じく全員が下を向く。TypeScript 版は下の隅のプレイヤーが上を向く）。
