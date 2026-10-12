@@ -84,6 +84,27 @@ export const MAX_SPEED_PER_SECOND = 9.4;
 export const MAX_SPEED = MAX_SPEED_PER_SECOND / TICKS_PER_SECOND;
 
 /**
+ * 速度の下限（1秒あたりのマス数）。原型の値で、理由の記録は無い。
+ *
+ * 効くのは、ブロックの中を進んでいる間に「超スロー」がかかったときだけ（ほかは、いちばん
+ * 遅い組み合わせでもこれより速い）。下限には「超スロー」の倍率を掛けない（原型の getSpeed は
+ * 最後にこの値と上限で挟む）。
+ */
+export const MIN_SPEED_PER_SECOND = 0.42;
+export const MIN_SPEED = MIN_SPEED_PER_SECOND / TICKS_PER_SECOND;
+
+/**
+ * 壊せるブロックの中を進んでいる間の速さの倍率（原型の DIG_PENALTY）。足の速さと靴の
+ * ぶんの合計に掛ける。
+ *
+ * ブロックを抜けられる能力が強すぎないように、とても遅くしてある。靴のぶんにも同じ倍率を
+ * 掛けるだけで、靴だけをさらに弱める扱いはしない（原型の作者は一度 10% まで弱めすぎて
+ * 「弱すぎる」と戻した。2026-08-09）。ブロックの中では「とまれない」の下限は効かず、
+ * 「超スロー」は効く（原型の getSpeed）。
+ */
+export const IN_BLOCK_SPEED_RATIO = 0.18;
+
+/**
  * 当たり判定に使うプレイヤーの半径（マス）。
  *
  * 0.5 より小さいので、通路の中央に乗っていれば壁に触れない。

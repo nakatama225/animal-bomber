@@ -1,4 +1,5 @@
-import type { Point } from '../core/Coord.js';
+import { cellOf, type Point } from '../core/Coord.js';
+import type { Tile } from '../state/Board.js';
 import type { PlayerInput } from '../input/PlayerInput.js';
 import { abilityOf } from '../abilities/registry.js';
 import { bodyCollides } from '../query/BoardQuery.js';
@@ -83,7 +84,7 @@ export class MovementSystem {
     else if (dy > 0) player.facing = 'down';
     else if (dy < 0) player.facing = 'up';
 
-    const speed = speedOf(player, abilityOf(player.animal).speedMultiplier);
+    const speed = speedOf(player, abilityOf(player.animal).speedMultiplier, standingOn(world, player));
     const substeps = Math.max(1, Math.ceil(speed / MOVE_SUBSTEP_DISTANCE));
     const perStep = speed / substeps;
 
@@ -123,7 +124,7 @@ export class MovementSystem {
    */
   #slide(world: WorldState, player: PlayerState): void {
     const forward = STEP_OF[player.facing];
-    const base = speedOf(player, abilityOf(player.animal).speedMultiplier);
+    const base = speedOf(player, abilityOf(player.animal).speedMultiplier, standingOn(world, player));
     const speed = base * SLIDE_SPEED_RATIO;
     const substeps = Math.max(1, Math.ceil(speed / MOVE_SUBSTEP_DISTANCE));
     const perStep = speed / substeps;
@@ -175,6 +176,14 @@ export class MovementSystem {
       if (!collides(world, player, player.position, next)) player.position = next;
     }
   }
+}
+
+/**
+ * 体の中心があるマス。速さは移動を始める前のマスで決まる（ブロックの中なら遅い。
+ * `speedOf`）。原型も移動の前に測る。
+ */
+function standingOn(world: Readonly<WorldState>, player: PlayerState): Tile {
+  return world.board.at(cellOf(player.position));
 }
 
 /** 各方向へ1歩ぶんの差分。 */

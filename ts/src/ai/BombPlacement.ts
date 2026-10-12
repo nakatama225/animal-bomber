@@ -50,7 +50,8 @@ export function canEscapeAfter(ctx: CpuContext, option: BombOption): boolean {
   });
   if (path === null) return false;
 
-  const speed = speedOf(ctx.me, ctx.ability.speedMultiplier) * ESCAPE_SPEED_RATIO;
+  const speed =
+    speedOf(ctx.me, ctx.ability.speedMultiplier, ctx.world.board.at(ctx.here)) * ESCAPE_SPEED_RATIO;
   const needed = path.length / speed;
   return needed < BOMB_FUSE - ESCAPE_MARGIN;
 }

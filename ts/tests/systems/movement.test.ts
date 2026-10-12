@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { abilityOf } from '../../src/domain/abilities/registry.js';
+import { tick, TICKS_PER_SECOND } from '../../src/domain/core/Tick.js';
 import { collides } from '../../src/domain/systems/MovementSystem.js';
 import { MAX_SHOES, MAX_SPEED, PLAYER_RADIUS } from '../../src/domain/rules/tuning.js';
 import { OUT } from '../../src/domain/state/Life.js';
@@ -98,6 +100,68 @@ describe('移動', () => {
     const player = world.players[0]!;
     player.shoes = 9999;
     expect(speedOf(player)).toBe(MAX_SPEED);
+  });
+
+  /*
+   * 以下の速さの期待値は、原型（legacy/animal-bomber.html の getSpeed）を画面なしで動かして
+   * 測った値（マス/秒）。この版は 1 tick あたりで持つので、60 を掛けて比べる。
+   */
+  const perSecond = (perTick: number): number => perTick * TICKS_PER_SECOND;
+
+  it('上限で止めるのは最後（靴で上限を超える動物が「超スロー」を踏んだとき、先に止めない）', () => {
+    const world = makeWorld(1234, ['rabbit', 'fox']);
+    const rabbit = world.players[0]!;
+    const multiplier = abilityOf('rabbit').speedMultiplier;
+    const measured: Record<number, [number, number]> = {
+      10: [8.714, 3.65988],
+      11: [9.134, 3.83628],
+      12: [9.4, 4.01268],
+      13: [9.4, 4.18908],
+    };
+    for (const [shoes, [plain, slow]] of Object.entries(measured)) {
+      rabbit.shoes = Number(shoes);
+      rabbit.effects.clear('slow');
+      expect(perSecond(speedOf(rabbit, multiplier)), `靴 ${shoes}`).toBeCloseTo(plain, 5);
+      rabbit.effects.add('slow', tick(100), tick(100));
+      expect(perSecond(speedOf(rabbit, multiplier)), `靴 ${shoes}・超スロー`).toBeCloseTo(slow, 5);
+    }
+  });
+
+  it('壊せるブロックの中では、足の速さと靴のぶんの 0.18 倍。超スローは効き、とまれないは効かず、下限は 0.42', () => {
+    const world = makeWorld(1234, ['mole', 'fox']);
+    const mole = world.players[0]!;
+    const multiplier = abilityOf('mole').speedMultiplier;
+    const speed = (shoes: number, effects: readonly ('slow' | 'runaway')[], tile: 'empty' | 'soft'): number => {
+      mole.shoes = shoes;
+      mole.effects.clear('slow');
+      mole.effects.clear('runaway');
+      for (const effect of effects) mole.effects.add(effect, tick(100), tick(100));
+      return perSecond(speedOf(mole, multiplier, tile));
+    };
+    expect(speed(0, [], 'empty')).toBeCloseTo(3.33, 5);
+    expect(speed(0, ['runaway'], 'empty')).toBeCloseTo(8.648, 5);
+    expect(speed(0, [], 'soft')).toBeCloseTo(0.5994, 5);
+    expect(speed(5, [], 'soft')).toBeCloseTo(0.9774, 5);
+    expect(speed(0, ['slow'], 'soft')).toBeCloseTo(0.42, 5);
+    expect(speed(0, ['runaway'], 'soft')).toBeCloseTo(0.5994, 5);
+    expect(speed(13, ['slow'], 'soft')).toBeCloseTo(0.664524, 5);
+  });
+
+  it('ブロックの中へ入ると、体の中心が入った次の tick から遅くなる', () => {
+    // (3,7) の中央から右へ。(4,7) と (5,7) は壊せるブロック。中心が (4,7) に入るのは 10 tick 目。
+    const world = makeWorld(5, ['mole', 'frog']);
+    const mole = world.players[0]!;
+    for (const { cell, tile } of world.board.cells()) if (tile === 'soft') world.board.set(cell, 'empty');
+    world.board.set({ col: 4, row: 7 }, 'soft');
+    world.board.set({ col: 5, row: 7 }, 'soft');
+    mole.position = { x: 3.5, y: 7.5 };
+    world.players[1]!.position = { x: 19.5, y: 13.5 };
+    const xs: number[] = [];
+    for (let t = 1; t <= 60; t += 1) {
+      advance(world, onlyFor(world, 0, press({ right: true })), 1);
+      if (t % 10 === 0) xs.push(mole.position.x);
+    }
+    [4.055, 4.1549, 4.2548, 4.3547, 4.4546, 4.5545].forEach((x, i) => expect(xs[i]).toBeCloseTo(x, 5));
   });
 
   it('倒れているプレイヤーは動かない', () => {

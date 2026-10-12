@@ -1,12 +1,15 @@
 import type { Direction, Point } from '../core/Coord.js';
 import type { ActiveAction } from '../abilities/ActiveAction.js';
 import type { PlayerInput } from '../input/PlayerInput.js';
+import type { Tile } from './Board.js';
 import type { EffectBag } from './EffectBag.js';
 import type { Life } from './Life.js';
 import type { Tick } from '../core/Tick.js';
 import {
   BASE_SPEED,
+  IN_BLOCK_SPEED_RATIO,
   MAX_SPEED,
+  MIN_SPEED,
   RUNAWAY_SPEED_FLOOR_RATIO,
   SHOE_STEP,
   SLOW_FACTOR,
@@ -133,23 +136,43 @@ export function justPressed(
 }
 
 /**
- * そのプレイヤーの、1 tick あたりの移動距離（マス）。
+ * そのプレイヤーの、1 tick あたりの移動距離（マス）。原型の getSpeed と同じ順で出す。
  *
- * 靴の段数だけ速くなり、上限で頭打ちになる。
+ * 1. 足の速さ（動物の倍率）と靴の段数ぶんを足す
+ * 2. 「超スロー」の倍率を掛ける
+ * 3. 「とまれない」なら下限を敷く
+ * 4. 壊せるブロックの中（壁の中も）にいれば、1. を `IN_BLOCK_SPEED_RATIO` 倍したものに
+ *    置き換え、「超スロー」だけを掛け直す（「とまれない」は効かない）
+ * 5. 最後に下限（`MIN_SPEED`）と上限（`MAX_SPEED`）で挟む
+ *
+ * ⚠️ 上限で止めるのは最後。先に止めると、靴で上限を超えるほど速い動物が「超スロー」を
+ * 踏んだとき、原型より遅くなる（靴 12 段のうさぎで、原型 4.01・先に止めると 3.95 マス/秒）。
+ *
+ * @param standingOn 体の中心があるマス。移動を始める前のマスを渡す（原型も移動の前に測る）
  */
-export function speedOf(player: PlayerState, animalMultiplier = 1): number {
-  let speed = Math.min(MAX_SPEED, BASE_SPEED * animalMultiplier + player.shoes * SHOE_STEP);
-  if (player.effects.has('slow')) speed *= SLOW_FACTOR;
+export function speedOf(
+  player: PlayerState,
+  animalMultiplier = 1,
+  standingOn: Tile = 'empty',
+): number {
+  const legs = BASE_SPEED * animalMultiplier + player.shoes * SHOE_STEP;
+  const slow = player.effects.has('slow');
+  let speed = legs;
+  if (slow) speed *= SLOW_FACTOR;
 
   // ⚠️ 「とまれない」は速度に下限を敷く効果。下限に「超スロー」の倍率を
   // かけないと、超スローを踏んだあとにこれを踏んだ人が速くなるという
   // 逆転が起きる。後から踏んだ悪い状態が前のものを打ち消してしまう。
   if (player.effects.has('runaway')) {
-    const floor =
-      MAX_SPEED * RUNAWAY_SPEED_FLOOR_RATIO * (player.effects.has('slow') ? SLOW_FACTOR : 1);
+    const floor = MAX_SPEED * RUNAWAY_SPEED_FLOOR_RATIO * (slow ? SLOW_FACTOR : 1);
     speed = Math.max(speed, floor);
   }
-  return speed;
+
+  if (standingOn !== 'empty') {
+    speed = legs * IN_BLOCK_SPEED_RATIO;
+    if (slow) speed *= SLOW_FACTOR;
+  }
+  return Math.min(MAX_SPEED, Math.max(MIN_SPEED, speed));
 }
 
 /** そのプレイヤーがいま置く爆弾の火力。 */
