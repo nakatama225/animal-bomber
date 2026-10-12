@@ -6,6 +6,8 @@ TypeScript 版の段階 3 の `tests/systems/item-damage.test.ts` と同じこ�
 
 import pytest
 
+from animal_bomber.domain.abilities.elephant import CHARGE_DURATION
+from animal_bomber.domain.abilities.mole import DIG_TIME
 from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.core.tick import Tick, seconds_to_ticks
 from animal_bomber.domain.events import (
@@ -40,6 +42,7 @@ from animal_bomber.domain.rules.tuning import (
     STARTING_HP,
     WEAKENED_POWER,
 )
+from animal_bomber.domain.state.actions import Charge, Dig, Tongue
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
@@ -272,17 +275,22 @@ class Test悪い状態の作用:
         slid = sliding.position.x - 5.5
         assert slid == pytest.approx(walked * SLIDE_SPEED_RATIO)
 
-    def test_滑っている間に向きを押すと_ふつうの速さでその向きへ進む(self) -> None:
+    def test_滑っている間に向きを押しても_曲がらず向きも変わらない(self) -> None:
+        """原型の humanUpdate は、滑っている間は入力を見ない。
+
+        拾ったときの向きのまま滑る。
+        """
         world = make_world(animals=PLAIN)
         _open_row(world)
         walking, sliding = world.players
         for player in (walking, sliding):
             player.position = Cell(5, 5).center()
-        sliding.facing = Direction.RIGHT
+            player.facing = Direction.RIGHT
         _add(sliding, EffectKind.SLIDE, 3)
-        left = PlayerInput.LEFT
-        simulation.step(world, {0: left, 1: left})
-        assert sliding.position == walking.position
+        simulation.step(world, {0: RIGHT, 1: PlayerInput.LEFT})
+        assert sliding.facing is Direction.RIGHT
+        slid = sliding.position.x - 5.5
+        assert slid == pytest.approx((walking.position.x - 5.5) * SLIDE_SPEED_RATIO)
         assert sliding.effects.has(EffectKind.SLIDE)
 
     def test_壁にぶつかると滑りが終わる(self) -> None:
@@ -477,6 +485,86 @@ class Test悪い状態の作用:
         bomb = place_bomb(world, player)
         assert bomb is not None
         assert bomb.power == WEAKENED_POWER
+
+
+def _slide_arena(animal: Animal) -> tuple[WorldState, PlayerState]:
+    """(3,7) の中央から右向きにバナナで滑り始める盤面。
+
+    1P が `animal`、2P は遠くのかえる。
+    """
+    world = make_world(5, (animal, Animal.FROG))
+    clear_board(world)
+    world.items = []
+    player = world.players[0]
+    player.position = Cell(3, 7).center()
+    player.facing = Direction.RIGHT
+    world.players[1].position = Cell(19, 13).center()
+    apply_item(world, player, ItemKind.BANANA)
+    return world, player
+
+
+class Test滑っている間の動き:
+    """原型の humanUpdate の滑りの枝。
+
+    期待値は、原型を画面なしで動かして同じ場面で測った位置（TypeScript 版の
+    `item-damage.test.ts` と同じ場面）。
+    """
+
+    def test_向きを押しても曲がらず_向きも変わらず_滑る速さで進む(self) -> None:
+        world, player = _slide_arena(Animal.FOX)
+        expected = [3.577083, 3.654167, 3.73125, 3.808333, 3.885417, 3.9625]
+        for x in expected:
+            simulation.step(world, only_for(world, 0, PlayerInput.UP))
+            assert player.position.x == pytest.approx(x, abs=5e-6)
+            assert player.position.y == 7.5
+            assert player.facing is Direction.RIGHT
+
+    def test_中央へ寄せる強さは_ふだんの速さ(self) -> None:
+        world, player = _slide_arena(Animal.FOX)
+        player.position = Point(3.5, 7.6)
+        simulation.step(world, only_for(world, 0, IDLE))
+        assert player.position.x == pytest.approx(3.577083, abs=5e-6)
+        assert player.position.y == pytest.approx(7.538333, abs=5e-6)
+        simulation.step(world, only_for(world, 0, IDLE))
+        assert player.position.y == 7.5
+
+    def test_泣いている間にバナナを拾うと_泣いたまま滑る(self) -> None:
+        world, player = _slide_arena(Animal.FOX)
+        player.effects.clear(EffectKind.SLIDE)
+        apply_item(world, player, ItemKind.ONION)
+        apply_item(world, player, ItemKind.BANANA)
+        advance(world, only_for(world, 0, IDLE), 4)
+        assert player.position.x == pytest.approx(3.808333, abs=5e-6)
+        assert player.effects.has(EffectKind.STUN)
+
+    def test_穴を掘っている最中も滑り_マスを出た次のtickに掘りが取り消される(
+        self,
+    ) -> None:
+        world, player = _slide_arena(Animal.MOLE)
+        player.action = Dig(cell=Cell(3, 7), remaining=DIG_TIME)
+        advance(world, only_for(world, 0, IDLE), 8)
+        assert player.position.x == pytest.approx(4.055, abs=5e-6)
+        assert isinstance(player.action, Dig)
+        advance(world, only_for(world, 0, IDLE), 1)
+        assert player.position.x == pytest.approx(4.124375, abs=5e-6)
+        assert player.action is None
+        assert world.actors == []
+
+    def test_舌を伸ばしている最中も滑る(self) -> None:
+        world, player = _slide_arena(Animal.FROG)
+        player.action = Tongue(origin=Cell(3, 7), direction=Direction.RIGHT)
+        advance(world, only_for(world, 0, IDLE), 6)
+        assert player.position.x == pytest.approx(3.9625, abs=5e-6)
+        assert isinstance(player.action, Tongue)
+
+    def test_ブロックを壊しながら進む技の最中は_その技と滑りの両方で進む(
+        self,
+    ) -> None:
+        world, player = _slide_arena(Animal.ELEPHANT)
+        player.action = Charge(direction=Direction.RIGHT, remaining=CHARGE_DURATION)
+        for x in (3.76675, 4.0335, 4.30025, 4.567):
+            simulation.step(world, only_for(world, 0, IDLE))
+            assert player.position.x == pytest.approx(x, abs=5e-6)
 
 
 class Testアイテムを焼く_落とす:

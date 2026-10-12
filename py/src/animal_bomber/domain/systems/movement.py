@@ -95,53 +95,82 @@ def _axis(player_input: PlayerInput, plus: PlayerInput, minus: PlayerInput) -> i
 
 
 def _move(world: WorldState, player: PlayerState, player_input: PlayerInput) -> None:
+    # 滑っている間は、何よりも先に滑る（`_slide`）。
+    if player.effects.has(EffectKind.SLIDE):
+        _slide(world, player)
+        return
     # 泣いている・落とし穴にはまっている間は、どの入力も通らない。
     if is_frozen(player):
         return
     # 乗っ取られている間は、その振る舞いが位置を決める（種類は見ない）。
     if player.action is not None and traits_of(player.action).drives_movement:
         return
-    # ⚠️ 上の2つで帰るので、泣いている間と乗っ取られている間は滑らない。原型は、CPU で
-    # ないプレイヤーなら、滑っている間はこの2つを通らずに滑り続ける（掘っている・舌を
-    # 伸ばしている間も。ブロックを壊しながら進む技の最中は、その移動に滑りが足される）。
-    # 原型の CPU は泣いている・掘っている・舌の間は先に帰り、この版と同じく滑らない。
-    # 原型の中で2通りあり、この版は CPU の側と同じ（TypeScript 版も同じ）。どちらに
-    # 揃えるかは、まだ決めていない。
     dx = _axis(player_input, PlayerInput.RIGHT, PlayerInput.LEFT)
     dy = _axis(player_input, PlayerInput.DOWN, PlayerInput.UP)
     # 「そうさ反転」がかかっていると、押した向きと逆へ進む。
     if player.effects.has(EffectKind.REVERSE):
         dx, dy = -dx, -dy
-    # 「滑る」「とまれない」は、手を離していても向いている方向へ進み続ける。
-    # 速さを上げるのは滑っているときだけ（とまれないは速さの下限で効く。`speed_of`）。
-    sliding = False
+    # 「とまれない」は、手を離していても向いている方向へ進み続ける（速さの下限でも
+    # 効く。`speed_of`）。
     if dx == 0 and dy == 0:
-        if not (
-            player.effects.has(EffectKind.SLIDE)
-            or player.effects.has(EffectKind.RUNAWAY)
-        ):
+        if not player.effects.has(EffectKind.RUNAWAY):
             return
         dx, dy = player.facing.delta
-        sliding = player.effects.has(EffectKind.SLIDE)
     # 斜めに押したら横を優先し、1つの軸に丸める（原型と同じ）。斜めに進めると、
     # 格子状の通路では壁に沿って滑る動きになる。
     if dx != 0:
         dy = 0
     player.facing = Direction((dx, dy))
 
-    speed = speed_of(player) * SLIDE_SPEED_RATIO if sliding else speed_of(player)
+    speed = speed_of(player)
+    substeps = max(1, math.ceil(speed / MOVE_SUBSTEP_DISTANCE))
+    per_step = speed / substeps
+    for _ in range(substeps):
+        moved = _try_move(world, player, dx * per_step, dy * per_step)
+        # 進めたときは寄せる幅を少し弱める（原型と同じ倍率）。
+        rate = per_step * ALIGN_RATE_WHEN_MOVING if moved else per_step
+        _align_to_corridor(world, player, horizontal=dx != 0, rate=rate)
+
+
+def _slide(world: WorldState, player: PlayerState) -> None:
+    """バナナで滑る（原型の humanUpdate の滑りの枝）。
+
+    原型は、滑っている間は移動の関数（movePlayer）を通らず、向いている方向へ直接動かす。
+    そのため次の3つが、ふつうの移動と違う（TypeScript 版も同じ）。
+
+    - 入力を見ない。向きを押しても曲がらず、向きも変わらない（拾ったときの向きのまま
+      滑る。原型の slideDir は拾ったときの向きで、滑っている間は向きが変わらないので、
+      向いている方向で足りる）
+    - 泣いている間も、位置を決める振る舞いの最中も滑る。穴を掘っている最中なら、滑って
+      マスを出た次の tick に掘りが取り消される。ブロックを壊しながら進む技の最中なら、
+      その技と滑りの両方で進む
+    - 速さは、ふだんの速さの `SLIDE_SPEED_RATIO` 倍。通路の中央へ寄せる強さは、ふだんの
+      速さ（原型の alignAssist）
+
+    進めなかったら（壁・ブロック・爆弾にぶつかったら）滑りは終わる。ぶつかっても滑り
+    続けると、壁ぎわで復帰できないまま爆風を待つことになる。
+
+    原型の CPU は、泣いている・掘っている・舌を伸ばしている間は先に帰って滑らない。この
+    版は CPU も同じ移動の処理を通るので、同じく滑り続ける（操作しているプレイヤーの
+    動きにそろえると決めた）。
+
+    ⚠️ 原型は1フレームぶんを1回で動かし、行き先が壁に重なれば動かずに滑りを終える。この版
+    は細かく分けて動かすので、分けた1回ぶんが通らなくなった所で止まる（原型より壁に近い所
+    で止まりうる）。原型の1回の大きさは、画面の更新の間隔と最速のプレイヤーの速さで変わる
+    （原型の loop が時間を分ける）ので、原型の答えも1つに決まらない。
+    """
+    dx, dy = player.facing.delta
+    base = speed_of(player)
+    speed = base * SLIDE_SPEED_RATIO
     substeps = max(1, math.ceil(speed / MOVE_SUBSTEP_DISTANCE))
     per_step = speed / substeps
     moved_any = False
     for _ in range(substeps):
-        moved = _try_move(world, player, dx * per_step, dy * per_step)
-        moved_any = moved_any or moved
-        # 進めたときは寄せる幅を少し弱める（原型と同じ倍率）。
-        rate = per_step * ALIGN_RATE_WHEN_MOVING if moved else per_step
-        _align_to_corridor(world, player, horizontal=dx != 0, rate=rate)
-    # 壁にぶつかったら滑りは終わる。ぶつかっても滑り続けると、壁ぎわで向きを
-    # 変えられないまま爆風を待つことになる。
-    if sliding and not moved_any:
+        if not _try_move(world, player, dx * per_step, dy * per_step):
+            break
+        moved_any = True
+        _align_to_corridor(world, player, horizontal=dx != 0, rate=base / substeps)
+    if not moved_any:
         player.effects.clear(EffectKind.SLIDE)
 
 
