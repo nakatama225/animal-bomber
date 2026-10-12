@@ -118,7 +118,9 @@ def encode_actor(actor: Actor) -> str:
     """状態の要約に混ぜる文字列。
 
     結果を左右する中身を、TypeScript 版の `encode` と同じ並びで並べる（比べるテストが
-    文字列ごと突き合わせる）。
+    文字列ごと突き合わせる）。⚠️ 跳ねる爆弾の持ち主は、TypeScript 版と同じく並べない。
+    持ち主は `state/world.py` の `hash_world` が、どの盤面の物にも混ぜる。跳ねる爆弾の
+    `interval` は結果を左右しないので、どちらにも入れない。
     """
     match actor:
         case Pit(cell=cell, owner=owner):

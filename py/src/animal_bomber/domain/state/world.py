@@ -235,5 +235,12 @@ def hash_world(world: WorldState) -> int:
         if item.melting_until is not None:
             hasher.add_text("melting").add_int(item.melting_until)
     for actor in world.actors:
-        hasher.add_text(actor_name(actor)).add_text(encode_actor(actor))
+        # 持ち主はどの盤面の物も持つので、ここで全部に混ぜる。跳ねる爆弾の要約
+        # （`encode_actor`。TypeScript 版と同じ並び）は持ち主を並べないが、持ち主は
+        # 爆発したときの火力と爆風の持ち主を決める。
+        (
+            hasher.add_text(actor_name(actor))
+            .add_text(encode_actor(actor))
+            .add_int(actor.owner)
+        )
     return hasher.value

@@ -383,6 +383,7 @@ ACTOR_FIELDS = [
     pytest.param(_foxfire, "owner", 0, id="foxfire-owner"),
     pytest.param(_foxfire, "elapsed", Tick(1), id="foxfire-elapsed"),
     pytest.param(_slime, "cell", Cell(5, 6), id="slime-cell"),
+    pytest.param(_slime, "owner", 1, id="slime-owner"),
     pytest.param(_slime, "hops_left", 5, id="slime-hops"),
     pytest.param(_slime, "flown", Tick(1), id="slime-flown"),
     pytest.param(_slime, "timer", Tick(1), id="slime-timer"),
@@ -396,8 +397,9 @@ ACTOR_FIELDS = [
 ]
 """盤面の物の、結果を左右する中身（作り方・変える項目・変えた値）。
 
-跳ねる爆弾の投げた持ち主と次の区切りまでの間隔は混ぜない（TypeScript 版の `encode` と
-同じ並びにするため。持ち主は作ってから変わらず、間隔は残りの tick に写してから使う）。
+跳ねる爆弾の次の区切りまでの間隔は混ぜない。残りの tick（`timer`）に写したあとは、
+着地の揺れの絵にしか使わない。持ち主は、跳ねる爆弾の要約（TypeScript 版の `encode` と
+同じ並び）には無いが、`hash_world` がどの盤面の物にも混ぜる。
 """
 
 
