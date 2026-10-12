@@ -137,11 +137,9 @@ def advance_tongue(world: WorldState, player: PlayerState, tongue: Tongue) -> Pr
     アイテムは、舌が戻りきったときに効く。掴んだ瞬間は掴んだ音だけ、拾った音は効いた
     とき（原型も、効かせる処理の中で鳴らす）。
 
-    伸びている舌の上に爆風が来ると焼き切れる（`_burn`）。
+    伸びている舌の上に爆風が来ると焼き切れる。焼けたかは 1 tick の最後に見る
+    （`check_tongue_burn`）。
     """
-    burnt_at = _blast_on_tongue(world, tongue)
-    if burnt_at is not None:
-        return Progress(events=tuple(_burn(world, player, burnt_at)), done=True)
     tongue.elapsed = Tick(tongue.elapsed + 1)
     events: list[SimEvent] = []
     while tongue.steps < tongue_steps_by(tongue.elapsed):
@@ -158,6 +156,20 @@ def advance_tongue(world: WorldState, player: PlayerState, tongue: Tongue) -> Pr
                 events.extend(apply_item(world, player, tongue.caught))
             return Progress(events=tuple(events), done=True)
     return Progress(events=tuple(events))
+
+
+def check_tongue_burn(
+    world: WorldState, player: PlayerState, tongue: Tongue
+) -> Progress:
+    """伸びている舌の上に爆風があれば焼き切れる（原型の tongueBurnCheck。`_burn`）。
+
+    1 tick の最後（被弾を見たあと）に見るので、爆風が出た tick のうちに焼き切れる
+    （原型も同じ）。
+    """
+    burnt_at = _blast_on_tongue(world, tongue)
+    if burnt_at is None:
+        return Progress()
+    return Progress(events=tuple(_burn(world, player, burnt_at)), done=True)
 
 
 def _extend(world: WorldState, player: PlayerState, tongue: Tongue) -> list[SimEvent]:

@@ -238,14 +238,18 @@ class Testキツネ跳び:
         assert TechniqueMoment(player=0, moment=Moment.CHASER_CAST) in events
 
     def test_跳んでいるのは1秒(self) -> None:
-        """原型の答え：59 フレーム。この版は出した tick の終わりから数えて 59 tick。"""
+        """出した tick を含めて 60 tick。原型の答え：出したフレームのあと 59 フレーム。
+
+        出した tick には状態の時間が減らず（減らすのは次の tick の頭。原型も同じ）、
+        そのあと 59 tick 続く。
+        """
         world, fox, _ = leap()
         assert fox.effects.has(EffectKind.LEAP)
-        leaping = 1
+        after = 0
         for _ in range(120):
             simulation.step(world, idle(world))
-            leaping += 1 if fox.effects.has(EffectKind.LEAP) else 0
-        assert leaping == 59
+            after += 1 if fox.effects.has(EffectKind.LEAP) else 0
+        assert after == 59
 
     def test_盤面に相手がいなければ_跳ぶだけで炎は出さない(self) -> None:
         """原型の castFoxfire。チキンは使う。"""

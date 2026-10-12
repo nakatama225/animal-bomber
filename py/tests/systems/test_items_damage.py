@@ -971,8 +971,8 @@ class Test拾う:
         simulation.step(world, only_for(world, 0, IDLE))
         assert (first.power, second.power) == (2, 1)
 
-    def test_爆発した_tick_に焼けたアイテムは拾えない(self) -> None:
-        """拾うのは爆発のあと（`simulation.py` の 4.）。"""
+    def test_爆発する_tick_に足元にあるアイテムは_焼ける前に拾う(self) -> None:
+        """拾うのは爆発より先（`simulation.py` の 2. と 5.。原型の update と同じ）。"""
         world = make_world()
         clear_board(world)
         target, other = world.players
@@ -983,11 +983,12 @@ class Test拾う:
         other.position = Cell(21, 15).center()
         bomb.fuse = Tick(1)
         events = simulation.step(world, only_for(world, 0, IDLE))
-        assert ItemBurned(cell=Cell(3, 1), kind=ItemKind.FIRE) in events
-        assert target.power == 1
+        assert ItemTaken(cell=Cell(3, 1), kind=ItemKind.FIRE, taker=0) in events
+        assert not any(isinstance(e, ItemBurned) for e in events)
+        assert target.power == 2
 
     def test_被弾して足元へ吐き出したアイテムは_次の_tick_に拾う(self) -> None:
-        """拾うのは被弾より先（`simulation.py` の 5.）。同じ tick には拾い直さない。
+        """拾うのは被弾より先（`simulation.py` の 2. と 7.）。同じ tick に拾い直さない。
 
         (1, 1) の右端近く（x=1.9）に立つと、体（半径 `BLAST_HITBOX`）が右の (2, 1) に
         かかる。(2, 1) にだけ爆風を置くと、足元 (1, 1) には爆風が無いので、吐き出した

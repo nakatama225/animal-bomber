@@ -58,7 +58,6 @@
 """
 
 import math
-from collections.abc import Mapping
 
 from animal_bomber.domain.core.coord import Direction, Point
 from animal_bomber.domain.input.player_input import PlayerInput
@@ -74,7 +73,6 @@ from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.player import (
     Life,
-    PlayerId,
     PlayerState,
     is_frozen,
     speed_of,
@@ -82,12 +80,17 @@ from animal_bomber.domain.state.player import (
 from animal_bomber.domain.state.world import WorldState
 
 
-def move_players(world: WorldState, inputs: Mapping[PlayerId, PlayerInput]) -> None:
-    """生きているプレイヤーを、入力のとおりに動かす。プレイヤー番号の順に動かす。"""
-    for player in world.players:
-        if player.life is not Life.ALIVE:
-            continue
-        _move(world, player, inputs[player.id])
+def move_player(
+    world: WorldState, player: PlayerState, player_input: PlayerInput
+) -> None:
+    """1人ぶん。盤面にいるプレイヤーを、入力のとおりに動かす。
+
+    プレイヤーごとに「動く → 爆弾を置く → 技を始める → 拾う」を済ませる番の頭で呼ぶ
+    （`systems/simulation.py`。原型の update と同じ）。
+    """
+    if player.life is not Life.ALIVE:
+        return
+    _move(world, player, player_input)
 
 
 def _axis(player_input: PlayerInput, plus: PlayerInput, minus: PlayerInput) -> int:

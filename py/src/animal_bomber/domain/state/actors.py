@@ -10,7 +10,7 @@
 """
 
 from dataclasses import dataclass
-from typing import TypeAlias, assert_never
+from typing import Final, TypeAlias, assert_never
 
 from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.core.tick import Tick
@@ -92,6 +92,37 @@ class BurntTongue:
 
 Actor: TypeAlias = Pit | Foxfire | SlimeBomb | Scatter | BurntTongue
 """盤面で自分の規則で動き続けるもののどれか。"""
+
+
+OWNER_TURN: Final = -1
+"""`actor_turn` が返す、持ち主の番に進めるものの印。"""
+
+
+def actor_turn(actor: Actor) -> int:
+    """1 tick の中で、いつ進めるか（原型の update の並びに合わせる）。
+
+    - 0 以上 … プレイヤーが全員動き終わったあとに、数の小さい順に進める。同じ数どうしは
+      出た順。原型は種類ごとに順を決めて回す（落とし穴 → 葱 → 追いかける炎 → 撒く本体 →
+      跳ねる爆弾）。葱（1）は段階 8 で足す
+    - `OWNER_TURN` … 持ち主のプレイヤーの番に、状態の時間を減らす前に進める（焼けた舌が
+      戻るのは、原型ではプレイヤーごとの効果の処理の中）
+
+    TypeScript 版の `WorldActor.turn` と同じ値。跳ねる爆弾の爆発と、落とし穴に落ちる
+    のは、ふつうの爆弾の導火線より先になる（原型も同じ）。
+    """
+    match actor:
+        case Pit():
+            return 0
+        case Foxfire():
+            return 2
+        case Scatter():
+            return 3
+        case SlimeBomb():
+            return 4
+        case BurntTongue():
+            return OWNER_TURN
+        case _:
+            assert_never(actor)
 
 
 def actor_name(actor: Actor) -> str:

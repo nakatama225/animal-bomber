@@ -103,6 +103,23 @@ def advance_action(world: WorldState, player: PlayerState, action: Action) -> Pr
             assert_never(action)
 
 
+def check_after_damage(
+    world: WorldState, player: PlayerState, action: Action
+) -> Progress:
+    """被弾を見たあと（1 tick の最後）に、振る舞いが爆風に触れたかを見る。
+
+    爆風が出た tick のうちに見るため、進める（`advance_action`）のとは別にしてある
+    （原型も、被弾を見た直後に伸びている舌が焼けたかを見る）。
+    """
+    match action:
+        case Charge() | Dig():
+            return Progress()
+        case Tongue():
+            return frog.check_tongue_burn(world, player, action)
+        case _:
+            assert_never(action)
+
+
 def finish_action(
     world: WorldState, player: PlayerState, action: Action
 ) -> list[SimEvent]:

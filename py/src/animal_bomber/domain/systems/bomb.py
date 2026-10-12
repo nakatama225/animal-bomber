@@ -8,8 +8,6 @@
 `active_bombs` を引いたもの）を指す。
 """
 
-from collections.abc import Mapping
-
 from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import BombPlaced, SimEvent
@@ -25,7 +23,6 @@ from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.bomb import Bomb
 from animal_bomber.domain.state.player import (
     Life,
-    PlayerId,
     PlayerState,
     can_place_bomb,
     just_pressed,
@@ -34,47 +31,38 @@ from animal_bomber.domain.state.player import (
 from animal_bomber.domain.state.world import WorldState
 
 
-def step_bombs(
-    world: WorldState, inputs: Mapping[PlayerId, PlayerInput]
+def place_for(
+    world: WorldState, player: PlayerState, player_input: PlayerInput
 ) -> list[SimEvent]:
-    """爆弾を置き、導火線を進め、マスから出たプレイヤーを通り抜けの対象から外す。"""
-    events = _place(world, inputs)
-    _advance_fuses(world)
-    _release_pass_through(world)
-    return events
+    """1人ぶん。爆弾のボタンを押した瞬間に、1つ置く。
 
-
-def _place(world: WorldState, inputs: Mapping[PlayerId, PlayerInput]) -> list[SimEvent]:
-    """爆弾のボタンを押した瞬間に、1つ置く。番号の順に置く。
-
-    置くのは動いたあとのマス（原型の humanUpdate と同じ）。「勝手に設置」の拍に置くのは
+    そのプレイヤーが動いたすぐあとに呼ぶ（`systems/simulation.py`）ので、置くのは動いた
+    あとのマス（原型の humanUpdate と同じ）。番号の小さいプレイヤーが置いた爆弾は、同じ
+    tick にあとから動くプレイヤーの壁になる。「勝手に設置」の拍に置くのは
     `systems/autobomb.py` で、動く前に置く。
 
     置けない状態（落とし穴にはまっている・置けない振る舞いの最中・「爆弾おけない」）は
     `can_place_bomb` が見る。「勝手に設置」がかかっていれば「爆弾おけない」に勝つので、
     拍の合間にボタンでも置ける（原型と同じ）。
     """
-    events: list[SimEvent] = []
-    for player in world.players:
-        if player.life is not Life.ALIVE:
-            continue
-        if not can_place_bomb(player):
-            continue
-        if not just_pressed(player, inputs[player.id], PlayerInput.BOMB):
-            continue
-        bomb = place_bomb(world, player)
-        if bomb is not None:
-            events.append(BombPlaced(cell=bomb.cell, owner=bomb.owner))
-    return events
+    if player.life is not Life.ALIVE or not can_place_bomb(player):
+        return []
+    if not just_pressed(player, player_input, PlayerInput.BOMB):
+        return []
+    bomb = place_bomb(world, player)
+    if bomb is None:
+        return []
+    return [BombPlaced(cell=bomb.cell, owner=bomb.owner)]
 
 
-def _advance_fuses(world: WorldState) -> None:
+def advance_fuses(world: WorldState) -> None:
+    """導火線を 1 tick 進める（尽きた爆弾を爆発させるのは `systems/blast.py`）。"""
     for bomb in world.bombs:
         if bomb.fuse > 0:
             bomb.fuse = Tick(bomb.fuse - 1)
 
 
-def _release_pass_through(world: WorldState) -> None:
+def release_pass_through(world: WorldState) -> None:
     """体の中心が爆弾のマスから出たプレイヤーを、通り抜けの対象から外す。
 
     外したあとは、`is_solid_for` はそのプレイヤーにも「通れない」と答える。移動では、

@@ -67,45 +67,52 @@ SPIT_RING = (
 
 
 def step_items(world: WorldState) -> list[SimEvent]:
-    """足元のアイテムを拾い、溶けきったものと残る長さを過ぎたものを消す。
+    """全員ぶん拾ってから、消えるものを消す。
 
-    拾うのは生きているプレイヤーで、プレイヤー番号の順。消すのは拾ったあと（原型も、
-    拾ったあとに見る）。
+    1 tick の中では番が違うので、試合を進めるときは別々に呼ぶ（`pick_up_for` と
+    `remove_expired`）。
     """
-    events = _pick_up(world)
-    events.extend(_remove_expired(world))
-    return events
-
-
-def _pick_up(world: WorldState) -> list[SimEvent]:
     events: list[SimEvent] = []
     for player in world.players:
-        if player.life is not Life.ALIVE:
-            continue
-        # 通り道のアイテムを自分で扱う振る舞いの最中は、ここでは拾わない
-        # （`ActionTraits.sweeps_items`）。
-        if player.action is not None and traits_of(player.action).sweeps_items:
-            continue
-        cell = player.position.cell()
-        item = item_at(world, cell)
-        if item is None:
-            continue
-        # 撒いたプレイヤー自身は、自分の撒いたものを踏んでも拾わない（効かず、残る。
-        # 原型の pickupCheck）。鼻水で溶けている最中のものは、誰が踏んでも効かない。
-        if item.scattered_by == player.id or item.melting_until is not None:
-            continue
-        world.items.remove(item)
-        events.append(ItemTaken(cell=cell, kind=item.kind, taker=player.id))
-        events.extend(apply_item(world, player, item.kind))
+        events.extend(pick_up_for(world, player))
+    events.extend(remove_expired(world))
     return events
 
 
-def _remove_expired(world: WorldState) -> list[SimEvent]:
+def pick_up_for(world: WorldState, player: PlayerState) -> list[SimEvent]:
+    """1人ぶん。足元のアイテムを拾う。
+
+    そのプレイヤーが動いて、爆弾を置き、技を始めたすぐあとに呼ぶ（原型の update の
+    pickupCheck）。爆発より前なので、爆発する tick に踏み込んだアイテムは、焼ける前に
+    拾える。落とし穴に落ちるのも拾ったあと（TypeScript 版の `ItemSystem` と同じ）。
+    """
+    if player.life is not Life.ALIVE:
+        return []
+    # 通り道のアイテムを自分で扱う振る舞いの最中は、ここでは拾わない
+    # （`ActionTraits.sweeps_items`）。
+    if player.action is not None and traits_of(player.action).sweeps_items:
+        return []
+    cell = player.position.cell()
+    item = item_at(world, cell)
+    if item is None:
+        return []
+    # 撒いたプレイヤー自身は、自分の撒いたものを踏んでも拾わない（効かず、残る。
+    # 原型の pickupCheck）。鼻水で溶けている最中のものは、誰が踏んでも効かない。
+    if item.scattered_by == player.id or item.melting_until is not None:
+        return []
+    world.items.remove(item)
+    return [
+        ItemTaken(cell=cell, kind=item.kind, taker=player.id),
+        *apply_item(world, player, item.kind),
+    ]
+
+
+def remove_expired(world: WorldState) -> list[SimEvent]:
     """溶けきったものと、残る長さを過ぎたもの（うんこ・撒かれたもの）を消す。
 
-    後ろから順に見る。溶けているものは `melting_until` の tick に（その tick を含めて）
-    消え、残る長さのあるものは `expires_at` を過ぎた tick に消える（TypeScript 版と同じ
-    比べ方）。
+    盤面の物を進めたあと、爆発の前（原型の update の「うんこの寿命」）。後ろから順に
+    見る。溶けているものは `melting_until` の tick に（その tick を含めて）消え、残る
+    長さのあるものは `expires_at` を過ぎた tick に消える（TypeScript 版と同じ比べ方）。
     """
     events: list[SimEvent] = []
     for item in reversed(world.items):

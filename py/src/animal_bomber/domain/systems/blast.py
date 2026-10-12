@@ -89,14 +89,8 @@ class Detonation:
     """この連鎖で起きたイベント（焼けたアイテム・壊れたブロック・落ちたアイテム）。"""
 
 
-def step_blasts(world: WorldState) -> list[SimEvent]:
-    """導火線の尽きた爆弾を連鎖ごと爆発させ、爆風の残り時間を進める。"""
-    events = _detonate_expired(world)
-    _expire_blasts(world)
-    return events
-
-
-def _detonate_expired(world: WorldState) -> list[SimEvent]:
+def detonate_expired(world: WorldState) -> list[SimEvent]:
+    """導火線の尽きた爆弾を、置かれた順に連鎖ごと爆発させる。"""
     # 爆発させると world.bombs が変わるので、対象を先に決めておく。
     # `not bomb.chained` は、tick の始めにはいつも成り立つ（`Bomb.chained`）。
     # TypeScript 版と同じ形に揃えて残す。
@@ -112,7 +106,8 @@ def _detonate_expired(world: WorldState) -> list[SimEvent]:
     return events
 
 
-def _expire_blasts(world: WorldState) -> None:
+def expire_blasts(world: WorldState) -> None:
+    """爆風の残り時間を 1 tick 進め、尽きたものを消す。"""
     for blast in world.blasts:
         blast.remaining = Tick(blast.remaining - 1)
     world.blasts = [blast for blast in world.blasts if blast.remaining > 0]

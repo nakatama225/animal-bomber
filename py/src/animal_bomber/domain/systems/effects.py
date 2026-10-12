@@ -7,10 +7,16 @@
 処理」ができてしまうため。時間の進め方は全部の状態に共通で、作用は受け持ちごとに違う。
 """
 
-from animal_bomber.domain.state.world import WorldState
+from animal_bomber.domain.state.player import PlayerState
 
 
-def step_effects(world: WorldState) -> None:
-    """全員の一時的な状態を 1 tick 進め、切れたものを外す（倒れているプレイヤーも）。"""
-    for player in world.players:
-        player.effects.advance()
+def advance_effects_for(player: PlayerState) -> None:
+    """1人ぶん。一時的な状態を 1 tick 進め、切れたものを外す（倒れているプレイヤーも）。
+
+    そのプレイヤーの振る舞いを進める前に呼ぶ（原型の update は、プレイヤーごとに「効果の
+    時間を減らす → 技を進める → 勝手に設置」と回す）。そのため、番号の小さいプレイヤーの
+    技で番号の大きいプレイヤーに状態がかかると、その tick のうちに1回減り、番号の大きい
+    プレイヤーの技で小さいプレイヤーにかかると、減るのは次の tick から（原型と同じ。
+    かかる側の番号で 1 tick 違う。TypeScript 版の `EffectSystem` と同じ）。
+    """
+    player.effects.advance()

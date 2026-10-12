@@ -81,8 +81,11 @@ app → shell → presentation → net → ai → content → domain
 - `domain/query/` は読むだけです。状態を書き換えず、`domain/systems/` を import しません
   （CPU の判断（段階 6）も同じ問い合わせを使うため）
 - 1 tick の処理は `domain/systems/` に処理ごとのモジュールとして置き、`simulation.py` の
-  `step()` に順に並べます。並べる順の理由は `simulation.py` のモジュールの説明に、並びと
-  同じ番号で書いてください
+  `step()` に順に並べます。並びは原型の update と同じで、プレイヤーごとに済ませる処理は
+  1人ぶんの関数（`move_player`・`place_for` など）として出し、`step()` のプレイヤーごとの
+  輪の中で呼びます。並べる順の理由は `simulation.py` のモジュールの説明に、並びと同じ
+  番号で書いてください。並びを変えたら `tests/systems/test_tick_order.py`（原型を測った
+  答え）が失敗するので、原型の並びと食い違っていないかを確かめてください
 - 動物の技（`domain/abilities/`）は、`domain/systems/` の基本の操作（爆発させる・傷つける・
   アイテムを効かせる・爆弾を置く）を呼びます。`domain/systems/` から `domain/abilities/` を
   import してよいのは、技を呼び分ける `actions.py` と盤面の物を進める `actors.py` だけです

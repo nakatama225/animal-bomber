@@ -15,9 +15,11 @@ from animal_bomber.domain.abilities.frog import (
     advance_burnt_tongue,
     advance_slime,
     advance_tongue,
+    check_tongue_burn,
     throw_slime,
     tongue_reach_of,
 )
+from animal_bomber.domain.abilities.results import Progress
 from animal_bomber.domain.core.coord import Cell, Direction
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import (
@@ -420,14 +422,16 @@ class Test舌の長さと時間:
         """原型の答え：40 フレームで 5 マス伸びた舌の 2 マス目に爆風を置く。
 
         次のフレームで舌が消え、そのラウンドは 1 マスまで・3 秒泣く（181 フレーム）・
-        10 秒たつごとに1マス戻る。
+        10 秒たつごとに1マス戻る。焼けたかを見るのは、その tick の最後（被弾を見たあと。
+        `check_tongue_burn`）。
         """
         world, frog = frog_at()
         tongue = tongue_of(frog)
         for _ in range(40):
             advance_tongue(world, frog, tongue)
         add_blast(world, Cell(5, 5), 1, is_center=False)
-        assert advance_tongue(world, frog, tongue).done
+        assert not advance_tongue(world, frog, tongue).done
+        assert check_tongue_burn(world, frog, tongue).done
         assert tongue_reach_of(world, frog) == 1
         assert frog.effects.remaining(EffectKind.STUN) == 180
         reaches = []
@@ -452,6 +456,7 @@ class Test舌の長さと時間:
                 advance_tongue(world, frog, tongue)
             add_blast(world, Cell(5, 5), 1, is_center=False)
             advance_tongue(world, frog, tongue)
+            check_tongue_burn(world, frog, tongue)
             assert frog.effects.remaining(EffectKind.STUN) == after, f"前に {before}"
 
     def test_掴んで戻る途中で焼き切れると_掴んでいたものは焦げて効かない(self) -> None:
@@ -467,7 +472,8 @@ class Test舌の長さと時間:
             tick += 1
         assert tick == 31
         add_blast(world, Cell(4, 5), 1, is_center=False)
-        assert advance_tongue(world, frog, tongue).done
+        assert not advance_tongue(world, frog, tongue).done
+        assert check_tongue_burn(world, frog, tongue).done
         assert frog.power == before
         assert world.items == []
         assert tongue_reach_of(world, frog) == 0
@@ -496,6 +502,7 @@ class Test舌の長さと時間:
         assert tongue.length == 1
         add_blast(world, Cell(4, 5), 1, is_center=False)
         advance_tongue(world, frog, tongue)
+        check_tongue_burn(world, frog, tongue)
         assert (scar.limit, scar.until_regen) == (0, REGEN_TIME)
         back_at = None
         for tick in range(1, 701):
@@ -552,13 +559,18 @@ class Test舌の長さと時間:
             for tick in range(1, 61):
                 if burn and tick == 25:
                     add_blast(world, Cell(4, 5), 1, is_center=False)
-                progress = advance_tongue(world, frog, tongue)
-                for event in progress.events:
+                advanced = advance_tongue(world, frog, tongue)
+                checked = (
+                    Progress(done=True)
+                    if advanced.done
+                    else check_tongue_burn(world, frog, tongue)
+                )
+                for event in (*advanced.events, *checked.events):
                     if isinstance(event, TechniqueMoment):
                         log.append(f"{tick}:{event.moment.value}")
                     if isinstance(event, ItemTaken):
                         log.append(f"{tick}:itemTaken({event.cell})")
-                if progress.done:
+                if checked.done:
                     break
             return log
 

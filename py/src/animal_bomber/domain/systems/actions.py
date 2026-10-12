@@ -33,11 +33,14 @@
 
 ## 進めるのと始めるのを分ける
 
-続いている振る舞いを進めるのを先に全員ぶん済ませ、ボタンを見て新しく始めるのはそのあと。
-原型も、効果の処理の中で全員の技を進め、そのあとの入力の処理で技を始める。進めるときは
-1人ずつ、そのプレイヤーの「勝手に設置」（`systems/autobomb.py`）をすぐに呼ぶ。原型は
-プレイヤーごとに「技を進める → 勝手に設置」と回すので、番号の大きいプレイヤーの技が
-番号の小さいプレイヤーを押しのけたり、その爆弾を起こしたりする順まで同じになる。
+続いている振る舞いを進める（`advance_for`）のと、ボタンを見て新しく始める
+（`watch_for`）のは、1 tick の中で番が違う。原型は、プレイヤーごとの効果の処理の中で
+技を進め、全員ぶん済ませたあとの、プレイヤーごとの入力の処理（動く → 爆弾を置く →
+技を始める）で技を始める。どちらの番で呼ぶかは `systems/simulation.py` が決める
+（TypeScript 版の `ActionSystem` と同じ）。
+
+伸びている舌が爆風で焼き切れたかは、1 tick の最後（被弾を見たあと）に見る
+（`after_damage`。原型の tongueBurnCheck）。
 
 ⚠️ この tick に振る舞いを進めたプレイヤーは、同じ tick には新しく始めない（終わった tick
 でも）。原型は、技が終わったフレームのうちに次の技を始められる。1 tick の違いで、
@@ -57,11 +60,10 @@ TypeScript 版と同じ形のままにしてある。
 ここは押した長さを数えて呼び分けるだけ。
 """
 
-from collections.abc import Mapping
-
 from animal_bomber.domain.abilities.results import Started
 from animal_bomber.domain.abilities.techniques import (
     advance_action,
+    check_after_damage,
     finish_action,
     hold_technique,
     tap_technique,
@@ -70,32 +72,49 @@ from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import SimEvent, TechniqueUsed
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import stats_of
-from animal_bomber.domain.state.player import Life, PlayerId, PlayerState, is_frozen
+from animal_bomber.domain.state.player import Life, PlayerState, is_frozen
 from animal_bomber.domain.state.world import WorldState
-from animal_bomber.domain.systems.autobomb import autobomb_for
 
 
-def step_actions(
-    world: WorldState, inputs: Mapping[PlayerId, PlayerInput]
+def advance_for(world: WorldState, player: PlayerState) -> tuple[list[SimEvent], bool]:
+    """1人ぶん。通常技の間隔を 1 tick 減らし、乗っ取り中の振る舞いを 1 tick 進める。
+
+    返すのは、起きたイベントと、振る舞いを進めたか（進めたら、この tick は新しく始め
+    ない）。通常技の間隔（`ability_cooldown`）は、盤面にいないプレイヤーの分も減らす
+    （TypeScript 版と同じ。入力を受け取っているプレイヤーの分を減らす）。
+    """
+    if player.ability_cooldown > 0:
+        player.ability_cooldown = Tick(player.ability_cooldown - 1)
+    if player.action is None:
+        return [], False
+    return _advance(world, player), True
+
+
+def watch_for(
+    world: WorldState, player: PlayerState, player_input: PlayerInput
 ) -> list[SimEvent]:
-    """振る舞いを進め（1人ずつ、すぐあとに勝手に設置）、そのあと技のボタンを見る。
+    """1人ぶん。技のボタンの押し方を見て、技を出す。盤面にいるプレイヤーだけ。"""
+    if player.life is not Life.ALIVE:
+        return []
+    return _watch_button(world, player, player_input)
 
-    通常技の間隔（`ability_cooldown`）は、盤面にいないプレイヤーの分も減らす（TypeScript
-    版と同じ。入力を受け取っているプレイヤーの分を減らす）。
+
+def after_damage(world: WorldState) -> list[SimEvent]:
+    """被弾を見たあとに、振る舞いが爆風に触れたかを見る（伸びている舌の焼き切れ）。
+
+    盤面にいるプレイヤーだけ。終わったら後始末を呼んで外す。
     """
     events: list[SimEvent] = []
-    advanced: list[PlayerId] = []
     for player in world.players:
-        if player.ability_cooldown > 0:
-            player.ability_cooldown = Tick(player.ability_cooldown - 1)
-        if player.action is not None:
-            advanced.append(player.id)
-            events.extend(_advance(world, player))
-        events.extend(autobomb_for(world, player))
-    for player in world.players:
-        if player.id in advanced or player.life is not Life.ALIVE:
+        action = player.action
+        if action is None or player.life is not Life.ALIVE:
             continue
-        events.extend(_watch_button(world, player, inputs[player.id]))
+        progress = check_after_damage(world, player, action)
+        events.extend(progress.events)
+        if not progress.done:
+            continue
+        events.extend(finish_action(world, player, action))
+        player.action = None
     return events
 
 

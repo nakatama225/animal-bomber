@@ -4,10 +4,9 @@
 updateDigging・pitfallCheck）を画面なしで動かして測った値（TypeScript 版の
 `tests/abilities/pit.test.ts` と同じ場面）。
 
-動けない長さを tick の終わりに数えると、原型 181 フレーム・この版 179 tick で2つ違う。
-1つは原型の秒の小数の残り（1/60 秒ずつ 3 秒を引くと、181 回目で 0 を切る）。もう1つは
-減らす位置で、この版は動けない最後の tick の終わりに状態を消すので、その tick が数に
-入らない（`systems/simulation.py` の 8.）。幅を持たせて比べる。
+動けない長さを tick の終わりに数えると、原型 181 フレーム・この版 180 tick で1つ違う。
+原型の秒の小数の残りのため（1/60 秒ずつ 3 秒を引くと、181 回目で 0 を切る。減らす位置は
+原型と同じ。`systems/simulation.py` の 1.）。幅を持たせて比べる。
 """
 
 from animal_bomber.domain.abilities.elephant import CHARGE_DURATION
@@ -267,8 +266,9 @@ class Test落ちる:
         world.actors.append(Pit(cell=Cell(7, 5), owner=owner.id))
         events = simulation.step(world, idle(world))
         assert is_frozen(rabbit)
-        # 原型の PIT_HOLD 3 秒（180 tick）。落ちた tick の終わりに1つ減っている。
-        assert rabbit.effects.remaining(EffectKind.PITFALL) == 179
+        # 原型の PIT_HOLD 3 秒（180 tick）。落ちた tick には減らない（減らすのは次の
+        # tick の頭。原型も同じ）。
+        assert rabbit.effects.remaining(EffectKind.PITFALL) == 180
         # 泣いている（たまねぎ）のとは別の状態として持つ。
         assert not rabbit.effects.has(EffectKind.STUN)
         assert EffectApplied(target=rabbit.id, effect=EffectKind.PITFALL) in events
