@@ -29,12 +29,15 @@ ROOT = Path(__file__).resolve().parents[2]
 # 遊んだあとと流し直したあとの状態の要約、記録の文字列を出す。ラウンドをまたぐ台本
 # （`play_match`）の盤面の要約と勝ち数も出す。動物の技を通す3つの台本
 # （`tests/systems/technique_scenarios.py`。粘膜爆弾・焼けた舌・体当たり・落とし穴に
-# 落ちる、など `scenario.py` が通らない技も通る）の盤面の要約も出す。ルールの層を
-# 足したら、台本がそれを通るようにする（通らない処理の set の反復は、ここでは
-# 見つからない）。
+# 落ちる、など `scenario.py` が通らない技も通る）の盤面の要約も出す。CPU だけの試合
+# （`play_cpu_match`）の盤面の要約と勝ち数も出す（CPU の判断の set の反復を見る）。
+# ルールの層や CPU の判断を足したら、台本がそれを通るようにする（通らない処理の
+# set の反復は、ここでは見つからない）。
 DETERMINISTIC = """
 from animal_bomber.domain.state.world import hash_world
-from tests.determinism.scenario import play_and_record, play_match, replay
+from tests.determinism.scenario import (
+    play_and_record, play_cpu_match, play_match, replay,
+)
 from tests.systems.technique_scenarios import SCENARIOS, play
 
 played, log = play_and_record()
@@ -43,6 +46,8 @@ session = play_match()
 print(f"{hash_world(session.world):08x}", session.match)
 for scenario in SCENARIOS:
     print(scenario.name, f"{hash_world(play(scenario)):08x}")
+cpu = play_cpu_match()
+print(f"{hash_world(cpu.world):08x}", cpu.match)
 """
 
 # 対照。下の突き合わせが「種を変えられていない」ために通ってしまわないためのもの。

@@ -128,7 +128,7 @@ layers = [
     "shell",
     "presentation",
     "net",
-    "(ai)",
+    "ai",
     "(content)",
     "domain",
 ]
@@ -136,7 +136,7 @@ layers = [
 [[tool.importlinter.contracts]]
 name = "ルールの層は乱数・実時間・描画・環境で結果が違いうる計算を import しない"
 type = "forbidden"
-source_modules = ["animal_bomber.domain"]
+source_modules = ["animal_bomber.domain", "animal_bomber.ai"]
 forbidden_modules = [
     "random",
     "secrets",

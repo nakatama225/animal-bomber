@@ -15,6 +15,8 @@
 
 from dataclasses import dataclass
 
+from animal_bomber.ai.levels import CPU_LEVELS, CpuLevelKey
+from animal_bomber.ai.source import CpuInputSource, cpu_seed
 from animal_bomber.app.session import GameSession
 from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.core.tick import MatchTick, Tick
@@ -241,6 +243,40 @@ def play_match(ticks: int = MATCH_TICKS, seed: int = SEED) -> GameSession:
     sources.extend(
         SittingSource(player) for player in PLAYER_IDS[1 : len(MATCH_ANIMALS)]
     )
+    session = GameSession(config, sources)
+    for _ in range(ticks):
+        session.tick()
+    return session
+
+
+CPU_TICKS = 1500
+CPU_ANIMALS = (Animal.FROG, Animal.FOX, Animal.MOLE, Animal.ELEPHANT)
+"""CPU だけの試合の4匹。舌・狐火・穴・突進の判断を通す。
+
+`tests/ai/test_cpu_ts.py` の4段階の試合と同じ顔ぶれ。
+"""
+CPU_LEVEL_KEYS = (
+    CpuLevelKey.EASY,
+    CpuLevelKey.NORMAL,
+    CpuLevelKey.HARD,
+    CpuLevelKey.ONI,
+)
+"""4体の強さ（見落とし・攻めを見送る抽選も通す）。"""
+
+
+def play_cpu_match(ticks: int = CPU_TICKS, seed: int = SEED) -> GameSession:
+    """CPU だけの試合。CPU の判断（`ai/`）が set を反復しないことを見る。
+
+    CPU は試合の状態を読んで入力を返すだけなので、入力が変われば試合も変わる。hash の
+    種を変えたプロセスで盤面の要約が同じなら、CPU の判断も起動のしかたによらない。
+    """
+    config = MatchConfig(
+        seed=seed, animals=CPU_ANIMALS, wins_to_take=99, starting_hp=SCRIPT_HP
+    )
+    sources: list[InputSource] = [
+        CpuInputSource(player, CPU_LEVELS[level], cpu_seed(seed, player))
+        for player, level in zip(PLAYER_IDS, CPU_LEVEL_KEYS, strict=True)
+    ]
     session = GameSession(config, sources)
     for _ in range(ticks):
         session.tick()

@@ -33,6 +33,7 @@ from animal_bomber.domain.state.actors import Actor
 
 ROOT = Path(__file__).resolve().parents[2]
 DOMAIN = ROOT / "src" / "animal_bomber" / "domain"
+AI = ROOT / "src" / "animal_bomber" / "ai"
 
 KIND_NAMES = (
     *(animal.value for animal in Animal),
@@ -58,11 +59,16 @@ KIND_WORDS = re.compile(
 
 
 def watched() -> list[Path]:
-    """種類を知ってはいけないファイル。"""
+    """種類を知ってはいけないファイル。
+
+    CPU の判断（`ai/`）も、動物ごとの戦い方（`ai/tactics.py`）のほかは種類を知らない
+    （TypeScript 版の guards が `ai/` 直下と `ai/behaviors/` を見るのと同じ切り方）。
+    """
     return [
         *sorted((DOMAIN / "systems").glob("*.py")),
         *sorted((DOMAIN / "query").glob("*.py")),
         DOMAIN / "events.py",
+        *sorted(path for path in AI.glob("*.py") if path.name != "tactics.py"),
     ]
 
 
@@ -79,22 +85,31 @@ class Test種類が閉じていること:
         self,
     ) -> None:
         """見張るファイルの一覧が空だと、上の確かめは何も見ずに通る。"""
-        names = {path.relative_to(DOMAIN).as_posix() for path in watched()}
+        names = {path.relative_to(DOMAIN.parent).as_posix() for path in watched()}
         assert {
-            "systems/actions.py",
-            "systems/movement.py",
-            "systems/items.py",
-            "systems/damage.py",
-            "systems/bomb.py",
-            "query/board.py",
-            "events.py",
+            "domain/systems/actions.py",
+            "domain/systems/movement.py",
+            "domain/systems/items.py",
+            "domain/systems/damage.py",
+            "domain/systems/bomb.py",
+            "domain/query/board.py",
+            "domain/query/danger.py",
+            "domain/query/path.py",
+            "domain/events.py",
+            "ai/source.py",
+            "ai/behaviors.py",
+            "ai/bombs.py",
         } <= names
+        assert "ai/tactics.py" not in names
 
     def test_見張る言葉が_種類を扱うファイルには現れる(self) -> None:
         """前の確かめが「その言葉がどこにも無いだけ」で通ってしまわないための対照。"""
-        for name in ("abilities/elephant.py", "abilities/techniques.py"):
-            text = (DOMAIN / name).read_text(encoding="utf-8")
-            assert KIND_WORDS.search(text), name
+        for path in (
+            DOMAIN / "abilities/elephant.py",
+            DOMAIN / "abilities/techniques.py",
+            AI / "tactics.py",
+        ):
+            assert KIND_WORDS.search(path.read_text(encoding="utf-8")), path.name
 
     def test_見張る名前に_どの種類も入っている(self) -> None:
         """列挙や union から名前を取り出しそこねると、見張りが黙って狭くなる。"""

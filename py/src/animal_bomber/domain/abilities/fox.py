@@ -44,6 +44,13 @@ FOXFIRE_LIFETIME: Final = Tick(90)
 には進まず当たらない（TypeScript 版と同じ）。
 """
 
+FOXFIRE_REACH: Final = 8
+"""寿命のうちに進めるマス数。CPU が「届くか」を判断するのに使う（段階 6）。
+
+原型の CPU も floor(FOXFIRE_LIFE / FOXFIRE_STEP) = floor(1.5 / 0.17) で数える
+（TypeScript 版の `FOXFIRE_REACH` と同じ）。
+"""
+
 SEARCH_DEPTH: Final = 22
 """道を探す深さの上限（マス数。原型の foxfireStep と同じ）。"""
 

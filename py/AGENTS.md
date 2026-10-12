@@ -70,7 +70,7 @@ app → shell → presentation → net → ai → content → domain
 
 `pyproject.toml` の `[tool.importlinter]` の層の検査は `exhaustive = true` にしてあり、
 ここに並べていないディレクトリを `animal_bomber/` の直下に作ると失敗します
-（`net` を `network` と作った、など）。まだ作っていない層は括弧で囲んであります（`"(ai)"` など）。
+（`net` を `network` と作った、など）。まだ作っていない層は括弧で囲んであります（`"(content)"` など）。
 **層のディレクトリを作ったら括弧を外してください。** 括弧のままだと、あとでその層の
 ディレクトリを消しても黙って通ります。
 ルールと同じく結果を決める層（`content`・`ai`）を作ったときは、「ルールの層は乱数・実時間・
@@ -79,7 +79,7 @@ app → shell → presentation → net → ai → content → domain
 `domain/` の中の向きは検査していません。次の3つは守ってください。
 
 - `domain/query/` は読むだけです。状態を書き換えず、`domain/systems/` を import しません
-  （CPU の判断（段階 6）も同じ問い合わせを使うため）
+  （CPU の判断（`ai/`）も同じ問い合わせを使うため）
 - 1 tick の処理は `domain/systems/` に処理ごとのモジュールとして置き、`simulation.py` の
   `step()` に順に並べます。並びは原型の update と同じで、プレイヤーごとに済ませる処理は
   1人ぶんの関数（`move_player`・`place_for` など）として出し、`step()` のプレイヤーごとの
@@ -174,8 +174,12 @@ set の反復は、import でも構文木でも止められません。`tests/de
   なったので、直しが全部入った HEAD から出す形に替えました。
   段階を進めて出し直すときは、その段階で入る仕組み（葱ボン・延長戦など）を写しで止める
   のをやめ、止めたものと理由をテストの説明に書いてください
+- CPU の固定値（`tests/ai/test_cpu_ts.py` が読む `tests/ai/ts_cpu_values.json`）も同じ形で
+  出します。写すものに `ai/` を足し、CPU だけの試合を流して、tick ごとの入力と 100 tick ごとの
+  盤面を出します。CPU の判断の規則・順・乱数を引く順のどれかを変えると失敗します
 - `tests/boundary/test_closed_kinds.py` は、試合を進める処理（`domain/systems/`）・盤面への
-  問い合わせ（`domain/query/`）・イベント（`domain/events.py`）に、動物の名前と振る舞い・
+  問い合わせ（`domain/query/`）・イベント（`domain/events.py`）・CPU の共通の判断（`ai/` の
+  うち戦い方の `tactics.py` 以外）に、動物の名前と振る舞い・
   盤面の物のクラスの名前が現れないことを見ます。コメントも含みます。名前を書かずに種類を
   見分ける書き方（`action_name`・`actor_name`・`encode_action`・`encode_actor`・
   `isinstance`・`hasattr`・`getattr`）も失敗にします。共通の処理は種類を
@@ -204,3 +208,17 @@ catch-all（`case _:`）を足して黙らせないでください。
   でください。振る舞いが移動・爆弾・拾う・被弾に割り込むときは、`ActionTraits` に性質を
   足し、処理はその性質だけを見ます（突進が特別扱いなしで書けているのが、この形の確かめ
   です）
+- CPU の戦い方は `ai/tactics.py` の `tactic_of` の `match` に書きます。動物を足すと、ここも
+  mypy が失敗します
+
+## CPU の判断（`ai/`）
+
+- CPU は入力を返すだけです。試合の状態を書き換えず、試合の乱数（`world.rng`）も引きません
+  （`tests/ai/test_cpu.py` が、入力を返す前と後で状態の要約が同じことを見ます）。CPU の乱数は
+  `CpuInputSource` が持つ `Rng` です
+- 判断の規則は `ai/behaviors.py` に関数を1つ書き、`ai/chain.py` の `DEFAULT_CHAIN` に並べます。
+  並びの順がそのまま優先順位です。試すのは `for` 文で書きます（`chain.py` の説明）
+- ⛔ 「袋小路では爆弾を置かない」を足さないでください。開幕はどこも袋小路なので、
+  CPU が永久に爆弾を置かなくなります（原型で実際に起きました）
+- 規則を変えると、乱数を引く順が変わることがあります。TypeScript 版と比べるテスト
+  （`tests/ai/test_cpu_ts.py`）が失敗したら、TypeScript 版も同じく変えたかを確かめてください

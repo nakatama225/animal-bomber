@@ -106,6 +106,7 @@ class Testルールの層:
         files = checked_files(PACKAGE)
         # 場所を間違えて1つも読んでいないと、何も見ずに通ってしまう。
         assert PACKAGE / "domain" / "core" / "statehash.py" in files
+        assert PACKAGE / "ai" / "source.py" in files
         assert PACKAGE / "presentation" / "__init__.py" not in files
         found = scan(PACKAGE)
         assert not found, "\n".join(found)
@@ -115,8 +116,8 @@ class Testルールの層:
     ) -> None:
         """走査の範囲の確認。浅い所しか見ない・外す層を取り違える、を防ぐ。
 
-        まだ無い層（`ai/`）も見ること。見る先を `domain/` だけに絞ると、あとで作る
-        CPU の層で `round()` を使っても見つからない。
+        CPU の層（`ai/`）も見ること。見る先を `domain/` だけに絞ると、CPU の層で
+        `round()` を使っても見つからない。
         """
         rules = tmp_path / "domain" / "systems"
         cpu = tmp_path / "ai"
