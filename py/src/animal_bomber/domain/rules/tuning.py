@@ -241,7 +241,7 @@ AUTOBOMB_INTERVAL_SECONDS: Final = 0.5
 
 ⚠️ 毎 tick 置こうとしない。毎 tick だと、歩きながら隣り合うマスに続けて置き、爆発で
 手持ちが戻った次の tick に置き直す。原型は 0.5 秒に1回で、素の速さで歩くと1マス
-おきに並ぶ（TypeScript 版も 32bf68b で合わせた）。
+おきに並ぶ（TypeScript 版も 2ce8030 で合わせた）。
 """
 
 AUTOBOMB_INTERVAL: Final = seconds_to_ticks(AUTOBOMB_INTERVAL_SECONDS)
@@ -263,7 +263,7 @@ ROUND_INTERMISSION_SECONDS: Final = 2
 
 ⚠️ 決まった tick のうちに盤面を作り直すと、決着をつけた爆発も、倒れる瞬間も、画面に
 1度も描かれない（描く前に次の盤面へ切り替わる）。決着の場面を見せるために、前の盤面を
-止めたまま少し待つ（TypeScript 版は c391fa1 で直した）。ラウンドの間に出す画面
+止めたまま少し待つ（TypeScript 版は 42d1cda で直した）。ラウンドの間に出す画面
 （段階 10）は、この待ちの間に重ねる。
 """
 

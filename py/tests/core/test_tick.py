@@ -38,5 +38,5 @@ class TestTick:
 
 class Test秒で書いた定数:
     def test_tickに直した値が_TypeScript版と同じ(self) -> None:
-        """期待する値は、TypeScript 版の段階 2（9c89418）の定数を node で出したもの。"""
+        """期待する値は、TypeScript 版の段階 2（381e9fc）の定数を node で出したもの。"""
         assert (BOMB_FUSE, BLAST_DURATION) == (144, 28)
