@@ -11,7 +11,7 @@ const HTML = require('path').join(__dirname, '..', 'animal-bomber.html');
 const src = fs.readFileSync(HTML, 'utf8');
 let code = [...src.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1])[0];
 
-/* ---- stubs ---- */
+/* ---- 代わりの部品 ---- */
 const noop = () => {};
 const gradStub = { addColorStop: noop };
 const ctxStub = new Proxy({}, {
@@ -496,7 +496,7 @@ t('きつね：アイテムで増えると一列も伸びる', () => {
 t('きつねの一列はブロックで止まる', () => {
   const [p, q] = fresh({ p1: 'fox', clear: true });
   q.state = 'OUT';
-  X.applyItem(p, X.IT_BOMB); X.applyItem(p, X.IT_BOMB);  // maxBombs 4
+  X.applyItem(p, X.IT_BOMB); X.applyItem(p, X.IT_BOMB);  // maxBombs が 4 になる
   p.cx = 1.5; p.cy = 1.5; p.dir = 'right';
   X.grid[1][3] = X.SOFT;                    // 前から2マス目を塞ぐ
   X.doAction(p);
@@ -718,7 +718,7 @@ t('他人が自分の足元に爆弾を置いても動ける', () => {
 
 t('きつねの一列が他人を貫いても、その他人は詰まない', () => {
   const [a, b] = fresh({ p1: 'fox', p2: 'frog' });
-  X.applyItem(a, X.IT_BOMB);            // maxBombs 3
+  X.applyItem(a, X.IT_BOMB);            // maxBombs が 3 になる
   a.cx = 1.5; a.cy = 1.5; a.dir = 'right';
   b.cx = 2.5; b.cy = 1.5;               // 一列の途中に立ってる
   X.doAction(a);
@@ -3092,7 +3092,7 @@ t('パッド: 2人プレイでは操作にもポーズにも効かない（1台�
   fresh({ p1: 'rabbit', p2: 'frog', mode: '2p', clear: true });
   padOff();
   const paused0 = X.G.paused;
-  padPoll(fakePad([9]));                               // Start
+  padPoll(fakePad([9]));                               // Start ボタン
   eq(X.G.paused, paused0, '2人プレイでパッドのポーズが効いた（肘が当たって止まる）');
   padPoll(fakePad([0]));                               // A
   eq(X.keys.has('Pad:A'), false, '2人プレイでパッドのボタンが注入された');
@@ -3110,7 +3110,7 @@ t('パッド: Start を押しっぱなしにしてもポーズが即解除され
   fresh({ p1: 'rabbit', mode: '1p', clear: true });
   padOff();
   X.G.phase = 'play'; X.G.paused = false;
-  padPoll(fakePad([9]));                    // Start
+  padPoll(fakePad([9]));                    // Start ボタン
   eq(X.G.paused, true, 'Start でポーズできない');
   /* ⛔ ここで pressed.clear() を挟まない。画面遷移のトリガに pressed.has() を使うと
      「loop() の末尾が毎フレーム掃除してくれる」前提に依存する。その前提は
@@ -3864,7 +3864,7 @@ t('★チップを押したら見た目も追いつく（set の戻り値で早�
   const sd = () => X.MENU.reg.rules.sd;
   const wins = () => X.MENU.reg.rules.wins;
 
-  sd()[1].act();                              // OFF
+  sd()[1].act();                              // オフにする
   eq(X.CFG.sudden, false, 'OFF にできない');
   ok(sd()[1].base.indexOf('on') >= 0, 'OFF を押したのに印が付いていない');
 
@@ -4060,7 +4060,7 @@ t('設定へ: ポーズしていない試合中に Select を押しても何も�
   padPlay();
   eq(X.G.phase, 'play', '前提：試合中');
   eq(X.G.paused, false, '前提：ポーズしていない');
-  menuTap(8);                                   // Select
+  menuTap(8);                                   // Select ボタン
   eq(X.MENU.dialog, null, '肘が当たっただけで確認が出てしまう');
   eq(X.G.phase, 'play', '試合が終わってしまった');
   padOff();
@@ -4069,9 +4069,9 @@ t('設定へ: ポーズしていない試合中に Select を押しても何も�
 
 t('設定へ: Start でポーズしてから Select で確認が出る', () => {
   padPlay();
-  menuTap(9);                                   // Start
+  menuTap(9);                                   // Start ボタン
   eq(X.G.paused, true, '前提：Start でポーズできていない');
-  menuTap(8);                                   // Select
+  menuTap(8);                                   // Select ボタン
   ok(X.MENU.dialog, '確認が出ていない');
   eq(X.MENU.dialog.items.length, 2, '「やめる」と「設定へもどる」の2つが並んでいない');
   padOff();
@@ -4135,7 +4135,7 @@ t('設定へ: ゲストはポーズできないので Select 単体で出る', (
   padPlay({ mode: 'lan', role: 'guest' });
   menuTap(9);                                   // Start（ゲストは効かない）
   eq(X.G.paused, false, '前提：ゲストはポーズできない');
-  menuTap(8);                                   // Select
+  menuTap(8);                                   // Select ボタン
   ok(X.MENU.dialog, 'ゲストが確認を出せない＝コントローラーで抜けられない');
   X.MENU.closeDialog();
   X.NET.role = null;
@@ -4153,7 +4153,7 @@ t('設定へ: キーボードの矢印も同じ入口を通る（KEY_TO_PAD 経�
   return '矢印でも動く';
 });
 
-/* ---------- report ---------- */
+/* ---------- 結果を出す ---------- */
 console.log('');
 for (const [mark, name, msg] of results) {
   console.log(`${mark} ${name}${msg ? `  — ${msg}` : ''}`);

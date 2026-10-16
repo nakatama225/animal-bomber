@@ -104,7 +104,7 @@ function pair(opts = {}) {
   if (opts.clear) {
     const { grid, ROWS, COLS } = host.X;
     for (let y = 1; y < ROWS - 1; y++) for (let x = 1; x < COLS - 1; x++) {
-      if (grid[y][x] === 2) grid[y][x] = 0;   // SOFT -> EMPTY
+      if (grid[y][x] === 2) grid[y][x] = 0;   // 壊せるブロック（SOFT）を空き（EMPTY）にする
     }
   }
   host.X.NET.role = 'host';
@@ -739,7 +739,7 @@ t('★ゲストが遅れて入っても今の設定が届く（buildLobby が配
   return `peer_joined で ${outbox.filter(m => m.t === 'lobby').length} 回配った`;
 });
 
-/* ---------- report ---------- */
+/* ---------- 結果を出す ---------- */
 t('★誰も接続していない人間枠を作らない（ホストの分身が動き出すのを防ぐ）', () => {
   /* 2026-08-22 実測の回帰テスト。修正#1（ホストも LAN モードに入る）を入れた
      ことで初めて到達するようになった経路。

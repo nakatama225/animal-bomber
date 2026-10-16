@@ -1,4 +1,4 @@
-/* headless simulation harness for animal-bomber.html
+/* animal-bomber.html を画面なしで回して、試合を確かめる土台
    DOM / canvas / WebAudio をスタブして、ゲームロジックだけ node で回す */
 const fs = require('fs');
 const path = require('path');
@@ -9,7 +9,7 @@ const blocks = [...src.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1])
 if (blocks.length !== 1) { console.error('script blocks:', blocks.length); process.exit(1); }
 let code = blocks[0];
 
-/* ---------------- stubs ---------------- */
+/* ---------------- 代わりの部品 ---------------- */
 const noop = () => {};
 const gradStub = { addColorStop: noop };
 const fnCache = {};
@@ -50,7 +50,7 @@ global.clearInterval = noop;
 global.setTimeout = () => 0;
 global.clearTimeout = noop;
 
-/* ---------------- expose internals ---------------- */
+/* ---------------- 中の関数を外から使えるようにする ---------------- */
 code += `
 global.__X = {
   get G(){return G}, get players(){return players}, get bombs(){return bombs},
@@ -65,7 +65,7 @@ global.__X = {
 new Function(code)();
 const X = global.__X;
 
-/* ---------------- run ---------------- */
+/* ---------------- 走らせる ---------------- */
 function runMatch(seedLabel, opts = {}) {
   const hp = opts.hp ?? 3;
   Object.assign(X.CFG, { mode: opts.mode || '1p', hpP1: hp, hpP2: hp, hpCPU: hp,
@@ -232,7 +232,7 @@ for (const r of results) {
   if (r.stuck) console.log(`  ⚠️ ラウンドが終わらなかった`);
 }
 
-/* ---------------- aggregate checks ---------------- */
+/* ---------------- 全体の数字を確かめる ---------------- */
 console.log('\n================ 判定 ================');
 const ok = [];
 const ng = [];
