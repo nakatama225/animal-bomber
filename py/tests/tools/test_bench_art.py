@@ -77,7 +77,10 @@ def test_場面は_取っておいた絵を薄めずに貼り_測る間に絵を
       例外は回りながら浮かぶ顔（`bench_particles.py`）なので、ここでは顔を出さない
     - 先に描いておいた絵で足りること（測る間に描くと、そのフレームが遅れる）
     - 貼った数が、場面が持つ数より少なくない（爆風 297 件は2枚ずつ・アイテム 20 個は
-      2枚か7枚ずつ・爆弾 8 個は4〜6枚ずつ・体 4・光の玉 105）
+      2枚か7枚ずつ・爆弾 8 個は4〜6枚ずつ・プレイヤー 4 体・粘膜爆弾・炎・光の玉 105）。
+      プレイヤーは、接地影と輪・体・印の3枚に、かえるは舌の根元と吸盤の2枚以上、もぐらは
+      掘る身ぶりの穴・土の山2つ・つるはし・ゲージ2枚の6枚以上、きつねはゲージ2枚を足す
+      （合わせて 22 枚以上）。粘膜爆弾は影と体の1枚以上、炎は跡3マスと火の玉と芯の5枚
     """
     completed = subprocess.run(
         [sys.executable, "-c", COUNTING],
@@ -91,6 +94,8 @@ def test_場面は_取っておいた絵を薄めずに貼り_測る間に絵を
     seen = json.loads(completed.stdout.strip().splitlines()[-1])
     assert seen["drawn"] == 0
     assert seen["counts"]["items"] == 20
+    assert (seen["counts"]["slimes"], seen["counts"]["foxfires"]) == (1, 1)
+    players = 4 * 3 + 2 + 6 + 2
     for alpha_blits, faded_blits in seen["frames"]:
         assert faded_blits == 0
-        assert alpha_blits >= 297 * 2 + 20 * 2 + 8 * 4 + 4 + 105
+        assert alpha_blits >= 297 * 2 + 20 * 2 + 8 * 4 + players + 1 + 5 + 105

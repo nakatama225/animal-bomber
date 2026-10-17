@@ -1,20 +1,26 @@
 """描画の層（`presentation/render/`）の取っておいた絵を通して描く、重い場面。
 
 `tools/bench_art.py` から使う。`bench_scene.py` と同じいちばん重い場面（延長戦で盤面が
-ほぼ全部燃えている瞬間。爆風 297 件・粒子 105 個）に、プレイヤー 4 体（うさぎの体。
-歩く・止まる・向きの違う姿を混ぜる）・爆弾 8 個・アイテム 20 個を、描画の層の取って
-おいた絵（`render/baked/`）を通して重ねる。
+ほぼ全部燃えている瞬間。爆風 297 件・粒子 105 個）に、プレイヤー 4 体・爆弾 8 個・
+アイテム 20 個・粘膜爆弾 1 個・追いかける炎 1 本を、描画の層の取っておいた絵
+（`render/baked/`）を通して重ねる。プレイヤーは4匹の違う動物で、どれも技の絵や状態の
+印を出している（重い側で測る。動きは `bench_art_cast.py`）。
 
 `bench_scene.py` との違い：
 
-- 床・アイテム・爆弾・爆風・体は、原型の描く関数の写し（`render/art/`）で描いた絵を
-  貼る（`bench_scene.py` は TypeScript 版の色で描いた代わりの絵と、同じ大きさの円）
-- アイテム 20 個を足した（`bench_scene.py` は描いていない）。うんこはいつも点滅させる
-- 粒子（四角い粒・光の玉・回りながら浮かぶ顔）は、原型の描く関数をまだ写していない
-  ので、`bench_particles.py` をそのまま使う
+- 床・アイテム・爆弾・爆風・プレイヤー・技・粘膜爆弾・炎は、原型の描く関数の写し
+  （`render/art/`）で描いた絵を貼る（`bench_scene.py` は TypeScript 版の色で描いた
+  代わりの絵と、同じ大きさの円）
+- アイテム 20 個・粘膜爆弾・炎を足した（`bench_scene.py` は描いていない）。うんこは
+  いつも点滅させる
+- 粒子（四角い粒・光の玉・回りながら浮かぶ顔）は `bench_particles.py` をそのまま使う
+  （原型の粒子を描く関数の写しは `render/art/particles.py` にあるが、測定の粒子の数と
+  種類は段階 0 の判定に合わせてある）
 
-並べる順は原型の draw と同じ（床・アイテム・爆弾・爆風・プレイヤー・粒子）。背景は
-揺らさず、それより上を画面の揺れ（整数の px）でずらす。
+並べる順は原型の draw と同じ（床・アイテム・爆弾・爆風・プレイヤー・炎・粘膜爆弾・
+粒子）。背景は揺らさず、それより上を画面の揺れ（整数の px）でずらす。場面で使う絵は、
+作るときに全部描いておく（試合の前に描いておく `BakedArt.prebuild` と、場面だけで使う
+印の組み合わせ）。
 """
 
 import math
@@ -27,16 +33,18 @@ import pygame
 from animal_bomber.domain.core.coord import Cell, Direction
 from animal_bomber.domain.core.entity_id import EntityId
 from animal_bomber.domain.core.tick import Tick
-from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.rules.tuning import BLAST_DURATION, BOMB_FUSE, COLS, ROWS
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.bomb import Blast, Bomb
 from animal_bomber.domain.state.item import Item
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng
-from animal_bomber.presentation.render.art.animals.body import BodyPose
+from animal_bomber.presentation.render.art.player import BLINK_ALPHA
+from animal_bomber.presentation.render.art.player_marks import MAX_MARKS
 from animal_bomber.presentation.render.baked.art import BakedArt
 from animal_bomber.presentation.render.layout import Layout
+from animal_bomber.presentation.render.views.actors import slime_look
+from bench_art_cast import CAST, Walker, foxfire_at, player_look, slime_at
 from bench_particles import ParticleKind, Particles
 from bench_sprites import open_cells, vertical_gradient
 
@@ -55,6 +63,8 @@ class ArtSceneSpec:
     players: int = 4
     bombs: int = 8
     items: int = 20
+    slimes: int = 1
+    foxfires: int = 1
 
     @property
     def size(self) -> tuple[int, int]:
@@ -62,21 +72,11 @@ class ArtSceneSpec:
         return Layout(self.tile).surface_size
 
 
-@dataclass
-class _Walker:
-    """場面のプレイヤー1体（体を描くための値）。"""
-
-    home: tuple[float, float]
-    facing: Direction
-    walking: bool
-    walked: float = 0.0
-
-
 class ArtScene:
     """1 フレームずつ描ける場面。作る前に `pygame.display.set_mode` を済ませておく。
 
-    作るときに、試合で使う絵を全部先に描いておく（描画の層の `BakedArt.prebuild`）。
-    かかった時間は `prebuild_ms` に入れる。
+    作るときに、場面で使う絵を全部先に描いておく（描画の層の `BakedArt.prebuild` と、
+    場面で出る状態の印の組み合わせ）。かかった時間は `prebuild_ms` に入れる。
     """
 
     def __init__(self, spec: ArtSceneSpec, rng: random.Random) -> None:
@@ -86,8 +86,25 @@ class ArtScene:
         layout = Layout(spec.tile)
         self._layout = layout
         self._art = BakedArt(layout)
+        corners = [
+            (1.5, 1.5),
+            (COLS - 1.5, 1.5),
+            (1.5, ROWS - 1.5),
+            (COLS - 1.5, ROWS - 1.5),
+        ]
+        facings = [Direction.RIGHT, Direction.DOWN, Direction.UP, Direction.LEFT]
+        self._walkers = [
+            Walker(CAST[i % len(CAST)], corners[i % 4], facings[i % 4])
+            for i in range(spec.players)
+        ]
         started = time.perf_counter()
-        self._art.prebuild([Animal.RABBIT])
+        self._art.prebuild(list(dict.fromkeys(w.animal for w in self._walkers)))
+        # 状態の印の組み合わせは、出たときに描く（`BakedArt.prebuild`）。場面では
+        # どのフレームも同じ組み合わせなので、測る前に描いておく。
+        for walker in self._walkers:
+            marks = "".join(player_look(walker, 0).marks[:MAX_MARKS])
+            for alpha in (1.0, BLINK_ALPHA):
+                self._art.players.marks(marks, alpha)
         self.prebuild_ms = (time.perf_counter() - started) * 1000
         self._background = vertical_gradient(spec.size, (35, 24, 16), (23, 15, 10))
         self._board_origin = (math.floor(layout.origin_x), math.floor(layout.origin_y))
@@ -106,17 +123,6 @@ class ArtScene:
             Bomb(EntityId(i), Cell(*rng.choice(cells)), 0, 1, BOMB_FUSE)
             for i in range(spec.bombs)
         ]
-        corners = [
-            (1.5, 1.5),
-            (COLS - 1.5, 1.5),
-            (1.5, ROWS - 1.5),
-            (COLS - 1.5, ROWS - 1.5),
-        ]
-        facings = [Direction.RIGHT, Direction.DOWN, Direction.UP, Direction.LEFT]
-        self._walkers = [
-            _Walker(corners[i % 4], facings[i % 4], walking=i != 2)
-            for i in range(spec.players)
-        ]
         self._particles = Particles(
             spec.particle_kind, spec.particles, spec.spinners, spec.tile, "baked", rng
         )
@@ -131,6 +137,8 @@ class ArtScene:
             "players": len(self._walkers),
             "bombs": len(self._bombs),
             "items": len(self._items),
+            "slimes": self._spec.slimes,
+            "foxfires": self._spec.foxfires,
         }
 
     @property
@@ -170,30 +178,17 @@ class ArtScene:
         for blast in self._blasts:
             blast.remaining = Tick(BLAST_DURATION - frame % BLAST_DURATION)
             art.blasts.draw(target, blast, self._cosmetic, shake)
-        self._draw_players(target, now, shake)
+        for walker in self._walkers:
+            art.players.draw(
+                target, player_look(walker, frame), now, self._cosmetic, shake
+            )
+        for index in range(self._spec.foxfires):
+            art.foxfires.draw(target, foxfire_at(frame, 3 + index * 4), now, shake)
+        for index in range(self._spec.slimes):
+            slime, origin = slime_at(frame, Cell(9 + index * 2, 9))
+            art.slimes.draw(target, slime_look(slime, origin, True), now, shake)
         self._particles.draw(target, bx + shake[0], by + shake[1])
         self._particles.step()
-
-    def _draw_players(
-        self, target: pygame.Surface, now: Tick, shake: tuple[int, int]
-    ) -> None:
-        """プレイヤーの体を描く。歩いている体は、向きの方へ行き来させる。"""
-        layout = self._layout
-        for walker in self._walkers:
-            x, y = walker.home
-            if walker.walking:
-                walker.walked += 0.075  # うさぎの素の速さ（1 tick あたりのマス）
-                dx, dy = walker.facing.delta
-                swing = math.sin(walker.walked * 0.8) * 0.5
-                x, y = x + dx * swing, y + dy * swing
-            pose = BodyPose(
-                Animal.RABBIT,
-                walker.facing,
-                walker.walked,
-                now if walker.walking else None,
-            )
-            art_x, art_y = layout.px(x) + shake[0], layout.py(y) + shake[1]
-            self._art.bodies.draw(target, pose, now, art_x, art_y)
 
     def _board_layer(self) -> pygame.Surface:
         """床と壁を1枚に貼った面（盤面の左上を整数の px に丸めた位置から）。

@@ -142,12 +142,14 @@ for (const tile of TILES) {
   }
 }
 const T0 = 44;
-// 無敵の点滅（消える側と出る側）
-playerCase('rabbit-invuln-dim', T0, 300, playerOf('rabbit', { invuln: 0.7 }));
+// 無敵の点滅（消える側と出る側）。floor(invuln×14) が偶数のとき薄くなる。
+// 0.75 は floor(10.5) = 10 で薄く、0.65 は floor(9.1) = 9 で薄くならない。
+// （初めは消える側も 0.7 にしていたが、floor(9.8) = 9 で薄くならず、薄くなる側を確かめていなかった）
+playerCase('rabbit-invuln-dim', T0, 300, playerOf('rabbit', { invuln: 0.75 }));
 playerCase('rabbit-invuln-lit', T0, 300, playerOf('rabbit', { invuln: 0.65 }));
-// ブロックの中を通っている（薄く描く）
+// ブロックの中を通っている（薄く描く）。点滅で薄いときは、薄いほう（0.35）を採る
 playerCase('mole-in-block', T0, 300, playerOf('mole', { dir: 'right' }), X.SOFT);
-playerCase('mole-in-block-invuln', T0, 300, playerOf('mole', { dir: 'right', invuln: 0.7 }), X.SOFT);
+playerCase('mole-in-block-invuln', T0, 300, playerOf('mole', { dir: 'right', invuln: 0.75 }), X.SOFT);
 // 落とし穴にはまっている
 for (const dir of ['down', 'left']) {
   playerCase(`elephant-pitfall-${dir}`, T0, 300, playerOf('elephant', { dir, effects: { pitfall: 1.8 } }));

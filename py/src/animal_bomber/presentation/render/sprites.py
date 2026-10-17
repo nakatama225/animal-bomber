@@ -126,7 +126,7 @@ class SpriteCache:
         key: Hashable,
         box: Box,
         draw: Callable[[Canvas], None],
-        only_paint: int | None = None,
+        only_paint: int | range | None = None,
     ) -> Sprite:
         """`key` の絵。無ければ `draw` で範囲 `box` を描いて取っておく。
 
@@ -165,7 +165,7 @@ class SpriteCache:
         return copy
 
     def _render(
-        self, box: Box, draw: Callable[[Canvas], None], only_paint: int | None
+        self, box: Box, draw: Callable[[Canvas], None], only_paint: int | range | None
     ) -> Sprite:
         """範囲 `box` を描いて、貼れる形の絵にする。
 

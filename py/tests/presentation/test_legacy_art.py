@@ -16,9 +16,13 @@
 
 体・頭・尻尾・目・角の丸い四角は、原型では drawPlayer の中で呼ばれる。drawPlayer は
 足元の影・色の輪・状態の印も描くので、固定値にはこれらの部品を直接呼んだケースも
-入れてある（`legacy_art.js` の後半）。
+入れてある（`legacy_art.js` の後半）。プレイヤー・粘膜爆弾・炎・粒子・1枚の絵の入力は、
+原型の項目の名前で書き出してあるので、描く関数の入力の形に直してから渡す
+（`legacy_inputs.py`）。
 
-まだ写していない描く関数のケースは、名前を挙げて飛ばす（`NEXT_STAGE`）。
+まだ写していない描く関数のケースは、名前を挙げて飛ばす（`NEXT_STAGE`）。いまは全部
+写してあるので空。固定値に描く関数を足したら（葱ボンの段階 8 など）、写すまでここに
+挙げる。
 """
 
 from collections.abc import Callable
@@ -26,14 +30,12 @@ from typing import Any
 
 import pytest
 
-from animal_bomber.domain.core.coord import Cell, Direction
+from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.core.entity_id import EntityId
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.animals import Animal
-from animal_bomber.domain.rules.items import POOP_LIFETIME, ItemKind
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.bomb import Blast, Bomb
-from animal_bomber.domain.state.item import Item
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng, ScriptedRandom
 from animal_bomber.presentation.render.art.animals.body import (
     BodyPose,
@@ -46,55 +48,33 @@ from animal_bomber.presentation.render.art.animals.tail import draw_tail
 from animal_bomber.presentation.render.art.blasts import draw_blast
 from animal_bomber.presentation.render.art.board import draw_tile
 from animal_bomber.presentation.render.art.bombs import draw_bomb
+from animal_bomber.presentation.render.art.foxfires import draw_foxfire
+from animal_bomber.presentation.render.art.frame import draw_frame
 from animal_bomber.presentation.render.art.items import draw_item
+from animal_bomber.presentation.render.art.particles import draw_particle
+from animal_bomber.presentation.render.art.player import draw_player
 from animal_bomber.presentation.render.art.shapes import ink_line, round_rect
+from animal_bomber.presentation.render.art.slimes import draw_slime
 from animal_bomber.presentation.render.canvas.recording import RecordingCanvas
 from animal_bomber.presentation.render.layout import Layout
 
+from .legacy_inputs import (
+    DIRECTIONS,
+    foxfire_look_from,
+    frame_scene_from,
+    item_from,
+    particle_look_from,
+    player_look_from,
+    slime_look_from,
+)
 from .legacy_ops import FIXTURE, mismatch
 
-NEXT_STAGE = frozenset(
-    {"drawPlayer", "drawSlimes", "drawFoxfires", "drawParticle", "draw"}
-)
+NEXT_STAGE: frozenset[str] = frozenset()
 """まだ写していない描く関数（次の段で写す）。ここに挙げたケースは飛ばす。"""
 
-_SCATTERED_LIFETIME = 3600  # 原型の PORO_LIFE 60 秒
-_DIRECTIONS = {
-    "up": Direction.UP,
-    "down": Direction.DOWN,
-    "left": Direction.LEFT,
-    "right": Direction.RIGHT,
-}
 _TILES = {"hard": Tile.HARD, "soft": Tile.SOFT, "empty": Tile.EMPTY}
 
 Drawer = Callable[[RecordingCanvas, dict[str, Any], CosmeticRng], None]
-
-
-def _item(inputs: dict[str, Any]) -> Item:
-    """固定値の入力から、同じ時刻の関係を持つアイテムを作る。
-
-    原型の born（置いた秒）は、この版では消える時刻（置いた tick ＋ 消えるまでの
-    長さ）に、melt（溶けきるまでの残りの秒）は溶けきる時刻（いまの tick ＋ 残りの
-    tick）にする。
-    """
-    raw = inputs["item"]
-    kind = ItemKind(raw["kind"])
-    scattered = bool(raw.get("poro"))
-    expires_at = None
-    if kind is ItemKind.POOP:
-        lifetime = _SCATTERED_LIFETIME if scattered else POOP_LIFETIME
-        expires_at = Tick(raw["bornTicks"] + lifetime)
-    melting_until = None
-    if "meltTicks" in raw:
-        melting_until = Tick(inputs["elapsedTicks"] + raw["meltTicks"])
-    return Item(
-        id=EntityId(1),
-        cell=Cell(raw["x"], raw["y"]),
-        kind=kind,
-        scattered_by=0 if scattered else None,
-        expires_at=expires_at,
-        melting_until=melting_until,
-    )
 
 
 def _draw_tile(canvas: RecordingCanvas, inputs: dict[str, Any], _: CosmeticRng) -> None:
@@ -104,7 +84,7 @@ def _draw_tile(canvas: RecordingCanvas, inputs: dict[str, Any], _: CosmeticRng) 
 
 def _draw_item(canvas: RecordingCanvas, inputs: dict[str, Any], _: CosmeticRng) -> None:
     now = Tick(inputs["elapsedTicks"])
-    draw_item(canvas, Layout(inputs["tile"]), _item(inputs), now)
+    draw_item(canvas, Layout(inputs["tile"]), item_from(inputs), now)
 
 
 def _draw_bomb(canvas: RecordingCanvas, inputs: dict[str, Any], _: CosmeticRng) -> None:
@@ -194,13 +174,45 @@ def _draw_body(canvas: RecordingCanvas, inputs: dict[str, Any], _: CosmeticRng) 
     last = inputs["lastMoveTicks"]
     pose = BodyPose(
         animal=Animal(inputs["animal"]),
-        facing=_DIRECTIONS[inputs["dir"]],
+        facing=DIRECTIONS[inputs["dir"]],
         walked=inputs["walk"],
         last_moved_at=None if last is None else Tick(last),
         scatter_left=Tick(inputs["poroTicks"]),
         leap_left=Tick(inputs["leapTicks"]),
     )
     draw_animal_body(canvas, inputs["tile"], pose, Tick(inputs["elapsedTicks"]))
+
+
+def _draw_player(
+    canvas: RecordingCanvas, inputs: dict[str, Any], rng: CosmeticRng
+) -> None:
+    look = player_look_from(inputs["player"])
+    draw_player(canvas, Layout(inputs["tile"]), look, Tick(inputs["elapsedTicks"]), rng)
+
+
+def _draw_slime(
+    canvas: RecordingCanvas, inputs: dict[str, Any], _: CosmeticRng
+) -> None:
+    look = slime_look_from(inputs["slime"])
+    draw_slime(canvas, Layout(inputs["tile"]), look, Tick(inputs["elapsedTicks"]))
+
+
+def _draw_foxfire(
+    canvas: RecordingCanvas, inputs: dict[str, Any], _: CosmeticRng
+) -> None:
+    look = foxfire_look_from(inputs["foxfire"])
+    draw_foxfire(canvas, Layout(inputs["tile"]), look, Tick(inputs["elapsedTicks"]))
+
+
+def _draw_particle(
+    canvas: RecordingCanvas, inputs: dict[str, Any], _: CosmeticRng
+) -> None:
+    look = particle_look_from(inputs["particle"])
+    draw_particle(canvas, Layout(inputs["tile"]), look)
+
+
+def _draw(canvas: RecordingCanvas, inputs: dict[str, Any], rng: CosmeticRng) -> None:
+    draw_frame(canvas, Layout(inputs["tile"]), frame_scene_from(inputs), rng)
 
 
 DRAWERS: dict[str, Drawer] = {
@@ -213,6 +225,11 @@ DRAWERS: dict[str, Drawer] = {
     "drawTail": _draw_tail,
     "headRabbit": _head_rabbit,
     "drawAnimalBody": _draw_body,
+    "drawPlayer": _draw_player,
+    "drawSlimes": _draw_slime,
+    "drawFoxfires": _draw_foxfire,
+    "drawParticle": _draw_particle,
+    "draw": _draw,
 }
 """写した描く関数と、固定値の入力からそれを呼ぶ関数。"""
 
@@ -246,7 +263,22 @@ def test_固定値の描く関数は_写したものか次の段のものだけ(
     assert not set(DRAWERS) & NEXT_STAGE
     checked = sum(1 for name in names if name in DRAWERS)
     skipped = sum(1 for name in names if name in NEXT_STAGE)
-    assert (checked, skipped) == (111, 131)
+    assert (checked, skipped) == (242, 0)
+
+
+def test_無敵の点滅の両方の向きを確かめている() -> None:
+    """固定値に、点滅で薄くなっているケースと濃いケースの両方があること。
+
+    floor(残り × 14) が偶数のとき薄くなる。初めは薄くなるはずのケースの残りが 0.7 秒
+    （floor(9.8) = 9）で、薄くなる側を確かめていなかった。
+    """
+    blinking = [
+        case["inputs"]["player"]["invuln"]
+        for case in CASES
+        if case["fn"] == "drawPlayer" and case["inputs"]["player"]["invuln"] > 0
+    ]
+    parity = {int(left * 14) % 2 for left in blinking}
+    assert parity == {0, 1}
 
 
 def test_記録する_canvas_は負の半径で例外を出す() -> None:

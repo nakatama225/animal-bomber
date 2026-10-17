@@ -4,7 +4,7 @@
 """
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Final
 
 import numpy as np
@@ -74,6 +74,31 @@ def direct_per_paint(
     return as_array(surface, box)
 
 
+def direct_groups(
+    layout: Layout, box: Box, draw: Callable[[Canvas], None], sizes: Sequence[int]
+) -> Image:
+    """塗る命令を、続く `sizes` 個ずつの組に分けて別の絵に描き、順に床へ重ねた画素。
+
+    取っておく絵が部品ごとの絵（接地影と輪・体・ゲージなど）を重ねるとき、取っておかずに
+    描くほうも同じ組で重ねて比べる。組の中は `direct` と同じく2倍のまま重ねる。`sizes`
+    の合計が命令の数と違えば、描き損ねた命令があるので止める。
+    """
+    left, top = math.floor(box[0]), math.floor(box[1])
+    width, height = math.ceil(box[2]) - left, math.ceil(box[3]) - top
+    surface = blank(layout)
+    start = 0
+    paints = 0
+    for size in sizes:
+        group = range(start, start + size)
+        canvas = SurfaceCanvas(width, height, left=left, top=top, only_paint=group)
+        draw(canvas)
+        paints = canvas.paints
+        surface.blit(canvas.to_surface(), (left, top))
+        start += size
+    assert start == paints, f"組の命令の数の合計 {start} が、命令の数 {paints} と違う"
+    return as_array(surface, box)
+
+
 def baked(layout: Layout, box: Box, paste: Callable[[pygame.Surface], None]) -> Image:
     """取っておいた絵を `paste` で床に貼った画素。"""
     surface = blank(layout)
@@ -84,6 +109,34 @@ def baked(layout: Layout, box: Box, paste: Callable[[pygame.Surface], None]) -> 
 def max_difference(a: Image, b: Image) -> int:
     """2つの画素の、赤・緑・青の差のいちばん大きい値。"""
     return int(np.abs(a - b).max())
+
+
+SUBPIXEL: Final = 64
+"""2倍の画素1つを塗るかどうかで変わる、画素の色の幅（255 段の 1/4）。"""
+
+EDGE_FLIPS: Final = 12
+"""縁が画素の中心をちょうど通るために、塗るかどうかが入れ替わる画素の数の上限。
+
+形の縁が描く面の画素の中心（2倍の画素）をちょうど通る所では、描く範囲の左上が違う
+2つの canvas（取っておく絵と、比べる絵）で、小数の最後の桁の違いから、その画素を
+塗るかどうかが入れ替わることがある（同じ体を範囲だけ変えて描いて確かめた。差は 2×2 の
+画素の1つぶん）。
+"""
+
+
+def mismatched(got: Image, wanted: Image, slack: int) -> int:
+    """差が `slack` を超える画素の数。"""
+    return int((np.abs(got - wanted).max(axis=2) > slack).sum())
+
+
+def assert_matches(got: Image, wanted: Image, faded: int = 0) -> None:
+    """差が、丸めと薄めた写し `faded` 枚ぶんの幅に収まる（縁の入れ替わりを除く）。
+
+    薄めた写しは、整数の不透明度への切り捨てで1枚につき 1 段まで違いうる。縁の入れ
+    替わりは `EDGE_FLIPS` 個まで、差は `SUBPIXEL` まで許す。
+    """
+    assert max_difference(got, wanted) <= SUBPIXEL
+    assert mismatched(got, wanted, ROUNDING + faded) <= EDGE_FLIPS
 
 
 NEIGHBOR_STEPS: Final = (-1.0, -0.5, 0.5, 1.0)

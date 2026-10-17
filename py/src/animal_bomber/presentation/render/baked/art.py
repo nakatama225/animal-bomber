@@ -2,7 +2,10 @@
 
 from collections.abc import Iterable
 
-from animal_bomber.domain.rules.animals import Animal
+from animal_bomber.domain.rules.animals import Animal, stats_of
+from animal_bomber.presentation.render.art.player import BLINK_ALPHA, IN_BLOCK_ALPHA
+from animal_bomber.presentation.render.art.player_marks import special_emoji
+from animal_bomber.presentation.render.baked.actors import FoxfireSprites, SlimeSprites
 from animal_bomber.presentation.render.baked.board import BoardSprites
 from animal_bomber.presentation.render.baked.bodies import BodySprites
 from animal_bomber.presentation.render.baked.bombs import BlastSprites, BombSprites
@@ -11,12 +14,18 @@ from animal_bomber.presentation.render.baked.items import (
     prebuild_items,
     prebuild_melting,
 )
+from animal_bomber.presentation.render.baked.particles import ParticleSprites
+from animal_bomber.presentation.render.baked.players import PlayerSprites
+from animal_bomber.presentation.render.baked.techniques import (
+    DigSprites,
+    TongueSprites,
+)
 from animal_bomber.presentation.render.layout import Layout
 from animal_bomber.presentation.render.sprites import SpriteCache
 
 
 class BakedArt:
-    """マスの大きさ `layout` の、盤面の絵（床・アイテム・爆弾・爆風・動物の体）。
+    """マスの大きさ `layout` の、盤面の絵（床・アイテム・爆弾・爆風・プレイヤーなど）。
 
     取っておく絵はどれも同じ入れ物（`cache`）に入る。マスの大きさを変えたら、作り直す。
     """
@@ -29,18 +38,39 @@ class BakedArt:
         self.bombs = BombSprites(layout, self.cache)
         self.blasts = BlastSprites(layout, self.cache)
         self.bodies = BodySprites(layout.tile, self.cache)
+        self.tongues = TongueSprites(layout, self.cache)
+        self.digs = DigSprites(layout, self.cache)
+        self.players = PlayerSprites(
+            layout, self.cache, self.bodies, self.tongues, self.digs
+        )
+        self.slimes = SlimeSprites(layout, self.cache)
+        self.foxfires = FoxfireSprites(layout, self.cache)
+        self.particles = ParticleSprites(layout, self.cache)
 
     def prebuild(self, animals: Iterable[Animal]) -> None:
         """試合で使う絵を先に描いておく（初めて出たときに描くと、そのフレームが遅れる）。
 
         段の数で決まる組み合わせの全部（爆弾・爆風・アイテム。点滅するうんこを含む）と、
-        試合に出る動物の歩く姿と止まった姿を描く。ぞうが出るなら、鼻水で溶けていくうんこも
-        描く。撒いている身ぶりと跳び上がりの姿は、出たときに描く（1匹につき1秒ほどしか
-        出ず、組み合わせが多い。初めて描く1枚はマス 60 で 6ms ほど）。
+        試合に出る動物ごとに次を描く。
 
-        マス 60・うさぎだけで 1 秒ほどかかる（`tools/bench_art.py --first-draw`）。
-        取っておいた絵はラウンドをまたいで使えるので、マスの大きさが変わらなければ
-        描き直さない。
+        - 歩く姿と止まった姿・接地影と輪を、ふだんの濃さと無敵の点滅の薄さで（被弾の
+          あとの 1.25 秒は、脚を振りながら点滅する）
+        - ブロックを通り抜ける動物は、ブロックの中の薄さでも
+        - とくぎの印と、長押しのゲージの長さの全部（チキンを拾うと出る）
+        - 落とし穴を掘る動物が出るなら、ほかの動物の、落とし穴にはまって止まった姿と、
+          穴の縁・目印の顔・残りのゲージ、掘る身ぶりの絵
+        - 舌の部品と粘膜爆弾の形の全部（かえる）・追いかける炎（きつね）
+        - ぞうが出るなら、鼻水で溶けていくうんこ
+
+        撒いている身ぶりと跳び上がりの姿、状態の印の組み合わせは、出たときに描く（1匹に
+        つき1秒ほどしか出ないか、組み合わせが多い）。
+
+        かかる時間（`tools/bench_art.py --first-draw` の `prebuild_rabbit`・
+        `prebuild_all`）は、マス 60 で、うさぎだけ 1.35 秒（1197 枚）・5匹全部 4.45 秒
+        （2573 枚）。体の絵（1枚 4ms ほど）を点滅の薄さでも描くようにして、体の枚数が
+        倍になったのがおもな増え方（技の部品を足す前は、うさぎだけ 1.1 秒・5匹全部
+        2.4 秒）。取っておいた絵はラウンドをまたいで使えるので、マスの大きさが変わら
+        なければ描き直さない。
         """
         chosen = list(dict.fromkeys(animals))
         self.bombs.prebuild()
@@ -48,5 +78,22 @@ class BakedArt:
         prebuild_items(self.items)
         if Animal.ELEPHANT in chosen:
             prebuild_melting(self.items)
+        pits = Animal.MOLE in chosen
+        self.players.prebuild_gauges(pits=pits)
         for animal in chosen:
-            self.bodies.prebuild(animal)
+            alphas = [1.0, BLINK_ALPHA]
+            if stats_of(animal).passes_soft_blocks:
+                alphas.append(IN_BLOCK_ALPHA)
+            for alpha in alphas:
+                self.bodies.prebuild(animal, alpha)
+            self.players.prebuild(animal, tuple(alphas))
+            self.players.marks(special_emoji(animal), 1.0)
+            if pits and animal is not Animal.MOLE:
+                self.bodies.prebuild_pit(animal)
+        if pits:
+            self.digs.prebuild()
+        if Animal.FROG in chosen:
+            self.tongues.prebuild()
+            self.slimes.prebuild()
+        if Animal.FOX in chosen:
+            self.foxfires.prebuild()
