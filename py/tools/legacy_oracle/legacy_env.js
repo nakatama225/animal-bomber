@@ -166,7 +166,7 @@ global.__X = {
   get OX(){return OX}, set OX(v){OX=v}, get OY(){return OY}, set OY(v){OY=v},
   get CW(){return CW}, set CW(v){CW=v}, get CH(){return CH}, set CH(v){CH=v},
   draw, drawTile, drawItem, drawBomb, drawBlast, drawPlayer, drawAnimalBody, drawTongue, drawDigging,
-  drawSlimes, drawFoxfires, drawParticle, drawNegibons, roundRect, drawEye, triEar,
+  drawSlimes, drawFoxfires, drawParticle, drawNegibons, roundRect, drawEye, triEar, inkLine,
   headRabbit, headMole, headFox, headFrog, drawTail, drawElephantHead,
   puff, shake, kill, hurt, destroySoft, blowPoop, spitPowerup, makePlayer, startGame, startRound, update,
   hop, elephantSnot, chargeSweep, chargeDrop, explodeChain, spawnBomb,
