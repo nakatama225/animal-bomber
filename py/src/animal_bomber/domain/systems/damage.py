@@ -104,6 +104,9 @@ def hurt(
     player.hp -= taken
     player.invulnerable_until = Tick(world.now + INVULNERABLE)
     player.last_hit_by = by
+    # ⚠️ 並び（被弾 → 吐き出したアイテム → 倒れた）は変えない。音の層
+    # （presentation/presenter.py）が、被弾のすぐあとのアイテムで吐き出す音を、
+    # 同じ tick の倒れたイベントで被弾の音を出すかを見分けている。
     events: list[SimEvent] = [PlayerHurt(target=player.id, by=by, amount=taken)]
     events.extend(spit_power_up(world, player))
     if player.hp <= 0:

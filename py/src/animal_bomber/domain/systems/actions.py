@@ -192,6 +192,9 @@ def _tap(world: WorldState, player: PlayerState) -> list[SimEvent]:
     )
     if not fired:
         return list(started.events)
+    # ⚠️ 技を出したイベントを、技が起こしたイベント（一列に並べた爆弾など）の前に置く。
+    # 音の層（presentation/presenter.py）が、この並びで技が並べた爆弾を見分けて、
+    # 置く音を1回にしている。並びを変えると、置く音が並べた本数だけ鳴る。
     return [TechniqueUsed(player=player.id, special=False), *started.events]
 
 

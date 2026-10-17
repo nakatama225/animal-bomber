@@ -3,9 +3,13 @@ name = "animal-bomber"
 version = "0.1.0"
 description = "どうぶつボンバーの Python 版（デスクトップ・pygame-ce）"
 requires-python = ">=3.11"
-# 実際に import しているものだけを書く。pygame-ce をいま import するのは、描画の重さの
-# 測定（tools/）だけ。描画の層を書く段で src も使うので、先に本体の依存に入れた。
+# 実際に import しているものだけを書く。pygame-ce は画面・入力・音の出口
+# （presentation・shell・app）と描画の重さの測定（tools/）、numpy は音の合成
+# （presentation/audio/）が使う。numpy はルールの層では禁じてある（下の banned-api）。
+# numpy を 2.5 未満にしているのは、2.5 の型の定義が Python 3.12 からの書き方（type 文）を
+# 使っていて、3.11 の文法で読む mypy（下の python_version）が読めずに止まるため。
 dependencies = [
+    "numpy>=2.4.6,<2.5",
     "pygame-ce>=2.5",
 ]
 

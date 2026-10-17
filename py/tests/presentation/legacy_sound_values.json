@@ -1,0 +1,9600 @@
+{
+ "source": "legacy/animal-bomber.html（A・noiseBurst・tone・SE・BGM）",
+ "sampleRate": 48000,
+ "noiseSeconds": 1,
+ "buses": {
+  "sfx": 0.55,
+  "bgm": 0.15
+ },
+ "tempo": 138,
+ "bassPat": [
+  0,
+  null,
+  0,
+  null,
+  -5,
+  null,
+  -5,
+  null,
+  -3,
+  null,
+  -3,
+  null,
+  -7,
+  null,
+  -7,
+  null
+ ],
+ "arpPat": [
+  12,
+  19,
+  16,
+  24,
+  12,
+  19,
+  16,
+  24,
+  9,
+  16,
+  12,
+  21,
+  7,
+  14,
+  11,
+  19
+ ],
+ "seNames": [
+  "place",
+  "explode",
+  "breakBlock",
+  "item",
+  "hurt",
+  "die",
+  "jump",
+  "special",
+  "tick",
+  "win",
+  "champion",
+  "draw",
+  "ui",
+  "slip",
+  "cry",
+  "chicken",
+  "poop",
+  "blowPoop",
+  "negi",
+  "negiHit",
+  "negiOut",
+  "negiBlock",
+  "spit",
+  "charge",
+  "slime",
+  "slimeHop",
+  "snot",
+  "foxfire",
+  "foxfireHit",
+  "tongue",
+  "tongueCatch",
+  "pitDig",
+  "pitDone",
+  "pitFall",
+  "foxLeap",
+  "sudden"
+ ],
+ "sounds": {
+  "place": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       300,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       110,
+       0.09
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.11
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.16,
+       0.018
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.09
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       900,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       600,
+       0.05
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.07
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.1,
+       0.010000000000000002
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.05
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "explode": [
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.52
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "lowpass"
+      ],
+      [
+       "Q",
+       "value",
+       1
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       2200,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       90,
+       0.5
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.75,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.5
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sine"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       110,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       32,
+       0.42
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.44
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.5,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.42
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "breakBlock": [
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.18
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "bandpass"
+      ],
+      [
+       "Q",
+       "value",
+       1.2
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       2600,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       700,
+       0.16
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.3,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.16
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "item": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       520,
+       0
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.1
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.16,
+       0.016
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.08
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       618.3876998014149,
+       0.055
+      ],
+      [
+       "start",
+       0.055
+      ],
+      [
+       "stop",
+       0.155
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.055
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.16,
+       0.07100000000000001
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.135
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       735.3910524340095,
+       0.11
+      ],
+      [
+       "start",
+       0.11
+      ],
+      [
+       "stop",
+       0.21
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.11
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.16,
+       0.126
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.19
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "hurt": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sawtooth"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       520,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       90,
+       0.3
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.32
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.3,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.3
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.22
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "lowpass"
+      ],
+      [
+       "Q",
+       "value",
+       1
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       900,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       200,
+       0.2
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.25,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.2
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "die": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       440,
+       0
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.18
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.22,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.16
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       349.2282314330039,
+       0.1
+      ],
+      [
+       "start",
+       0.1
+      ],
+      [
+       "stop",
+       0.28
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.1
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.22,
+       0.12000000000000001
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.26
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       277.18263097687213,
+       0.2
+      ],
+      [
+       "start",
+       0.2
+      ],
+      [
+       "stop",
+       0.38
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.2
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.22,
+       0.22
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.36
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       220,
+       0.30000000000000004
+      ],
+      [
+       "start",
+       0.30000000000000004
+      ],
+      [
+       "stop",
+       0.4800000000000001
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.30000000000000004
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.22,
+       0.32000000000000006
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.4600000000000001
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0.1
+      ],
+      [
+       "stop",
+       0.72
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "lowpass"
+      ],
+      [
+       "Q",
+       "value",
+       1
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       700,
+       0.1
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       60,
+       0.7
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.35,
+       0.1
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.7
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "jump": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       400,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       820,
+       0.13
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.15
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.13
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "special": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       392,
+       0
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.13
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.17,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.11
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       466.16918908106663,
+       0.05
+      ],
+      [
+       "start",
+       0.05
+      ],
+      [
+       "stop",
+       0.18
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.05
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.17,
+       0.07
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.16
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       587.3363741356592,
+       0.1
+      ],
+      [
+       "start",
+       0.1
+      ],
+      [
+       "stop",
+       0.23
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.1
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.17,
+       0.12000000000000001
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.21000000000000002
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       698.464595022026,
+       0.15000000000000002
+      ],
+      [
+       "start",
+       0.15000000000000002
+      ],
+      [
+       "stop",
+       0.28
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.15000000000000002
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.17,
+       0.17
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.26
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       784,
+       0.2
+      ],
+      [
+       "start",
+       0.2
+      ],
+      [
+       "stop",
+       0.33
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.2
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.17,
+       0.22
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.31
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "tick": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1200,
+       0
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.07
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.14,
+       0.010000000000000002
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.05
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "win": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       523.25,
+       0
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.32
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.3
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       659.2536893574924,
+       0.11
+      ],
+      [
+       "start",
+       0.11
+      ],
+      [
+       "stop",
+       0.43
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.11
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.13
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.41
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       783.9891779757236,
+       0.22
+      ],
+      [
+       "start",
+       0.22
+      ],
+      [
+       "stop",
+       0.54
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.22
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.24
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.52
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1046.5,
+       0.33
+      ],
+      [
+       "start",
+       0.33
+      ],
+      [
+       "stop",
+       0.65
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.33
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.35000000000000003
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.63
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1318.5073787149847,
+       0.44
+      ],
+      [
+       "start",
+       0.44
+      ],
+      [
+       "stop",
+       0.76
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.44
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.46
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.74
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1567.9783559514472,
+       0.55
+      ],
+      [
+       "start",
+       0.55
+      ],
+      [
+       "stop",
+       0.8700000000000001
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.55
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.5700000000000001
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.8500000000000001
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "champion": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       523.25,
+       0
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.28
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.26
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       261.6,
+       0
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.28
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.14,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.26
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       523.25,
+       0.12
+      ],
+      [
+       "start",
+       0.12
+      ],
+      [
+       "stop",
+       0.4
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.12
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.13999999999999999
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.38
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       261.6,
+       0.12
+      ],
+      [
+       "start",
+       0.12
+      ],
+      [
+       "stop",
+       0.4
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.12
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.14,
+       0.13999999999999999
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.38
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       523.25,
+       0.24
+      ],
+      [
+       "start",
+       0.24
+      ],
+      [
+       "stop",
+       0.52
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.24
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.26
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.5
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       261.6,
+       0.24
+      ],
+      [
+       "start",
+       0.24
+      ],
+      [
+       "stop",
+       0.52
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.24
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.14,
+       0.26
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.5
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       659.2536893574924,
+       0.36
+      ],
+      [
+       "start",
+       0.36
+      ],
+      [
+       "stop",
+       0.64
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.36
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.38
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.62
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       329.59534665249885,
+       0.36
+      ],
+      [
+       "start",
+       0.36
+      ],
+      [
+       "stop",
+       0.64
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.36
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.14,
+       0.38
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.62
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       783.9891779757236,
+       0.48
+      ],
+      [
+       "start",
+       0.48
+      ],
+      [
+       "stop",
+       0.76
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.48
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.5
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.74
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       391.95713131093993,
+       0.48
+      ],
+      [
+       "start",
+       0.48
+      ],
+      [
+       "stop",
+       0.76
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.48
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.14,
+       0.5
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.74
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1046.5,
+       0.6
+      ],
+      [
+       "start",
+       0.6
+      ],
+      [
+       "stop",
+       0.88
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.6
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.62
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.86
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       523.2,
+       0.6
+      ],
+      [
+       "start",
+       0.6
+      ],
+      [
+       "stop",
+       0.88
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.6
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.14,
+       0.62
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.86
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       783.9891779757236,
+       0.86
+      ],
+      [
+       "start",
+       0.86
+      ],
+      [
+       "stop",
+       1.1400000000000001
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.86
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.88
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       1.12
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       391.95713131093993,
+       0.86
+      ],
+      [
+       "start",
+       0.86
+      ],
+      [
+       "stop",
+       1.1400000000000001
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.86
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.14,
+       0.88
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       1.12
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1046.5,
+       0.98
+      ],
+      [
+       "start",
+       0.98
+      ],
+      [
+       "stop",
+       1.26
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.98
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       1
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       1.24
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       523.2,
+       0.98
+      ],
+      [
+       "start",
+       0.98
+      ],
+      [
+       "stop",
+       1.26
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.98
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.14,
+       1
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       1.24
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1318.5073787149847,
+       1.1
+      ],
+      [
+       "start",
+       1.1
+      ],
+      [
+       "stop",
+       1.3800000000000001
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       1.1
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       1.12
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       1.36
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       659.1906933049977,
+       1.1
+      ],
+      [
+       "start",
+       1.1
+      ],
+      [
+       "stop",
+       1.3800000000000001
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       1.1
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.14,
+       1.12
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       1.36
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1567.9783559514472,
+       1.24
+      ],
+      [
+       "start",
+       1.24
+      ],
+      [
+       "stop",
+       1.52
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       1.24
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       1.26
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       1.5
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       783.9142626218799,
+       1.24
+      ],
+      [
+       "start",
+       1.24
+      ],
+      [
+       "stop",
+       1.52
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       1.24
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.14,
+       1.26
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       1.5
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       1.24
+      ],
+      [
+       "stop",
+       1.76
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "highpass"
+      ],
+      [
+       "Q",
+       "value",
+       1
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       6000,
+       1.24
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       1200,
+       1.74
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.14,
+       1.24
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       1.74
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "draw": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       392,
+       0
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.37
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.18,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.35
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       349.232297511013,
+       0.16
+      ],
+      [
+       "start",
+       0.16
+      ],
+      [
+       "stop",
+       0.53
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.16
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.18,
+       0.18
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.51
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       311.13060618576714,
+       0.32
+      ],
+      [
+       "start",
+       0.32
+      ],
+      [
+       "stop",
+       0.69
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.32
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.18,
+       0.34
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.6699999999999999
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "ui": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       760,
+       0
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.07
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.12,
+       0.010000000000000002
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.05
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "slip": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sine"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1100,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       220,
+       0.42
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.44
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.22,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.42
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.32
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "bandpass"
+      ],
+      [
+       "Q",
+       "value",
+       2
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       3000,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       800,
+       0.3
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.14,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.3
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "cry": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sawtooth"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       660,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       520,
+       0.22
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.24
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.16,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.22
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sawtooth"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       570,
+       0.16
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       430,
+       0.38
+      ],
+      [
+       "start",
+       0.16
+      ],
+      [
+       "stop",
+       0.4
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.16
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.16,
+       0.18
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.38
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sawtooth"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       480,
+       0.32
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       340,
+       0.54
+      ],
+      [
+       "start",
+       0.32
+      ],
+      [
+       "stop",
+       0.56
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.32
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.16,
+       0.34
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.54
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "chicken": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       440,
+       0
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.18
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.16
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       587.3295358348151,
+       0.07
+      ],
+      [
+       "start",
+       0.07
+      ],
+      [
+       "stop",
+       0.25
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.07
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.09000000000000001
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.23
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       739.9888454232688,
+       0.14
+      ],
+      [
+       "start",
+       0.14
+      ],
+      [
+       "stop",
+       0.32000000000000006
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.14
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.16
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.30000000000000004
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       880,
+       0.21000000000000002
+      ],
+      [
+       "start",
+       0.21000000000000002
+      ],
+      [
+       "stop",
+       0.39
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.21000000000000002
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.23
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.37
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "poop": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sawtooth"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       220,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       55,
+       0.45
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.47000000000000003
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.24,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.45
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.37
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "lowpass"
+      ],
+      [
+       "Q",
+       "value",
+       1
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       500,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       90,
+       0.35
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.22,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.35
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "blowPoop": [
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.24
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "lowpass"
+      ],
+      [
+       "Q",
+       "value",
+       1
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       700,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       160,
+       0.22
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.2,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.22
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sine"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       300,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       520,
+       0.18
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.19999999999999998
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.14,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.18
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "negi": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1500,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       640,
+       0.15
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.16999999999999998
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.15
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.12000000000000001
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "highpass"
+      ],
+      [
+       "Q",
+       "value",
+       1
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       4000,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       1200,
+       0.1
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.1,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.1
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "negiHit": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       523,
+       0
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.18
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.16
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       658.9387090950187,
+       0.06
+      ],
+      [
+       "start",
+       0.06
+      ],
+      [
+       "stop",
+       0.24
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.06
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.08
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.22
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       783.6146012065044,
+       0.12
+      ],
+      [
+       "start",
+       0.12
+      ],
+      [
+       "stop",
+       0.30000000000000004
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.12
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.13999999999999999
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.28
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1046,
+       0.18
+      ],
+      [
+       "start",
+       0.18
+      ],
+      [
+       "stop",
+       0.36
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.18
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.19999999999999998
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.33999999999999997
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1317.8774181900374,
+       0.24
+      ],
+      [
+       "start",
+       0.24
+      ],
+      [
+       "stop",
+       0.42000000000000004
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.24
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.26
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.4
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.27
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "lowpass"
+      ],
+      [
+       "Q",
+       "value",
+       1
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       2200,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       400,
+       0.25
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.2,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.25
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "negiOut": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       392,
+       0
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.22
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.16,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.2
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       329.63139477945606,
+       0.12
+      ],
+      [
+       "start",
+       0.12
+      ],
+      [
+       "stop",
+       0.34
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.12
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.16,
+       0.13999999999999999
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.32
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       261.62861141732674,
+       0.24
+      ],
+      [
+       "start",
+       0.24
+      ],
+      [
+       "stop",
+       0.46
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.24
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.16,
+       0.26
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.44
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "negiBlock": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       180,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       90,
+       0.1
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.12000000000000001
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.22,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.1
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.11
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "bandpass"
+      ],
+      [
+       "Q",
+       "value",
+       3
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1600,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       500,
+       0.09
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.16,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.09
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "spit": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       330,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       660,
+       0.11
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.13
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.15,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.11
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       990,
+       0.06
+      ],
+      [
+       "start",
+       0.06
+      ],
+      [
+       "stop",
+       0.13
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.06
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.08,
+       0.07
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.11
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "charge": [
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.47000000000000003
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "lowpass"
+      ],
+      [
+       "Q",
+       "value",
+       1
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       700,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       180,
+       0.45
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.26,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.45
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sawtooth"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       130,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       220,
+       0.4
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.42000000000000004
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.22,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.4
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       900,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       400,
+       0.1
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.12000000000000001
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.1,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.1
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "slime": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sine"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       200,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       520,
+       0.22
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.24
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.22
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.16
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "bandpass"
+      ],
+      [
+       "Q",
+       "value",
+       1.4
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       900,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       2200,
+       0.14
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.1,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.14
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "slimeHop": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sine"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       420,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       700,
+       0.09
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.11
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.13,
+       0.018
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.09
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "snot": [
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.30000000000000004
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "bandpass"
+      ],
+      [
+       "Q",
+       "value",
+       1.1
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       2600,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       500,
+       0.28
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.2,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.28
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sawtooth"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       220,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       90,
+       0.22
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.24
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.14,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.22
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "foxfire": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sine"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       330,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       440.49715187611133,
+       0.5
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.52
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.15,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.5
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sine"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       494.4413353693049,
+       0.06
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       660,
+       0.56
+      ],
+      [
+       "start",
+       0.06
+      ],
+      [
+       "stop",
+       0.5800000000000001
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.06
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.15,
+       0.08
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.56
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sine"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       660,
+       0.12
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       880.9943037522227,
+       0.62
+      ],
+      [
+       "start",
+       0.12
+      ],
+      [
+       "stop",
+       0.64
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.12
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.15,
+       0.13999999999999999
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.62
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.62
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "bandpass"
+      ],
+      [
+       "Q",
+       "value",
+       2
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       2600,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       700,
+       0.6
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.12,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.6
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "foxfireHit": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sine"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       900,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       180,
+       0.3
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.32
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.24,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.3
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.27
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "bandpass"
+      ],
+      [
+       "Q",
+       "value",
+       1.5
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       3000,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       600,
+       0.25
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.18,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.25
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "tongue": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sine"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       700,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       1300,
+       0.13
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.15
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.16,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.13
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "tongueCatch": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sine"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1300,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       600,
+       0.12
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.13999999999999999
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.18,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.12
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1800,
+       0.1
+      ],
+      [
+       "start",
+       0.1
+      ],
+      [
+       "stop",
+       0.17
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.1
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.09,
+       0.11000000000000001
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.15000000000000002
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "pitDig": [
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.18
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "bandpass"
+      ],
+      [
+       "Q",
+       "value",
+       1.5
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1500,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       300,
+       0.16
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.15,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.16
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       170,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       90,
+       0.12
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.13999999999999999
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.1,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.12
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0.28
+      ],
+      [
+       "stop",
+       0.4600000000000001
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "bandpass"
+      ],
+      [
+       "Q",
+       "value",
+       1.5
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1500,
+       0.28
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       300,
+       0.44000000000000006
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.15,
+       0.28
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.44000000000000006
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       170,
+       0.28
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       90,
+       0.4
+      ],
+      [
+       "start",
+       0.28
+      ],
+      [
+       "stop",
+       0.42000000000000004
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.28
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.1,
+       0.30000000000000004
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.4
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0.56
+      ],
+      [
+       "stop",
+       0.7400000000000001
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "bandpass"
+      ],
+      [
+       "Q",
+       "value",
+       1.5
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1500,
+       0.56
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       300,
+       0.7200000000000001
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.15,
+       0.56
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.7200000000000001
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       170,
+       0.56
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       90,
+       0.68
+      ],
+      [
+       "start",
+       0.56
+      ],
+      [
+       "stop",
+       0.7000000000000001
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.56
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.1,
+       0.5800000000000001
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.68
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0.8400000000000001
+      ],
+      [
+       "stop",
+       1.02
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "bandpass"
+      ],
+      [
+       "Q",
+       "value",
+       1.5
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1500,
+       0.8400000000000001
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       300,
+       1
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.15,
+       0.8400000000000001
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       1
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       170,
+       0.8400000000000001
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       90,
+       0.9600000000000001
+      ],
+      [
+       "start",
+       0.8400000000000001
+      ],
+      [
+       "stop",
+       0.9800000000000001
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.8400000000000001
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.1,
+       0.8600000000000001
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.9600000000000001
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       1.12
+      ],
+      [
+       "stop",
+       1.3
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "bandpass"
+      ],
+      [
+       "Q",
+       "value",
+       1.5
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1500,
+       1.12
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       300,
+       1.28
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.15,
+       1.12
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       1.28
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       170,
+       1.12
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       90,
+       1.2400000000000002
+      ],
+      [
+       "start",
+       1.12
+      ],
+      [
+       "stop",
+       1.2600000000000002
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       1.12
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.1,
+       1.1400000000000001
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       1.2400000000000002
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "pitDone": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sine"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       150,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       80,
+       0.2
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.22
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.18,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.2
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       600,
+       0.16
+      ],
+      [
+       "start",
+       0.16
+      ],
+      [
+       "stop",
+       0.23
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.16
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.07,
+       0.17
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.21000000000000002
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "pitFall": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sine"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       700,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       70,
+       0.55
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.5700000000000001
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.3,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.55
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.52
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "lowpass"
+      ],
+      [
+       "Q",
+       "value",
+       1
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1200,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       120,
+       0.5
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.24,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.5
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       330,
+       0.15
+      ],
+      [
+       "start",
+       0.15
+      ],
+      [
+       "stop",
+       0.35
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.15
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.14,
+       0.16999999999999998
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.32999999999999996
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       261.9211735747529,
+       0.25
+      ],
+      [
+       "start",
+       0.25
+      ],
+      [
+       "stop",
+       0.45
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.25
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.14,
+       0.27
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.43
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       207.88697323265407,
+       0.35
+      ],
+      [
+       "start",
+       0.35
+      ],
+      [
+       "stop",
+       0.55
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.35
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.14,
+       0.37
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.53
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "foxLeap": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "triangle"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       420,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       1150,
+       0.22
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.24
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.24,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.22
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1400,
+       0.2
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       900,
+       0.30000000000000004
+      ],
+      [
+       "start",
+       0.2
+      ],
+      [
+       "stop",
+       0.32000000000000006
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.2
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.1,
+       0.22
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.30000000000000004
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sine"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       260,
+       0.72
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       150,
+       0.86
+      ],
+      [
+       "start",
+       0.72
+      ],
+      [
+       "stop",
+       0.88
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.72
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.2,
+       0.74
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.86
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0.74
+      ],
+      [
+       "stop",
+       0.88
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "lowpass"
+      ],
+      [
+       "Q",
+       "value",
+       1
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       900,
+       0.74
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       200,
+       0.86
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.16,
+       0.74
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.86
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "sudden": [
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       660,
+       0
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.16
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.24,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.14
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       880,
+       0.17
+      ],
+      [
+       "start",
+       0.17
+      ],
+      [
+       "stop",
+       0.33000000000000007
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.17
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.24,
+       0.19
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.31000000000000005
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       660,
+       0.34
+      ],
+      [
+       "start",
+       0.34
+      ],
+      [
+       "stop",
+       0.5
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.34
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.24,
+       0.36000000000000004
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.48000000000000004
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "square"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       880,
+       0.51
+      ],
+      [
+       "start",
+       0.51
+      ],
+      [
+       "stop",
+       0.67
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.51
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.24,
+       0.53
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.65
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sine"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       80,
+       0.1
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       40,
+       1
+      ],
+      [
+       "start",
+       0.1
+      ],
+      [
+       "stop",
+       1.02
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0.1
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.35,
+       0.12000000000000001
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       1
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "explode(2)": [
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.52
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "lowpass"
+      ],
+      [
+       "Q",
+       "value",
+       1
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       2200,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       90,
+       0.5
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.75,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.5
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sine"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       110,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       32,
+       0.42
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.44
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.5,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.42
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0.05
+      ],
+      [
+       "stop",
+       0.42
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "lowpass"
+      ],
+      [
+       "Q",
+       "value",
+       1
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1200,
+       0.05
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       120,
+       0.39999999999999997
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.4,
+       0.05
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.39999999999999997
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ],
+  "explode(5)": [
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.52
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "lowpass"
+      ],
+      [
+       "Q",
+       "value",
+       1
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       2200,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       90,
+       0.5
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.75,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.5
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "oscillator",
+     "log": [
+      [
+       "type",
+       "sine"
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       110,
+       0
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       32,
+       0.42
+      ],
+      [
+       "start",
+       0
+      ],
+      [
+       "stop",
+       0.44
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.0001,
+       0
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.5,
+       0.02
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.42
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ],
+   [
+    {
+     "kind": "bufferSource",
+     "log": [
+      [
+       "loop",
+       true
+      ],
+      [
+       "start",
+       0.05
+      ],
+      [
+       "stop",
+       0.42
+      ]
+     ]
+    },
+    {
+     "kind": "biquad",
+     "log": [
+      [
+       "type",
+       "lowpass"
+      ],
+      [
+       "Q",
+       "value",
+       1
+      ],
+      [
+       "frequency",
+       "setValueAtTime",
+       1200,
+       0.05
+      ],
+      [
+       "frequency",
+       "exponentialRampToValueAtTime",
+       120,
+       0.39999999999999997
+      ]
+     ]
+    },
+    {
+     "kind": "gain",
+     "log": [
+      [
+       "gain",
+       "setValueAtTime",
+       0.4,
+       0.05
+      ],
+      [
+       "gain",
+       "exponentialRampToValueAtTime",
+       0.0008,
+       0.39999999999999997
+      ]
+     ]
+    },
+    {
+     "bus": "sfx"
+    }
+   ]
+  ]
+ },
+ "bgm": [
+  {
+   "step": 0,
+   "t": 0,
+   "voices": [
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        110
+       ],
+       [
+        "start",
+        0
+       ],
+       [
+        "stop",
+        0.16
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        0
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.5,
+        0.008
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        0.14
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        440
+       ],
+       [
+        "start",
+        0
+       ],
+       [
+        "stop",
+        0.11
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        0
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.16,
+        0.008
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        0.09
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ]
+   ]
+  },
+  {
+   "step": 1,
+   "t": 0.10869565217391304,
+   "voices": []
+  },
+  {
+   "step": 2,
+   "t": 0.21739130434782608,
+   "voices": [
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        110
+       ],
+       [
+        "start",
+        0.21739130434782608
+       ],
+       [
+        "stop",
+        0.3773913043478261
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        0.21739130434782608
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.5,
+        0.2253913043478261
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        0.35739130434782607
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        554.3652619537442
+       ],
+       [
+        "start",
+        0.21739130434782608
+       ],
+       [
+        "stop",
+        0.3273913043478261
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        0.21739130434782608
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.16,
+        0.2253913043478261
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        0.3073913043478261
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "bufferSource",
+      "log": [
+       [
+        "loop",
+        true
+       ],
+       [
+        "start",
+        0.21739130434782608
+       ],
+       [
+        "stop",
+        0.2773913043478261
+       ]
+      ]
+     },
+     {
+      "kind": "biquad",
+      "log": [
+       [
+        "type",
+        "highpass"
+       ],
+       [
+        "frequency",
+        "value",
+        7000
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.12,
+        0.21739130434782608
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.001,
+        0.2673913043478261
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ]
+   ]
+  },
+  {
+   "step": 3,
+   "t": 0.32608695652173914,
+   "voices": []
+  },
+  {
+   "step": 4,
+   "t": 0.43478260869565216,
+   "voices": [
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        82.40688922821748
+       ],
+       [
+        "start",
+        0.43478260869565216
+       ],
+       [
+        "stop",
+        0.5947826086956522
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        0.43478260869565216
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.5,
+        0.44278260869565217
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        0.5747826086956522
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        440
+       ],
+       [
+        "start",
+        0.43478260869565216
+       ],
+       [
+        "stop",
+        0.5447826086956522
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        0.43478260869565216
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.16,
+        0.44278260869565217
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        0.5247826086956522
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ]
+   ]
+  },
+  {
+   "step": 5,
+   "t": 0.5434782608695652,
+   "voices": []
+  },
+  {
+   "step": 6,
+   "t": 0.6521739130434783,
+   "voices": [
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        82.40688922821748
+       ],
+       [
+        "start",
+        0.6521739130434783
+       ],
+       [
+        "stop",
+        0.8121739130434783
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        0.6521739130434783
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.5,
+        0.6601739130434783
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        0.7921739130434783
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        554.3652619537442
+       ],
+       [
+        "start",
+        0.6521739130434783
+       ],
+       [
+        "stop",
+        0.7621739130434783
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        0.6521739130434783
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.16,
+        0.6601739130434783
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        0.7421739130434782
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "bufferSource",
+      "log": [
+       [
+        "loop",
+        true
+       ],
+       [
+        "start",
+        0.6521739130434783
+       ],
+       [
+        "stop",
+        0.7121739130434783
+       ]
+      ]
+     },
+     {
+      "kind": "biquad",
+      "log": [
+       [
+        "type",
+        "highpass"
+       ],
+       [
+        "frequency",
+        "value",
+        7000
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.12,
+        0.6521739130434783
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.001,
+        0.7021739130434783
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ]
+   ]
+  },
+  {
+   "step": 7,
+   "t": 0.7608695652173912,
+   "voices": []
+  },
+  {
+   "step": 8,
+   "t": 0.8695652173913043,
+   "voices": [
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        92.4986056779086
+       ],
+       [
+        "start",
+        0.8695652173913043
+       ],
+       [
+        "stop",
+        1.0295652173913044
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        0.8695652173913043
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.5,
+        0.8775652173913043
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        1.0095652173913043
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        369.9944227116344
+       ],
+       [
+        "start",
+        0.8695652173913043
+       ],
+       [
+        "stop",
+        0.9795652173913043
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        0.8695652173913043
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.16,
+        0.8775652173913043
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        0.9595652173913043
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ]
+   ]
+  },
+  {
+   "step": 9,
+   "t": 0.9782608695652174,
+   "voices": []
+  },
+  {
+   "step": 10,
+   "t": 1.0869565217391304,
+   "voices": [
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        92.4986056779086
+       ],
+       [
+        "start",
+        1.0869565217391304
+       ],
+       [
+        "stop",
+        1.2469565217391305
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        1.0869565217391304
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.5,
+        1.0949565217391304
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        1.2269565217391305
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        440
+       ],
+       [
+        "start",
+        1.0869565217391304
+       ],
+       [
+        "stop",
+        1.1969565217391305
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        1.0869565217391304
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.16,
+        1.0949565217391304
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        1.1769565217391305
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "bufferSource",
+      "log": [
+       [
+        "loop",
+        true
+       ],
+       [
+        "start",
+        1.0869565217391304
+       ],
+       [
+        "stop",
+        1.1469565217391304
+       ]
+      ]
+     },
+     {
+      "kind": "biquad",
+      "log": [
+       [
+        "type",
+        "highpass"
+       ],
+       [
+        "frequency",
+        "value",
+        7000
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.12,
+        1.0869565217391304
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.001,
+        1.1369565217391304
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ]
+   ]
+  },
+  {
+   "step": 11,
+   "t": 1.1956521739130435,
+   "voices": []
+  },
+  {
+   "step": 12,
+   "t": 1.3043478260869565,
+   "voices": [
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        73.4161919793519
+       ],
+       [
+        "start",
+        1.3043478260869565
+       ],
+       [
+        "stop",
+        1.4643478260869567
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        1.3043478260869565
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.5,
+        1.3123478260869565
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        1.4443478260869567
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        329.6275569128699
+       ],
+       [
+        "start",
+        1.3043478260869565
+       ],
+       [
+        "stop",
+        1.4143478260869566
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        1.3043478260869565
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.16,
+        1.3123478260869565
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        1.3943478260869566
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ]
+   ]
+  },
+  {
+   "step": 13,
+   "t": 1.4130434782608696,
+   "voices": []
+  },
+  {
+   "step": 14,
+   "t": 1.5217391304347825,
+   "voices": [
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        73.4161919793519
+       ],
+       [
+        "start",
+        1.5217391304347825
+       ],
+       [
+        "stop",
+        1.6817391304347824
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        1.5217391304347825
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.5,
+        1.5297391304347825
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        1.6617391304347824
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        415.3046975799451
+       ],
+       [
+        "start",
+        1.5217391304347825
+       ],
+       [
+        "stop",
+        1.6317391304347826
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        1.5217391304347825
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.16,
+        1.5297391304347825
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        1.6117391304347826
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "bufferSource",
+      "log": [
+       [
+        "loop",
+        true
+       ],
+       [
+        "start",
+        1.5217391304347825
+       ],
+       [
+        "stop",
+        1.5817391304347825
+       ]
+      ]
+     },
+     {
+      "kind": "biquad",
+      "log": [
+       [
+        "type",
+        "highpass"
+       ],
+       [
+        "frequency",
+        "value",
+        7000
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.12,
+        1.5217391304347825
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.001,
+        1.5717391304347825
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ]
+   ]
+  },
+  {
+   "step": 15,
+   "t": 1.6304347826086956,
+   "voices": []
+  },
+  {
+   "step": 16,
+   "t": 1.7391304347826086,
+   "voices": [
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        110
+       ],
+       [
+        "start",
+        1.7391304347826086
+       ],
+       [
+        "stop",
+        1.8991304347826086
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        1.7391304347826086
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.5,
+        1.7471304347826087
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        1.8791304347826085
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        440
+       ],
+       [
+        "start",
+        1.7391304347826086
+       ],
+       [
+        "stop",
+        1.8491304347826087
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        1.7391304347826086
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.16,
+        1.7471304347826087
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        1.8291304347826087
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ]
+   ]
+  },
+  {
+   "step": 17,
+   "t": 1.8478260869565217,
+   "voices": []
+  },
+  {
+   "step": 18,
+   "t": 1.9565217391304348,
+   "voices": [
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        110
+       ],
+       [
+        "start",
+        1.9565217391304348
+       ],
+       [
+        "stop",
+        2.1165217391304347
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        1.9565217391304348
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.5,
+        1.9645217391304348
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        2.0965217391304347
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        554.3652619537442
+       ],
+       [
+        "start",
+        1.9565217391304348
+       ],
+       [
+        "stop",
+        2.066521739130435
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        1.9565217391304348
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.16,
+        1.9645217391304348
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        2.046521739130435
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "bufferSource",
+      "log": [
+       [
+        "loop",
+        true
+       ],
+       [
+        "start",
+        1.9565217391304348
+       ],
+       [
+        "stop",
+        2.0165217391304346
+       ]
+      ]
+     },
+     {
+      "kind": "biquad",
+      "log": [
+       [
+        "type",
+        "highpass"
+       ],
+       [
+        "frequency",
+        "value",
+        7000
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.12,
+        1.9565217391304348
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.001,
+        2.006521739130435
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ]
+   ]
+  },
+  {
+   "step": 19,
+   "t": 2.0652173913043477,
+   "voices": []
+  },
+  {
+   "step": 20,
+   "t": 2.1739130434782608,
+   "voices": [
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        82.40688922821748
+       ],
+       [
+        "start",
+        2.1739130434782608
+       ],
+       [
+        "stop",
+        2.333913043478261
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        2.1739130434782608
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.5,
+        2.1819130434782608
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        2.313913043478261
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        440
+       ],
+       [
+        "start",
+        2.1739130434782608
+       ],
+       [
+        "stop",
+        2.2839130434782606
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        2.1739130434782608
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.16,
+        2.1819130434782608
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        2.2639130434782606
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ]
+   ]
+  },
+  {
+   "step": 21,
+   "t": 2.282608695652174,
+   "voices": []
+  },
+  {
+   "step": 22,
+   "t": 2.391304347826087,
+   "voices": [
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        82.40688922821748
+       ],
+       [
+        "start",
+        2.391304347826087
+       ],
+       [
+        "stop",
+        2.551304347826087
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        2.391304347826087
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.5,
+        2.399304347826087
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        2.531304347826087
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        554.3652619537442
+       ],
+       [
+        "start",
+        2.391304347826087
+       ],
+       [
+        "stop",
+        2.501304347826087
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        2.391304347826087
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.16,
+        2.399304347826087
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        2.4813043478260868
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "bufferSource",
+      "log": [
+       [
+        "loop",
+        true
+       ],
+       [
+        "start",
+        2.391304347826087
+       ],
+       [
+        "stop",
+        2.451304347826087
+       ]
+      ]
+     },
+     {
+      "kind": "biquad",
+      "log": [
+       [
+        "type",
+        "highpass"
+       ],
+       [
+        "frequency",
+        "value",
+        7000
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.12,
+        2.391304347826087
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.001,
+        2.4413043478260867
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ]
+   ]
+  },
+  {
+   "step": 23,
+   "t": 2.5,
+   "voices": []
+  },
+  {
+   "step": 24,
+   "t": 2.608695652173913,
+   "voices": [
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        92.4986056779086
+       ],
+       [
+        "start",
+        2.608695652173913
+       ],
+       [
+        "stop",
+        2.7686956521739132
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        2.608695652173913
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.5,
+        2.616695652173913
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        2.748695652173913
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        369.9944227116344
+       ],
+       [
+        "start",
+        2.608695652173913
+       ],
+       [
+        "stop",
+        2.718695652173913
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        2.608695652173913
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.16,
+        2.616695652173913
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        2.698695652173913
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ]
+   ]
+  },
+  {
+   "step": 25,
+   "t": 2.717391304347826,
+   "voices": []
+  },
+  {
+   "step": 26,
+   "t": 2.8260869565217392,
+   "voices": [
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        92.4986056779086
+       ],
+       [
+        "start",
+        2.8260869565217392
+       ],
+       [
+        "stop",
+        2.9860869565217394
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        2.8260869565217392
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.5,
+        2.8340869565217393
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        2.9660869565217394
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        440
+       ],
+       [
+        "start",
+        2.8260869565217392
+       ],
+       [
+        "stop",
+        2.936086956521739
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        2.8260869565217392
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.16,
+        2.8340869565217393
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        2.916086956521739
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "bufferSource",
+      "log": [
+       [
+        "loop",
+        true
+       ],
+       [
+        "start",
+        2.8260869565217392
+       ],
+       [
+        "stop",
+        2.8860869565217393
+       ]
+      ]
+     },
+     {
+      "kind": "biquad",
+      "log": [
+       [
+        "type",
+        "highpass"
+       ],
+       [
+        "frequency",
+        "value",
+        7000
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.12,
+        2.8260869565217392
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.001,
+        2.876086956521739
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ]
+   ]
+  },
+  {
+   "step": 27,
+   "t": 2.934782608695652,
+   "voices": []
+  },
+  {
+   "step": 28,
+   "t": 3.043478260869565,
+   "voices": [
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        73.4161919793519
+       ],
+       [
+        "start",
+        3.043478260869565
+       ],
+       [
+        "stop",
+        3.203478260869565
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        3.043478260869565
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.5,
+        3.051478260869565
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        3.183478260869565
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        329.6275569128699
+       ],
+       [
+        "start",
+        3.043478260869565
+       ],
+       [
+        "stop",
+        3.153478260869565
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        3.043478260869565
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.16,
+        3.051478260869565
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        3.133478260869565
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ]
+   ]
+  },
+  {
+   "step": 29,
+   "t": 3.152173913043478,
+   "voices": []
+  },
+  {
+   "step": 30,
+   "t": 3.260869565217391,
+   "voices": [
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        73.4161919793519
+       ],
+       [
+        "start",
+        3.260869565217391
+       ],
+       [
+        "stop",
+        3.4208695652173913
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        3.260869565217391
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.5,
+        3.268869565217391
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        3.4008695652173913
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "oscillator",
+      "log": [
+       [
+        "type",
+        "square"
+       ],
+       [
+        "frequency",
+        "value",
+        415.3046975799451
+       ],
+       [
+        "start",
+        3.260869565217391
+       ],
+       [
+        "stop",
+        3.370869565217391
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.0001,
+        3.260869565217391
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.16,
+        3.268869565217391
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.0008,
+        3.350869565217391
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ],
+    [
+     {
+      "kind": "bufferSource",
+      "log": [
+       [
+        "loop",
+        true
+       ],
+       [
+        "start",
+        3.260869565217391
+       ],
+       [
+        "stop",
+        3.320869565217391
+       ]
+      ]
+     },
+     {
+      "kind": "biquad",
+      "log": [
+       [
+        "type",
+        "highpass"
+       ],
+       [
+        "frequency",
+        "value",
+        7000
+       ]
+      ]
+     },
+     {
+      "kind": "gain",
+      "log": [
+       [
+        "gain",
+        "setValueAtTime",
+        0.12,
+        3.260869565217391
+       ],
+       [
+        "gain",
+        "exponentialRampToValueAtTime",
+        0.001,
+        3.310869565217391
+       ]
+      ]
+     },
+     {
+      "bus": "bgm"
+     }
+    ]
+   ]
+  },
+  {
+   "step": 31,
+   "t": 3.369565217391304,
+   "voices": []
+  }
+ ]
+}

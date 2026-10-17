@@ -2,7 +2,7 @@
 
 別のプロセスで、SDL のドライバを dummy にして走らせる（テストのプロセスで pygame の
 画面を初期化しない。`tests/tools/runner.py` と同じ理由）。走らせる側で、ドライバが
-dummy であることを確かめてから画面を作る。
+dummy であることを確かめてから画面を作る。音の出口も dummy にする（音は出さない）。
 """
 
 import json
@@ -10,19 +10,23 @@ import os
 import subprocess
 import sys
 
-DUMMY_ENV = {**os.environ, "SDL_VIDEODRIVER": "dummy"}
+DUMMY_ENV = {**os.environ, "SDL_VIDEODRIVER": "dummy", "SDL_AUDIODRIVER": "dummy"}
 
 # 試合を作り、決めたイベントと tick の数でフレームを回して、結果を JSON で出す。
+# 2つ目の引数が "audio" なら、遊ぶときと同じく音を開いて回す。
 SMOKE = """
 import json, sys
 import pygame
-from animal_bomber.app.main import new_session, run
+from animal_bomber.app.main import new_session, open_audio, preset_mixer, run
 from animal_bomber.presentation.presenter import Presenter
 from animal_bomber.presentation.render.placeholder import (
     CELL, HUD_HEIGHT, PLAYER_COLORS, SCREEN_SIZE,
 )
 from animal_bomber.shell.keyboard import KeyboardWatcher
 
+audio = sys.argv[2:] == ["audio"]
+if audio:
+    preset_mixer()
 pygame.init()
 assert pygame.display.get_driver() == "dummy", pygame.display.get_driver()
 screen = pygame.display.set_mode(SCREEN_SIZE)
@@ -41,16 +45,30 @@ EVENTS = {
     ],
     "quit": [pygame.event.Event(pygame.QUIT)],
     "esc": [key(pygame.KSCAN_ESCAPE, pygame.K_ESCAPE)],
+    "probe": [],
 }
 plan = json.loads(sys.argv[1])
 keyboard = KeyboardWatcher()
 session = new_session(1, keyboard)
 current = []
+def channel_states():
+    if not pygame.mixer.get_init():
+        return []
+    count = pygame.mixer.get_num_channels()
+    return [pygame.mixer.Channel(i).get_busy() for i in range(count)]
+# "probe" のフレームの始め（前のフレームを描き終えた直後）に、チャンネルを見る。
+probes = []
 def ticks():
     for ticks_, name in plan:
+        if name == "probe":
+            probes.append(channel_states())
         current[:] = EVENTS[name]
         yield ticks_
-run(screen, session, keyboard, Presenter(), ticks(), events=lambda: list(current))
+presenter, observers = open_audio(session) if audio else (Presenter(), ())
+run(
+    screen, session, keyboard, presenter, ticks(),
+    events=lambda: list(current), observers=observers,
+)
 first = session.world.players[0]
 x, y = round(first.position.x * CELL), HUD_HEIGHT + round(first.position.y * CELL)
 print(json.dumps({
@@ -61,14 +79,16 @@ print(json.dumps({
     "color": list(PLAYER_COLORS[0]),
     "bombs": len(session.world.bombs),
     "previous": int(first.previous_input),
+    "mixer": pygame.mixer.get_init(),
+    "channels": probes[-1] if probes else channel_states(),
 }))
 pygame.quit()
 """
 
 
-def _run(plan: list[tuple[int, str]]) -> dict[str, object]:
+def _run(plan: list[tuple[int, str]], *options: str) -> dict[str, object]:
     completed = subprocess.run(
-        [sys.executable, "-c", SMOKE, json.dumps(plan)],
+        [sys.executable, "-c", SMOKE, json.dumps(plan), *options],
         env=DUMMY_ENV,
         capture_output=True,
         text=True,
@@ -118,3 +138,28 @@ def test_窓を閉じたら_試合を進めずに戻る() -> None:
 
 def test_Escを押したら_試合を進めずに戻る() -> None:
     assert _run([(3, "esc"), (3, "none")])["elapsed"] == 0
+
+
+def test_音を開いて回すと_曲を鳴らし_爆弾を置いた音を鳴らす() -> None:
+    """遊ぶときと同じ配線（`preset_mixer`・`open_audio`）で回す。
+
+    音の出口は決めた形（48000 Hz・16 bit・2 チャンネル）で開く。曲は専用のチャンネル
+    （0 番）で鳴り始め、置いた爆弾の音はほかのチャンネルで鳴る。置く音は 0.11 秒で
+    鳴り終わるので、爆弾を置いたフレームの次のフレームの始めに見る（"probe"）。
+    """
+    result = _run([(0, "none"), (1, "none"), (3, "tap_bomb"), (0, "probe")], "audio")
+    assert result["bombs"] == 1
+    assert result["mixer"] == [48000, -16, 2]
+    channels = result["channels"]
+    assert isinstance(channels, list)
+    assert channels[0] is True
+    assert any(channels[1:])
+
+
+def test_音を開かなければ_何も鳴らさない() -> None:
+    """mixer の形を決めずに回す（いままでのテストと同じ）。曲のチャンネルも静か。"""
+    channels = _run([(0, "none"), (1, "none"), (3, "tap_bomb"), (0, "probe")])[
+        "channels"
+    ]
+    assert isinstance(channels, list)
+    assert not any(channels)
