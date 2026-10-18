@@ -302,6 +302,37 @@ describe('葱が飛ぶ', () => {
     expect(events).toContainEqual({ type: 'leekStopped', cell: { col: 5, row: 2 }, by: 'blast' });
   });
 
+  it('同じ tick に撃った2本が同じ相手に同じ tick に届くと、番号の大きいほう（あとに撃った葱）の持ち主が戻る', () => {
+    // 原型の updateNegis は葱の配列を後ろから回す（L2292）。葱は入力の輪で番号の順に積む（L4333 → L2288）ので、
+    // 同じ tick に撃った2本なら番号の大きいほうが先に進んで当たる（L2327）。先に撃った葱は、相手がもう外周に
+    // いる（L2321）のと、戻った撃ち手が無敵な（L2325）のとで通り抜け、そのまま飛び続ける。
+    const world = makeWorld(3, ['rabbit', 'elephant', 'mole']);
+    clearBoard(world);
+    const [early, target, late] = world.players as [PlayerState, PlayerState, PlayerState];
+    const aim: Cell = { col: 5, row: 5 };
+    // 上辺と左辺から、同じ道のり（帯の真ん中からマスの中央まで 5.81 マス）で届く位置。
+    onLane(early, alongsFacing(aim)[0]);
+    onLane(late, alongsFacing(aim)[3]);
+    target.position = centerOf(aim);
+    const sim = new Simulation();
+    const fire = new Map<PlayerId, PlayerInput>([
+      [early.id, press({ bomb: true })],
+      [target.id, press({})],
+      [late.id, press({ bomb: true })],
+    ]);
+    const thrown = sim.step(world, fire).filter((e) => e.type === 'leekThrown');
+    expect(thrown.map((e) => e.type === 'leekThrown' && e.player)).toEqual([early.id, late.id]);
+
+    const events: SimEvent[] = [];
+    for (let i = 0; i < 100 && !events.some((e) => e.type === 'revived'); i += 1) {
+      events.push(...stepWith(world, sim, press({})));
+    }
+    expect(events.find((e) => e.type === 'revived')).toMatchObject({ player: late.id, replaced: target.id });
+    expect(early.life.kind).toBe('negibon');
+    // 先に撃った葱は当たらずに飛び続けている。
+    expect(world.actors.some((a) => a instanceof LeekActor && a.owner === early.id)).toBe(true);
+  });
+
   it('射程を越えると落ちる。盤面の中央までは届かない', () => {
     const { world } = shootingRange(5);
     const events = throwAndWait(world);

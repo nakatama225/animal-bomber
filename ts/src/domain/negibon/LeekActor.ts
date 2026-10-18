@@ -38,6 +38,12 @@ export type LeekStop = 'wall' | 'blast' | 'bomb' | 'range';
 export class LeekActor implements WorldActor {
   readonly kind = 'leek';
   readonly turn = ACTOR_TURNS.leek;
+  /**
+   * 同じ tick の葱は、新しく撃ったものから進める。原型の updateNegis の L2292 と同じ（配列を後ろから回す）。
+   * 別々の葱ボンが撃った葱が同じ tick に同じ相手に届くと、あとに撃った葱の持ち主が盤面へ戻る（同じ tick に撃った2本なら
+   * 番号の大きいほう）。先に撃った葱は、相手がもう外周にいるのと、戻った撃ち手が無敵なのとで通り抜けて飛び続ける。
+   */
+  readonly newestFirst = true;
   #position: Point;
   #travelled = 0;
   #remaining: Tick = LEEK_LIFETIME;

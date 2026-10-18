@@ -20,7 +20,7 @@ export class ActorSystem {
 
   /**
    * プレイヤーが動き終わったあとに進めるもの（`turn` が数）を、数の小さい順に進める。
-   * 同じ数どうしは出た順。
+   * 同じ数どうしは出た順。`newestFirst` のものは新しく出たものから（`WorldActor.newestFirst`）。
    */
   step(world: WorldState): SimEvent[] {
     return this.#advance(world, (actor) => actor.turn !== 'owner');
@@ -31,7 +31,12 @@ export class ActorSystem {
     // 走査中に増えることがある（爆発して別のものを出すなど）ので、
     // この tick の分だけを先に確定させる。この tick で新しく増えたものは、次の tick から進める。
     const current = [...world.actors];
-    const due = current.filter(picks).sort((a, b) => turnOrder(a) - turnOrder(b));
+    const due = current.filter(picks).sort((a, b) => {
+      const byTurn = turnOrder(a) - turnOrder(b);
+      if (byTurn !== 0) return byTurn;
+      const byAge = current.indexOf(a) - current.indexOf(b);
+      return a.newestFirst === true && b.newestFirst === true ? -byAge : byAge;
+    });
     const finished = new Set<WorldActor>();
     for (const actor of due) {
       const result = actor.tick(world);
