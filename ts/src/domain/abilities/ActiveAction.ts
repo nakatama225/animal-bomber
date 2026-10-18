@@ -27,7 +27,7 @@ import type { WorldState } from '../state/WorldState.js';
  *
  * ## System は種類を知らない
  *
- * 各 System が見るのは下の6つの性質だけで、**何の振る舞いかは見ない**。
+ * 各 System が見るのは下の7つの性質だけで、**何の振る舞いかは見ない**。
  * 動物を追加しても `src/domain/systems/` には1行も足さない。
  * これが守られているかは `tests/boundary/guards.test.ts` が見張る。
  */
@@ -74,6 +74,20 @@ export interface ActiveAction {
    * 飛ばしていた（update の `if (!p.effects.charge) pickupCheck(p);`）。
    */
   readonly sweepsItems: boolean;
+
+  /**
+   * true なら、持ち主が盤面を離れても（倒れて外周へ回った・退場した）外さずに、その場で止めておく。省くと false。
+   *
+   * 止めている間は進めない（`tick` を呼ばない）が、爆風に触れたかの確かめ（`afterDamage`）は続ける。外れるのは、
+   * `afterDamage` が終わりを返したとき・葱で盤面へ戻るとき（`swapPlaces`。後始末は呼ばない）・延長戦・
+   * ラウンドの始まり。
+   *
+   * 原型の舌のばしがこの形なので、それと同じにするための性質。原型は倒れても舌を消さず（toNegibon L2255）、
+   * 舌を進めるのは盤面にいるプレイヤーだけ（update L4320-4322）、焼けたかの確かめは状態を問わず全員を見る（L4395）。
+   * そのため、倒れたあとに止まった舌の上へ爆風が来ると焼けて、そのラウンドの舌が短くなる。
+   * false のもの（突進・穴掘り）は、盤面を離れた次の tick に後始末を呼んで外す（`ActionSystem`）。
+   */
+  readonly staysOffBoard?: boolean;
 
   /**
    * 1 tick 進める。

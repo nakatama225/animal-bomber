@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { CpuInputSource, cpuSeed } from '../../src/ai/CpuInputSource.js';
 import { CPU_LEVELS } from '../../src/ai/CpuLevel.js';
 import { GameSession } from '../../src/app/GameSession.js';
-import { centerOf } from '../../src/domain/core/Coord.js';
+import { TongueAction } from '../../src/domain/abilities/frog/TongueAction.js';
+import { cellOf, centerOf } from '../../src/domain/core/Coord.js';
 import { swapPlaces } from '../../src/domain/mutations/negibon.js';
 import { enterSuddenDeath } from '../../src/domain/mutations/suddenDeath.js';
 import { alongsFacing, laneSpot } from '../../src/domain/negibon/lane.js';
@@ -11,6 +12,7 @@ import { LeekActor } from '../../src/domain/negibon/LeekActor.js';
 import { defaultMatchConfig } from '../../src/domain/rules/MatchConfig.js';
 import { SPAWN_CELLS } from '../../src/domain/rules/tuning.js';
 import { tick } from '../../src/domain/core/Tick.js';
+import { OUT } from '../../src/domain/state/Life.js';
 import type { PlayerState } from '../../src/domain/state/PlayerState.js';
 import { hashWorld } from '../../src/domain/state/WorldState.js';
 import { layoutFor, screenX } from '../../src/presentation/render/Layout.js';
@@ -140,6 +142,29 @@ describe('描画', () => {
     // 葱は1本につき1回、飛ぶ向きへ回す。
     const rotations = (drawn: FakeCanvas): number => drawn.calls.get('rotate') ?? 0;
     expect(rotations(canvas) - rotations(drawWith(false))).toBe(sides.length);
+  });
+
+  it('盤面にいないプレイヤーの、止まったまま残っている舌は描かない（原型の drawPlayer L4753 は盤面にいないプレイヤーを描かずに返る）', () => {
+    // 倒れたかえるの舌は、外周にいる間も退場したあとも外さずに止めておく（`TongueAction.staysOffBoard`）。
+    // 描くのは盤面にいるプレイヤーだけなので、止まった舌は見えない。
+    const drawWith = (life: 'negibon' | 'out' | 'alive', tongue: boolean): FakeCanvas['log'] => {
+      const world = makeWorld(3, ['frog', 'rabbit']);
+      const frog = world.players[0]!;
+      frog.position = centerOf({ col: 3, row: 5 });
+      frog.facing = 'right';
+      const action = new TongueAction(cellOf(frog.position), frog.facing);
+      for (let t = 1; t <= 40; t += 1) action.tick(world, frog);
+      if (tongue) frog.action = action;
+      if (life === 'negibon') frog.life = { kind: 'negibon', along: 5, readyAt: tick(0) };
+      if (life === 'out') frog.life = OUT;
+      const canvas = fakeCanvas();
+      new Renderer(canvas.context, 920, 680).draw(world, 0.5);
+      return canvas.log;
+    };
+    expect(drawWith('negibon', true)).toEqual(drawWith('negibon', false));
+    expect(drawWith('out', true)).toEqual(drawWith('out', false));
+    // 対照：盤面にいれば舌を描く（同じ比べ方で違いが出る）。
+    expect(drawWith('alive', true)).not.toEqual(drawWith('alive', false));
   });
 });
 

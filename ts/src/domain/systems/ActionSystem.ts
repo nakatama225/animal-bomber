@@ -83,14 +83,18 @@ export class ActionSystem {
   }
 
   /**
-   * 被弾を見たあとに、振る舞いが爆風に触れたかを見る（`ActiveAction.afterDamage`）。
-   * 盤面にいるプレイヤーだけ。終わったら後始末を呼んで外す。
+   * 被弾を見たあとに、振る舞いが爆風に触れたかを見る（`ActiveAction.afterDamage`）。終わったら後始末を呼んで外す。
+   *
+   * 盤面にいるプレイヤーと、盤面を離れても残す振る舞い（`ActiveAction.staysOffBoard`）を持つプレイヤーを見る。
+   * 原型の L4395 は、状態を問わず全員について焼けたかを確かめる。倒れた tick にも見るので、倒した爆風が
+   * 止まった振る舞いに触れていれば、その tick のうちに終わる（原型も被弾 L4393 のすぐあとに見る）。
    */
   afterDamage(world: WorldState): SimEvent[] {
     const events: SimEvent[] = [];
     for (const player of world.players) {
       const action = player.action;
-      if (action === null || action.afterDamage === undefined || !isAlive(player)) continue;
+      if (action === null || action.afterDamage === undefined) continue;
+      if (!isAlive(player) && action.staysOffBoard !== true) continue;
       const result = action.afterDamage(world, player);
       events.push(...result.events);
       if (!result.done) continue;
@@ -105,8 +109,12 @@ export class ActionSystem {
     const action = player.action;
     if (action === null) return [];
 
+    // 盤面を離れても残す振る舞い（`ActiveAction.staysOffBoard`）は、盤面にいない間は進めずにそのまま止めておく
+    // （原型の update L4320-4322 も、盤面にいるプレイヤーの振る舞いだけを進める）。
+    if (!isAlive(player) && action.staysOffBoard === true) return [];
+
     // ⚠️ 前の tick のうちに盤面を離れていたら（倒れた・外周へ回った）、もう進めずに
-    // 打ち切る。進めると、盤面にいない人の技が1 tick ぶん働く（拾った物が外周の
+    // 打ち切る。進めると、盤面にいないプレイヤーの技が1 tick ぶん働く（拾った物が外周の
     // 葱ボンに渡る、など）。
     const result = isAlive(player) ? action.tick(world, player) : { events: [], done: true };
     const events = [...result.events];

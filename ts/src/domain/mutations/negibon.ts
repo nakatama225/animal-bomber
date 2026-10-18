@@ -78,6 +78,12 @@ export function swapPlaces(
   shooter.lastHitBy = null;
   // 置いている爆弾の数も 0 に戻す（原型の negiHit L2347）。外周にいる間は爆弾を置けないので、ふつうはもう 0。
   shooter.activeBombs = 0;
+  // かかっている状態と、盤面を離れても止めて残していた振る舞い（`ActiveAction.staysOffBoard`）を消す
+  // （原型の negiHit L2347-2348 は effects={}・tongue=null・digging=null）。外周にいる間に振る舞いが爆風に触れて
+  // 付いた泣く状態も、ここで消える。後始末（finish）は呼ばない。原型も消すだけで、掴んでいた物も一緒に消える
+  // （延長戦の片付けと同じ）。
+  for (const kind of EFFECT_KINDS) shooter.effects.clear(kind);
+  shooter.action = null;
   // 技のボタンの押した長さには触らない（原型の negiHit も触らない）。外周にいる間は数えないので、
   // 倒れたときの長さが残る。押したまま戻ると、そこから数え続ける。とくぎを持っている印は外周へ回るときに
   // 外してあるので、拾わない限りとくぎは出ない。印と回数には触らない（原型の negiHit L2337-2356 も触らない）。

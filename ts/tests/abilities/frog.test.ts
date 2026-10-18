@@ -12,7 +12,9 @@ import { cellOf, centerOf, type Cell } from '../../src/domain/core/Coord.js';
 import { tick } from '../../src/domain/core/Tick.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
 import { placeBombAt } from '../../src/domain/mutations/bombs.js';
+import { hurt } from '../../src/domain/mutations/damage.js';
 import { addBlast } from '../../src/domain/mutations/explode.js';
+import { swapPlaces } from '../../src/domain/mutations/negibon.js';
 import { enterSuddenDeath } from '../../src/domain/mutations/suddenDeath.js';
 import { OUT } from '../../src/domain/state/Life.js';
 import { isFrozen, type PlayerState } from '../../src/domain/state/PlayerState.js';
@@ -487,5 +489,95 @@ describe('舌の長さと時間（原型 startTongue・updateTongue・tongueBurn
     };
     expect(run(false)).toEqual(['23:tongueCaught', '46:itemTaken(null)']);
     expect(run(true)).toEqual(['23:tongueCaught']);
+  });
+});
+
+describe('倒れたかえるの舌（原型 toNegibon L2255・update L4320-4322・L4395・negiHit L2347-2348）', () => {
+  /** (3,5) から右へ舌を5マス伸ばした最中のかえる（40 tick 進めた。上の「焼き切れる」と同じ形）。 */
+  function frogWithTongue(): { world: WorldState; frog: PlayerState; rabbit: PlayerState; action: TongueAction } {
+    const { world, frog, rabbit } = arena();
+    frog.position = centerOf({ col: 3, row: 5 });
+    frog.facing = 'right';
+    const action = new TongueAction(cellOf(frog.position), frog.facing);
+    for (let t = 1; t <= 40; t += 1) action.tick(world, frog);
+    frog.action = action;
+    return { world, frog, rabbit, action };
+  }
+
+  /** 体力1個ぶんのかえるを倒す（残り時間があれば外周へ回る）。 */
+  function knockOut(world: WorldState, frog: PlayerState): void {
+    frog.hp = 2;
+    hurt(world, frog, 1, 2);
+  }
+
+  it('倒れて外周へ回っても、舌は外さずに伸びたまま止まる（原型は tongue を消さず、進めるのは盤面にいるときだけ）', () => {
+    const { world, frog, action } = frogWithTongue();
+    const extent = action.extent;
+    knockOut(world, frog);
+    expect(frog.life.kind).toBe('negibon');
+    const sim = new Simulation();
+    for (let t = 0; t < 120; t += 1) sim.step(world, sameForAll(world, press({})));
+    expect(frog.action).toBe(action);
+    expect(action.extent).toBe(extent);
+  });
+
+  it('外周にいる間に、止まった舌の上へ爆風が来ると焼ける：短くなり、泣き、舌は外れる（原型 L4395 → L2475-2490）', () => {
+    const { world, frog } = frogWithTongue();
+    knockOut(world, frog);
+    const sim = new Simulation();
+    sim.step(world, sameForAll(world, press({})));
+    addBlast(world, { col: 5, row: 5 }, 1, false);
+    const events = sim.step(world, sameForAll(world, press({})));
+    expect(events).toContainEqual({ type: 'burntOff', player: frog.id, cell: { col: 5, row: 5 } });
+    expect(events).toContainEqual({ type: 'effectApplied', target: frog.id, effect: 'stun' });
+    expect(frog.life.kind).toBe('negibon');
+    expect(frog.action).toBeNull();
+    expect(tongueReachOf(world, frog)).toBe(1);
+    expect(frog.effects.has('stun')).toBe(true);
+  });
+
+  it('倒した爆風が舌の上にも乗っていれば、倒れたその tick のうちに焼ける（原型は被弾 L4393 のすぐあとに L4395）', () => {
+    const { world, frog } = frogWithTongue();
+    frog.hp = 2;
+    addBlast(world, { col: 3, row: 5 }, 1, true);
+    addBlast(world, { col: 4, row: 5 }, 1, false);
+    const events = new Simulation().step(world, sameForAll(world, press({})));
+    expect(events).toContainEqual(expect.objectContaining({ type: 'playerDown', target: frog.id }));
+    expect(events).toContainEqual({ type: 'burntOff', player: frog.id, cell: { col: 4, row: 5 } });
+    expect(frog.life.kind).toBe('negibon');
+    expect(tongueReachOf(world, frog)).toBe(0);
+  });
+
+  it('退場したかえるの舌も残り、爆風が来れば焼ける（原型の退場 L1700 でも tongue は残る）', () => {
+    const { world, frog } = frogWithTongue();
+    world.endsAt = world.now;
+    knockOut(world, frog);
+    expect(frog.life).toBe(OUT);
+    const sim = new Simulation();
+    sim.step(world, sameForAll(world, press({})));
+    expect(frog.action).not.toBeNull();
+    addBlast(world, { col: 6, row: 5 }, 1, false);
+    const events = sim.step(world, sameForAll(world, press({})));
+    expect(events).toContainEqual({ type: 'burntOff', player: frog.id, cell: { col: 6, row: 5 } });
+    expect(tongueReachOf(world, frog)).toBe(2);
+  });
+
+  it('葱で戻ると、止まっていた舌は消える（原型の negiHit L2348 は tongue=null）', () => {
+    const { world, frog, rabbit } = frogWithTongue();
+    knockOut(world, frog);
+    swapPlaces(world, frog, rabbit);
+    expect(frog.life.kind).toBe('alive');
+    expect(frog.action).toBeNull();
+  });
+
+  it('葱で戻ると、外周で舌が焼けて付いた泣く状態は消え、短くなった長さは残る（原型 L2347 は effects={}、tongueLimit には触らない）', () => {
+    const { world, frog, rabbit } = frogWithTongue();
+    knockOut(world, frog);
+    addBlast(world, { col: 5, row: 5 }, 1, false);
+    new Simulation().step(world, sameForAll(world, press({})));
+    expect(frog.effects.has('stun')).toBe(true);
+    swapPlaces(world, frog, rabbit);
+    expect(frog.effects.active()).toEqual([]);
+    expect(tongueReachOf(world, frog)).toBe(1);
   });
 });

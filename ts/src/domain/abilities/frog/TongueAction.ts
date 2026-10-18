@@ -110,6 +110,13 @@ export class TongueAction implements ActiveAction {
   /** 往復し終わるまで、技のボタンは効かない（原型の doAction・doSpecial）。 */
   readonly blocksButtons = true;
   readonly sweepsItems = false;
+  /**
+   * 倒れても舌は外さずに止めておき、焼けたかは見続ける（原型と同じ）。原型の toNegibon（L2255）は tongue を消さず
+   * （退場 L1700 でも残る）、舌を進めるのは盤面にいるときだけ（L4320-4322）、焼けたかの確かめ（L4395）は状態を
+   * 問わない。外周にいる間に止まった舌の上へ爆風が来ると焼けて、そのラウンドの舌が短くなり、泣く。葱で盤面へ
+   * 戻るときに舌も泣く状態も消える（negiHit L2347-2348）が、短くなった長さは残る。
+   */
+  readonly staysOffBoard = true;
 
   /** 伸ばし始めたマス。押されて動いても、舌の根元はここのまま（原型も伸ばし始めのマスを覚える）。 */
   readonly #origin: Cell;
