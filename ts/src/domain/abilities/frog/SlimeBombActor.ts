@@ -52,6 +52,12 @@ const HOP_MAX = 8;
 export class SlimeBombActor implements WorldActor {
   readonly kind = 'slime';
   readonly turn = ACTOR_TURNS.slime;
+  /**
+   * 同じ tick の粘膜爆弾は、新しく投げたものから進める。原型の updateSlimes の L2949 と同じ（配列を後ろから回す）。
+   * 2つ以上が同じ tick に着地したり跳ねたりすると、間隔（L2958・L2979）と跳ぶ先（L2970）の乱数を新しいものから引く。
+   * 同じ tick に2つ以上が爆発すると、生やす爆弾の並び（5. で爆発する順）も新しいものから。
+   */
+  readonly newestFirst = true;
   #cell: Cell;
   readonly #from: Point;
   #hopsLeft: number;
@@ -206,8 +212,8 @@ export class SlimeBombActor implements WorldActor {
    * - 同じ tick にあとから進める粘膜爆弾が、その爆風に触れてすぐ爆発する（原型ではまだ爆風が無い）
    * いずれも `tests/abilities/frog.test.ts` の「粘膜爆弾が爆発する番」で確かめている。
    *
-   * ⚠️ 同じ tick に2つ以上が爆発するときの順は、原型と揃えていない。原型の updateSlimes は配列を後ろから
-   * 回すが（L2949）、この版は出た順に進めるので、生やす爆弾の並びも、5. で爆発する順も原型と逆になる。
+   * 同じ tick に2つ以上が爆発するときは、新しく投げたものから生やす（`newestFirst`。原型の updateSlimes も
+   * 配列を後ろから回す L2949）。`world.bombs` の並びも 5. で爆発する順も、原型と同じく新しいものが先になる。
    */
   #burst(world: WorldState): SimEvent[] {
     const blocked = (cell: Cell): boolean =>

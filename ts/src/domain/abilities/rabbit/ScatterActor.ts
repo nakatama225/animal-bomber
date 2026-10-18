@@ -43,6 +43,12 @@ const SCATTERED_LIFETIME: Tick = tick(3600);
 export class ScatterActor implements WorldActor {
   readonly kind = 'scatter';
   readonly turn = ACTOR_TURNS.scatter;
+  /**
+   * 同じ tick の撒く本体は、新しく撒き始めたものから進める。原型の updatePoroporos の L2756 と同じ（配列を後ろから回す）。
+   * 2つの範囲が重なり、同じ tick に同じマスへ撒くと、新しいほうのうんこになる。古いほうは、アイテムのあるマスには
+   * 撒かない決まり（L2768）でそのマスを飛ばす。
+   */
+  readonly newestFirst = true;
   #elapsed: Tick = tick(0);
   /** 撒き終えた輪。-1 はまだ1つも撒いていない。 */
   #ring = -1;

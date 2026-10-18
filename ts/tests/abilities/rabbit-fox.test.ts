@@ -204,6 +204,23 @@ describe('撒く範囲（原型 updatePoroporos）', () => {
     expect(cells).toHaveLength(24);
     expect(new Set(cells).size).toBe(24);
   });
+
+  it('2つが同じ tick に同じマスへ撒くと、新しいほうのうんこになる（原型 updatePoroporos は配列を後ろから回す L2756）', () => {
+    // 原型：中心 (5,7) の A（古い）と (7,7) の B（新しい）を同じ update から撒くと、B が先に撒き、A はアイテムのある
+    // マスを飛ばす（L2768）。40 フレーム目の 1周目どうしの (6,7) と、80 フレーム目の 2周目どうしの (5,5)・(6,5)・(7,5)・
+    // (5,9)・(6,9)・(7,9) は B のもの。持ち主ごとのマスは、原型を画面なしで動かして見た並び。
+    const { world, p0, p1 } = arena(['rabbit', 'rabbit']);
+    place(p0, { col: 1, row: 1 });
+    world.actors.push(new ScatterActor({ col: 5, row: 7 }, p0.id), new ScatterActor({ col: 7, row: 7 }, p1.id));
+    advance(world, sameForAll(world, press({})), 130);
+    const ownedBy = (owner: PlayerState): string[] =>
+      world.items.filter((item) => item.scatteredBy === owner.id).map((item) => `${item.cell.col},${item.cell.row}`);
+    expect(ownedBy(p0)).toEqual(['5,7', '5,6', '4,7', '5,8', '3,5', '4,5', '3,6', '3,7', '3,8', '3,9', '4,9']);
+    expect(ownedBy(p1)).toEqual([
+      '7,7', '7,6', '6,7', '8,7', '7,8',
+      '5,5', '6,5', '7,5', '8,5', '9,5', '9,6', '9,7', '9,8', '5,9', '6,9', '7,9', '8,9', '9,9',
+    ]);
+  });
 });
 
 describe('撒いている間の爆弾（原型 canPlaceBomb は撒いている状態を見ない）', () => {

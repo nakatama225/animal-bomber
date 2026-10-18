@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { SlimeBombActor } from '../../src/domain/abilities/frog/SlimeBombActor.js';
 import {
@@ -353,9 +353,11 @@ describe('粘膜爆弾が爆発する番（原型 slimeBurst L2942-2945・update
   it('同じ tick にあとから進める粘膜爆弾は、まだ爆風が無いのでその tick には爆発せず、次の tick に爆発する', () => {
     // 原型：爆発する粘膜爆弾 (9,7) の右の腕 (11,7) に、飛んでいる最中の別の粘膜爆弾がいる。その update の
     // updateSlimes にはまだ爆風が無いので、別の粘膜爆弾は次の update に爆風に触れて爆発する。
+    // 粘膜爆弾は新しいものから進める（L2949）ので、別の粘膜爆弾は古いほう（盤面の物の並びの前）に置き、
+    // 爆発するほうのあとに進める。
     const { world, frog, sim } = slimeAboutToBurst();
     const second = new SlimeBombActor({ col: 11, row: 7 }, frog, 5);
-    world.actors.push(second);
+    world.actors.unshift(second);
     const first = sim.step(world, sameForAll(world, press({})));
     expect(explodedAt(first)).toEqual(['9,7']);
     expect(blastCells(world)).toContain('11,7');
@@ -363,6 +365,44 @@ describe('粘膜爆弾が爆発する番（原型 slimeBurst L2942-2945・update
     const next = sim.step(world, sameForAll(world, press({})));
     expect(explodedAt(next)).toEqual(['11,7']);
     expect(world.actors).not.toContain(second);
+  });
+});
+
+describe('同じ tick に跳ねる粘膜爆弾の順（原型 updateSlimes は配列を後ろから回す L2949）', () => {
+  it('新しく投げたほうが先に、跳ぶ先と次の間隔の乱数を引く', () => {
+    // 原型：古い A と新しい B が同じ update に跳ねると、B の番に跳ぶ先（L2970）と間隔（L2979）を引き終えてから、
+    // A の番に引く（種 7・11・300 で、どれも B → A）。原型の乱数は列が違うので、どちらの番に引いたかで比べる。
+    const { world, frog } = arena();
+    const older = new SlimeBombActor({ col: 5, row: 5 }, frog, 5);
+    const newer = new SlimeBombActor({ col: 13, row: 9 }, frog, 5);
+    world.actors.push(older, newer);
+    let turn: string | null = null;
+    for (const [label, slime] of [['古い', older], ['新しい', newer]] as const) {
+      const tickOf = slime.tick.bind(slime);
+      vi.spyOn(slime, 'tick').mockImplementation((w) => {
+        turn = label;
+        try {
+          return tickOf(w);
+        } finally {
+          turn = null;
+        }
+      });
+    }
+    // 試合の乱数は、どちらの番に引いたかを書き留めて、いつも 0 を返す偽物にする。2つの間隔がそろうので、
+    // 同じ tick に着地して、同じ tick に跳ねる。
+    const draws: (string | null)[] = [];
+    vi.spyOn(world.rng, 'next').mockImplementation(() => {
+      draws.push(turn);
+      return 0;
+    });
+    const sim = new Simulation();
+    for (let i = 0; i < 100 && newer.hopsLeft === 5; i += 1) {
+      draws.length = 0;
+      sim.step(world, sameForAll(world, press({})));
+    }
+    expect([older.hopsLeft, newer.hopsLeft]).toEqual([4, 4]);
+    // 1つの番に8回（跳ぶ先の8つの向きを混ぜるのに7回、次の間隔に1回）。
+    expect(draws).toEqual([...Array<string>(8).fill('新しい'), ...Array<string>(8).fill('古い')]);
   });
 });
 
