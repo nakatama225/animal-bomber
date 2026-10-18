@@ -14,7 +14,7 @@ from enum import Enum
 from animal_bomber.domain.events import MatchEnded, RoundEnded, SimEvent
 from animal_bomber.domain.rules.match import MatchConfig
 from animal_bomber.domain.state.match import MatchState
-from animal_bomber.domain.state.player import Life, PlayerId
+from animal_bomber.domain.state.player import PlayerId, is_alive
 from animal_bomber.domain.state.world import WorldState
 
 
@@ -43,7 +43,7 @@ def check_round(world: WorldState, config: MatchConfig) -> RoundOutcome | None:
     なら引き分け。制限時間が過ぎたら引き分け。体力の多いほうを勝ちにすると、始まって
     から隅で待つのがいちばん強い戦い方になる（TypeScript 版の注記）。
     """
-    alive = [player.id for player in world.players if player.life is Life.ALIVE]
+    alive = [player.id for player in world.players if is_alive(player)]
     if len(alive) <= 1:
         winner = alive[0] if alive else None
         return RoundOutcome(winner=winner, reason=RoundEndReason.LAST_STANDING)

@@ -7,7 +7,7 @@ from animal_bomber.domain.query.board import blast_at, bomb_at, is_solid_for
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.tuning import BLAST_DURATION, BOMB_FUSE
 from animal_bomber.domain.state.board import Tile
-from animal_bomber.domain.state.player import Life
+from animal_bomber.domain.state.player import OUT
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.blast import add_blast, detonate
 from animal_bomber.domain.systems.bomb import place_bomb, remove_bomb
@@ -83,7 +83,7 @@ class Test爆弾を置く:
 
     def test_倒れているプレイヤーのボタンでは置かれない(self) -> None:
         world = make_world()
-        world.players[0].life = Life.DEAD
+        world.players[0].life = OUT
         advance(world, only_for(world, 0, BOMB), 1)
         assert world.bombs == []
 
@@ -100,7 +100,7 @@ class Test爆弾を置く:
         ため。
         """
         world = make_world()
-        world.players[1].life = Life.DEAD
+        world.players[1].life = OUT
         advance(world, only_for(world, 1, BOMB), 1)
         assert world.players[1].previous_input is BOMB
 
@@ -129,7 +129,7 @@ class Test置いた爆弾の通り抜け:
         world = make_world()
         owner, fallen = world.players
         fallen.position = owner.position
-        fallen.life = Life.DEAD
+        fallen.life = OUT
         bomb = place_bomb(world, owner)
         assert bomb is not None
         assert bomb.pass_through == {0}

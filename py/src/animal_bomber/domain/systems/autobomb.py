@@ -25,7 +25,7 @@ from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import BombPlaced, SimEvent
 from animal_bomber.domain.rules.tuning import AUTOBOMB_INTERVAL
 from animal_bomber.domain.state.effects import EffectKind
-from animal_bomber.domain.state.player import Life, PlayerState, can_place_bomb
+from animal_bomber.domain.state.player import PlayerState, can_place_bomb, is_alive
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems.bomb import place_bomb
 
@@ -36,7 +36,7 @@ def autobomb_for(world: WorldState, player: PlayerState) -> list[SimEvent]:
     落とし穴にはまっている間と、置けない振る舞いの最中は置かない（`can_place_bomb`）。
     「爆弾おけない」には止められない。勝手に設置がかかっている間は、そちらが勝つ。
     """
-    if player.life is not Life.ALIVE:
+    if not is_alive(player):
         return []
     # 拍は、このあと置けずに飛ばす場合も進める。原型も、置けなかった拍の次は
     # 1拍あと。

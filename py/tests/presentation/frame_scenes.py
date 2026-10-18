@@ -26,7 +26,7 @@ import pygame
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.state.actors import Foxfire, SlimeBomb
 from animal_bomber.domain.state.match import MatchState
-from animal_bomber.domain.state.player import Life, PlayerId
+from animal_bomber.domain.state.player import PlayerId, is_alive
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng, ScriptedRandom
 from animal_bomber.presentation.render.art.foxfires import FoxfireLook, TrailMark
@@ -109,7 +109,7 @@ def frame_scene(world: WorldState, visuals: FixedVisuals) -> FrameScene:
     players = [
         player_look(world, player, visuals.motion(player.id))
         for player in world.players
-        if player.life is Life.ALIVE
+        if is_alive(player)
     ]
     foxfires = [
         FoxfireLook(actor.cell, visuals.trail(actor, world.now))

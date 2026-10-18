@@ -5,13 +5,13 @@
 誰が操作するかは、入力の出どころ（`domain/input/sources.py` の窓口）の違いだけに
 なっている。
 
-いまは段階 5 までで使うものだけを持つ。外周（葱ボン）の状態は、使う段階 8 で足す。
-使わない項目を先に置くと、値が正しいかを確かめるテストが無いまま状態の要約に混ざる。
+試合にどういう形で加わっているか（盤面にいる・外周を回っている・退場した）は `Life` で
+持つ。外周を回っている間だけ持つ値（外周の上の位置・次に撃てる時刻）は、その状態の中に
+だけ置く（`Negibon`）。
 """
 
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Final, Literal
+from typing import Final, Literal, TypeAlias, assert_never
 
 from animal_bomber.domain.core.coord import Direction, Point
 from animal_bomber.domain.core.tick import Tick
@@ -45,11 +45,64 @@ PLAYER_IDS: Final[tuple[PlayerId, ...]] = (0, 1, 2, 3)
 """
 
 
-class Life(Enum):
-    """生死。"""
+@dataclass(frozen=True, slots=True)
+class Alive:
+    """盤面の上で戦っている。"""
 
-    ALIVE = "alive"
-    DEAD = "dead"
+
+@dataclass(frozen=True, slots=True)
+class Negibon:
+    """倒れたあと、盤面の外周を回って葱を撃っている（葱ボン）。
+
+    外周にいる間だけ意味を持つ値は、この状態にだけ持たせる。盤面にいるプレイヤーが
+    外周の上の位置を持つことは、型の上でできない。
+    """
+
+    along: float
+    """外周に沿った位置（マス単位）。0 が上辺の左端で、時計回りに増える。
+
+    ⚠️ 外周の帯の幅（絵の寸法）とは別のもの。こちらは帯の上のどこにいるか。
+    """
+    ready_at: Tick
+    """次の葱を撃てるようになる盤面の時刻。"""
+
+
+@dataclass(frozen=True, slots=True)
+class Out:
+    """退場した。このラウンドの間はもう戻らない。"""
+
+
+Life: TypeAlias = Alive | Negibon | Out
+"""プレイヤーがいまどういう形で試合に加わっているか。
+
+原型は `'ALIVE' | 'NEGIBON' | 'OUT'` の文字列と、外周の位置・撃つ間隔の値を、別々の
+項目に持っていた。そのため、盤面にいるプレイヤーにも外周の位置と撃つ間隔が残っていた。
+ここでは状態ごとに持つ値を分け、持つべきでない値を型の上で持てなくしてある
+（`docs/09-葱ボンと延長戦.md`）。
+
+⚠️ 中身を書き換えず、丸ごと差し替える（どれも frozen）。`ALIVE` と `OUT` は全員で
+1つを使い回す。種類で分ける所は `match` で書き、最後に `assert_never` を置く。種類を
+1つ足すと、扱いを書き忘れた所が型検査（mypy）で失敗する。
+"""
+
+ALIVE: Final = Alive()
+"""盤面の上で戦っている状態。全員で1つを使い回す。"""
+
+OUT: Final = Out()
+"""退場した状態。全員で1つを使い回す。"""
+
+
+def life_name(life: Life) -> str:
+    """状態の要約と記録に使う名前（TypeScript 版の `Life` の `kind` と同じ）。"""
+    match life:
+        case Alive():
+            return "alive"
+        case Negibon():
+            return "negibon"
+        case Out():
+            return "out"
+        case _:
+            assert_never(life)
 
 
 @dataclass(slots=True)
@@ -67,7 +120,8 @@ class PlayerState:
     """盤面上の位置（マス単位の連続座標）。"""
     facing: Direction
     """向いている方向。爆弾や技の向きに使う。"""
-    life: Life = Life.ALIVE
+    life: Life = ALIVE
+    """盤面にいるか・外周を回っているか・退場したか。盤面にいるかは `is_alive`。"""
     shoes: int = 0
     """靴を取った段数。"""
     power: int = BASE_POWER
@@ -138,6 +192,22 @@ class PlayerState:
     だけで、延長戦（段階 8）でも戻さない（原型と同じ）。記録から状態を作り直したときに
     同じ拍で置くよう、状態の一部として持つ。
     """
+
+
+def is_alive(player: PlayerState) -> bool:
+    """盤面の上にいるか（外周を回っている・退場したなら False）。
+
+    盤面の処理（動く・爆弾を置く・技・拾う・被弾）は、盤面にいるプレイヤーだけを扱う。
+    外周を回っているプレイヤーも退場したプレイヤーも、盤面の上にはいない。
+    """
+    life = player.life
+    match life:
+        case Alive():
+            return True
+        case Negibon() | Out():
+            return False
+        case _:
+            assert_never(life)
 
 
 def just_pressed(

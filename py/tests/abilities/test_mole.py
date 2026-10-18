@@ -23,7 +23,7 @@ from animal_bomber.domain.state.actors import Foxfire, Pit, SlimeBomb
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import Life, PlayerState, is_frozen
+from animal_bomber.domain.state.player import OUT, PlayerState, is_frozen
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.bomb import place_bomb
@@ -281,7 +281,7 @@ class Test落ちる:
         owner, rabbit = world.players
         place(owner, Cell(3, 3))
         place(rabbit, Cell(7, 5))
-        rabbit.life = Life.DEAD
+        rabbit.life = OUT
         world.actors.append(Pit(cell=Cell(7, 5), owner=owner.id))
         simulation.step(world, idle(world))
         assert not rabbit.effects.has(EffectKind.PITFALL)

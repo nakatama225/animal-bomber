@@ -33,7 +33,7 @@ from animal_bomber.domain.state.actions import Charge
 from animal_bomber.domain.state.actors import SlimeBomb
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import Life, PlayerId
+from animal_bomber.domain.state.player import OUT, PlayerId
 from animal_bomber.domain.state.world import WorldState, create_world
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.bomb import place_bomb_at
@@ -195,7 +195,7 @@ class Test突進:
         倒れた tick の終わりには突進が残っているが、拾ったものはふつうの煙にする。
         """
         world, _ = charging_world()
-        world.players[0].life = Life.DEAD
+        world.players[0].life = OUT
         before = snapshot_of(world)
         field = apply([ItemTaken(Cell(6, 5), ItemKind.FIRE, 0)], world, before)
         assert heads(field) == [("\N{FIRE}", GOOD_SMOKE)]

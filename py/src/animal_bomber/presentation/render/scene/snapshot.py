@@ -23,7 +23,7 @@ from animal_bomber.domain.state.actors import (
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import Life, PlayerId
+from animal_bomber.domain.state.player import PlayerId, is_alive
 from animal_bomber.domain.state.world import WorldState
 
 
@@ -81,7 +81,7 @@ def snapshot_of(world: WorldState) -> Snapshot:
     players = {
         player.id: PlayerSnapshot(
             position=player.position,
-            alive=player.life is Life.ALIVE,
+            alive=is_alive(player),
             shoes=player.shoes,
             effects={
                 kind: player.effects.remaining(kind) for kind in player.effects.active()

@@ -22,7 +22,7 @@ from animal_bomber.domain.state.actions import Dig, traits_of
 from animal_bomber.domain.state.actors import Pit
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
-from animal_bomber.domain.state.player import Life, PlayerState
+from animal_bomber.domain.state.player import PlayerState, is_alive
 from animal_bomber.domain.state.world import WorldState
 
 DIG_TIME: Final = Tick(90)
@@ -144,7 +144,7 @@ def advance_pit(
             どの動物が掘れるかを技の割り当て（`techniques.py`）の1か所で決めるため。
     """
     for player in world.players:
-        if digs_pits(player.animal) or player.life is not Life.ALIVE:
+        if digs_pits(player.animal) or not is_alive(player):
             continue
         if player.effects.has(EffectKind.PITFALL):
             continue

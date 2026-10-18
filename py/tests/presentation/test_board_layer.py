@@ -11,7 +11,7 @@ import pytest
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.match import MatchState
-from animal_bomber.domain.state.player import Life
+from animal_bomber.domain.state.player import OUT
 from animal_bomber.domain.state.world import create_world
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng, ScriptedRandom
 from animal_bomber.presentation.render.baked.art import BakedArt
@@ -35,7 +35,7 @@ def test_ブロックが壊れたら_次に描く1枚は壊れたあとの盤面
     """揺れていなければ背景に重ねた1枚を、揺れていれば盤面だけをずらして貼る。"""
     world = create_world(5, (Animal.RABBIT, Animal.ELEPHANT))
     for player in world.players:
-        player.life = Life.DEAD
+        player.life = OUT
     visuals = FixedVisuals(shake=shake)
     renderer = Renderer(BakedArt(LAYOUT), CosmeticRng(ScriptedRandom(randoms * 2)))
     target = pygame.Surface(LAYOUT.surface_size)

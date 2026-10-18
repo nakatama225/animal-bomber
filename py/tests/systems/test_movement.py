@@ -17,7 +17,7 @@ from animal_bomber.domain.rules.tuning import (
 )
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
-from animal_bomber.domain.state.player import Life, speed_of
+from animal_bomber.domain.state.player import OUT, speed_of
 from animal_bomber.domain.systems.bomb import place_bomb
 from tests.helpers import advance, clear_board, make_world, only_for
 
@@ -112,7 +112,7 @@ class Test移動:
         # 倒れたプレイヤーを飛ばすとき、そのあとのプレイヤーまで止めてしまわないこと。
         world = make_world()
         fallen, other = world.players
-        fallen.life = Life.DEAD
+        fallen.life = OUT
         before = (fallen.position, other.position)
         advance(world, {0: PlayerInput.RIGHT, 1: PlayerInput.DOWN}, 10)
         assert fallen.position == before[0]

@@ -34,7 +34,7 @@ from animal_bomber.domain.state.actors import (
     Scatter,
     SlimeBomb,
 )
-from animal_bomber.domain.state.player import Life
+from animal_bomber.domain.state.player import is_alive
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.presentation.render.art.foxfires import TrailMark
 from animal_bomber.presentation.render.scene.snapshot import Snapshot
@@ -186,7 +186,7 @@ def _foe_on(world: WorldState, fire: Foxfire, downed: Sequence[int]) -> bool:
     """
     return any(
         player.id != fire.owner
-        and (player.life is Life.ALIVE or player.id in downed)
+        and (is_alive(player) or player.id in downed)
         and player.position.cell() == fire.cell
         for player in world.players
     )

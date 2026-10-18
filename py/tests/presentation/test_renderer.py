@@ -29,7 +29,7 @@ from animal_bomber.domain.state.bomb import Blast, Bomb
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
 from animal_bomber.domain.state.match import MatchState
-from animal_bomber.domain.state.player import Life
+from animal_bomber.domain.state.player import OUT
 from animal_bomber.domain.state.world import WorldState, create_world, hash_world
 from animal_bomber.presentation.render.art.blasts import progress_of
 from animal_bomber.presentation.render.art.foxfires import TrailMark
@@ -284,7 +284,7 @@ def test_倒れたプレイヤーは描かない() -> None:
     world, visuals, randoms = ordinary()
     art = BakedArt(LAYOUT)
     alive, _ = direct_image(LAYOUT, world, visuals, randoms)
-    world.players[1].life = Life.DEAD
+    world.players[1].life = OUT
     got, used = renderer_image(art, world, visuals, randoms)
     assert used == randoms[:-2]
     wanted, _ = direct_image(LAYOUT, world, visuals, randoms[:-2])
@@ -319,7 +319,7 @@ def test_知らない種類の盤面の物が来たら止まる() -> None:
     layout = Layout(26)
     world = create_world(5, (Animal.RABBIT, Animal.ELEPHANT))
     for player in world.players:
-        player.life = Life.DEAD
+        player.life = OUT
     world.actors = [cast(Actor, object())]
     target = pygame.Surface(layout.surface_size)
     with pytest.raises(AssertionError):
@@ -338,7 +338,7 @@ def test_マスの継ぎ目に背景が透けない(tile: int) -> None:
     layout = Layout(tile)
     world = create_world(5, (Animal.RABBIT, Animal.ELEPHANT))
     for player in world.players:
-        player.life = Life.DEAD
+        player.life = OUT
     art = BakedArt(layout)
     for shake, randoms in ((0.0, []), (4.0, [0.75, 0.25])):
         visuals = FixedVisuals(shake=shake)

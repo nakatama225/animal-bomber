@@ -26,7 +26,7 @@ from animal_bomber.domain.state.actions import Charge, Dig, Tongue
 from animal_bomber.domain.state.actors import Pit, Scatter, SlimeBomb
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import Life, PlayerState
+from animal_bomber.domain.state.player import OUT, PlayerState
 from animal_bomber.domain.state.world import WorldState, create_world, hash_world
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.bomb import place_bomb_at
@@ -458,7 +458,7 @@ class Test技のボタンの数え方:
         place(rabbit, Cell(5, 5))
         rabbit.facing = Direction.RIGHT
         place(frog, Cell(19, 13))
-        rabbit.life = Life.DEAD
+        rabbit.life = OUT
         events = simulation.step(world, idle(world))
         events.extend(simulation.step(world, only_for(world, 0, ACTION)))
         events.extend(simulation.step(world, idle(world)))
@@ -472,7 +472,7 @@ class Test技のボタンの数え方:
         place(elephant, Cell(5, 5))
         place(rabbit, Cell(19, 13))
         elephant.action = Charge(direction=Direction.RIGHT, remaining=CHARGE_DURATION)
-        elephant.life = Life.DEAD
+        elephant.life = OUT
         simulation.step(world, idle(world))
         assert elephant.position == Cell(5, 5).center()
         assert elephant.action is None

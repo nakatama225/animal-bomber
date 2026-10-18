@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Final
+from typing import Final, assert_never
 
 from animal_bomber.domain.core.coord import Direction
 from animal_bomber.domain.core.entity_id import IdSource
@@ -22,7 +22,15 @@ from animal_bomber.domain.state.actors import Actor, actor_name, encode_actor
 from animal_bomber.domain.state.board import Board, build_board
 from animal_bomber.domain.state.bomb import Blast, Bomb
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import PLAYER_IDS, PlayerState
+from animal_bomber.domain.state.player import (
+    PLAYER_IDS,
+    Alive,
+    Life,
+    Negibon,
+    Out,
+    PlayerState,
+    life_name,
+)
 
 
 @dataclass(slots=True)
@@ -187,8 +195,10 @@ def hash_world(world: WorldState) -> int:
             .add_float(player.position.x)
             .add_float(player.position.y)
             .add_text(player.facing.name)
-            .add_text(player.life.name)
-            .add_int(player.shoes)
+        )
+        _hash_life(hasher, player.life)
+        (
+            hasher.add_int(player.shoes)
             .add_int(player.power)
             .add_int(player.max_bombs)
             .add_int(player.active_bombs)
@@ -255,3 +265,20 @@ def hash_world(world: WorldState) -> int:
             .add_int(actor.owner)
         )
     return hasher.value
+
+
+def _hash_life(hasher: StateHasher, life: Life) -> None:
+    """プレイヤーの状態（盤面・外周・退場）を混ぜる。
+
+    名前を混ぜ、外周にいる間だけ、外周の位置と撃てる時刻を続ける（TypeScript 版の
+    `hashLife` と同じ形）。⚠️ 状態を1つ足したら、ここにも足す（`assert_never` が
+    あるので、書き忘れると型検査が失敗する）。
+    """
+    hasher.add_text(life_name(life))
+    match life:
+        case Alive() | Out():
+            return
+        case Negibon(along=along, ready_at=ready_at):
+            hasher.add_float(along).add_int(ready_at)
+        case _:
+            assert_never(life)

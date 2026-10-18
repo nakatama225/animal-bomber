@@ -42,7 +42,7 @@ from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.rules.match import MatchConfig
 from animal_bomber.domain.state.effects import EffectKind
-from animal_bomber.domain.state.player import Life, PlayerId
+from animal_bomber.domain.state.player import OUT, PlayerId
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.blast import add_blast
 from animal_bomber.domain.systems.items import placed_item
@@ -517,7 +517,7 @@ class Testラウンドの終わり:
         loser.hp = 1
         add_blast(session.world, loser.position.cell(), 0, is_center=True)
         events = session.tick()
-        assert loser.life is Life.DEAD
+        assert loser.life == OUT
         assert sounds_of(events) == expected
 
     def test_通知はラウンドごとと優勝(self) -> None:

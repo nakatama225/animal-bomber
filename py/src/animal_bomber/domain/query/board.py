@@ -13,7 +13,7 @@ from animal_bomber.domain.rules.tuning import PLAYER_RADIUS
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.bomb import Blast, Bomb
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import Life, PlayerId, PlayerState
+from animal_bomber.domain.state.player import PlayerId, PlayerState, is_alive
 from animal_bomber.domain.state.world import WorldState
 
 
@@ -42,11 +42,11 @@ def item_at(world: WorldState, cell: Cell) -> Item | None:
 
 
 def players_on(world: WorldState, cell: Cell) -> list[PlayerState]:
-    """そのマスの上に、いま体の中心が乗っている、生きているプレイヤー。"""
+    """そのマスの上に、いま体の中心が乗っている、盤面にいるプレイヤー。"""
     return [
         player
         for player in world.players
-        if player.life is Life.ALIVE and player.position.cell() == cell
+        if is_alive(player) and player.position.cell() == cell
     ]
 
 

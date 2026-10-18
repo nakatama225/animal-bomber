@@ -62,7 +62,7 @@ from animal_bomber.domain.query.board import player_by_id
 from animal_bomber.domain.query.danger import DangerMap
 from animal_bomber.domain.state.actions import traits_of
 from animal_bomber.domain.state.effects import EffectKind
-from animal_bomber.domain.state.player import Life, PlayerId, PlayerState, is_frozen
+from animal_bomber.domain.state.player import PlayerId, PlayerState, is_alive, is_frozen
 from animal_bomber.domain.state.world import WorldState
 
 
@@ -137,7 +137,7 @@ class CpuInputSource:
             self._world = world
             self._memory = fresh_memory(self._rng)
         me = player_by_id(world, self._player_id)
-        if me is None or me.life is not Life.ALIVE:
+        if me is None or not is_alive(me):
             return PlayerInput.IDLE
         _count_down(self._memory)
         return _compose(me, self._decide(world, me))

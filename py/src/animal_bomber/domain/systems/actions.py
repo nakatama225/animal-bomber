@@ -69,7 +69,12 @@ from animal_bomber.domain.events import SimEvent, TechniqueUsed
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import stats_of
 from animal_bomber.domain.state.actions import traits_of
-from animal_bomber.domain.state.player import Life, PlayerState, is_frozen, just_pressed
+from animal_bomber.domain.state.player import (
+    PlayerState,
+    is_alive,
+    is_frozen,
+    just_pressed,
+)
 from animal_bomber.domain.state.world import WorldState
 
 
@@ -88,7 +93,7 @@ def watch_for(
     world: WorldState, player: PlayerState, player_input: PlayerInput
 ) -> list[SimEvent]:
     """1人ぶん。技のボタンの押し方を見て、技を出す。盤面にいるプレイヤーだけ。"""
-    if player.life is not Life.ALIVE:
+    if not is_alive(player):
         return []
     return _watch_button(world, player, player_input)
 
@@ -101,7 +106,7 @@ def after_damage(world: WorldState) -> list[SimEvent]:
     events: list[SimEvent] = []
     for player in world.players:
         action = player.action
-        if action is None or player.life is not Life.ALIVE:
+        if action is None or not is_alive(player):
             continue
         progress = check_after_damage(world, player, action)
         events.extend(progress.events)
@@ -121,14 +126,14 @@ def _advance(world: WorldState, player: PlayerState) -> list[SimEvent]:
     action = player.action
     if action is None:
         return []
-    if player.life is not Life.ALIVE:
+    if not is_alive(player):
         events: list[SimEvent] = []
         done = True
     else:
         progress = advance_action(world, player, action)
         events = list(progress.events)
         done = progress.done
-    if done or player.life is not Life.ALIVE:
+    if done or not is_alive(player):
         events.extend(finish_action(world, player, action))
         player.action = None
     return events

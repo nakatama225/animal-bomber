@@ -12,7 +12,7 @@ from animal_bomber.domain.input.sources import IdleSource
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.match import MatchConfig
 from animal_bomber.domain.rules.tuning import ROUND_INTERMISSION
-from animal_bomber.domain.state.player import Life
+from animal_bomber.domain.state.player import OUT
 from animal_bomber.presentation.audio.countdown import Countdown, seconds_left
 from animal_bomber.presentation.audio.sounds import SoundName
 
@@ -76,7 +76,7 @@ def test_決着のあとの待ちの間は_鳴らない() -> None:
     鳴らない。
     """
     session = _session(600)
-    session.world.players[1].life = Life.DEAD
+    session.world.players[1].life = OUT
     rang = _ticks_at(session, ROUND_INTERMISSION)
     assert rang == [1]
     assert session.between_rounds
@@ -90,6 +90,6 @@ def test_新しい盤面では_前の秒を忘れて数え直す() -> None:
     （1 + `ROUND_INTERMISSION`）に、残り 5 秒の音を鳴らす。
     """
     session = _session(300)
-    session.world.players[1].life = Life.DEAD
+    session.world.players[1].life = OUT
     rang = _ticks_at(session, 1 + ROUND_INTERMISSION + 60)
     assert rang == [1, 1 + ROUND_INTERMISSION, 1 + ROUND_INTERMISSION + 60]

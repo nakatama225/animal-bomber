@@ -40,7 +40,7 @@ from animal_bomber.domain.state.actors import BurntTongue, SlimeBomb
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import Life, PlayerState, is_frozen
+from animal_bomber.domain.state.player import OUT, PlayerState, is_frozen
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.blast import add_blast
@@ -164,7 +164,7 @@ class Test粘膜爆弾が跳ね終わったとき:
 
     def test_投げたプレイヤーが倒れていても_その爆弾として爆発する(self) -> None:
         world, frog, _ = arena()
-        frog.life = Life.DEAD
+        frog.life = OUT
         events = run_until_done(world, SlimeBomb(cell=Cell(6, 7), owner=0, hops_left=1))
         assert [e.owner for e in events if isinstance(e, Exploded)] == [0]
 
@@ -335,7 +335,7 @@ def tongue_scene(blocker: str, item_col: int) -> tuple[int, list[Cell], bool]:
     if blocker in ("player", "dead"):
         rabbit.position = Cell(5, 5).center()
     if blocker == "dead":
-        rabbit.life = Life.DEAD
+        rabbit.life = OUT
     power = frog.power
     simulation.step(world, idle(world))
     simulation.step(world, only_for(world, 0, ACTION))

@@ -21,7 +21,7 @@ from animal_bomber.domain.core.rng import Rng
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.query.danger import DangerMap
 from animal_bomber.domain.query.path import Goal, PathOptions, find_path
-from animal_bomber.domain.state.player import Life, PlayerState
+from animal_bomber.domain.state.player import PlayerState, is_alive
 from animal_bomber.domain.state.world import WorldState
 
 
@@ -60,7 +60,7 @@ class CpuContext:
         self.level = level
         self.memory = memory
         self.rng = rng
-        self.foes = [p for p in world.players if p.id != me.id and p.life is Life.ALIVE]
+        self.foes = [p for p in world.players if p.id != me.id and is_alive(p)]
 
     @property
     def can_bomb(self) -> bool:

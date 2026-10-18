@@ -46,7 +46,7 @@ from animal_bomber.domain.state.actions import Charge, Dig, Tongue
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import Life, PlayerState, power_of, speed_of
+from animal_bomber.domain.state.player import OUT, PlayerState, power_of, speed_of
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.blast import add_blast, detonate
@@ -783,7 +783,7 @@ class Test被弾:
         player = world.players[0]
         player.hp = 2
         events = hurt(world, player, 0, BLAST_DAMAGE)
-        assert player.life is Life.DEAD
+        assert player.life == OUT
         assert player.hp == 0
         assert events[-1] == PlayerDown(target=0, by=0)
 
@@ -944,7 +944,7 @@ class Test被弾:
     def test_倒れたプレイヤーは当たらず_拾わない(self) -> None:
         world = make_world()
         player = world.players[0]
-        player.life = Life.DEAD
+        player.life = OUT
         add_blast(world, player.position.cell(), 1, is_center=True)
         _drop(world, player.position.cell(), ItemKind.FIRE)
         events = simulation.step(world, only_for(world, 0, IDLE))

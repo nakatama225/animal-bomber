@@ -72,8 +72,8 @@ from animal_bomber.domain.state.actions import traits_of
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.player import (
-    Life,
     PlayerState,
+    is_alive,
     is_frozen,
     speed_of,
 )
@@ -88,7 +88,7 @@ def move_player(
     プレイヤーごとに「動く → 爆弾を置く → 技を始める → 拾う」を済ませる番の頭で呼ぶ
     （`systems/simulation.py`。原型の update と同じ）。
     """
-    if player.life is not Life.ALIVE:
+    if not is_alive(player):
         return
     _move(world, player, player_input)
 

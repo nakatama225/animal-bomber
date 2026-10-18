@@ -41,7 +41,7 @@ from animal_bomber.domain.state.actions import traits_of
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import Life, PlayerState
+from animal_bomber.domain.state.player import PlayerState, is_alive
 from animal_bomber.domain.state.world import WorldState
 
 SPIT_RING = (
@@ -86,7 +86,7 @@ def pick_up_for(world: WorldState, player: PlayerState) -> list[SimEvent]:
     pickupCheck）。爆発より前なので、爆発する tick に踏み込んだアイテムは、焼ける前に
     拾える。落とし穴に落ちるのも拾ったあと（TypeScript 版の `ItemSystem` と同じ）。
     """
-    if player.life is not Life.ALIVE:
+    if not is_alive(player):
         return []
     # 通り道のアイテムを自分で扱う振る舞いの最中は、ここでは拾わない
     # （`ActionTraits.sweeps_items`）。

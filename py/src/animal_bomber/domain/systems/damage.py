@@ -17,9 +17,10 @@ from animal_bomber.domain.query.board import last_blast_at
 from animal_bomber.domain.rules.tuning import BLAST_DAMAGE, BLAST_HITBOX, INVULNERABLE
 from animal_bomber.domain.state.actions import traits_of
 from animal_bomber.domain.state.player import (
-    Life,
+    OUT,
     PlayerId,
     PlayerState,
+    is_alive,
     is_blast_proof,
     is_invulnerable,
 )
@@ -28,14 +29,14 @@ from animal_bomber.domain.systems.items import spit_power_up
 
 
 def step_damage(world: WorldState) -> list[SimEvent]:
-    """生きていて無敵でないプレイヤーが爆風に触れていたら、体力を減らす。
+    """盤面にいて無敵でないプレイヤーが爆風に触れていたら、体力を減らす。
 
     跳び上がっている間（`is_blast_proof`）は当たらない。受ける傷に上限がある振る舞いの
     最中は当たる（傷は上限で減る。`hurt`）。
     """
     events: list[SimEvent] = []
     for player in world.players:
-        if player.life is not Life.ALIVE or is_invulnerable(player, world.now):
+        if not is_alive(player) or is_invulnerable(player, world.now):
             continue
         if is_blast_proof(player):
             continue
@@ -111,6 +112,6 @@ def hurt(
     events.extend(spit_power_up(world, player))
     if player.hp <= 0:
         player.hp = 0
-        player.life = Life.DEAD
+        player.life = OUT
         events.append(PlayerDown(target=player.id, by=by))
     return events

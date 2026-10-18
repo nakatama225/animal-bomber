@@ -19,7 +19,7 @@ from animal_bomber.domain.rules.tuning import (
     ROUND_INTERMISSION,
     SPAWN_CELLS,
 )
-from animal_bomber.domain.state.player import Life, PlayerId
+from animal_bomber.domain.state.player import OUT, PlayerId, is_alive
 from animal_bomber.domain.state.world import WorldState, create_world, hash_world
 
 ANIMALS = (Animal.RABBIT, Animal.ELEPHANT)
@@ -37,7 +37,7 @@ def _session(**overrides: object) -> GameSession:
 
 def _finish_round(session: GameSession, loser: PlayerId = 1) -> list[object]:
     """負けるプレイヤーを倒し、ラウンドを決める tick を1つ進める。"""
-    session.world.players[loser].life = Life.DEAD
+    session.world.players[loser].life = OUT
     return list(session.tick())
 
 
@@ -84,7 +84,7 @@ class Testラウンドの進行:
 
     def test_2人とも倒れたら引き分け(self) -> None:
         session = _session()
-        session.world.players[0].life = Life.DEAD
+        session.world.players[0].life = OUT
         events = _finish_round(session)
         assert RoundEnded(round=1, winner=None) in events
         assert session.match.wins == {}
@@ -161,7 +161,7 @@ class Test決着のあとの待ち:
         assert not session.between_rounds
         assert session.match.round == 2
         assert session.world.now == 0
-        assert session.world.players[1].life is Life.ALIVE
+        assert is_alive(session.world.players[1])
         assert hash_world(session.world) != before
 
     def test_待つ間も_試合通算の時刻は進む(self) -> None:

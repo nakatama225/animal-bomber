@@ -18,7 +18,7 @@ from animal_bomber.domain.state.actions import Charge
 from animal_bomber.domain.state.actors import Foxfire
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
-from animal_bomber.domain.state.player import Life, PlayerState
+from animal_bomber.domain.state.player import OUT, PlayerState
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.blast import add_blast
@@ -159,7 +159,7 @@ class Test炎の進み方:
     def test_相手がいなければ動かない(self) -> None:
         world, (fox, rabbit) = arena((Animal.FOX, Animal.RABBIT))
         place(fox, Cell(3, 7))
-        rabbit.life = Life.DEAD
+        rabbit.life = OUT
         cells, _ = run_fire(world, Foxfire(cell=Cell(3, 7), owner=0), 40)
         assert changes(cells) == ["1:3,7"]
 
@@ -257,7 +257,7 @@ class Testキツネ跳び:
         """原型の castFoxfire。チキンは使う。"""
         world, (fox, rabbit) = arena((Animal.FOX, Animal.RABBIT))
         place(fox, Cell(3, 7))
-        rabbit.life = Life.DEAD
+        rabbit.life = OUT
         fox.special_charges = 1
         simulation.step(world, idle(world))
         advance(world, only_for(world, 0, ACTION), FOX_HOLD)

@@ -36,6 +36,7 @@ from animal_bomber.domain.events import (
 )
 from animal_bomber.domain.state.actions import encode_action
 from animal_bomber.domain.state.actors import actor_name, encode_actor
+from animal_bomber.domain.state.player import Alive, Life, Negibon, Out, life_name
 from animal_bomber.domain.state.world import WorldState
 
 
@@ -87,6 +88,21 @@ def event_row(event: SimEvent) -> list[object]:
             assert_never(event)
 
 
+def life_row(life: Life) -> list[object]:
+    """プレイヤーの状態を、TypeScript 版の出力と同じ形にする。
+
+    名前を先に置き、外周にいる間だけ位置と撃てる時刻を続ける（TypeScript 版の
+    `hashLife` が混ぜるのと同じ並び）。
+    """
+    match life:
+        case Alive() | Out():
+            return [life_name(life)]
+        case Negibon(along=along, ready_at=ready_at):
+            return [life_name(life), along, ready_at]
+        case _:
+            assert_never(life)
+
+
 def world_rows(world: WorldState) -> dict[str, object]:
     """盤面の状態を、TypeScript 版の出力と同じ形に並べる。
 
@@ -101,7 +117,7 @@ def world_rows(world: WorldState) -> dict[str, object]:
                 p.position.y,
                 p.facing.name.lower(),
                 p.active_bombs,
-                p.life.value,
+                life_row(p.life),
                 p.hp,
                 p.invulnerable_until,
                 p.effects.encode(),

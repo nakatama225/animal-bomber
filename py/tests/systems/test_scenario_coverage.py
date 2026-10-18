@@ -23,7 +23,7 @@ from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.state.actions import action_name
 from animal_bomber.domain.state.actors import actor_name
 from animal_bomber.domain.state.effects import EffectKind
-from animal_bomber.domain.state.player import Life
+from animal_bomber.domain.state.player import is_alive
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems import simulation
 from tests.systems import test_simulation_ts as sim_ts
@@ -127,7 +127,7 @@ def test_アイテムの台本は_悪い状態8つと_手を離しても進む�
     for tick in range(600):
         inputs = {p.id: script(p.id, tick) for p in world.players}
         before = [
-            (p.position, p.effects.has(EffectKind.STUN), p.life is Life.ALIVE)
+            (p.position, p.effects.has(EffectKind.STUN), is_alive(p))
             for p in world.players
         ]
         effects = [

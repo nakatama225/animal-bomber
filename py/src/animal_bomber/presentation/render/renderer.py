@@ -44,7 +44,7 @@ from animal_bomber.domain.state.actors import (
     SlimeBomb,
 )
 from animal_bomber.domain.state.match import MatchState
-from animal_bomber.domain.state.player import Life, PlayerId
+from animal_bomber.domain.state.player import PlayerId, is_alive
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng
 from animal_bomber.presentation.render.art.foxfires import FoxfireLook, TrailMark
@@ -140,7 +140,7 @@ class Renderer:
         for blast in world.blasts:
             art.blasts.draw(target, blast, rng, offset)
         alpha = 1.0
-        on_board = [p for p in world.players if p.life is Life.ALIVE]
+        on_board = [p for p in world.players if is_alive(p)]
         for player in sorted(on_board, key=lambda p: p.position.y):
             look = player_look(world, player, visuals.motion(player.id))
             alpha = art.players.draw(target, look, now, rng, offset, alpha)

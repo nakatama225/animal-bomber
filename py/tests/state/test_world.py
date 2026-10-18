@@ -1,5 +1,6 @@
 """ラウンドの始まりの状態の作り方と、状態の要約の検査。"""
 
+import dataclasses
 from collections.abc import Callable
 
 import pytest
@@ -24,7 +25,14 @@ from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.bomb import Blast, Bomb
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import Life
+from animal_bomber.domain.state.player import (
+    ALIVE,
+    OUT,
+    Life,
+    Negibon,
+    is_alive,
+    life_name,
+)
 from animal_bomber.domain.state.world import WorldState, create_world, hash_world
 from tests.helpers import make_world
 
@@ -38,7 +46,7 @@ class Test始めの状態:
         assert [p.animal for p in world.players] == list(FOUR)
         assert [p.position for p in world.players] == [c.center() for c in SPAWN_CELLS]
         assert all(p.facing is Direction.DOWN for p in world.players)
-        assert all(p.life is Life.ALIVE and p.shoes == 0 for p in world.players)
+        assert all(is_alive(p) and p.shoes == 0 for p in world.players)
         assert world.now == 0
 
     def test_爆弾の数と火力と体力は_動物ごとの上乗せを足して始まる(self) -> None:
@@ -132,7 +140,7 @@ def _facing(world: WorldState) -> None:
 
 
 def _life(world: WorldState) -> None:
-    world.players[1].life = Life.DEAD
+    world.players[1].life = OUT
 
 
 def _shoes(world: WorldState) -> None:
@@ -601,6 +609,30 @@ class Test状態の要約:
         change(world)
         assert hash_world(world) != before
 
+    @pytest.mark.parametrize(
+        ("before", "after"),
+        [
+            pytest.param(ALIVE, OUT, id="盤面と退場"),
+            pytest.param(ALIVE, Negibon(0.0, Tick(0)), id="盤面と外周"),
+            pytest.param(OUT, Negibon(0.0, Tick(0)), id="退場と外周"),
+            pytest.param(
+                Negibon(12.5, Tick(210)), Negibon(12.75, Tick(210)), id="外周の位置"
+            ),
+            pytest.param(
+                Negibon(12.5, Tick(210)), Negibon(12.5, Tick(211)), id="撃てる時刻"
+            ),
+        ],
+    )
+    def test_プレイヤーの状態と_外周の位置と撃てる時刻を見分ける(
+        self, before: Life, after: Life
+    ) -> None:
+        """外周の値は外周の状態にだけあるので、外周のときだけ混ぜる（`_hash_life`）。"""
+        world = make_world()
+        world.players[1].life = before
+        hashed = hash_world(world)
+        world.players[1].life = after
+        assert hash_world(world) != hashed
+
     def test_同じ長さでも_かかっている状態の種類が違えば_値が変わる(self) -> None:
         """残り時間を種類の定義の順に並べて混ぜるので、どの種類かも値に効く。"""
         slow = make_world()
@@ -630,3 +662,34 @@ class Test状態の要約:
         one = create_world(4649, [Animal.RABBIT])
         two = create_world(4649, [Animal.RABBIT, Animal.ELEPHANT])
         assert hash_world(one) != hash_world(two)
+
+
+class Testプレイヤーの状態:
+    @pytest.mark.parametrize(
+        ("life", "on_board"),
+        [
+            pytest.param(ALIVE, True, id="盤面"),
+            pytest.param(Negibon(3.0, Tick(0)), False, id="外周"),
+            pytest.param(OUT, False, id="退場"),
+        ],
+    )
+    def test_盤面にいるのは_盤面の状態のときだけ(
+        self, life: Life, on_board: bool
+    ) -> None:
+        world = make_world()
+        world.players[0].life = life
+        assert is_alive(world.players[0]) is on_board
+
+    def test_状態の名前は_TypeScript版のkindと同じ(self) -> None:
+        names = [life_name(life) for life in (ALIVE, Negibon(3.0, Tick(0)), OUT)]
+        assert names == ["alive", "negibon", "out"]
+
+    def test_状態は書き換えられず_丸ごと差し替える(self) -> None:
+        """`ALIVE` と `OUT` は全員で使い回す。書き換えられると、ほかにも漏れる。
+
+        どれも frozen なので、書き換えようとすると止まる。
+        """
+        lane = Negibon(3.0, Tick(0))
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            lane.along = 4.0  # type: ignore[misc]
+        assert lane == Negibon(3.0, Tick(0))

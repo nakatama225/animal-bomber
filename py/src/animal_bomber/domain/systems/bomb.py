@@ -22,9 +22,9 @@ from animal_bomber.domain.rules.tuning import BOMB_FUSE
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.bomb import Bomb
 from animal_bomber.domain.state.player import (
-    Life,
     PlayerState,
     can_place_bomb,
+    is_alive,
     just_pressed,
     power_of,
 )
@@ -45,7 +45,7 @@ def place_for(
     `can_place_bomb` が見る。「勝手に設置」がかかっていれば「爆弾おけない」に勝つので、
     拍の合間にボタンでも置ける（原型と同じ）。
     """
-    if player.life is not Life.ALIVE or not can_place_bomb(player):
+    if not is_alive(player) or not can_place_bomb(player):
         return []
     if not just_pressed(player, player_input, PlayerInput.BOMB):
         return []

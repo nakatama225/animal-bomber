@@ -26,7 +26,7 @@ from animal_bomber.domain.state.actions import CHARGE_DAMAGE_CAP, Charge, traits
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import Life, PlayerState, is_blast_proof
+from animal_bomber.domain.state.player import OUT, PlayerState, is_blast_proof
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.bomb import place_bomb, place_bomb_at
@@ -538,7 +538,7 @@ class Test突進中に倒れたとき:
         drops: list[SimEvent] = []
         for tick in range(120):
             events = simulation.step(world, idle(world))
-            if down_at is None and elephant.life is Life.DEAD:
+            if down_at is None and elephant.life == OUT:
                 down_at = tick
             drops.extend(
                 event
@@ -560,7 +560,7 @@ class Test突進中に倒れたとき:
         assert world.items == []
         elephant.hp = 1
         hurt(world, elephant, rabbit.id, 2)
-        assert elephant.life is Life.DEAD
+        assert elephant.life == OUT
         events: list[SimEvent] = []
         for _ in range(5):
             events.extend(simulation.step(world, idle(world)))

@@ -16,9 +16,9 @@ from animal_bomber.domain.state.actors import Foxfire
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.player import (
-    Life,
     PlayerState,
     can_place_bomb,
+    is_alive,
     is_blast_proof,
     is_invulnerable,
 )
@@ -103,9 +103,7 @@ def cast_foxfire(world: WorldState, player: PlayerState) -> Started:
     ない（原型の castFoxfire）。炎の音も、炎を出したときだけ鳴らす（`CHASER_CAST`）。
     """
     player.effects.add(EffectKind.LEAP, LEAP_TIME, LEAP_TIME)
-    if not any(
-        other.id != player.id and other.life is Life.ALIVE for other in world.players
-    ):
+    if not any(other.id != player.id and is_alive(other) for other in world.players):
         return NOTHING
     world.actors.append(Foxfire(cell=player.position.cell(), owner=player.id))
     return Started(
@@ -146,7 +144,7 @@ def advance_foxfire(world: WorldState, fire: Foxfire) -> Progress:
         fire.cell = following
     events: list[SimEvent] = []
     for player in world.players:
-        if player.id == fire.owner or player.life is not Life.ALIVE:
+        if player.id == fire.owner or not is_alive(player):
             continue
         if is_invulnerable(player, world.now) or is_blast_proof(player):
             continue
@@ -169,7 +167,7 @@ def _next_step(world: WorldState, fire: Foxfire) -> Cell | None:
     foes = [
         player.position.cell()
         for player in world.players
-        if player.life is Life.ALIVE and player.id != fire.owner
+        if is_alive(player) and player.id != fire.owner
     ]
     if not foes:
         return None

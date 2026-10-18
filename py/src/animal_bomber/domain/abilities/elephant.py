@@ -34,8 +34,8 @@ from animal_bomber.domain.rules.tuning import MAX_SPEED, PLAYER_RADIUS
 from animal_bomber.domain.state.actions import Charge
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.player import (
-    Life,
     PlayerState,
+    is_alive,
     is_blast_proof,
     is_invulnerable,
 )
@@ -199,7 +199,7 @@ def finish_charge(
     倒れて盤面を離れたときは撒かない。抱えていたものは盤面に出ずに消える（原型は盤面に
     いるプレイヤーの突進だけを進めるので、倒れたあとは撒く処理を通らない）。
     """
-    if player.life is not Life.ALIVE or not charge.carried:
+    if not is_alive(player) or not charge.carried:
         charge.carried.clear()
         return []
     events: list[SimEvent] = [
@@ -290,7 +290,7 @@ def _push_players(
     events: list[SimEvent] = []
     dx, dy = charge.direction.delta
     for other in world.players:
-        if other.id == player.id or other.life is not Life.ALIVE:
+        if other.id == player.id or not is_alive(other):
             continue
         if abs(other.position.x - player.position.x) > CONTACT_RANGE:
             continue
