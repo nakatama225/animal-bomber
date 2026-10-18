@@ -17,7 +17,7 @@ import type { PlayerState } from '../../src/domain/state/PlayerState.js';
 import { hashWorld } from '../../src/domain/state/WorldState.js';
 import { layoutFor, screenX } from '../../src/presentation/render/Layout.js';
 import { Renderer } from '../../src/presentation/render/Renderer.js';
-import { makeWorld } from '../helpers.js';
+import { grantSpecial, makeWorld } from '../helpers.js';
 import { fakeCanvas, type FakeCanvas } from './fakeCanvas.js';
 
 /**
@@ -36,6 +36,10 @@ describe('描画', () => {
     // 12 から始めるのは、2026-10-11 の時点で1試合ですべて現れた種だったため。
     // 上限は、体力の既定を爆風1回にして試合が短くなったときに 8 から広げた（2026-10-13。8 試合では
     // 追いかける炎が一度も現れなかった）。
+    // とくぎの絵（跳ね回る爆弾・突進・撒く技・追いかける炎）は、ラウンドの始まりに全員へチキンを1つ渡して
+    // 出す。CPU がチキンを拾うかどうかに任せると、外周の CPU を原型に合わせたとき（2026-10-18）に、
+    // 40 試合のうち追いかける炎が出たのは1試合、葱のよけを合わせると0試合になった。とくぎの絵が出るかを
+    // 種の運に頼らない。
     const animals = ['rabbit', 'frog', 'elephant', 'fox'];
     const wanted = ['tongue', 'slime', 'charge', 'scatter', 'foxfire', 'negibon', 'leek'];
     const canvas = fakeCanvas({ keepLog: false });
@@ -48,10 +52,15 @@ describe('描画', () => {
       );
       const renderer = new Renderer(canvas.context, 920, 680);
       let intermissions = 0;
+      let granted: unknown = null;
       // 試合の長さは種によって大きく変わる（この顔ぶれで 80 通りの種を試すと 6,967〜29,303 tick。
       // 2026-10-11 に測った）。上限は余裕を見て大きくとる。
       for (let i = 0; i < 60000 && !game.match.finished; i += 1) {
         const world = game.world;
+        if (world !== granted) {
+          for (const player of world.players) grantSpecial(player, 1);
+          granted = world;
+        }
         renderer.beforeTick(world);
         const events = game.tick();
         renderer.afterTick(events, world);
