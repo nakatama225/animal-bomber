@@ -176,7 +176,8 @@ export function createWorld(config: WorldSeed): WorldState {
       walked: 0,
       previousInput: HELD_AT_ROUND_START,
       effects: new EffectBag(),
-      // とくぎはどちらも持たずに始まる（原型の startRound L4177 も chicken と chickenCharges を両方戻す）。
+      // とくぎはどちらも持たずに始まる（原型も、startRound が L4148 で呼ぶ resetPlayersForRound の L4177 で、chicken と
+      // chickenCharges を両方戻す）。
       hasSpecial: false,
       specialCharges: 0,
       action: null,

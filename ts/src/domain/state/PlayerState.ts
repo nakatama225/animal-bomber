@@ -195,7 +195,8 @@ export function powerOf(player: PlayerState): number {
 /**
  * 盤面の上で戦っているか。
  *
- * 外周にいるプレイヤーと退場したプレイヤーは、爆風にも拾い物にも関わらない。
+ * 外周にいるプレイヤーと退場したプレイヤーは、爆風で傷を受けず、拾い物にも関わらない（盤面を離れても止めて
+ * 残した振る舞いだけは、爆風に触れると焼ける。`ActiveAction.staysOffBoard`）。
  * 盤面の処理は、ほぼすべてこの判定から始まる。
  */
 export function isAlive(player: PlayerState): boolean {
