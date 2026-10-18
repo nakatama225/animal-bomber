@@ -187,6 +187,17 @@ export class SlimeBombActor implements WorldActor {
    * 中心の1マスしか燃えない）。どこにも降りられなければ、その場に中心の爆風だけを出す。
    *
    * 手持ちの数は見ない。とくぎの爆発なので、手持ちを出し切っていても起こる（`spawnBomb`）。
+   *
+   * 置いている爆弾の数（`activeBombs`）は、原型の slimeBurst と同じく、生やした直後に1つ戻し（L2943。0 で止める）、
+   * 爆発でもう1つ戻す（removeBomb の L1494。0 で止める）。原型の注記は「手持ちは減らさない」つもりで書かれて
+   * いるが、爆発のときにもう一度減るので、かえるが自分の爆弾を盤面に置いていれば1つ少なく数えられ、そのぶん
+   * 上限より1つ多く置ける（自分の爆弾が盤面から無くなると、0 で止まって数がそろう）。原型と同じにしてある。
+   *
+   * ⚠️ 爆発する時点は原型と違う（まだ直していない）。原型は導火線 0 の爆弾として生やし（L2945）、同じ update の
+   * 爆弾の輪（L4374-4377）で爆発させる。そのため、アイテムの寿命の処理（L4355-4369）より後で、同じ update に
+   * 導火線が尽きるほかの爆弾（配列の前にある）より後に爆発する。この版は盤面の物の番（1 tick の 3.）ですぐ
+   * 起こすので、それらより先になる。重なるマスの爆風の持ち主が入れ替わり、そこで傷を受けたプレイヤーの
+   * `lastHitBy`（被弾の by）が変わる（原型ではあとから爆発した粘膜爆弾の持ち主、この版はほかの爆弾の持ち主）。
    */
   #burst(world: WorldState): SimEvent[] {
     const blocked = (cell: Cell): boolean =>
@@ -202,7 +213,9 @@ export class SlimeBombActor implements WorldActor {
       }
       cell = landing;
     }
-    const result = detonate(world, spawnBomb(world, this.shooter, cell));
+    const bomb = spawnBomb(world, this.shooter, cell);
+    this.shooter.activeBombs = Math.max(0, this.shooter.activeBombs - 1);
+    const result = detonate(world, bomb);
     return [
       { type: 'exploded', cell, owner: this.shooter.id, chained: result.chained, blocks: result.destroyed.length },
       ...result.events,

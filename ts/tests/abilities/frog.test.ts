@@ -106,17 +106,36 @@ describe('粘膜爆弾が跳ね終わったとき（原型 slimeBurst）', () =>
     expect(events.filter((e) => e.type === 'exploded')).toHaveLength(1);
   });
 
-  it('本物の爆弾を出したままでも爆発し、その爆弾は残る（手持ちの数も変わらない）', () => {
-    // ⚠️ 原型は置いている数（activeBombs）を1つ多く引く（生やして +1、すぐ −1、爆発でもう −1）。
-    // ほかに爆弾を出していると、上限より1つ多く置けるようになる。原型の注記「手持ちは減らさない」の
-    // 意図に合わせ、この版は差し引きで変えない。
+  it('本物の爆弾を出したままでも爆発し、その爆弾は残る。置いている数は1つ少なく数えられる（原型 L2942-2945・L1494）', () => {
+    // 原型の slimeBurst は、生やして +1（spawnBomb）、すぐ max(0, −1)（L2943）、同じ update の爆弾の輪で
+    // 爆発して removeBomb でもう max(0, −1)（L1494）。自分の爆弾を盤面に置いていれば、差し引き1つ少なくなる。
+    // 前はこの版だけ差し引きで変えないようにしていたが、原型に合わせた。
     const { world, frog } = arena();
     bombWithLongFuse(world, frog, { col: 3, row: 13 });
-    const before = frog.activeBombs;
+    expect(frog.activeBombs).toBe(1);
     runUntilDone(world, new SlimeBombActor({ col: 6, row: 7 }, frog, 1));
     expect(blastCells(world)[0]).toBe('6,7C');
     expect(world.bombs.map((bomb) => `${bomb.cell.col},${bomb.cell.row}`)).toEqual(['3,13']);
-    expect(frog.activeBombs).toBe(before);
+    expect(frog.activeBombs).toBe(0);
+  });
+
+  it('自分の爆弾を置いていなければ、置いている数は 0 のまま（原型の L2943 も L1494 も 0 で止める）', () => {
+    const { world, frog } = arena();
+    expect(frog.activeBombs).toBe(0);
+    runUntilDone(world, new SlimeBombActor({ col: 6, row: 7 }, frog, 1));
+    expect(frog.activeBombs).toBe(0);
+  });
+
+  it('置ける数が上限でも、粘膜爆弾が爆発したあとは、もう1つ置ける（原型の placeBomb L1438 はこの数で見る）', () => {
+    const { world, frog } = arena();
+    frog.maxBombs = 1;
+    const first = placeBombAt(world, frog, { col: 3, row: 13 });
+    if (first === undefined) throw new Error('爆弾を置けなかった');
+    first.fuse = tick(9999);
+    expect(placeBombAt(world, frog, { col: 1, row: 11 })).toBeUndefined();
+    runUntilDone(world, new SlimeBombActor({ col: 6, row: 7 }, frog, 1));
+    expect(placeBombAt(world, frog, { col: 1, row: 11 })).toBeDefined();
+    expect(world.bombs).toHaveLength(2);
   });
 });
 
