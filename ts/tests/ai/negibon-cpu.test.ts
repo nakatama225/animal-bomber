@@ -15,6 +15,7 @@ import { swapPlaces } from '../../src/domain/mutations/negibon.js';
 import { alongsFacing, laneSpot } from '../../src/domain/negibon/lane.js';
 import { LeekActor } from '../../src/domain/negibon/LeekActor.js';
 import { placeBombAt } from '../../src/domain/mutations/bombs.js';
+import { LANE_SPEED } from '../../src/domain/rules/negibon.js';
 import { ALIVE } from '../../src/domain/state/Life.js';
 import type { PlayerState } from '../../src/domain/state/PlayerState.js';
 import type { WorldState } from '../../src/domain/state/WorldState.js';
@@ -57,21 +58,49 @@ function run(world: WorldState, sources: readonly InputSource[], ticks: number):
 const cpuOf = (chain?: readonly CpuBehavior[]): CpuInputSource =>
   new CpuInputSource(0, CPU_LEVELS.hard, 1, chain);
 
+/** 外周の CPU が進む向きを選び直す間隔（15 tick。原型は 16 フレームごと。1フレームの差は残している）。 */
+const REAIM = secondsToTicks(0.25);
+
+/**
+ * 登録した操作の出どころで `ticks` 回進め、CPU（プレイヤー0）の外周の上の位置を tick ごとに返す。
+ * 起きたことも返す。
+ */
+function trace(
+  world: WorldState,
+  sources: readonly InputSource[],
+  ticks: number,
+): { alongs: number[]; events: SimEvent[] } {
+  const gatherer = new InputGatherer();
+  for (const source of sources) gatherer.add(source);
+  const sim = new Simulation();
+  const alongs: number[] = [];
+  const events: SimEvent[] = [];
+  for (let i = 0; i < ticks; i += 1) {
+    events.push(...sim.step(world, gatherer.gather(world)));
+    alongs.push(alongOf(world.players[0]!));
+  }
+  return { alongs, events };
+}
+
+/*
+ * 外周にいる CPU は、原型の cpuNegiUpdate（L2366-2424）と同じ動きにしてある。
+ * 構えて撃つ 37 tick 目・選び直しの 15 tick は、原型（36 フレーム目・16 フレームごと）との1フレームの差を残している。
+ */
 describe('外周にいる CPU', () => {
-  it('射線の上に相手がいれば、動かずに狙いを定めてから撃つ', () => {
+  it('射線の上に相手がいれば、動かずに狙いを定めてから撃つ（原型 L2395-2398）', () => {
     const { world, cpu, foe } = arena();
     onLane(cpu, topAlongFor(5));
     foe.position = centerOf({ col: 5, row: 3 });
     const events = run(world, [cpuOf(), new IdleInputSource(1)], 120);
 
     const thrownAt = events.findIndex((tickEvents) => tickEvents.some((e) => e.type === 'leekThrown'));
-    // 捉えた瞬間には撃たない。人のように反応を遅らせる。
+    // 捉えた瞬間には撃たない。人間のように反応を遅らせる。
     expect(thrownAt).toBeGreaterThan(secondsToTicks(0.5));
     expect(thrownAt).toBeLessThan(secondsToTicks(1));
     expect(events.flat().some((e) => e.type === 'revived')).toBe(true);
   });
 
-  it('間に柱があれば撃たない', () => {
+  it('間に柱があれば撃たない（原型 L2388）', () => {
     // 6 列目は2行目に柱がある。
     const { world, cpu, foe } = arena();
     onLane(cpu, topAlongFor(6));
@@ -80,7 +109,7 @@ describe('外周にいる CPU', () => {
     expect(events.flat().some((e) => e.type === 'leekThrown')).toBe(false);
   });
 
-  it('間に爆弾があれば撃たない', () => {
+  it('間に爆弾があれば撃たない（原型 L2390）', () => {
     // 爆弾は葱を弾くので、撃っても無駄になる。
     const { world, cpu, foe } = arena();
     onLane(cpu, topAlongFor(5));
@@ -90,87 +119,7 @@ describe('外周にいる CPU', () => {
     expect(events.flat().some((e) => e.type === 'leekThrown')).toBe(false);
   });
 
-  it('射線に相手がいなければ、いちばん近い相手を撃てる位置へ外周を回って寄り、撃つ', () => {
-    const { world, cpu, foe } = arena();
-    onLane(cpu, topAlongFor(3));
-    foe.position = centerOf({ col: 9, row: 3 });
-    const events = run(world, [cpuOf(), new IdleInputSource(1)], 600);
-    const revived = events.flat().find((e) => e.type === 'revived');
-    expect(revived).toMatchObject({ player: 0, replaced: 1 });
-  });
-
-  it.each([
-    { from: 3, dx: 0.14 },
-    { from: 3, dx: 0.3 },
-    { from: 15, dx: -0.14 },
-    { from: 15, dx: -0.3 },
-    { from: 3, dx: -0.3 },
-  ])('マスの中央からずれて立つ相手にも、寄って1発で当てる（$from 列から、ずれ $dx）', ({ from, dx }) => {
-    // マスの中央へ寄ると、中央の手前で止まり、反対側へずれて立つ相手が射線に入らない。
-    const { world, cpu, foe } = arena();
-    onLane(cpu, topAlongFor(from));
-    foe.position = { x: 9.5 + dx, y: 3.5 };
-    const events = run(world, [cpuOf(), new IdleInputSource(1)], 900).flat();
-    expect(events.find((e) => e.type === 'revived')).toMatchObject({ player: 0, replaced: 1 });
-    // 当たらない位置から撃たない。
-    expect(events.filter((e) => e.type === 'leekThrown')).toHaveLength(1);
-  });
-
-  it('止まっている相手には、どこから寄っても当たる位置からしか撃たない', () => {
-    // 射線の幅が当たり判定より広いと、当たらない位置で止まって撃ち続ける。
-    // 寄る位置の見積もりが撃つ判定と食い違うと、着いたのに撃たずに止まる。
-    // 相手の立ち位置（マスの中央からのずれ）と、寄り始める位置を組み合わせて確かめる。
-    for (const dx of [-0.3, -0.2, -0.14, 0, 0.14, 0.2, 0.3]) {
-      for (const from of [1, 5, 9, 13, 17, 21]) {
-        const { world, cpu, foe } = arena();
-        onLane(cpu, topAlongFor(from));
-        foe.position = { x: 9.5 + dx, y: 3.5 };
-        const events = run(world, [cpuOf(), new IdleInputSource(1)], 900).flat();
-        const label = `ずれ ${dx}・${from} 列から`;
-        expect(events.some((e) => e.type === 'revived'), label).toBe(true);
-        expect(events.filter((e) => e.type === 'leekThrown'), label).toHaveLength(1);
-      }
-    }
-  });
-
-  it.each([
-    { name: '左上の隅で外壁に寄る', at: { x: 1.36, y: 1.5 }, from: [topAlongFor(3), 60] },
-    { name: '右上の隅で外壁に寄る', at: { x: 21.64, y: 1.5 }, from: [topAlongFor(4), 30] },
-    { name: '右下の隅で外壁に寄る', at: { x: 21.64, y: 15.5 }, from: [30, 45] },
-    { name: '左下の隅で外壁に寄る', at: { x: 1.36, y: 15.5 }, from: [45, 60] },
-    { name: '柱の列の端に立つ', at: { x: 10.05, y: 3.5 }, from: [topAlongFor(14), topAlongFor(2)] },
-    { name: '柱の列の反対の端に立つ', at: { x: 9.95, y: 3.5 }, from: [topAlongFor(14), topAlongFor(2)] },
-  ])('相手が「$name」ときも、撃てる位置を見つけて当てる', ({ at, from }) => {
-    // 外壁に寄ると撃てる位置は辺の始まりにしか無く、柱の列の端では隣の列からしか撃てない。
-    for (const start of from) {
-      const { world, cpu, foe } = arena();
-      onLane(cpu, start);
-      foe.position = { ...at };
-      const events = run(world, [cpuOf(), new IdleInputSource(1)], 1500).flat();
-      expect(events.some((e) => e.type === 'revived'), `${start} から`).toBe(true);
-    }
-  });
-
-  it('近くても1 tick で飛び越えてしまう狭い位置には寄らず、少し遠くても撃てる位置へ回る', () => {
-    // 相手は柱のある 4 列目の左の端に立つ。上辺からは 3 列目の端の、ごく狭い位置からしか
-    // 撃てない。そこへ寄ると飛び越えて、柱の列で止まったまま撃てなくなる。左辺からは撃てる。
-    const { world, cpu, foe } = arena();
-    onLane(cpu, topAlongFor(6));
-    foe.position = { x: 4.2, y: 3.5 };
-    const events = run(world, [cpuOf(), new IdleInputSource(1)], 900).flat();
-    expect(events.some((e) => e.type === 'revived')).toBe(true);
-  });
-
-  it('外周の1周をまたぐほうが近ければ、またいで寄る', () => {
-    // 左辺の上の端から、上辺の左寄りの相手へ。またがずに回ると 65 マスかかる。
-    const { world, cpu, foe } = arena();
-    onLane(cpu, 71.5);
-    foe.position = centerOf({ col: 7, row: 1 });
-    const events = run(world, [cpuOf(), new IdleInputSource(1)], 200).flat();
-    expect(events.some((e) => e.type === 'revived')).toBe(true);
-  });
-
-  it('射程の外の相手には、射線に入っても撃たない', () => {
+  it('射程の外の相手には、射線に入っても撃たない（原型 L2380 の ahead<=NEGI_RANGE-1）', () => {
     // 5 列目の 11 行目は、どの辺からも射程の外。
     const { world, cpu, foe } = arena();
     onLane(cpu, topAlongFor(5));
@@ -179,55 +128,132 @@ describe('外周にいる CPU', () => {
     expect(events.some((e) => e.type === 'leekThrown')).toBe(false);
   });
 
-  it('葱が触れられない技の最中の相手は狙わない', () => {
-    const { world, cpu, foe } = arena();
-    onLane(cpu, topAlongFor(5));
-    foe.position = centerOf({ col: 5, row: 3 });
-    foe.action = {
-      kind: 'probe',
-      drivesMovement: true,
-      damageCap: null,
-      untouchable: true,
-      canPlaceBomb: false,
-      blocksButtons: false,
-      sweepsItems: false,
-      tick: () => ({ events: [], done: false }),
+  it('射線に乗っているとみなす幅は 0.3。ずれ 0.29 なら当たらなくても撃ち、0.31 なら撃たない（原型 L2380。葱の当たりは 0.28）', () => {
+    const shoot = (dx: number): SimEvent[] => {
+      const { world, cpu, foe } = arena();
+      onLane(cpu, topAlongFor(5));
+      foe.position = { x: 5.5 + dx, y: 3.5 };
+      return run(world, [cpuOf(), new IdleInputSource(1)], 120).flat();
     };
-    const events = run(world, [cpuOf(), new IdleInputSource(1)], 300).flat();
-    expect(events.some((e) => e.type === 'leekThrown')).toBe(false);
+    const near = shoot(0.29);
+    expect(near.some((e) => e.type === 'leekThrown')).toBe(true);
+    expect(near.some((e) => e.type === 'revived')).toBe(false);
+    expect(shoot(0.31).some((e) => e.type === 'leekThrown')).toBe(false);
   });
 
-  it('とくぎで跳び上がっている相手は狙わない（葱が当たらない。原型の isUntouchable）', () => {
-    // 跳び上がっている状態（'leap'）は振る舞いではないので、上の振る舞いの性質だけを見ると狙ってしまう。
-    // 撃つほうの対照は「射線の上に相手がいれば…撃つ」。
+  it.each([
+    {
+      name: '無敵中',
+      setup: (foe: PlayerState) => {
+        foe.invulnerableUntil = tick(1000);
+      },
+    },
+    {
+      name: '葱が触れられない振る舞いの最中',
+      setup: (foe: PlayerState) => {
+        foe.action = {
+          kind: 'probe',
+          drivesMovement: true,
+          damageCap: null,
+          untouchable: true,
+          canPlaceBomb: false,
+          blocksButtons: false,
+          sweepsItems: false,
+          tick: () => ({ events: [], done: false }),
+        };
+      },
+    },
+    {
+      name: 'とくぎで跳び上がっている最中',
+      setup: (foe: PlayerState) => {
+        foe.effects.add('leap', tick(1000), tick(1000));
+      },
+    },
+  ])('「$name」の相手も狙って撃つ。葱は通り抜ける（原型 L2369 は盤面にいる全員を狙い、L2325 で葱が通り抜ける）', ({ setup }) => {
+    // 撃つ間隔を無駄にするが、原型と同じにする。
     const { world, cpu, foe } = arena();
     onLane(cpu, topAlongFor(5));
     foe.position = centerOf({ col: 5, row: 3 });
-    foe.effects.add('leap', tick(1000), tick(1000));
-    const events = run(world, [cpuOf(), new IdleInputSource(1)], 300).flat();
-    expect(events.some((e) => e.type === 'leekThrown')).toBe(false);
+    setup(foe);
+    const events = run(world, [cpuOf(), new IdleInputSource(1)], 120).flat();
+    expect(events.some((e) => e.type === 'leekThrown')).toBe(true);
+    expect(events.some((e) => e.type === 'revived')).toBe(false);
   });
 
-  it('柱の陰になる位置には寄らず、撃てる辺へ回る', () => {
-    // 4 列目は2行目に柱がある。上辺からは撃てないので、3 行目を撃てる左辺へ回る。
+  it('射線に相手がいなければ、いちばん近い相手のマスに向き合う4辺のうち、外周を回っていちばん近い位置へ寄り、射線に乗れば撃つ（原型 L2403-2417）', () => {
+    // 上辺の 6 列目から 9 列目の相手へ。上辺の位置（右へ 3）が、左辺の位置（左へ 8）より近い。
     const { world, cpu, foe } = arena();
     onLane(cpu, topAlongFor(6));
-    foe.position = centerOf({ col: 4, row: 3 });
-    const events = run(world, [cpuOf(), new IdleInputSource(1)], 1200).flat();
+    foe.position = centerOf({ col: 9, row: 3 });
+    const events = run(world, [cpuOf(), new IdleInputSource(1)], 600).flat();
     expect(events.find((e) => e.type === 'revived')).toMatchObject({ player: 0, replaced: 1 });
   });
 
-  it('無敵中の相手は狙わない。葱は通り抜けるので、撃つ間隔を無駄にする', () => {
+  it('外周の道のりは1周をまたいで測る（原型 L2414-2420）', () => {
+    // 左辺の上の端（71.5）から、1 列目の相手へ。上辺の位置 0 は、またげば 0.5、左辺の位置 69 は 2.5。
     const { world, cpu, foe } = arena();
-    onLane(cpu, topAlongFor(5));
-    foe.position = centerOf({ col: 5, row: 3 });
-    foe.invulnerableUntil = tick(1000);
-    const events = run(world, [cpuOf(), new IdleInputSource(1)], 300).flat();
-    expect(events.some((e) => e.type === 'leekThrown')).toBe(false);
+    onLane(cpu, 71.5);
+    foe.position = centerOf({ col: 1, row: 3 });
+    const events = run(world, [cpuOf(), new IdleInputSource(1)], 200).flat();
+    expect(events.some((e) => e.type === 'revived')).toBe(true);
   });
 
-  it('外周を進む向きは、人の操作と同じ変換で押す（下辺でも逆に進まない）', () => {
-    // 下辺は、外周の位置が左へ増える。表を別に持つと、人と CPU で食い違う。
+  it.each([
+    {
+      name: '射程の外',
+      // 上辺の 3 列目から 9 列目の相手へ。左辺の位置 69（左へ 5）が、上辺の位置 8（右へ 6）より近い。
+      // 左辺から 9 列目までは射程の外。
+      start: topAlongFor(3),
+      foeAt: { col: 9, row: 3 },
+      target: alongsFacing({ col: 9, row: 3 })[3],
+    },
+    {
+      name: '柱の陰',
+      // 上辺の 6 列目から 4 列目の相手へ。上辺の位置 3（左へ 2）がいちばん近いが、4 列目は2行目に柱がある。
+      start: topAlongFor(6),
+      foeAt: { col: 4, row: 3 },
+      target: topAlongFor(4),
+    },
+  ])('いちばん近い辺が「$name」でも、射程や陰を見ずにそこへ寄り、撃たずに行き来する（原型 L2410-2417）', ({ start, foeAt, target }) => {
+    // 原型も、残り60秒で外周が閉じるか、相手が別のマスへ移るまで、その辺で行ったり来たりする。
+    const { world, cpu, foe } = arena();
+    onLane(cpu, start);
+    foe.position = centerOf(foeAt);
+    const { alongs, events } = trace(world, [cpuOf(), new IdleInputSource(1)], 1200);
+    expect(events.some((e) => e.type === 'leekThrown')).toBe(false);
+    const settled = alongs.slice(120);
+    const swing = REAIM * LANE_SPEED;
+    for (const along of settled) expect(Math.abs(along - target)).toBeLessThan(swing);
+    // 止まらずに、選び直し1回ぶんの幅で動き続ける。
+    expect(Math.max(...settled) - Math.min(...settled)).toBeCloseTo(swing);
+  });
+
+  it('向きは選び直しのときだけ決め、次の選び直しまで同じ向きで進む。寄る先を行き過ぎては戻る（原型 L2418-2423）', () => {
+    // 11 列目の 8 行目は、どの辺からも射程の外。上辺の位置 10 が寄る先になる。そこから 1 だけ先の位置から始める。
+    const { world, cpu, foe } = arena();
+    const target = topAlongFor(11);
+    onLane(cpu, target + 1);
+    foe.position = centerOf({ col: 11, row: 8 });
+    const { alongs } = trace(world, [cpuOf(), new IdleInputSource(1)], 4 * REAIM);
+    const swing = REAIM * LANE_SPEED;
+    // 選び直しの間（15 tick）は同じ向きに進み続け、寄る先を 0.375 行き過ぎて戻る。
+    expect(alongs[REAIM - 1]).toBeCloseTo(target + 1 - swing);
+    expect(alongs[2 * REAIM - 1]).toBeCloseTo(target + 1);
+    expect(alongs[3 * REAIM - 1]).toBeCloseTo(target + 1 - swing);
+  });
+
+  it('選び直した瞬間に寄る先までの残りが 0.25 未満なら止まる（原型 L2421）', () => {
+    const { world, cpu, foe } = arena();
+    const target = topAlongFor(11);
+    onLane(cpu, target + 0.2);
+    foe.position = centerOf({ col: 11, row: 8 });
+    const { alongs } = trace(world, [cpuOf(), new IdleInputSource(1)], 4 * REAIM);
+    // 動かない（外周の位置を 0〜1周に収める計算の端数だけが付く）。
+    for (const along of alongs) expect(along).toBeCloseTo(target + 0.2, 9);
+  });
+
+  it('外周を進む向きは、人間の操作と同じ変換で押す（下辺でも逆に進まない）', () => {
+    // 下辺は、外周の位置が左へ増える。表を別に持つと、人間と CPU で食い違う。
     const { world, cpu, foe } = arena();
     const bottom = alongsFacing({ col: 15, row: 15 })[2];
     onLane(cpu, bottom);
@@ -381,8 +407,8 @@ describe('同じラウンドの2度目の外周（原型の toNegibon L2268 は�
     expect(thrownAt).toBe(37);
   });
 
-  it('選び直しの残りと狙いは持ち越すので、残りがあるうちは前の外周で選んだほうへ動く', () => {
-    // 1度目：上辺の 3 列目から、9 列目の相手へ（右へ）。5 tick 動いたところで盤面へ戻す。
+  it('選び直しの残りと向きは持ち越すので、残りがあるうちは前の外周で選んだ向きへ動く（原型の negiAim・negiDir）', () => {
+    // 1度目：上辺の 6 列目から、9 列目の相手へ（右へ。上辺の位置 8 が左辺の位置 69 より近い）。5 tick 動いたところで盤面へ戻す。
     // 2度目：上辺の 6 列目から。相手は 3 列目へ移っているので、選び直せば左へ向かう。
     const { world, cpu, foe } = arena();
     const source = cpuOf();
@@ -390,7 +416,7 @@ describe('同じラウンドの2度目の外周（原型の toNegibon L2268 は�
     gatherer.add(source);
     gatherer.add(new IdleInputSource(1));
     const sim = new Simulation();
-    onLane(cpu, topAlongFor(3));
+    onLane(cpu, topAlongFor(6));
     foe.position = centerOf({ col: 9, row: 3 });
     for (let i = 0; i < 5; i += 1) sim.step(world, gatherer.gather(world));
 
