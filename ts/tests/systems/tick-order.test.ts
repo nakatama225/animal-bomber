@@ -199,6 +199,25 @@ describe('盤面の物を進める順（`WorldActor.turn`）', () => {
     expect(world.actors.map((actor) => actor.kind)).toEqual(['slime', 'pit-a', 'pit-b']);
   });
 
+  it('同じ数のものを全員進めてから settle を出た順に呼び、そのあとで次の数へ移る（その tick に終わったものには呼ばない）', () => {
+    // 新しいものから進めるもの（newestFirst）でも、settle は古いものから呼ぶ（原型の追いかける炎は、動かす輪を
+    // 後ろから回し、当たりの輪を前から回す。L2667・L2685）。
+    const world = makeWorld();
+    const log: string[] = [];
+    const settling = (name: string): WorldActor => ({
+      ...fake(name, 2, 0, log),
+      newestFirst: true,
+      settle: () => {
+        log.push(`${name}:settle`);
+        return [];
+      },
+    });
+    world.actors = [settling('a'), settling('b!'), settling('c'), fake('d', 3, 0, log), fake('e', 1, 0, log)];
+    new ActorSystem().step(world);
+    expect(log).toEqual(['e', 'c', 'b!', 'a', 'a:settle', 'c:settle', 'd']);
+    expect(world.actors.map((actor) => actor.kind)).toEqual(['a', 'c', 'd', 'e']);
+  });
+
   it('持ち主の番に進めるものは、そのプレイヤーの番にだけ進め、プレイヤーが動いたあとの番では進めない', () => {
     const world = makeWorld();
     const log: string[] = [];

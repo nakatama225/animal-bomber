@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import { ChargeAction } from '../../src/domain/abilities/elephant/ChargeAction.js';
 import { abilityOf } from '../../src/domain/abilities/registry.js';
-import { FoxfireActor } from '../../src/domain/abilities/fox/FoxfireActor.js';
 import { SlimeBombActor } from '../../src/domain/abilities/frog/SlimeBombActor.js';
 import { TongueAction } from '../../src/domain/abilities/frog/TongueAction.js';
 import { PitAction } from '../../src/domain/abilities/mole/PitAction.js';
@@ -12,6 +11,7 @@ import { tick } from '../../src/domain/core/Tick.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
 import { OUT } from '../../src/domain/state/Life.js';
 import type { PlayerState } from '../../src/domain/state/PlayerState.js';
+import { ActorSystem } from '../../src/domain/systems/ActorSystem.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
 import type { SoundName } from '../../src/presentation/audio/SoundBank.js';
 import { Presenter } from '../../src/presentation/Presenter.js';
@@ -176,9 +176,10 @@ describe('技の途中で起きたことを、ルールの層が知らせる', (
       fox.position = centerOf({ col: 3, row: 7 });
       rabbit.position = centerOf({ col: 5, row: 7 });
       rabbit.invulnerableUntil = tick(0);
+      // 放った炎は盤面の物として進める（当たりは、動いたあとの `settle` で見る）。
       collect(abilityOf('fox').onHold!(world, fox).events);
-      const fire = new FoxfireActor(fox.position, fox.id);
-      for (let t = 0; t < 40; t += 1) collect(fire.tick(world).events);
+      const actors = new ActorSystem();
+      for (let t = 0; t < 40; t += 1) collect(actors.step(world));
     }
     // 撒く（輪を撒いたとき）
     {

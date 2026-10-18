@@ -7,8 +7,9 @@ import { cellOf, centerOf, type Cell } from '../../src/domain/core/Coord.js';
 import { tick } from '../../src/domain/core/Tick.js';
 import { addBlast } from '../../src/domain/mutations/explode.js';
 import { OUT } from '../../src/domain/state/Life.js';
-import type { PlayerState } from '../../src/domain/state/PlayerState.js';
+import { isAlive, type PlayerState } from '../../src/domain/state/PlayerState.js';
 import type { WorldState } from '../../src/domain/state/WorldState.js';
+import { ActorSystem } from '../../src/domain/systems/ActorSystem.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
 import { clearBoard, grantSpecial, makeWorld, onlyFor, press, sameForAll } from '../helpers.js';
 
@@ -37,15 +38,24 @@ function changes(log: readonly string[]): string[] {
   return log.flatMap((value, i) => (i === 0 || value !== log[i - 1] ? [`${i + 1}:${value}`] : []));
 }
 
-/** 炎だけを進め、毎 tick の炎のマス（消えたら '-'）と、1番の体力を記録する。 */
+/** 炎のいるマスを「列,行」で。 */
+function cellText(fire: FoxfireActor): string {
+  const cell = cellOf(fire.position);
+  return `${cell.col},${cell.row}`;
+}
+
+/**
+ * 炎だけを盤面の物として進め（`ActorSystem`。動かしてから当たりを見る）、毎 tick の炎のマス（消えたら '-'）と、
+ * 1番の体力を記録する。
+ */
 function runFire(world: WorldState, fire: FoxfireActor, ticks = 120): { cells: string[]; hp: string[] } {
+  const actors = new ActorSystem();
+  world.actors.push(fire);
   const cells: string[] = [];
   const hp: string[] = [];
-  let done = false;
   for (let t = 0; t < ticks; t += 1) {
-    if (!done) done = fire.tick(world).done;
-    const cell = cellOf(fire.position);
-    cells.push(done ? '-' : `${cell.col},${cell.row}`);
+    actors.step(world);
+    cells.push(world.actors.includes(fire) ? cellText(fire) : '-');
     hp.push(`${world.players[1]!.hp}`);
   }
   return { cells, hp };
@@ -102,6 +112,71 @@ describe('狐火の進み方（原型 foxfireStep・updateFoxfires）', () => {
       hp.push(`${elephant.hp}`);
     }
     expect(changes(hp)).toEqual(['1:8', '31:7']);
+  });
+});
+
+describe('同じ tick の炎どうし（原型 updateFoxfires は全部の炎を動かしてから、別の輪で当たりを見る）', () => {
+  it('古い炎が相手を倒す tick に、新しい炎もその相手のほうへ一歩進む', () => {
+    // 原型：11 フレーム目に、古い炎が (5,7) へ進んで当たり、相手は外周へ回る。新しい炎も同じフレームに
+    // (8,7) へ進む（当たりを見る前に、全部の炎が動き終わっている）。炎ごとに動いてすぐ当たる形だと、
+    // 新しい炎が動くときには相手がもう盤面にいないので、(9,7) から動かない。
+    const { world, p0: fox, p1: rabbit } = arena(['fox', 'rabbit']);
+    place(fox, { col: 3, row: 7 });
+    place(rabbit, { col: 5, row: 7 });
+    // 1回当たると倒れる体力（原型の体力 1）。
+    rabbit.hp = 2;
+    const older = new FoxfireActor(centerOf({ col: 4, row: 7 }), fox.id);
+    const newer = new FoxfireActor(centerOf({ col: 9, row: 7 }), fox.id);
+    world.actors.push(older, newer);
+    const sim = new Simulation();
+    const log: string[] = [];
+    for (let t = 0; t < 11; t += 1) {
+      sim.step(world, sameForAll(world, press({})));
+      log.push(`${cellText(older)} ${cellText(newer)} ${isAlive(rabbit) ? 'board' : 'down'}`);
+    }
+    expect(changes(log)).toEqual(['1:4,7 9,7 board', '11:5,7 8,7 down']);
+  });
+
+  it('同じ tick に2つの炎が当たると、古い炎の当たりが先', () => {
+    // 原型：11 フレーム目に、0番の炎（古い）が 1番に、1番の炎（新しい）が 0番に当たる。被弾のたびに吐き出す
+    // アイテムは (9,7) → (3,7) の順に積まれた（当たりの輪は炎の配列を前から回す。L2685）。
+    const { world, p0, p1 } = arena(['fox', 'fox']);
+    place(p0, { col: 3, row: 7 });
+    place(p1, { col: 9, row: 7 });
+    world.actors.push(
+      new FoxfireActor(centerOf({ col: 8, row: 7 }), p0.id),
+      new FoxfireActor(centerOf({ col: 4, row: 7 }), p1.id),
+    );
+    const sim = new Simulation();
+    const hits: string[] = [];
+    for (let t = 1; t <= 11; t += 1) {
+      const events = sim.step(world, sameForAll(world, press({})));
+      for (const event of events) if (event.type === 'playerHurt') hits.push(`${t}:${event.target}`);
+    }
+    expect(hits).toEqual(['11:1', '11:0']);
+    expect(world.items.map((item) => `${item.cell.col},${item.cell.row}`)).toEqual(['9,7', '3,7']);
+  });
+
+  it('寿命が尽きる tick（91 tick 目）には、炎のマスにいる相手にも当たらない（対照：90 tick 目なら当たる）', () => {
+    // 原型は寿命が尽きた炎を動かす輪の中で外す（L2679-2682）ので、その炎は当たりの輪（L2685）に残らない。
+    // 原型：無敵が 91 フレーム目に切れると当たらず、90 フレーム目に切れると 90 フレーム目に当たる。炎は 91 フレーム目に消える。
+    const hitAt = (vulnerableFrom: number): number | null => {
+      const { world, p0: fox, p1: rabbit } = arena(['fox', 'rabbit']);
+      place(fox, { col: 3, row: 7 });
+      place(rabbit, { col: 5, row: 7 });
+      // t tick 目の間の時刻（world.now）は t - 1。
+      rabbit.invulnerableUntil = tick(vulnerableFrom - 1);
+      world.actors.push(new FoxfireActor(rabbit.position, fox.id));
+      const before = rabbit.hp;
+      const sim = new Simulation();
+      for (let t = 1; t <= 100; t += 1) {
+        sim.step(world, sameForAll(world, press({})));
+        if (rabbit.hp < before) return t;
+      }
+      return null;
+    };
+    expect(hitAt(91)).toBeNull();
+    expect(hitAt(90)).toBe(90);
   });
 });
 
@@ -205,10 +280,11 @@ describe('跳び上がっている間と、同じマスの相手（原型 update
     place(rabbit, { col: 5, row: 7 });
     place(frog, { col: 5, row: 7 });
     const before = { rabbit: rabbit.hp, frog: frog.hp };
-    const fire = new FoxfireActor(fox.position, fox.id);
+    world.actors.push(new FoxfireActor(fox.position, fox.id));
+    const actors = new ActorSystem();
     const hitAt: { rabbit: number | null; frog: number | null } = { rabbit: null, frog: null };
     for (let t = 1; t <= 40; t += 1) {
-      fire.tick(world);
+      actors.step(world);
       if (hitAt.rabbit === null && rabbit.hp < before.rabbit) hitAt.rabbit = t;
       if (hitAt.frog === null && frog.hp < before.frog) hitAt.frog = t;
     }

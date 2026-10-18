@@ -48,7 +48,8 @@ const SEARCH_ORDER: readonly Cell[] = [
  * マス単位で、いちばん近い相手への最短の道（ブロックは回り込む。爆弾は通り抜ける）を1マスずつ進む。
  * 相手のいるマスに着いたら、そこに居続ける。
  *
- * 乗っているマスにいる相手（放ったプレイヤー以外）に、毎 tick 当たる。当たっても消えない。
+ * 乗っているマスにいる相手（放ったプレイヤー以外）に、毎 tick 当たる。当たりは、同じ tick の炎が全部動いてから
+ * 見る（`settle`）。当たっても消えない。
  * 当たった相手は被弾のあとの無敵に入るので、同じ相手に続けて当たることはない。
  * 跳び上がっている相手（`isBlastProof`）には当たらない。突進中のぞうには当たる（傷は上限で減る）。
  */
@@ -71,8 +72,17 @@ export class FoxfireActor implements WorldActor {
     return centerOf(this.#cell);
   }
 
+  /**
+   * 寿命を進め、進む時間が来ていれば1マス進む。当たりはここでは見ない（`settle`）。
+   *
+   * ⚠️ 原型は炎を後ろから（新しいものから）動かす（L2667）が、ここは出た順に動かす。動きはほかの炎を読まず、
+   * イベントも出さないので、順は結果に効かない。動く間にイベントを出す（消えるときの煙をここで出す、など）か、
+   * ほかの炎を読むようにしたら、`newestFirst` を付けて原型の順に揃える。
+   */
   tick(world: WorldState): { events: SimEvent[]; done: boolean } {
     this.#elapsed = tick(this.#elapsed + 1);
+    // 寿命が尽きた tick は進まず、当たりも見ない（done を返すと `settle` は呼ばれない）。原型も動かす輪の中で
+    // 外す（L2679-2682）ので、当たりの輪（L2685）に残らない。
     if (this.#elapsed > LIFETIME) return { events: [], done: true };
 
     while (this.#steps < stepsBy(this.#elapsed)) {
@@ -82,7 +92,17 @@ export class FoxfireActor implements WorldActor {
       if (next === null) break;
       this.#cell = next;
     }
+    return { events: [], done: false };
+  }
 
+  /**
+   * 乗っているマスの相手に当たる。同じ tick の炎が全部動いたあとに、古い炎から呼ばれる（`WorldActor.settle`）。
+   *
+   * 原型の updateFoxfires も、全部の炎を動かしてから、別の輪で配列を前から回して当たりを見る（L2667-2683 →
+   * L2685-2694）。動いてすぐ当たる形にすると、古い炎の当たりで相手が倒れたとき、同じ tick に動く新しい炎は
+   * その相手を追わない。原型では、当たりを見る前に、新しい炎はもうその相手のほうへ進んでいる。
+   */
+  settle(world: WorldState): SimEvent[] {
     const events: SimEvent[] = [];
     for (const player of world.players) {
       if (player.id === this.owner || !isAlive(player)) continue;
@@ -91,7 +111,7 @@ export class FoxfireActor implements WorldActor {
       events.push({ type: 'techniqueMoment', player: this.owner, moment: 'chaserHit' });
       events.push(...hurt(world, player, this.owner, 2));
     }
-    return { events, done: false };
+    return events;
   }
 
   /**
