@@ -304,8 +304,36 @@ def _push_players(
         for kind in charge.carried:
             events.extend(apply_item(world, other, kind))
         charge.carried.clear()
-        if is_invulnerable(other, world.now) or is_blast_proof(other):
+        turn_pending = other.id > player.id
+        if _invulnerable_in_turn(other, turn_pending, world.now) or is_blast_proof(
+            other
+        ):
             continue
         events.append(TechniqueMoment(player=player.id, moment=Moment.RAMMED))
         events.extend(hurt(world, other, player.id, RAM_DAMAGE))
+        # 番号の大きい相手は、この tick のうちにこのあと自分の番で無敵が1回減る（原型の
+        # L4297 は、状態を問わず全員について回る）。そのぶん 1 tick 早く切れる（爆風・
+        # 追いかける炎に当たるのが 74 tick 後になる）。
+        if turn_pending:
+            other.invulnerable_until = Tick(other.invulnerable_until - 1)
     return events
+
+
+def _invulnerable_in_turn(target: PlayerState, turn_pending: bool, now: Tick) -> bool:
+    """体当たりが相手の無敵を見るときの判定。原型の updateCharge と同じ時点の値で見る。
+
+    原型（L2882 の `q.invuln<=0`）は効果の輪（L4296）で、プレイヤーごとに無敵を減らして
+    から（L4297）そのプレイヤーの突進を進める（L4323）。そのため、突進する側より番号の
+    大きい相手（`turn_pending`）は、この tick のぶんがまだ減っていない。この版の無敵は
+    切れる tick（`invulnerable_until`）で持つので、その相手だけ 1 tick 前の時刻で見ると
+    原型と同じになる（爆風で傷を受けた相手には 76 tick 後から当たる。番号が小さければ
+    75。TypeScript 版と同じ）。
+
+    切れる tick で持つ形はそのままにして、ここだけで合わせた。番号の並びで違いが出るの
+    は、無敵を読み書きする処理のうち効果の輪の中で走るもの（体当たり）だけで、ほかの
+    処理（爆風・追いかける炎・CPU・描画）は輪が終わったあとに読むため。残りの tick 数で
+    持って輪の中で減らす形にすると、それらすべてと状態の要約が変わる。
+
+    0 の tick は1つ前が無いので 0 のまま見る（ラウンドの始まりは無敵が無い）。
+    """
+    return is_invulnerable(target, Tick(max(0, now - 1)) if turn_pending else now)

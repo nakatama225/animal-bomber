@@ -7,6 +7,10 @@
 振る舞いを直に入れて始める（原型の elephantCharge と同じ時点）。
 """
 
+from collections.abc import Callable
+
+import pytest
+
 from animal_bomber.domain.abilities.elephant import CHARGE_DURATION, finish_charge
 from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.core.tick import Tick
@@ -16,6 +20,7 @@ from animal_bomber.domain.events import (
     ExplosionCause,
     ItemDropped,
     ItemWashed,
+    PlayerHurt,
     SimEvent,
     Sprayed,
 )
@@ -24,6 +29,7 @@ from animal_bomber.domain.rules.animals import Animal, stats_of
 from animal_bomber.domain.rules.items import POOP_LIFETIME, ItemKind
 from animal_bomber.domain.state.actions import CHARGE_DAMAGE_CAP, Charge, traits_of
 from animal_bomber.domain.state.board import Tile
+from animal_bomber.domain.state.bomb import Blast
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
 from animal_bomber.domain.state.player import OUT, PlayerState, is_blast_proof
@@ -694,3 +700,124 @@ class Test鼻水噴射:
         assert not second_snot_douses(3)
         assert not second_snot_douses(299)
         assert second_snot_douses(300)
+
+
+ORDERS = [
+    pytest.param(
+        (Animal.ELEPHANT, Animal.RABBIT, Animal.MOLE),
+        74,
+        76,
+        id="受ける側の番号が大きい",
+    ),
+    pytest.param(
+        (Animal.RABBIT, Animal.ELEPHANT, Animal.MOLE),
+        75,
+        75,
+        id="受ける側の番号が小さい",
+    ),
+]
+"""プレイヤーの並びと、体当たり → 爆風・爆風 → 体当たりで、次に当たるまでの tick。"""
+
+
+class Test体当たりと無敵の切れ目:
+    """原型は効果の輪（L4296）で、プレイヤーごとに無敵を減らしてから（L4297）突進を進める（L4323）。
+
+    そのため、突進する側より番号の大きい相手は、体当たりの確かめ（L2882 の
+    `q.invuln<=0`）では、その update の無敵がまだ減っていないので1 tick 長く守られ、
+    体当たりで傷を受けると、同じ update のうちにあとから自分の番で1回減るので1 tick 早く
+    切れる。原型は無敵から 1/60 を引き続け、爆風の無敵 1.25 秒は 75 回目に 0 になる。
+    数は、体当たり・爆風の update を k としたときの、次に当たる update（TypeScript 版の
+    `tests/abilities/charge.test.ts` と同じ場面）。
+    """
+
+    def duel(
+        self, animals: tuple[Animal, ...]
+    ) -> tuple[WorldState, PlayerState, PlayerState, PlayerState]:
+        """ぞうとうさぎと、離れた所にいるもぐら（爆風の持ち主）。"""
+        world = make_world(31337, animals)
+        clear_board(world)
+        world.items.clear()
+        charger, target, third = (
+            next(p for p in world.players if p.animal is animal)
+            for animal in (Animal.ELEPHANT, Animal.RABBIT, Animal.MOLE)
+        )
+        charger.position = Cell(1, 1).center()
+        third.position = Cell(21, 15).center()
+        target.position = Cell(9, 7).center()
+        target.hp = 40
+        return world, charger, target, third
+
+    def ram_this_tick(self, charger: PlayerState, target: PlayerState) -> None:
+        """受ける側のすぐ左に、右へ突進し始めたぞうを置く。
+
+        この tick の効果の輪で当たる。
+        """
+        target.position = Cell(9, 7).center()
+        charger.position = Point(target.position.x - 0.6, target.position.y)
+        charger.action = Charge(direction=Direction.RIGHT, remaining=CHARGE_DURATION)
+
+    def blast_under(
+        self, world: WorldState, player: PlayerState, owner: PlayerState
+    ) -> None:
+        world.blasts.append(
+            Blast(
+                id=world.ids.take(),
+                cell=player.position.cell(),
+                owner=owner.id,
+                is_center=True,
+                remaining=Tick(1000),
+            )
+        )
+
+    def hurt_by(
+        self, events: list[SimEvent], target: PlayerState, by: PlayerState
+    ) -> bool:
+        return any(
+            isinstance(e, PlayerHurt) and e.target == target.id and e.by == by.id
+            for e in events
+        )
+
+    def first_hurt(
+        self,
+        world: WorldState,
+        target: PlayerState,
+        by: PlayerState,
+        before: Callable[[], None] = lambda: None,
+    ) -> int:
+        """毎 tick `before` を呼んでから進め、`by` に傷を受けた tick を返す。
+
+        返すのは進める前の盤面の時刻。
+        """
+        for _ in range(300):
+            before()
+            at = world.now
+            if self.hurt_by(simulation.step(world, idle(world)), target, by):
+                return at
+        raise AssertionError("300 tick たっても当たらない")
+
+    @pytest.mark.parametrize(("animals", "ram_then_blast", "blast_then_ram"), ORDERS)
+    def test_体当たりで傷を受けた側に爆風が当たるまで(
+        self, animals: tuple[Animal, ...], ram_then_blast: int, blast_then_ram: int
+    ) -> None:
+        world, charger, target, third = self.duel(animals)
+        self.ram_this_tick(charger, target)
+        rammed_at = world.now
+        assert self.hurt_by(simulation.step(world, idle(world)), target, charger)
+        charger.action = None
+        charger.position = Cell(1, 1).center()
+        self.blast_under(world, target, third)
+        assert self.first_hurt(world, target, third) - rammed_at == ram_then_blast
+
+    @pytest.mark.parametrize(("animals", "ram_then_blast", "blast_then_ram"), ORDERS)
+    def test_爆風で傷を受けた側に体当たりが当たるまで(
+        self, animals: tuple[Animal, ...], ram_then_blast: int, blast_then_ram: int
+    ) -> None:
+        world, charger, target, third = self.duel(animals)
+        self.blast_under(world, target, third)
+        blasted_at = world.now
+        assert self.hurt_by(simulation.step(world, idle(world)), target, third)
+        world.blasts.clear()
+        ram = self.first_hurt(
+            world, target, charger, lambda: self.ram_this_tick(charger, target)
+        )
+        assert ram - blasted_at == blast_then_ram
