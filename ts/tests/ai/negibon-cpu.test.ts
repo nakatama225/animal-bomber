@@ -48,6 +48,13 @@ function arena(): { world: WorldState; cpu: PlayerState; foe: PlayerState } {
   return { world, cpu: world.players[0]!, foe: world.players[1]! };
 }
 
+/** 盤面を空にした世界に、CPU（プレイヤー0）と、動かない的を2つ（プレイヤー1と2）置く。 */
+function arena3(): { world: WorldState; cpu: PlayerState; foes: [PlayerState, PlayerState] } {
+  const world = makeWorld(3, ['rabbit', 'elephant', 'mole']);
+  clearBoard(world);
+  return { world, cpu: world.players[0]!, foes: [world.players[1]!, world.players[2]!] };
+}
+
 /** 登録した操作の出どころで `ticks` 回進め、起きたことを tick ごとに返す。 */
 function run(world: WorldState, sources: readonly InputSource[], ticks: number): SimEvent[][] {
   const gatherer = new InputGatherer();
@@ -192,12 +199,61 @@ describe('外周にいる CPU', () => {
     expect(events.find((e) => e.type === 'revived')).toMatchObject({ player: 0, replaced: 1 });
   });
 
+  it.each([
+    { name: 'プレイヤー1', near: 0 as const },
+    { name: 'プレイヤー2', near: 1 as const },
+  ])('盤面に相手が複数いれば、外周の位置から縦と横の距離の和がいちばん小さい相手（ここでは$name）に寄る（原型 L2405-2409）', ({ near }) => {
+    // 上辺の位置 9（x=10.5、y=−0.31）から、(3,5) までは 7+5.81=12.81、(19,9) までは 9+9.81=18.81。
+    // (3,5) を撃てる上辺の位置 2 へ左に進む（(19,9) なら上辺の位置 18 へ右に進む）。5 tick の間はどちらも射線に乗らない。
+    // 近い相手を番号の若いほうにも大きいほうにも置き、いつも先の相手・いつも後の相手を選ぶ形と見分ける。
+    const { world, cpu, foes } = arena3();
+    onLane(cpu, 9);
+    foes[near].position = centerOf({ col: 3, row: 5 });
+    foes[1 - near]!.position = centerOf({ col: 19, row: 9 });
+    const { alongs, events } = trace(world, [cpuOf(), new IdleInputSource(1), new IdleInputSource(2)], 5);
+    expect(events.some((e) => e.type === 'leekThrown')).toBe(false);
+    expect(alongs[4]).toBeCloseTo(9 - 5 * LANE_SPEED);
+  });
+
+  it('近さは縦と横の距離の和で比べる。直線の距離では比べない（原型 L2407）', () => {
+    // 上辺の位置 9（x=10.5、y=−0.31）から、(9,7) は和が 1+7.81=8.81・直線で 7.87、(16,3) は和が 6+3.81=9.81・直線で 7.11。
+    // 和で比べると (9,7) を撃てる上辺の位置 8 へ左に、直線で比べると (16,3) の上辺の位置 15 へ右に進む。
+    const { world, cpu, foes } = arena3();
+    onLane(cpu, 9);
+    foes[0].position = centerOf({ col: 9, row: 7 });
+    foes[1].position = centerOf({ col: 16, row: 3 });
+    const { alongs, events } = trace(world, [cpuOf(), new IdleInputSource(1), new IdleInputSource(2)], 5);
+    expect(events.some((e) => e.type === 'leekThrown')).toBe(false);
+    expect(alongs[4]).toBeCloseTo(9 - 5 * LANE_SPEED);
+  });
+
+  it.each([
+    { name: 'プレイヤー1が左', left: 0 as const, way: -1 },
+    { name: 'プレイヤー1が右', left: 1 as const, way: 1 },
+  ])('距離の和が同じなら、番号の若い相手に寄る（$name。原型 L2408 は d<bd で、先に見た相手を残す）', ({ left, way }) => {
+    // 上辺の位置 9（x=10.5）から、(8,5) と (12,5) はどちらも 2+5.81=7.81（横の差がちょうど 2 なので、小数でも同じ値）。
+    // (8,5) なら上辺の位置 7 へ左に、(12,5) なら上辺の位置 11 へ右に進む。どちらも射程の外（5.81 先）なので撃たない。
+    const { world, cpu, foes } = arena3();
+    onLane(cpu, 9);
+    foes[left].position = centerOf({ col: 8, row: 5 });
+    foes[1 - left]!.position = centerOf({ col: 12, row: 5 });
+    const { alongs, events } = trace(world, [cpuOf(), new IdleInputSource(1), new IdleInputSource(2)], 5);
+    expect(events.some((e) => e.type === 'leekThrown')).toBe(false);
+    expect(alongs[4]).toBeCloseTo(9 + way * 5 * LANE_SPEED);
+  });
+
   it('外周の道のりは1周をまたいで測る（原型 L2414-2420）', () => {
     // 左辺の上の端（71.5）から、1 列目の相手へ。上辺の位置 0 は、またげば 0.5、左辺の位置 69 は 2.5。
+    // またいで上辺へ進んだことを、位置で直に確かめる（またがなければ左辺を下がり、10 tick 後は 70.58 にいる）。
+    // 10 tick 目はまだ撃つ前（構えて撃つのは 40 tick 目ごろ。当たると盤面へ戻り、外周の位置が無くなる）。
     const { world, cpu, foe } = arena();
     onLane(cpu, 71.5);
     foe.position = centerOf({ col: 1, row: 3 });
-    const events = run(world, [cpuOf(), new IdleInputSource(1)], 200).flat();
+    const source = cpuOf();
+    const { alongs } = trace(world, [source, new IdleInputSource(1)], 10);
+    expect(laneSpot(alongs[9]!).side).toBe('top');
+    expect(alongs[9]).toBeLessThan(1);
+    const events = run(world, [source, new IdleInputSource(1)], 190).flat();
     expect(events.some((e) => e.type === 'revived')).toBe(true);
   });
 
@@ -246,13 +302,24 @@ describe('外周にいる CPU', () => {
   });
 
   it('選び直した瞬間に寄る先までの残りが 0.25 未満なら止まる（原型 L2421）', () => {
+    // 0.25 のすぐ内側（0.24）と、次のテストのすぐ外側（0.26）の対で、止まる幅の両側を確かめる。
     const { world, cpu, foe } = arena();
     const target = topAlongFor(11);
-    onLane(cpu, target + 0.2);
+    onLane(cpu, target + 0.24);
     foe.position = centerOf({ col: 11, row: 8 });
     const { alongs } = trace(world, [cpuOf(), new IdleInputSource(1)], 4 * REAIM);
     // 動かない（外周の位置を 0〜1周に収める計算の端数だけが付く）。
-    for (const along of alongs) expect(along).toBeCloseTo(target + 0.2, 9);
+    for (const along of alongs) expect(along).toBeCloseTo(target + 0.24, 9);
+  });
+
+  it('選び直した瞬間に寄る先までの残りが 0.25 以上なら、その向きへ進む（原型 L2421）', () => {
+    const { world, cpu, foe } = arena();
+    const target = topAlongFor(11);
+    onLane(cpu, target + 0.26);
+    foe.position = centerOf({ col: 11, row: 8 });
+    const { alongs } = trace(world, [cpuOf(), new IdleInputSource(1)], REAIM);
+    // 次の選び直しまで、寄る先のほう（左）へ進み続ける。
+    expect(alongs[REAIM - 1]).toBeCloseTo(target + 0.26 - REAIM * LANE_SPEED);
   });
 
   it('外周を進む向きは、人間の操作と同じ変換で押す（下辺でも逆に進まない）', () => {

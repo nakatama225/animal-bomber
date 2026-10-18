@@ -12,13 +12,30 @@ import { LeekActor } from '../../src/domain/negibon/LeekActor.js';
 import { defaultMatchConfig } from '../../src/domain/rules/MatchConfig.js';
 import { SPAWN_CELLS } from '../../src/domain/rules/tuning.js';
 import { tick } from '../../src/domain/core/Tick.js';
+import type { InputSource } from '../../src/domain/input/InputSource.js';
 import { OUT } from '../../src/domain/state/Life.js';
-import type { PlayerState } from '../../src/domain/state/PlayerState.js';
+import { isAlive, type PlayerState } from '../../src/domain/state/PlayerState.js';
 import { hashWorld } from '../../src/domain/state/WorldState.js';
 import { layoutFor, screenX } from '../../src/presentation/render/Layout.js';
 import { Renderer } from '../../src/presentation/render/Renderer.js';
 import { grantSpecial, makeWorld } from '../helpers.js';
 import { fakeCanvas, type FakeCanvas } from './fakeCanvas.js';
+
+/**
+ * CPU の操作に、とくぎを直に出すボタン（`PlayerInput.special`）を重ねる窓口。`wants` が真の間、1 tick おきに押す
+ * （押した瞬間でないと出ないので、押したままにしない）。CPU の判断はそのまま毎 tick 進める。
+ */
+function pressingSpecial(cpu: InputSource, wants: () => boolean): InputSource {
+  let pressed = false;
+  return {
+    playerId: cpu.playerId,
+    next: (world) => {
+      const playerInput = cpu.next(world);
+      pressed = !pressed && wants();
+      return pressed ? { ...playerInput, special: true } : playerInput;
+    },
+  };
+}
 
 /**
  * 描画の通し検査。
@@ -40,26 +57,46 @@ describe('描画', () => {
     // 出す。CPU がチキンを拾うかどうかに任せると、外周の CPU を原型に合わせたとき（2026-10-18）に、
     // 40 試合のうち追いかける炎が出たのは1試合、葱のよけを合わせると0試合になった。とくぎの絵が出るかを
     // 種の運に頼らない。
+    // ただし、かえるには舌が一度現れるまで渡さない。かえるの CPU はチキンを持っていると舌を伸ばさない
+    // （FrogTactic の `!ctx.me.hasSpecial`。原型 L1931 の `!p.chicken` も同じ）。ラウンドの始まりに渡すと、舌が
+    // 出るのは粘膜爆弾を使うか外周から戻ったあとだけになり、舌が出るかが種の運に寄る。
+    // 跳ね回る爆弾は、チキンを持たせても CPU が投げるのはまれ（爆弾を置いたあと、相手まで歩いて 8 マス以内に
+    // いるときだけ）。そこで、舌が現れてから跳ね回る爆弾が現れるまでの間は、盤面にいるかえるにチキンを渡し、
+    // とくぎを直に出すボタン（`special`。CPU が押すボタン）を押させる。ボタンを通すので、チキンを使う・出せない
+    // 間は出ない、の決まりはそのまま通る。チキンを渡すのは盤面にいるときだけにする（外周にいる間はアイテムを
+    // 拾えないので、試合では起きない状態になる）。
+    // 2026-10-18 に測ると、全員に渡す形では舌が初めて出たのが 7 試合目、跳ね回る爆弾が 6 試合目の6ラウンド目
+    // だった。この形では、どちらも1試合目の2ラウンド目に出る。
     const animals = ['rabbit', 'frog', 'elephant', 'fox'];
     const wanted = ['tongue', 'slime', 'charge', 'scatter', 'foxfire', 'negibon', 'leek'];
     const canvas = fakeCanvas({ keepLog: false });
     const seen = new Set<string>();
+    const wantsSlime = (): boolean => seen.has('tongue') && !seen.has('slime');
     let matches = 0;
     for (let seed = 12; seed < 52 && !wanted.every((kind) => seen.has(kind)); seed += 1) {
       const game = new GameSession({ ...defaultMatchConfig(seed, animals), winsToTake: 2 });
-      game.world.players.forEach((player) =>
-        game.attach(new CpuInputSource(player.id, CPU_LEVELS.oni, cpuSeed(seed, player.id))),
-      );
+      game.world.players.forEach((player) => {
+        const cpu = new CpuInputSource(player.id, CPU_LEVELS.oni, cpuSeed(seed, player.id));
+        game.attach(player.animal === 'frog' ? pressingSpecial(cpu, wantsSlime) : cpu);
+      });
       const renderer = new Renderer(canvas.context, 920, 680);
       let intermissions = 0;
       let granted: unknown = null;
+      let frogGranted: unknown = null;
       // 試合の長さは種によって大きく変わる（この顔ぶれで 80 通りの種を試すと 6,967〜29,303 tick。
       // 2026-10-11 に測った）。上限は余裕を見て大きくとる。
       for (let i = 0; i < 60000 && !game.match.finished; i += 1) {
         const world = game.world;
         if (world !== granted) {
-          for (const player of world.players) grantSpecial(player, 1);
+          for (const player of world.players) if (player.animal !== 'frog') grantSpecial(player, 1);
           granted = world;
+        }
+        if (world !== frogGranted && wantsSlime()) {
+          const frog = world.players.find((player) => player.animal === 'frog' && isAlive(player));
+          if (frog !== undefined) {
+            grantSpecial(frog, 1);
+            frogGranted = world;
+          }
         }
         renderer.beforeTick(world);
         const events = game.tick();

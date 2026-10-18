@@ -192,13 +192,15 @@ describe('延長戦の準備', () => {
   });
 
   it('外周で残ったとくぎの回数も延長戦で消え、延長戦の中で拾うと拾ったぶんだけになる（原型 L4448）', () => {
-    // 外周へ回ると、とくぎを持っている印だけが外れて回数は残る（原型の toNegibon L2255）。
+    // 外周へ回ると、とくぎを持っている印だけが外れて回数は残る（原型の toNegibon L2255）。外周にいる間は拾えず、
+    // 葱で戻っても印は戻らないので、この形で延長戦に入るときの印はいつも外れている。ここで確かめるのは回数だけ。
+    // 印を外すことは、印を立てて延長戦に入る「加わる者は…」のテストが確かめている。
     const world = makeWorld(3, THREE);
     const player = world.players[2]!;
     player.hasSpecial = false;
     player.specialCharges = 2;
     enterSuddenDeath(world, [0, 2], 'timeUp');
-    expect([player.hasSpecial, player.specialCharges]).toEqual([false, 0]);
+    expect(player.specialCharges).toBe(0);
     applyItem(world, player, 'chicken', 1);
     expect([player.hasSpecial, player.specialCharges]).toEqual([true, 1]);
   });
