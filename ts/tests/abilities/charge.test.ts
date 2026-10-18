@@ -7,6 +7,7 @@ import { tick } from '../../src/domain/core/Tick.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
 import { placeBomb, placeBombAt } from '../../src/domain/mutations/bombs.js';
 import { hurt } from '../../src/domain/mutations/damage.js';
+import { swapPlaces } from '../../src/domain/mutations/negibon.js';
 import { itemEffectTicks, POOP_LIFETIME, type ItemKind } from '../../src/domain/rules/items.js';
 import { isAlive, isBlastProof, isUntouchable, type PlayerState } from '../../src/domain/state/PlayerState.js';
 import type { WorldState } from '../../src/domain/state/WorldState.js';
@@ -477,5 +478,92 @@ describe('突進中に倒れたら、抱えていたハズレは盤面に出な�
     for (let i = 0; i < 5; i += 1) events.push(...sim.step(world, sameForAll(world, press({}))));
     expect(events.filter((e) => e.type === 'itemDropped' && e.kind === 'onion')).toEqual([]);
     expect(world.items.filter((item) => item.kind === 'onion')).toEqual([]);
+  });
+});
+
+describe('体当たりと無敵の切れ目（原型は効果の輪 L4296 で、プレイヤーごとに無敵を減らしてから L4297、突進を進める L4323）', () => {
+  /*
+   * 原型では、突進する側より番号の大きい相手は、その update の無敵がまだ減っていない（L2882 が見る値が1回多い）。
+   * また、体当たりで傷を受けた番号の大きい相手は、同じ update のうちにあとから1回減る。
+   * 数は、体当たり・爆風・葱で戻った update を k としたときの、次に当たる update（全文の Am1 と A3 の確かめ）。
+   * 葱で戻った無敵は、この版は 144 tick のまま（原型は 1/60 を小数で引き続けて 145。前に決めた1フレームの差）。
+   */
+  const ORDERS = [
+    { label: '受ける側の番号が大きい', animals: ['elephant', 'rabbit', 'mole'], ramThenBlast: 74, blastThenRam: 76, reviveThenRam: 145 },
+    { label: '受ける側の番号が小さい', animals: ['rabbit', 'elephant', 'mole'], ramThenBlast: 75, blastThenRam: 75, reviveThenRam: 144 },
+  ] as const;
+
+  /** ぞうとうさぎと、離れた所にいるもぐら（爆風の持ち主・葱で入れ替わる相手）。 */
+  function duel(animals: readonly string[]): { world: WorldState; charger: PlayerState; target: PlayerState; third: PlayerState } {
+    const world = makeWorld(31337, [...animals]);
+    clearBoard(world);
+    world.items = [];
+    const charger = world.players.find((p) => p.animal === 'elephant')!;
+    const target = world.players.find((p) => p.animal === 'rabbit')!;
+    const third = world.players.find((p) => p.animal === 'mole')!;
+    charger.position = centerOf({ col: 1, row: 1 });
+    third.position = centerOf({ col: 21, row: 15 });
+    target.position = centerOf({ col: 9, row: 7 });
+    target.hp = 40;
+    return { world, charger, target, third };
+  }
+
+  /** 受ける側のすぐ左に、右へ突進し始めたぞうを置く。この tick の効果の輪で体当たりする。 */
+  function ramThisTick(charger: PlayerState, target: PlayerState): void {
+    target.position = centerOf({ col: 9, row: 7 });
+    charger.position = { x: target.position.x - 0.6, y: target.position.y };
+    charger.action = new ChargeAction('right');
+  }
+
+  function blastUnder(world: WorldState, player: PlayerState, owner: PlayerState): void {
+    world.blasts.push({ id: world.ids.take(), cell: cellOf(player.position), owner: owner.id, isCenter: true, remaining: tick(1000) });
+  }
+
+  const step = (world: WorldState, sim: Simulation): SimEvent[] => sim.step(world, sameForAll(world, press({})));
+  const hurtBy = (events: readonly SimEvent[], target: PlayerState, by: PlayerState): boolean =>
+    events.some((e) => e.type === 'playerHurt' && e.target === target.id && e.by === by.id);
+
+  /** 毎 tick `before` を呼んでから進め、`target` が `by` に傷を受けた tick（進める前の now）を返す。 */
+  function firstHurt(world: WorldState, sim: Simulation, target: PlayerState, by: PlayerState, before: () => void = () => {}): number {
+    for (let i = 0; i < 300; i += 1) {
+      before();
+      const at = world.now;
+      if (hurtBy(step(world, sim), target, by)) return at;
+    }
+    throw new Error('300 tick たっても当たらない');
+  }
+
+  it.each(ORDERS)('体当たりで傷を受けた側に爆風が当たるのは $ramThenBlast tick 後（$label）', ({ animals, ramThenBlast }) => {
+    const { world, charger, target, third } = duel(animals);
+    const sim = new Simulation();
+    ramThisTick(charger, target);
+    const rammedAt = world.now;
+    expect(hurtBy(step(world, sim), target, charger)).toBe(true);
+    charger.action = null;
+    charger.position = centerOf({ col: 1, row: 1 });
+    blastUnder(world, target, third);
+    expect(firstHurt(world, sim, target, third) - rammedAt).toBe(ramThenBlast);
+  });
+
+  it.each(ORDERS)('爆風で傷を受けた側に体当たりが当たるのは $blastThenRam tick 後（$label）', ({ animals, blastThenRam }) => {
+    const { world, charger, target, third } = duel(animals);
+    const sim = new Simulation();
+    blastUnder(world, target, third);
+    const blastedAt = world.now;
+    expect(hurtBy(step(world, sim), target, third)).toBe(true);
+    world.blasts = [];
+    expect(firstHurt(world, sim, target, charger, () => ramThisTick(charger, target)) - blastedAt).toBe(blastThenRam);
+  });
+
+  it.each(ORDERS)('葱で戻った側に体当たりが当たるのは $reviveThenRam tick 後（$label）', ({ animals, reviveThenRam }) => {
+    const { world, charger, target, third } = duel(animals);
+    const sim = new Simulation();
+    // 葱が当たるのは 3. の盤面の物の番なので、戻った tick の効果の輪（1.）では、まだ体当たりできない。
+    target.life = { kind: 'negibon', along: 0, readyAt: tick(0) };
+    third.position = centerOf({ col: 9, row: 7 });
+    const revivedAt = world.now;
+    swapPlaces(world, target, third);
+    step(world, sim);
+    expect(firstHurt(world, sim, target, charger, () => ramThisTick(charger, target)) - revivedAt).toBe(reviveThenRam);
   });
 });

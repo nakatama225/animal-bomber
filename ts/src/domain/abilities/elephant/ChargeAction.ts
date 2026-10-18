@@ -249,9 +249,13 @@ export class ChargeAction implements ActiveAction {
 
       // 被弾のあとの無敵の間と、跳び上がっている間は傷つけない（原型の updateCharge）。
       // ⚠️ 相手が突進中でも傷は入る（上限で減る）。突進どうしでぶつかると、どちらにも傷が入る。
-      if (isInvulnerable(other, world.now) || isBlastProof(other)) continue;
+      const turnPending = other.id > player.id;
+      if (invulnerableInTurn(other, turnPending, world.now) || isBlastProof(other)) continue;
       events.push({ type: 'techniqueMoment', player: player.id, moment: 'rammed' });
       events.push(...hurt(world, other, player.id, 2));
+      // 番号の大きい相手は、この tick のうちにこのあと自分の番で無敵が1回減る（原型の L4297 は、状態を問わず
+      // 全員について回る）。そのぶん1 tick 早く切れる（爆風・葱・追いかける炎に当たるのが 74 tick 後になる）。
+      if (turnPending) other.invulnerableUntil = tick(other.invulnerableUntil - 1);
     }
     return events;
   }
@@ -267,6 +271,24 @@ export class ChargeAction implements ActiveAction {
     const gap = Math.max(-speed, Math.min(speed, target - player.position.x));
     return { x: player.position.x + gap, y: player.position.y };
   }
+}
+
+/**
+ * 体当たりが相手の無敵を見るときの判定。原型の updateCharge（L2882 の `q.invuln<=0`）と同じ時点の値で見る。
+ *
+ * 原型は効果の輪（L4296）で、プレイヤーごとに無敵を減らしてから（L4297）そのプレイヤーの突進を進める（L4323）。
+ * そのため、突進する側より番号の大きい相手（`turnPending`）は、この tick のぶんがまだ減っていない。この版の
+ * 無敵は切れる tick（`invulnerableUntil`）で持つので、その相手だけ1 tick 前の時刻で見ると原型と同じになる
+ * （爆風で傷を受けた相手には 76 tick 後、葱で戻った相手には 145 tick 後から当たる。番号が小さければ 75・144）。
+ *
+ * 切れる tick で持つのはそのままにして、ここだけで合わせた。番号の並びで違いが出るのは、無敵を読み書きする
+ * 処理のうち効果の輪の中で走るもの（体当たり）だけで、ほかの処理（爆風・葱・追いかける炎・CPU・描画）は輪が
+ * 終わったあとに読むため。残りの tick 数で持って輪の中で減らす形にすると、それらすべてと状態の要約が変わる。
+ *
+ * 0 の tick は1つ前が無いので 0 のまま見る（ラウンドの始まりは無敵が無い）。
+ */
+function invulnerableInTurn(target: PlayerState, turnPending: boolean, now: Tick): boolean {
+  return isInvulnerable(target, turnPending ? tick(Math.max(0, now - 1)) : now);
 }
 
 /** 各方向へ1歩ぶんの差分。 */
