@@ -115,6 +115,20 @@ class ActionTraits:
     原型の doAction・doSpecial の `if (p.tongue) return;`。押した長さは数え続け、
     しきい値に届けば、その押し方のとくぎはそれきりになる。
     """
+    stays_off_board: bool
+    """True なら、持ち主が盤面を離れても（倒れた）外さずに、その場で止めておく。
+
+    止めている間は進めないが、爆風に触れたかの確かめ（`systems/actions.py` の
+    `after_damage`）は続ける。外れるのは、その確かめが終わりを返したときと、ラウンドの
+    始まり（盤面を作り直す）。False のもの（突進・穴掘り）は、盤面を離れた次の tick に
+    後始末を呼んで外す。
+
+    原型の舌がこの形なので、それと同じにするための性質（TypeScript 版の
+    `ActiveAction.staysOffBoard`）。原型は倒れても舌を消さず（toNegibon L2255。退場の
+    L1700 でも残る）、舌を進めるのは盤面にいるプレイヤーだけ（update L4320-4322）、
+    焼けたかの確かめは状態を問わず全員を見る（L4395）。そのため、倒れたあとに止まった
+    舌の上へ爆風が来ると焼けて、そのラウンドの舌が短くなる。
+    """
     sweeps_items: bool
     """True なら、足元のアイテムをふつうの拾い（`systems/items.py`）では拾わない。
 
@@ -131,6 +145,7 @@ _CHARGE_TRAITS: Final = ActionTraits(
     damage_cap=CHARGE_DAMAGE_CAP,
     can_place_bomb=False,
     blocks_buttons=False,
+    stays_off_board=False,
     sweeps_items=True,
 )
 _DIG_TRAITS: Final = ActionTraits(
@@ -138,6 +153,7 @@ _DIG_TRAITS: Final = ActionTraits(
     damage_cap=None,
     can_place_bomb=False,
     blocks_buttons=False,
+    stays_off_board=False,
     sweeps_items=False,
 )
 _TONGUE_TRAITS: Final = ActionTraits(
@@ -145,6 +161,7 @@ _TONGUE_TRAITS: Final = ActionTraits(
     damage_cap=None,
     can_place_bomb=False,
     blocks_buttons=True,
+    stays_off_board=True,
     sweeps_items=False,
 )
 
@@ -154,7 +171,8 @@ def traits_of(action: Action) -> ActionTraits:
 
     いまの振る舞いはどれも位置を決め、爆弾を置けない（原型の canPlaceBomb も、掘る・舌・
     突進の最中は置けない）。性質を分けてあるのは、そうでない振る舞いを足すため。
-    技のボタンを止めるのは舌だけ（原型の doAction・doSpecial）。
+    技のボタンを止めるのは舌だけ（原型の doAction・doSpecial）。盤面を離れても止めて残す
+    のも舌だけ（原型の toNegibon・update・tongueBurnCheck）。
 
     ⚠️ 葱が当たらないか（原型の isUntouchable。突進は当たらない）は、葱ボンを作る段階 8
     で足す。爆風が当たらないか（`state/player.py` の `is_blast_proof`）とは別のもので、

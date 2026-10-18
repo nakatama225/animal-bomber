@@ -101,12 +101,18 @@ def watch_for(
 def after_damage(world: WorldState) -> list[SimEvent]:
     """被弾を見たあとに、振る舞いが爆風に触れたかを見る（伸びている舌の焼き切れ）。
 
-    盤面にいるプレイヤーだけ。終わったら後始末を呼んで外す。
+    盤面にいるプレイヤーと、盤面を離れても止めて残す振る舞い
+    （`ActionTraits.stays_off_board`）を持つプレイヤーを見る。終わったら後始末を呼んで
+    外す。原型の L4395 は、状態を問わず全員について焼けたかを確かめる。倒れた tick にも
+    見るので、倒した爆風が止まった振る舞いに触れていれば、その tick のうちに終わる
+    （原型も被弾 L4393 のすぐあとに見る）。
     """
     events: list[SimEvent] = []
     for player in world.players:
         action = player.action
-        if action is None or not is_alive(player):
+        if action is None:
+            continue
+        if not is_alive(player) and not traits_of(action).stays_off_board:
             continue
         progress = check_after_damage(world, player, action)
         events.extend(progress.events)
@@ -122,9 +128,15 @@ def _advance(world: WorldState, player: PlayerState) -> list[SimEvent]:
 
     ⚠️ 前の tick のうちに盤面を離れていたら（倒れた）、もう進めずに打ち切る。進めると、
     盤面にいないプレイヤーの技が 1 tick ぶん働く。
+
+    盤面を離れても止めて残す振る舞い（`ActionTraits.stays_off_board`）は、盤面にいない間は
+    進めずにそのまま止めておく（原型の update L4320-4322 も、盤面にいるプレイヤーの
+    振る舞いだけを進める）。
     """
     action = player.action
     if action is None:
+        return []
+    if not is_alive(player) and traits_of(action).stays_off_board:
         return []
     if not is_alive(player):
         events: list[SimEvent] = []

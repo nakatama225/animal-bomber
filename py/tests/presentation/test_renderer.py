@@ -52,6 +52,7 @@ from animal_bomber.presentation.render.views.player import (
 )
 from tests.helpers import clear_board, grant_special
 
+from .baked_helpers import Image
 from .frame_scenes import (
     FixedVisuals,
     assert_same_frame,
@@ -290,6 +291,32 @@ def test_倒れたプレイヤーは描かない() -> None:
     wanted, _ = direct_image(LAYOUT, world, visuals, randoms[:-2])
     assert_same_frame(got, wanted, FADED)
     assert frame_mismatches(got, alive, FADED) != (0, 0)
+
+
+@pytest.mark.usefixtures("fine_levels")
+def test_盤面にいないプレイヤーの_止まったまま残っている舌は描かない() -> None:
+    """倒れたかえるの舌は、外さずに止めておく（`ActionTraits.stays_off_board`）。
+
+    描くのは盤面にいるプレイヤーだけなので、止まった舌は見えない（原型の drawPlayer
+    L4753 も、盤面にいないプレイヤーを描かずに帰る）。対照として、盤面にいれば舌の
+    有無で絵が変わる。
+    """
+
+    def drawn(on_board: bool, tongue: bool) -> Image:
+        world = create_world(5, (Animal.FROG, Animal.RABBIT))
+        clear_board(world)
+        frog = world.players[0]
+        frog.position = Cell(3, 5).center()
+        frog.facing = Direction.RIGHT
+        if tongue:
+            frog.action = Tongue(Cell(3, 5), Direction.RIGHT, Tick(40), 5, 5)
+        if not on_board:
+            frog.life = OUT
+        got, _ = renderer_image(BakedArt(LAYOUT), world, FixedVisuals(), [])
+        return got
+
+    assert frame_mismatches(drawn(False, True), drawn(False, False), 0) == (0, 0)
+    assert frame_mismatches(drawn(True, True), drawn(True, False), 0) != (0, 0)
 
 
 @pytest.mark.usefixtures("fine_levels")
