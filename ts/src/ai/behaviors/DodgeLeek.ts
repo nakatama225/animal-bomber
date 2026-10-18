@@ -1,7 +1,6 @@
-import { step, type Direction, type Point } from '../../domain/core/Coord.js';
+import { step, type Direction } from '../../domain/core/Coord.js';
 import { LeekActor } from '../../domain/negibon/LeekActor.js';
 import { isSolidFor } from '../../domain/query/BoardQuery.js';
-import { LEEK_HIT } from '../../domain/rules/negibon.js';
 import type { CpuBehavior } from '../CpuBehavior.js';
 import type { CpuContext } from '../CpuContext.js';
 
@@ -12,12 +11,27 @@ const LINE_WIDTH = 0.6;
 const LOOK_AHEAD = 9;
 
 /**
- * 外周から飛んでくる葱の射線から、直角に1マス外れる。
+ * よける先を試す順。横に飛ぶ葱なら下→上、縦に飛ぶ葱なら右→左。原型の planCPU の L2090 と同じ固定の順。
+ *
+ * ⚠️ 自分が射線のどちら側に立っているかは見ない（原型も見ない）。射線の左（横に飛ぶ葱なら上）に立っていると、
+ * 右（下）へよけて射線を横切り、そのままなら外れた葱へ自分から寄っていくことがある。
+ */
+const SIDES: Readonly<Record<Direction, readonly Direction[]>> = {
+  left: ['down', 'up'],
+  right: ['down', 'up'],
+  up: ['right', 'left'],
+  down: ['right', 'left'],
+};
+
+/**
+ * 外周から飛んでくる葱の射線から、直角に1マス外れる（原型の planCPU の L2086-2098）。
  *
  * 爆風から逃げる規則（`FLEE`）の次に置く。葱に当たっても、外周から撃ち返して
  * 入れ替われば戻ってこられる。爆風のほうが致命的なので先に逃げる（原型と同じ優先順）。
  *
- * 避け先は、通れて爆風の届かないマスだけ。無ければ次の規則に譲る。
+ * よける先は、直角の2マスを固定の順（`SIDES`）に試し、通れて爆風の届かない最初のマス。
+ * いまの位置で当たるかどうか（ずれが葱の当たり判定より大きいか）は見ずに、両側を試す（原型の L2091-2095 と同じ）。
+ * どちらも無ければ次の規則に譲る。
  */
 export const DODGE_LEEK: CpuBehavior = {
   name: 'dodgeLeek',
@@ -25,11 +39,7 @@ export const DODGE_LEEK: CpuBehavior = {
   decide(ctx) {
     const leek = incomingLeek(ctx);
     if (leek === null) return null;
-    const sides = sidesAwayFrom(leek, ctx.me.position);
-    // いまの位置で当たらないなら、射線を横切る向きへは動かない。離れる側が塞がっていても、
-    // 横切れば外れるはずの葱に自分から当たる。
-    const allowed = offsetFrom(leek, ctx.me.position) >= LEEK_HIT ? sides.slice(0, 1) : sides;
-    for (const side of allowed) {
+    for (const side of SIDES[leek.facing]) {
       const cell = step(ctx.here, side);
       if (isSolidFor(ctx.world, cell, ctx.me, ctx.passesThrough)) continue;
       if (!ctx.danger.isSafe(cell)) continue;
@@ -39,14 +49,7 @@ export const DODGE_LEEK: CpuBehavior = {
   },
 };
 
-/** 葱の射線から、飛ぶ向きと直角にどれだけ離れているか（マス）。 */
-function offsetFrom(leek: LeekActor, me: Point): number {
-  return leek.facing === 'up' || leek.facing === 'down'
-    ? Math.abs(me.x - leek.position.x)
-    : Math.abs(me.y - leek.position.y);
-}
-
-/** 自分に向かって飛んでくる、ほかの人の葱。 */
+/** 自分に向かって飛んでくる、ほかのプレイヤーの葱（原型の negiThreat L2066-2075）。 */
 function incomingLeek(ctx: CpuContext): LeekActor | null {
   const { x, y } = ctx.me.position;
   for (const actor of ctx.world.actors) {
@@ -58,17 +61,4 @@ function incomingLeek(ctx: CpuContext): LeekActor | null {
     if (offset < LINE_WIDTH && ahead > 0 && ahead < LOOK_AHEAD) return actor;
   }
   return null;
-}
-
-/**
- * 飛ぶ向きと直角の2方向を、射線から離れる側を先にして並べる。
- *
- * ⚠️ 原型はいつも右（横に飛ぶ葱なら下）から試した。射線の左に立っていると、右へ避けて
- * 自分から射線を横切り、そのままなら外れた葱に当たる。ちょうど射線の上なら原型と同じ順。
- */
-function sidesAwayFrom(leek: LeekActor, me: Point): readonly Direction[] {
-  if (leek.facing === 'up' || leek.facing === 'down') {
-    return me.x < leek.position.x ? ['left', 'right'] : ['right', 'left'];
-  }
-  return me.y < leek.position.y ? ['up', 'down'] : ['down', 'up'];
 }

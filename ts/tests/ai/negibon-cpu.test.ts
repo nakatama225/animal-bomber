@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import type { CpuBehavior } from '../../src/ai/CpuBehavior.js';
+import { CpuContext } from '../../src/ai/CpuContext.js';
 import { CpuInputSource } from '../../src/ai/CpuInputSource.js';
 import { CPU_LEVELS } from '../../src/ai/CpuLevel.js';
-import type { CpuMemory } from '../../src/ai/CpuMemory.js';
+import { freshMemory, type CpuMemory } from '../../src/ai/CpuMemory.js';
 import { DODGE_LEEK } from '../../src/ai/behaviors/DodgeLeek.js';
 import { FLEE } from '../../src/ai/behaviors/Flee.js';
-import { centerOf } from '../../src/domain/core/Coord.js';
+import { cellOf, centerOf, type Cell } from '../../src/domain/core/Coord.js';
+import { Rng } from '../../src/domain/core/Rng.js';
 import { secondsToTicks, tick } from '../../src/domain/core/Tick.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
 import type { InputSource } from '../../src/domain/input/InputSource.js';
@@ -15,6 +17,7 @@ import { swapPlaces } from '../../src/domain/mutations/negibon.js';
 import { alongsFacing, laneSpot } from '../../src/domain/negibon/lane.js';
 import { LeekActor } from '../../src/domain/negibon/LeekActor.js';
 import { placeBombAt } from '../../src/domain/mutations/bombs.js';
+import { DangerMap } from '../../src/domain/query/DangerMap.js';
 import { LANE_SPEED } from '../../src/domain/rules/negibon.js';
 import { ALIVE } from '../../src/domain/state/Life.js';
 import type { PlayerState } from '../../src/domain/state/PlayerState.js';
@@ -296,25 +299,48 @@ describe('盤面にいる CPU と葱', () => {
     expect(Math.abs(cpu.position.x - 5.5)).toBeGreaterThan(0.5);
   });
 
-  it('射線から離れる側へよける。近づく側へよけて、外れるはずの葱に当たらない', () => {
-    // 射線の左に立っているのに右へよけると、自分から射線を横切る。
-    const { world, cpu } = leekIncoming();
-    const leek = world.actors[0] as LeekActor;
-    world.actors = [new LeekActor({ x: 5.9, y: leek.position.y }, 'down', 1)];
-    const events = run(world, [cpuOf([FLEE, DODGE_LEEK]), new IdleInputSource(1)], 120).flat();
-    expect(events.some((e) => e.type === 'revived')).toBe(false);
-    expect(cpu.position.x).toBeLessThan(5.5);
+  /** 盤面の CPU（プレイヤー0）が、この判断で葱をよけるならどのマスへ動くか。よけなければ null。 */
+  function dodgeTo(world: WorldState): Cell | null {
+    const me = world.players[0]!;
+    const ctx = new CpuContext(
+      world, me, cellOf(me.position), DangerMap.of(world), false, CPU_LEVELS.hard, freshMemory(new Rng(1)), new Rng(1),
+    );
+    return DODGE_LEEK.decide(ctx)?.path[0] ?? null;
+  }
+
+  it('縦に飛ぶ葱なら、射線のどちら側に立っていても右→左の順に試す（原型 planCPU L2090）', () => {
+    // CPU は (5,5) の中央（x=5.5）。葱が 5.9 を飛べば射線の左に立つことになるが、右の (6,5) へよけて射線を横切る。
+    // 前は射線から離れる側（左）を先に試していたが、原型に合わせた。
+    const { world } = leekIncoming();
+    world.actors = [new LeekActor({ x: 5.9, y: -0.31 }, 'down', 1)];
+    expect(dodgeTo(world)).toEqual({ col: 6, row: 5 });
+    world.actors = [new LeekActor({ x: 5.1, y: -0.31 }, 'down', 1)];
+    expect(dodgeTo(world)).toEqual({ col: 6, row: 5 });
   });
 
-  it('当たらない位置にいるなら、離れる側が塞がっていても射線を横切らない', () => {
-    // マスの中央に立ち、葱は 0.4 マス右を飛ぶ。そのままなら外れる。左のマスは塞がっている。
-    const { world, cpu } = leekIncoming();
-    const leek = world.actors[0] as LeekActor;
-    world.actors = [new LeekActor({ x: 5.9, y: leek.position.y }, 'down', 1)];
-    world.board.set({ col: 4, row: 5 }, 'soft');
-    const events = run(world, [cpuOf([FLEE, DODGE_LEEK]), new IdleInputSource(1)], 120).flat();
-    expect(events.some((e) => e.type === 'revived')).toBe(false);
-    expect(cpu.position.x).toBeCloseTo(5.5);
+  it('横に飛ぶ葱なら、射線のどちら側に立っていても下→上の順に試す（原型 planCPU L2090）', () => {
+    // 葱は左辺から右へ飛ぶ。5.8 を飛べば CPU（y=5.5）は射線の上に立つが、下の (5,6) へよけて射線を横切る。
+    const { world } = leekIncoming();
+    world.actors = [new LeekActor({ x: -0.31, y: 5.8 }, 'right', 1)];
+    expect(dodgeTo(world)).toEqual({ col: 5, row: 6 });
+    world.actors = [new LeekActor({ x: -0.31, y: 5.2 }, 'right', 1)];
+    expect(dodgeTo(world)).toEqual({ col: 5, row: 6 });
+  });
+
+  it('ずれが葱の当たり判定（0.28）以上でも両側を試す。先の側が塞がっていれば、射線を横切る側へもよける（原型 L2091-2095）', () => {
+    // 葱は 0.4 マス左（5.1）を飛ぶ。そのままなら外れる。先に試す右の (6,5) は塞がっているので、左の (4,5) へよける。
+    // 前は、いまの位置で当たらないなら射線を横切る側を試さず、よけなかった。
+    const { world } = leekIncoming();
+    world.actors = [new LeekActor({ x: 5.1, y: -0.31 }, 'down', 1)];
+    world.board.set({ col: 6, row: 5 }, 'soft');
+    expect(dodgeTo(world)).toEqual({ col: 4, row: 5 });
+  });
+
+  it('横に飛ぶ葱で下が塞がっていれば、上へよける（原型 L2091-2095 の2つ目）', () => {
+    const { world } = leekIncoming();
+    world.actors = [new LeekActor({ x: -0.31, y: 5.5 }, 'right', 1)];
+    world.board.set({ col: 5, row: 6 }, 'soft');
+    expect(dodgeTo(world)).toEqual({ col: 5, row: 4 });
   });
 
   it('爆風の届くマスへはよけない', () => {
