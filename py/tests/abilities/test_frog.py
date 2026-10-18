@@ -152,17 +152,41 @@ class Test粘膜爆弾が跳ね終わったとき:
             ExplosionCause.FUSE
         ]
 
-    def test_本物の爆弾を出したままでも爆発し_その爆弾と手持ちの数は変わらない(
+    def test_本物の爆弾を出したままでも爆発し_置いている数は1つ少なく数えられる(
         self,
     ) -> None:
-        """原型は置いている数を1つ多く引く（数え違いとみて写さない）。差し引きで変えない。"""
+        """原型の slimeBurst（L2942-2945）と removeBomb（L1494）。
+
+        生やして +1、すぐ max(0, −1)、爆発でもう max(0, −1)。自分の爆弾を盤面に置いて
+        いれば、差し引き1つ少なくなる。前はこの版だけ差し引きで変えないようにしていたが、
+        原型に合わせた（TypeScript 版と同じ）。
+        """
         world, frog, _ = arena()
         long_bomb(world, frog, Cell(3, 13))
-        before = frog.active_bombs
+        assert frog.active_bombs == 1
         run_until_done(world, SlimeBomb(cell=Cell(6, 7), owner=0, hops_left=1))
         assert blast_cells(world)[0] == (6, 7, True)
         assert [bomb.cell for bomb in world.bombs] == [Cell(3, 13)]
-        assert frog.active_bombs == before
+        assert frog.active_bombs == 0
+
+    def test_自分の爆弾を置いていなければ_置いている数は0のまま(self) -> None:
+        """原型の L2943 も L1494 も 0 で止める。"""
+        world, frog, _ = arena()
+        assert frog.active_bombs == 0
+        run_until_done(world, SlimeBomb(cell=Cell(6, 7), owner=0, hops_left=1))
+        assert frog.active_bombs == 0
+
+    def test_置ける数が上限でも_粘膜爆弾が爆発したあとは_もう1つ置ける(self) -> None:
+        """原型の placeBomb（L1438）は、この置いている数で見る。"""
+        world, frog, _ = arena()
+        frog.max_bombs = 1
+        first = place_bomb_at(world, frog, Cell(3, 13))
+        assert first is not None
+        first.fuse = Tick(9999)
+        assert place_bomb_at(world, frog, Cell(1, 11)) is None
+        run_until_done(world, SlimeBomb(cell=Cell(6, 7), owner=0, hops_left=1))
+        assert place_bomb_at(world, frog, Cell(1, 11)) is not None
+        assert len(world.bombs) == 2
 
     def test_投げたプレイヤーが倒れていても_その爆弾として爆発する(self) -> None:
         world, frog, _ = arena()

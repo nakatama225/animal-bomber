@@ -333,6 +333,13 @@ def _burst(world: WorldState, slime: SlimeBomb) -> list[SimEvent]:
     四方が塞がれて中心の1マスしか燃えない）。どこにも降りられなければ、その場に中心の
     爆風だけを出す。手持ちの数は見ない。とくぎの爆発なので、手持ちを出し切っていても
     起こる（`spawn_bomb`）。
+
+    置いている爆弾の数（`active_bombs`）は、原型の slimeBurst と同じく、生やした直後に
+    1つ戻し（L2943。0 で止める）、爆発でもう1つ戻す（removeBomb の L1494。0 で止める）。
+    原型の注記は「手持ちは減らさない」つもりで書かれているが、爆発のときにもう一度減るので、
+    投げたプレイヤーが自分の爆弾を盤面に置いていれば1つ少なく数えられ、そのぶん上限より
+    1つ多く置ける（自分の爆弾が盤面から無くなると、0 で止まって数がそろう）。原型と
+    同じにしてある（TypeScript 版と同じ）。
     """
     cell = slime.cell
     if _blocked(world, cell):
@@ -357,7 +364,9 @@ def _burst(world: WorldState, slime: SlimeBomb) -> list[SimEvent]:
     owner = player_by_id(world, slime.owner)
     if owner is None:
         raise ValueError(f"投げたプレイヤーが盤面の一覧にいない: {slime.owner}")
-    result = detonate(world, spawn_bomb(world, owner, cell))
+    bomb = spawn_bomb(world, owner, cell)
+    owner.active_bombs = max(0, owner.active_bombs - 1)
+    result = detonate(world, bomb)
     exploded = Exploded(
         cell=cell,
         owner=slime.owner,
