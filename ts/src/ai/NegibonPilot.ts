@@ -69,15 +69,25 @@ const SCAN = LANE_SPEED / 4;
  * - 射線に入ったとみなす幅が、葱の当たり判定より広かった
  * - 無敵中の相手も狙っていた（葱は通り抜けるので、撃つ間隔を無駄にする）
  *
- * 外周に回るたびに作り直す。前に外周にいたときの狙いを持ち越さない。
+ * ## 同じラウンドのうちは作り直さない
+ *
+ * 原型は外周の操縦の記憶（選び直しの残り negiAim・向き negiDir）を CPU の記憶 p.ai に持ち、ラウンドの始まり
+ * （L4191-4192）にしか作り直さない。外周へ回るとき（toNegibon の L2268）に 0 に戻すのは構えの溜め（negiLock）だけで、
+ * 同じラウンドで2度目に外周へ回ると、前の外周の選び直しの残りと向きのまま動き出す。ここも同じにする。
+ * 外周へ回ったら `enterLane` を呼ぶ。
  */
 export class NegibonPilot {
-  /** 次に寄る位置を選び直すまでの tick。 */
+  /** 次に寄る位置を選び直すまでの tick。0 で始まるので、ラウンドで1度目の外周は最初の tick に選ぶ（原型の L4192）。 */
   #reaimIn = 0;
   /** 射線に相手を捉えてからの tick。 */
   #locked = 0;
   /** 寄る位置（外周の上の位置）。 */
   #target: number | null = null;
+
+  /** 外周へ回ったときに呼ぶ。構えの溜めだけを 0 に戻す（原型の toNegibon L2268）。 */
+  enterLane(): void {
+    this.#locked = 0;
+  }
 
   next(world: Readonly<WorldState>, lane: Negibon): PlayerInput {
     const foes = world.players.filter((player) => canBeHit(world, player));

@@ -89,5 +89,6 @@ function clearRoundState(player: PlayerState): void {
   player.actionHeld = tick(0);
   player.actionFired = false;
   player.abilityCooldown = tick(0);
-  player.lastHitBy = null;
+  // 最後に傷を付けた相手（`lastHitBy`）は戻さない。原型の enterSuddenDeath（L4446-4461）も触らない。
+  // 試合の中で読む所は無く、変わるのは状態の要約だけ。
 }

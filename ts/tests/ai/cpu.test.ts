@@ -5,7 +5,7 @@ import type { CpuBehavior } from '../../src/ai/CpuBehavior.js';
 import { CpuContext } from '../../src/ai/CpuContext.js';
 import { CpuInputSource, cpuSeed } from '../../src/ai/CpuInputSource.js';
 import { CPU_LEVELS, type CpuLevelKey } from '../../src/ai/CpuLevel.js';
-import { freshMemory } from '../../src/ai/CpuMemory.js';
+import { freshMemory, type CpuMemory } from '../../src/ai/CpuMemory.js';
 import { BREAK_BLOCKS } from '../../src/ai/behaviors/BreakBlocks.js';
 import { DEFAULT_CHAIN } from '../../src/ai/behaviors/DefaultChain.js';
 import { FLEE } from '../../src/ai/behaviors/Flee.js';
@@ -324,9 +324,10 @@ describe('ラウンドをまたぐ', () => {
     expect(source.memory.lastBomb).toBeNull();
   });
 
-  it('延長戦に入ったら、それまでの記憶を捨てる', () => {
-    // 延長戦では盤面を作り直さず、全員を開始位置へ移す。盤面が同じものなので、
-    // 作り直しだけを見ていると、移る前の場所で立てた道筋をたどり続ける。
+  it('延長戦に入っても記憶を捨てない。経路も置き直さない記憶も揺らぎもそのまま（原型の enterSuddenDeath L4435-4465 は p.ai に触らない）', () => {
+    // 延長戦では盤面を作り直さず、全員を開始位置へ移す。原型は CPU の記憶を作り直さないので、次に考え直すまでは
+    // 移る前の経路の先のマスへ歩く。前はここで捨てていた（この確認も捨てる側を見ていた）が、原型に合わせた。
+    // 作り直すと判断の間隔の揺らぎ（jitter）を引き直し、CPU の乱数が1つ進む。
     const world = makeWorld(3, ['rabbit', 'elephant']);
     const source = new CpuInputSource(0, CPU_LEVELS.hard, 1);
     const sim = new Simulation();
@@ -334,10 +335,17 @@ describe('ラウンドをまたぐ', () => {
       sim.step(world, new Map([[0, source.next(world)]]));
     }
     expect(source.memory.lastBomb).not.toBeNull();
+    const before = source.memory as CpuMemory;
+    const { jitter, lastBomb } = before;
+    before.path = [{ col: 9, row: 9 }];
+    before.thinkIn = 99;
 
     enterSuddenDeath(world, [0, 1], 'timeUp');
     source.next(world);
-    expect(source.memory.lastBomb).toBeNull();
+    expect(source.memory).toBe(before);
+    expect(source.memory.jitter).toBe(jitter);
+    expect(source.memory.lastBomb).toEqual(lastBomb);
+    expect(source.memory.path).toEqual([{ col: 9, row: 9 }]);
   });
 });
 

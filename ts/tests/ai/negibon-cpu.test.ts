@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { CpuBehavior } from '../../src/ai/CpuBehavior.js';
 import { CpuInputSource } from '../../src/ai/CpuInputSource.js';
 import { CPU_LEVELS } from '../../src/ai/CpuLevel.js';
+import type { CpuMemory } from '../../src/ai/CpuMemory.js';
 import { DODGE_LEEK } from '../../src/ai/behaviors/DodgeLeek.js';
 import { FLEE } from '../../src/ai/behaviors/Flee.js';
 import { centerOf } from '../../src/domain/core/Coord.js';
@@ -14,6 +15,7 @@ import { swapPlaces } from '../../src/domain/mutations/negibon.js';
 import { alongsFacing, laneSpot } from '../../src/domain/negibon/lane.js';
 import { LeekActor } from '../../src/domain/negibon/LeekActor.js';
 import { placeBombAt } from '../../src/domain/mutations/bombs.js';
+import { ALIVE } from '../../src/domain/state/Life.js';
 import type { PlayerState } from '../../src/domain/state/PlayerState.js';
 import type { WorldState } from '../../src/domain/state/WorldState.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
@@ -27,6 +29,12 @@ function topAlongFor(col: number): number {
 /** 外周に置く。すぐ撃てる。 */
 function onLane(player: PlayerState, along: number): void {
   player.life = { kind: 'negibon', along, readyAt: tick(0) };
+}
+
+/** 外周の上の位置。外周にいなければ失敗させる。 */
+function alongOf(player: PlayerState): number {
+  if (player.life.kind !== 'negibon') throw new Error(`外周にいない: ${player.life.kind}`);
+  return player.life.along;
 }
 
 /** 盤面を空にした2人の世界。プレイヤー0が CPU、プレイヤー1は動かない的。 */
@@ -300,22 +308,98 @@ describe('盤面にいる CPU と葱', () => {
   });
 });
 
+/** CPU（プレイヤー0）だけを動かし、爆弾を1つ置いた直後まで進める。置き直さない記憶が入った CPU を返す。 */
+function afterFirstBomb(world: WorldState): CpuInputSource {
+  const source = cpuOf();
+  const sim = new Simulation();
+  for (let i = 0; i < 600 && source.memory.lastBomb === null; i += 1) {
+    sim.step(world, new Map([[0, source.next(world)]]));
+  }
+  expect(source.memory.lastBomb).not.toBeNull();
+  return source;
+}
+
 describe('外周から戻った CPU', () => {
-  it('倒れる前の記憶を捨てる', () => {
-    // 戻ると当てた相手の位置へ移るので、倒れる前に立てた道筋は使えない。
+  it('倒れる前の記憶を持ち越す。作り直さないので、判断の間隔の揺らぎも引き直さない（原型の negiHit L2337-2356 は p.ai に触らない）', () => {
+    // 原型が CPU の記憶を作り直すのは、ラウンドの始まり（L4191-4192）と作るとき（L1210）だけ。
     const world = makeWorld(3, ['rabbit', 'elephant']);
-    const source = cpuOf();
-    const sim = new Simulation();
     const [cpu, foe] = world.players as [PlayerState, PlayerState];
-    for (let i = 0; i < 600 && source.memory.lastBomb === null; i += 1) {
-      sim.step(world, new Map([[0, source.next(world)]]));
-    }
-    expect(source.memory.lastBomb).not.toBeNull();
+    const source = afterFirstBomb(world);
+    const before = source.memory;
+    const { jitter, lastBomb } = before;
 
     onLane(cpu, 0);
     source.next(world);
     swapPlaces(world, cpu, foe);
     source.next(world);
-    expect(source.memory.lastBomb).toBeNull();
+    expect(source.memory).toBe(before);
+    expect(source.memory.jitter).toBe(jitter);
+    expect(source.memory.lastBomb).toEqual(lastBomb);
+  });
+
+  it('戻った直後は、考え直すまで倒れる前の経路の先のマスへ1軸ずつ歩く（隣のマスでなくても。原型 L1971-1984）', () => {
+    // 戻ると当てた相手の位置へ移る。原型の経路追従は、先頭のマスが隣かどうかを見ずに、そのマスの中央へ寄る。
+    const world = makeWorld(3, ['rabbit', 'elephant']);
+    clearBoard(world);
+    const [cpu, foe] = world.players as [PlayerState, PlayerState];
+    const source = cpuOf();
+    source.next(world);
+    const memory = source.memory as CpuMemory;
+    memory.path = [{ col: 9, row: 9 }];
+    memory.thinkIn = 99;
+
+    onLane(cpu, 0);
+    source.next(world);
+    foe.position = centerOf({ col: 3, row: 7 });
+    swapPlaces(world, cpu, foe);
+    // 横に 6、縦に 2 離れている。両方 0.06 より離れているので、離れているほうの横だけを押す。
+    expect(source.next(world)).toMatchObject({ right: true, down: false, up: false, left: false });
+    expect(source.memory.path).toEqual([{ col: 9, row: 9 }]);
+  });
+});
+
+describe('同じラウンドの2度目の外周（原型の toNegibon L2268 は構えの溜め negiLock だけを 0 にする）', () => {
+  it('構えの溜めは 0 に戻るので、射線に乗った相手には、外周へ回ってから 37 tick 目に撃つ', () => {
+    // 1度目の外周で 20 tick 構えたところで盤面へ戻す。溜めが残っていれば 17 tick 目に撃ってしまう。
+    const { world, cpu, foe } = arena();
+    const source = cpuOf();
+    const gatherer = new InputGatherer();
+    gatherer.add(source);
+    gatherer.add(new IdleInputSource(1));
+    const sim = new Simulation();
+    onLane(cpu, topAlongFor(5));
+    foe.position = centerOf({ col: 5, row: 3 });
+    for (let i = 0; i < 20; i += 1) sim.step(world, gatherer.gather(world));
+
+    cpu.life = ALIVE;
+    source.next(world);
+    onLane(cpu, topAlongFor(5));
+    let thrownAt: number | null = null;
+    for (let i = 1; i <= 60 && thrownAt === null; i += 1) {
+      if (sim.step(world, gatherer.gather(world)).some((e) => e.type === 'leekThrown')) thrownAt = i;
+    }
+    expect(thrownAt).toBe(37);
+  });
+
+  it('選び直しの残りと狙いは持ち越すので、残りがあるうちは前の外周で選んだほうへ動く', () => {
+    // 1度目：上辺の 3 列目から、9 列目の相手へ（右へ）。5 tick 動いたところで盤面へ戻す。
+    // 2度目：上辺の 6 列目から。相手は 3 列目へ移っているので、選び直せば左へ向かう。
+    const { world, cpu, foe } = arena();
+    const source = cpuOf();
+    const gatherer = new InputGatherer();
+    gatherer.add(source);
+    gatherer.add(new IdleInputSource(1));
+    const sim = new Simulation();
+    onLane(cpu, topAlongFor(3));
+    foe.position = centerOf({ col: 9, row: 3 });
+    for (let i = 0; i < 5; i += 1) sim.step(world, gatherer.gather(world));
+
+    cpu.life = ALIVE;
+    source.next(world);
+    const start = topAlongFor(6);
+    onLane(cpu, start);
+    foe.position = centerOf({ col: 3, row: 3 });
+    for (let i = 0; i < 3; i += 1) sim.step(world, gatherer.gather(world));
+    expect(alongOf(cpu)).toBeGreaterThan(start);
   });
 });

@@ -66,12 +66,10 @@ export class CpuInputSource implements InputSource {
   readonly #rng: Rng;
   readonly #chain: readonly CpuBehavior[];
   #world: Readonly<WorldState> | null = null;
-  /** 最後に見た盤面が延長戦に入っていたか。 */
-  #sawSuddenDeath = false;
-  /** 最後に見たとき、自分が盤面にいたか。外周から戻ったことを知るのに使う。 */
-  #onBoard = true;
-  /** 外周にいる間の操縦。外周へ回るたびに作り直す。 */
-  #pilot: NegibonPilot | null = null;
+  /** 最後に見たとき、自分が外周にいたか。外周へ回ったことを知るのに使う。 */
+  #onLane = false;
+  /** 外周にいる間の操縦。盤面が作り直されるまで持ち続け、外周へ回るたびには作り直さない。 */
+  #pilot = new NegibonPilot();
   #memory: CpuMemory;
 
   /**
@@ -101,34 +99,34 @@ export class CpuInputSource implements InputSource {
   }
 
   next(world: Readonly<WorldState>): PlayerInput {
-    // ラウンドが変わると盤面が作り直される。前のラウンドの経路を捨てる。
-    // 延長戦に入ったときも、全員が開始位置へ移って盤面が片付くので同じく捨てる。
-    if (world !== this.#world || world.suddenDeath !== this.#sawSuddenDeath) {
+    // ラウンドが変わると盤面が作り直される。前のラウンドの記憶（経路・外周の操縦）を捨てる。
+    // 原型が CPU の記憶（p.ai）を作り直すのは、ラウンドの始まり（resetPlayersForRound の L4191-4192）と
+    // 作るとき（makePlayer の L1210）だけなので、ここもラウンドの盤面が替わったときだけにする。
+    //
+    // ⚠️ 延長戦に入ったとき・外周から戻ったときは捨てない。原型の enterSuddenDeath（L4435-4465）も
+    // negiHit（L2337-2356）も p.ai に触らない。開始位置や当てた相手の位置へ移ったあとも、次に考え直すまでは
+    // 前の経路の先のマスへ歩き、置き直さない記憶・爆弾を控える残り・判断の間隔の揺らぎ（jitter）も続けて使う。
+    // 捨てると、CPU の乱数を1つ余計に引く（jitter の引き直し）ので、その後の判断がすべてずれる。
+    if (world !== this.#world) {
       this.#world = world;
-      this.#sawSuddenDeath = world.suddenDeath;
       this.#memory = freshMemory(this.#rng);
-      this.#onBoard = true;
-      this.#pilot = null;
+      this.#onLane = false;
+      this.#pilot = new NegibonPilot();
     }
 
     const me = playerById(world, this.playerId);
     if (me === undefined) return IDLE_INPUT;
     if (me.life.kind === 'negibon') {
-      this.#onBoard = false;
-      this.#pilot ??= new NegibonPilot();
+      // 外周へ回った最初の tick に、構えの溜めだけを戻す（原型の toNegibon L2268 は negiLock だけを 0 にする）。
+      if (!this.#onLane) this.#pilot.enterLane();
+      this.#onLane = true;
       return this.#pilot.next(world, me.life);
     }
-    this.#pilot = null;
-    if (!isAlive(me)) {
-      this.#onBoard = false;
-      return IDLE_INPUT;
-    }
-    // 外周から葱を当てて戻ると、当てた相手の位置へ移る。倒れる前の道筋は使えない。
-    if (!this.#onBoard) {
-      this.#onBoard = true;
-      this.#memory = freshMemory(this.#rng);
-    }
+    this.#onLane = false;
+    if (!isAlive(me)) return IDLE_INPUT;
 
+    // 外周にいる間（と退場したあと）は数えない。原型も cpuUpdate を呼ばない（L4335-4339）ので、
+    // 考え直すまでの間隔などは倒れた瞬間の値のまま止まっている。
     countDown(this.#memory);
     return compose(me, this.#decide(world, me));
   }

@@ -197,6 +197,16 @@ describe('倒れたら外周へ回る', () => {
     expect(shooter.activeBombs).toBe(0);
   });
 
+  it('葱で戻っても、撃った側の最後に傷を付けた相手（lastHitBy）は戻さない（原型の negiHit L2337-2356 は触らない）', () => {
+    // 試合の中で読む所は無く、変わるのは状態の要約だけ。原型に合わせる。
+    const world = makeWorld(3, ['rabbit', 'elephant']);
+    const [shooter, victim] = world.players as [PlayerState, PlayerState];
+    shooter.lastHitBy = 1;
+    onLane(shooter, 5);
+    swapPlaces(world, shooter, victim);
+    expect(shooter.lastHitBy).toBe(1);
+  });
+
   it('残りが外周の閉じる時刻を切っていれば、外周へ回らず退場する', () => {
     const world = makeWorld(3, ['rabbit', 'elephant']);
     world.endsAt = tick(world.now + NEGIBON_CUTOFF);

@@ -75,7 +75,8 @@ export function swapPlaces(
   shooter.position = at;
   shooter.hp = REVIVE_HP;
   shooter.invulnerableUntil = tick(world.now + REVIVE_INVULNERABLE);
-  shooter.lastHitBy = null;
+  // 最後に傷を付けた相手（`lastHitBy`）は戻さない。原型の negiHit（L2337-2356）も触らない。
+  // 試合の中で読む所は無く、変わるのは状態の要約だけ。
   // 置いている爆弾の数も 0 に戻す（原型の negiHit L2347）。外周にいる間は爆弾を置けないので、ふつうはもう 0。
   shooter.activeBombs = 0;
   // かかっている状態と、盤面を離れても止めて残していた振る舞い（`ActiveAction.staysOffBoard`）を消す

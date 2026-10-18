@@ -217,6 +217,15 @@ describe('延長戦の準備', () => {
     expect(world.rng.calls).toBe(calls);
   });
 
+  it('最後に傷を付けた相手（lastHitBy）は戻さない（原型の enterSuddenDeath L4446-4461 は触らない）', () => {
+    // 試合の中で読む所は無く、変わるのは状態の要約だけ。原型に合わせる。
+    const world = makeWorld(3, THREE);
+    world.players[0]!.lastHitBy = 2;
+    world.players[1]!.lastHitBy = 1;
+    enterSuddenDeath(world, [0, 1], 'timeUp');
+    expect(world.players.map((player) => player.lastHitBy)).toEqual([2, 1, null]);
+  });
+
   it('「勝手に設置」の待ちは戻さない', () => {
     // 原型も延長戦では待ちに触らない。0 に戻すのはラウンドの始まりだけ。
     const world = makeWorld(3, THREE);
