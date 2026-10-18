@@ -44,7 +44,11 @@ from animal_bomber.presentation.render.art.animals.mole import (
     set_clod_style,
     set_pile_style,
 )
-from animal_bomber.presentation.render.art.player import PlayerLook, draw_player
+from animal_bomber.presentation.render.art.player import (
+    BLINK_ALPHA,
+    PlayerLook,
+    draw_player,
+)
 from animal_bomber.presentation.render.baked.art import BakedArt
 from animal_bomber.presentation.render.baked.bodies import quantized
 from animal_bomber.presentation.render.baked.digging import DIG_LEVELS
@@ -53,7 +57,7 @@ from animal_bomber.presentation.render.canvas.protocol import Canvas
 from animal_bomber.presentation.render.canvas.recording import RecordingCanvas
 from animal_bomber.presentation.render.canvas.surface import SUPERSAMPLE
 from animal_bomber.presentation.render.layout import Layout
-from animal_bomber.presentation.render.sprites import level_value, quantize
+from animal_bomber.presentation.render.sprites import level_value, opacity, quantize
 
 from .baked_helpers import (
     EDGE_FLIPS,
@@ -288,14 +292,31 @@ class Test舌:
 
 class Test掘る:
     @pytest.mark.parametrize(
-        ("remaining", "now"),
-        [(Tick(45), Tick(4)), (Tick(87), Tick(300)), (Tick(0), Tick(301))],
-        ids=["土くれが飛ぶ", "掘り始め", "掘り終わり"],
+        ("remaining", "now", "alpha"),
+        [
+            (Tick(45), Tick(4), 1.0),
+            (Tick(45), Tick(15), 1.0),
+            (Tick(87), Tick(300), 1.0),
+            (Tick(0), Tick(301), 1.0),
+            (Tick(45), Tick(4), BLINK_ALPHA),
+        ],
+        ids=[
+            "右へ振って土くれが飛ぶ",
+            "左へ振って土くれが飛ぶ",
+            "掘り始め",
+            "掘り終わり",
+            "薄く描く",
+        ],
     )
-    def test_部品を丸めた位置に描いた絵と同じ(self, remaining: Tick, now: Tick) -> None:
+    def test_部品を丸めた位置に描いた絵と同じ(
+        self, remaining: Tick, now: Tick, alpha: float
+    ) -> None:
         """土の山・土くれ・つるはしは整数の px に、穴と山の大きさは進みの段に丸める。
 
-        比べる絵は、同じ丸めた位置と段の値で、部品の描く関数を直接呼んだもの。
+        比べる絵は、同じ丸めた位置と段の値で、部品の描く関数を直接呼んだもの。土くれは、
+        手をどちらへ振っても、振れ幅が大きければ飛ぶ（原型の Math.abs(swing) > 0.85）。
+        薄く描くとき（落とし穴のプレイヤーのあとに描く。原型の globalAlpha）は、塗る
+        命令1つずつを薄めて重ねた絵と比べる（薄めた写し1枚につき 1 段まで違いうる）。
         """
         art = BakedArt(LAYOUT)
         x, y = IX + 0.3, IY - 0.2
@@ -308,6 +329,7 @@ class Test掘る:
         spray = abs(swing) > SPRAY_FROM
 
         def reference(canvas: Canvas) -> None:
+            canvas.global_alpha = opacity(alpha) / 255
             draw_dig_hole(canvas, tile, ix, iy, kq)
             set_pile_style(canvas)
             for s in (-1, 1):
@@ -322,10 +344,16 @@ class Test掘る:
             draw_dig_gauge(canvas, tile, ix, iy, gauge)
 
         sizes = [1, 2, 2] + ([1, 1, 1] if spray else []) + [1, 1, 1]
+        faded = 0
+        if alpha < 1:
+            sizes = [1] * sum(sizes)
+            faded = len(sizes)
         wanted = direct_groups(LAYOUT, BOX, reference, sizes)
-        got = baked(LAYOUT, BOX, lambda t: art.digs.draw(t, x, y, remaining, now))
-        assert_matches(got, wanted)
-        assert spray == (now == 4)
+        got = baked(
+            LAYOUT, BOX, lambda t: art.digs.draw(t, x, y, remaining, now, alpha)
+        )
+        assert_matches(got, wanted, faded)
+        assert spray == (now in (4, 15))
 
 
 def test_丸めた体の動きは_描く関数の動きと同じ段に乗る() -> None:

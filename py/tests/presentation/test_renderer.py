@@ -16,7 +16,7 @@ from collections.abc import Iterator
 import numpy as np
 import pytest
 
-from animal_bomber.domain.core.coord import Cell, Direction
+from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.core.entity_id import EntityId
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.animals import Animal
@@ -47,6 +47,7 @@ from animal_bomber.presentation.render.views.player import (
     TrackedMotion,
     invulnerable_left,
 )
+from tests.helpers import clear_board
 
 from .frame_scenes import (
     FixedVisuals,
@@ -271,6 +272,24 @@ def test_倒れたプレイヤーは描かない() -> None:
     wanted, _ = direct_image(LAYOUT, world, visuals, randoms[:-2])
     assert_same_frame(got, wanted, FADED)
     assert frame_mismatches(got, alive, FADED) != (0, 0)
+
+
+@pytest.mark.usefixtures("fine_levels")
+def test_プレイヤーは_一覧の順でなく上にいる順に重ねる() -> None:
+    """原型の draw は、プレイヤーを縦の位置の小さい順に描く（下にいるほど手前）。
+
+    一覧の先のプレイヤーを下に置き、2体の体を縦に重ねる。
+    """
+    world = create_world(5, (Animal.RABBIT, Animal.ELEPHANT))
+    clear_board(world)
+    world.now = Tick(330)
+    rabbit, elephant = world.players
+    rabbit.position = Cell(5, 6).center()
+    elephant.position = Point(5.5, 5.9)
+    visuals = FixedVisuals()
+    got, _ = renderer_image(BakedArt(LAYOUT), world, visuals, [])
+    wanted, _ = direct_image(LAYOUT, world, visuals, [])
+    assert_same_frame(got, wanted, FADED)
 
 
 @pytest.mark.parametrize("tile", [26, 44, 60])

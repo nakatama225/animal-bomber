@@ -5,6 +5,8 @@
 見る所）を、取り違えたときに見た目が変わる組み合わせで確かめる。
 """
 
+import pytest
+
 from animal_bomber.domain.core.coord import Cell, Direction
 from animal_bomber.domain.core.entity_id import EntityId
 from animal_bomber.domain.core.tick import Tick
@@ -19,19 +21,17 @@ from animal_bomber.domain.events import (
     SimEvent,
     Sprayed,
     TechniqueMoment,
+    TechniqueUsed,
 )
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.state.actions import Charge
 from animal_bomber.domain.state.bomb import Bomb
 from animal_bomber.domain.state.item import Item
+from animal_bomber.domain.state.player import Life
 from animal_bomber.domain.state.world import WorldState, create_world
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng
-from animal_bomber.presentation.render.scene.effects import (
-    RAM_BOMB_SHAKE,
-    EffectField,
-    explosion_shake,
-)
+from animal_bomber.presentation.render.scene.effects import EffectField
 from animal_bomber.presentation.render.scene.particles import (
     BAD_SMOKE,
     CARRIED_SMOKE,
@@ -168,12 +168,27 @@ class Test突進:
             Bomb(EntityId(2), Cell(5, 3), 0, 2, Tick(1)),
         ]
         before = snapshot_of(world)
+        # 原型の揺れ：突進が起こした爆弾は 7、連鎖は min(10, 3 + 連鎖の数 × 1.6)。
         rammed = apply([Exploded(Cell(3, 3), 0, 1, 0)], world, before)
-        assert rammed.shake == RAM_BOMB_SHAKE
+        assert rammed.shake == 7
         fused = apply([Exploded(Cell(5, 3), 0, 1, 0)], world, before)
-        assert fused.shake == explosion_shake(1)
+        assert fused.shake == pytest.approx(4.6)
         big = apply([Exploded(Cell(3, 3), 0, 4, 0)], world, before)
-        assert big.shake == explosion_shake(4) > RAM_BOMB_SHAKE
+        assert big.shake == pytest.approx(9.4)
+
+    def test_前のtickに倒れていたプレイヤーは_突進の最中でも吸い込まない(
+        self,
+    ) -> None:
+        """原型は盤面にいるプレイヤーの突進だけを進めるので、吸い込むのも生きている間だけ。
+
+        倒れた tick の終わりには突進が残っているが、拾ったものはふつうの煙にする。
+        """
+        world, _ = charging_world()
+        world.players[0].life = Life.DEAD
+        before = snapshot_of(world)
+        field = apply([ItemTaken(Cell(6, 5), ItemKind.FIRE, 0)], world, before)
+        assert heads(field) == [("\N{FIRE}", GOOD_SMOKE)]
+        assert len(field.particles) == 7
 
 
 class Test鼻水:
@@ -202,6 +217,33 @@ class Test鼻水:
         assert order == each * 2
         assert [x for kind, x in shapes] == [4.5] * 7 + [5.5] * 7
         assert {p.color for p in field.particles} == {WATER_SMOKE}
+
+    def test_水しぶきの一覧に無いマスで消した爆弾にも_煙を出す(self) -> None:
+        """原型は、鼻水で消した爆弾ごとに煙を出す（水しぶきとは別に必ず出す）。
+
+        ルールの層の並びが変わり、届いたマスの一覧に無い消した爆弾が残っても、出し損ねない。
+        """
+        field = apply(
+            [
+                BombDoused(Cell(4, 5), 0),
+                Sprayed(0, (Cell(5, 5),), Direction.RIGHT),
+                BombDoused(Cell(6, 5), 1),
+            ]
+        )
+        assert heads(field) == [("\N{DROPLET}", WATER_SMOKE)] * 2
+        puffs = [p for p in field.particles if p.text is not None]
+        assert [(p.x, p.y) for p in puffs] == [(4.5, 5.5), (6.5, 5.5)]
+
+
+class Test技:
+    def test_跳ぶ動物でも_とくぎを出したときは足元に土ぼこりを立てない(self) -> None:
+        """原型が土ぼこりを出すのは、通常技で跳んだとき（hop）だけ。"""
+        world = create_world(3, (Animal.RABBIT, Animal.FOX))
+        world.players[0].position = Cell(7, 5).center()
+        field = apply([TechniqueUsed(0, special=True)], world)
+        assert field.particles == []
+        jumped = apply([TechniqueUsed(0, special=False)], world)
+        assert len(jumped.particles) == 6
 
 
 class Test揺れの減り:

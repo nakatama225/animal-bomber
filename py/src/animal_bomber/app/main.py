@@ -162,14 +162,18 @@ def run(
         presenter: 起きたイベントを渡す先。
         ticks_per_frame: フレームごとに進める tick の数（`frames()`）。
         renderer: 盤面を描くもの。
-        scene: 見た目だけの値を数えるもの。1 tick ごとに盤面とイベントを渡し、描くときに
-            読ませる。
+        scene: 見た目だけの値を数えるもの。回し始める前に進める前の盤面を1回渡し、
+            1 tick ごとに盤面とイベントを渡し、描くときに読ませる。
         events: そのフレームに届いたイベントを返す関数。テストで差し替える。
         observers: 1 tick 進めるたびに、盤面とイベントを渡す先（秒読みと曲）。
     """
     # 描く面はアルファの桁の無い面にし、窓の面へは 1 フレームに 1 回だけ貼る
     # （py/AGENTS.md「描画の重さ」。合否はこの形で測って決めた）。
     canvas = pygame.Surface(renderer.layout.surface_size).convert()
+    # 進める前の盤面の控えを取らせる。取らないと、1ラウンド目の最初の tick に歩いた
+    # 距離を数えない（原型は最初の update から数える。2ラウンド目からは、作り直した
+    # 盤面が進める前に渡る）。
+    scene.observe(session.world, [])
     for ticks in ticks_per_frame:
         for event in events():
             if event.type == pygame.QUIT:

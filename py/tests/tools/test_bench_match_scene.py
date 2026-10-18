@@ -25,23 +25,29 @@ for kind in ("square", "glow"):
     class Counting(pygame.Surface):
         def __init__(self, size):
             super().__init__(size)
-            self.alpha_blits = self.faded_blits = 0
+            self.alpha_blits = self.faded_blits = self.shaken_boards = 0
         def blit(self, source, dest, area=None, special_flags=0):
             if source.get_masks()[3]:
                 self.alpha_blits += 1
                 alpha = source.get_alpha()
                 if alpha is not None and alpha < 255:
                     self.faded_blits += 1
+            board = source.get_width() > self.get_width() // 2
+            if board and special_flags == pygame.BLEND_PREMULTIPLIED:
+                self.shaken_boards += 1
             return super().blit(source, dest, area, special_flags)
     scene = MatchScene(spec, random.Random(1))
     built = scene.renders
     frames = []
+    shaken = []
     for frame in range(40):
         target = Counting(spec.size)
         scene.draw(target, frame)
         frames.append([target.alpha_blits, target.faded_blits])
+        shaken.append(target.shaken_boards)
     out[kind] = {{"frames": frames, "drawn": scene.renders - built,
-                  "counts": scene.counts, "phases": scene.blast_phases}}
+                  "counts": scene.counts, "phases": scene.blast_phases,
+                  "shaken": shaken}}
 print(json.dumps(out))
 """
 
@@ -53,6 +59,10 @@ def test_場面は_取っておいた絵を薄めずに貼り_測る間に絵を
       回りながら浮かぶ顔も、薄めた形の絵を作って重ねる）
     - 先に描いておいた絵で足りること（測る間に描くと、そのフレームが遅れる）
     - 爆風の位相をそろえていること（そろえ損ねると軽く測れる）
+    - 画面がいつも揺れていること（揺れが止まると、背景と盤面を合わせた1枚を貼る軽い
+      ほうの道を通る）。揺れているフレームは、盤面の大きさの絵を、色に不透明度を掛けた
+      形で1回貼る。ずれが縦横とも 0px に丸まるフレーム（100 回に 1 回ほど）だけは
+      1枚で貼る
     - 貼った数が、場面が持つ数より少なくない：爆風 297 件は2枚ずつ・アイテム
       20 個は2枚か7枚ずつ・爆弾 8 個は4〜6枚ずつ・プレイヤー 4 体（接地影と輪・体・印の
       3枚に、かえるは舌の根元と吸盤の2枚以上、もぐらは掘る身ぶりの穴・土の山2つ・
@@ -74,6 +84,9 @@ def test_場面は_取っておいた絵を薄めずに貼り_測る間に絵を
         result = seen[kind]
         assert result["drawn"] == 0
         assert result["phases"] == 1
+        shaken = result["shaken"]
+        assert set(shaken) <= {0, 1}
+        assert sum(shaken) >= len(shaken) - 2
         counts = result["counts"]
         assert [counts[key] for key in ("blasts", "particles", "spinners")] == [
             297,

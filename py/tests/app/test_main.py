@@ -13,6 +13,8 @@ import os
 import subprocess
 import sys
 
+import pytest
+
 DUMMY_ENV = {**os.environ, "SDL_VIDEODRIVER": "dummy", "SDL_AUDIODRIVER": "dummy"}
 
 # 試合を作り、決めたイベントと tick の数でフレームを回して、結果を JSON で出す。
@@ -89,8 +91,9 @@ def ticks():
         current[:] = EVENTS[name]
         yield ticks_
 presenter, observers = open_audio(session) if "audio" in options else (Presenter(), ())
+scene = SceneTracker()
 run(
-    screen, session, keyboard, presenter, ticks(), renderer, SceneTracker(),
+    screen, session, keyboard, presenter, ticks(), renderer, scene,
     events=lambda: list(current), observers=observers,
 )
 first = session.world.players[0]
@@ -104,6 +107,7 @@ for px in range(int(x - layout.tile * 0.5), int(x + layout.tile * 0.5)):
 print(json.dumps({
     "elapsed": session.clock.now,
     "first": [first.position.x, first.position.y],
+    "walked": scene.motion(first.id).walked,
     "second": [p.position.cell().col for p in session.world.players][1],
     "body": body,
     "size": list(screen.get_size()),
@@ -144,6 +148,20 @@ def test_フレームごとに_決めた数だけ試合を進めて描く() -> N
     assert result["second"] == 21
     body = result["body"]
     assert isinstance(body, int) and body > 20
+
+
+def test_tickごとに_見た目だけの値を数えて描く側へ渡す() -> None:
+    """1P が下のキーで歩いた距離を、進めた tick ごとに数える。
+
+    原型の movePlayer は、試合の最初の tick から、動けた tick に進んだ距離を足すので、
+    まっすぐ歩いた距離と同じになる。
+    """
+    result = _run([(1, "down"), (2, "none")])
+    first = result["first"]
+    walked = result["walked"]
+    assert isinstance(first, list) and isinstance(walked, float)
+    assert first[1] > 1.5
+    assert walked == pytest.approx(first[1] - 1.5)
 
 
 def test_画面の大きさに収まる寸法で窓を作る() -> None:

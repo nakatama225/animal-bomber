@@ -21,51 +21,14 @@ from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.rules.tuning import MAX_SPEED
 from animal_bomber.domain.state.actors import Foxfire, SlimeBomb
-from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import PlayerId, PlayerState, speed_of
-from animal_bomber.domain.state.world import WorldState
-from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.blast import add_blast
 from animal_bomber.presentation.render.scene.actors import TRAIL_TICKS
 from animal_bomber.presentation.render.scene.motion import HURT_FRAMES
-from animal_bomber.presentation.render.scene.tracker import SceneTracker
-from tests.helpers import clear_board, idle, make_world, only_for
+from tests.helpers import idle, only_for
 
-
-def arena(animals: tuple[Animal, Animal]) -> WorldState:
-    """壊せるブロックとアイテムを片付けた盤面。0番は (1, 13)、1番は (21, 1) に立つ。"""
-    world = make_world(2468, animals)
-    clear_board(world)
-    world.items.clear()
-    first, second = world.players
-    first.position = Cell(1, 13).center()
-    second.position = Cell(21, 1).center()
-    return world
-
-
-def step(
-    world: WorldState,
-    tracker: SceneTracker,
-    inputs: dict[PlayerId, PlayerInput],
-) -> list[SimEvent]:
-    events = simulation.step(world, inputs)
-    tracker.observe(world, events)
-    return events
-
-
-def started(world: WorldState) -> SceneTracker:
-    """盤面を、進める前の控えから数え始める。"""
-    tracker = SceneTracker()
-    world.now = Tick(0)
-    tracker.observe(world, [])
-    return tracker
-
-
-def speed_now(player: PlayerState, standing: Tile = Tile.EMPTY) -> float:
-    """いまの状態で 1 tick に進む距離（原型の getSpeed(p)·dt）。"""
-    return speed_of(player, standing)
+from .scene_helpers import arena, speed_now, started, step
 
 
 class Test歩いた距離:
@@ -225,6 +188,28 @@ class Test被弾の揺れ:
         for _ in range(30):
             tracker.observe(world, [])
         assert tracker.motion(rabbit.id).hurt_shake == left
+
+
+class Test画面の揺れと粒子:
+    def test_盤面が進んだtickのうちに_揺れを減らし_出た粒子を進める(self) -> None:
+        """原型の update は、揺れと粒子を出したあと、同じ update の最後で進める。
+
+        揺れは被弾で 6 にしてから 38px 毎秒の 1/60 秒ぶん減り、寿命で消えた炎の煙
+        （寿命 0.6 秒・上へ 1.2 マス毎秒）も 1/60 秒ぶん進む。次の tick も同じだけ進む。
+        """
+        world = arena((Animal.FOX, Animal.RABBIT))
+        rabbit = world.players[1]
+        rabbit.hp = 10
+        fire = Foxfire(cell=Cell(5, 13), owner=0, elapsed=Tick(90), steps=8)
+        world.actors.append(fire)
+        tracker = started(world)
+        add_blast(world, rabbit.position.cell(), 0, is_center=True)
+        for ticks in (1, 2):
+            step(world, tracker, idle(world))
+            assert tracker.shake == pytest.approx(6 - ticks * 38 / 60)
+            [smoke] = [p for p in tracker.particles if p.text == "\N{DASH SYMBOL}"]
+            assert smoke.life == pytest.approx(0.6 - ticks / 60)
+        assert fire not in world.actors
 
 
 class Test粘膜爆弾:

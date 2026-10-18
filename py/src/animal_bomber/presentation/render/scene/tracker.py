@@ -52,7 +52,8 @@ class SceneTracker:
         if world is not self._world:
             self._forget(world)
             if world.now == 0:
-                # まだ一度も進めていない盤面（作り直した直後のラウンド）。控えだけ取る。
+                # まだ一度も進めていない盤面（試合の始まりと、作り直した直後の
+                # ラウンド）。控えだけ取る。
                 self._before = snapshot_of(world)
                 return
         elif self._before is not None and world.now == self._before.now:
