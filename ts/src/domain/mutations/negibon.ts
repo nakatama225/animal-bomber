@@ -41,8 +41,10 @@ export function lanesOpen(world: Readonly<WorldState>): boolean {
  * （chicken）だけを消し、回数（chickenCharges）には触らない。残った回数は見えず使えないが、同じラウンドのうちに
  * 盤面へ戻ってチキンを拾うと、その回数に足される（L1616-1617）。
  *
- * ⚠️ 盤面に置いたままの爆弾の数（`activeBombs`）は戻さない。爆発したときに
- * 数え直すので、ここで 0 にすると、まだ盤面にある爆弾のぶんだけ多く置けてしまう。
+ * 盤面に置いている爆弾の数（`activeBombs`）は 0 に戻す。原型の toNegibon（L2256）と同じ。盤面に残った自分の爆弾が
+ * あとで爆発しても、減らすのは 0 で止める（`removeBomb`。原型の L1494）ので負にはならない。
+ * 0 に戻しても、盤面へ戻ったときに多く置けることは起きない。外周へ回ってから最初に撃てるまで 3.5 秒かかり、
+ * 導火線（2.4 秒）より長いので、戻る時点では、倒れる前に置いた爆弾はもう爆発して盤面に残っていない。
  */
 export function sendToLane(world: WorldState, player: PlayerState): void {
   player.life = {
@@ -52,6 +54,7 @@ export function sendToLane(world: WorldState, player: PlayerState): void {
   };
   for (const kind of EFFECT_KINDS) player.effects.clear(kind);
   player.hasSpecial = false;
+  player.activeBombs = 0;
 }
 
 /**
@@ -73,6 +76,8 @@ export function swapPlaces(
   shooter.hp = REVIVE_HP;
   shooter.invulnerableUntil = tick(world.now + REVIVE_INVULNERABLE);
   shooter.lastHitBy = null;
+  // 置いている爆弾の数も 0 に戻す（原型の negiHit L2347）。外周にいる間は爆弾を置けないので、ふつうはもう 0。
+  shooter.activeBombs = 0;
   // 技のボタンの押した長さには触らない（原型の negiHit も触らない）。外周にいる間は数えないので、
   // 倒れたときの長さが残る。押したまま戻ると、そこから数え続ける。とくぎを持っている印は外周へ回るときに
   // 外してあるので、拾わない限りとくぎは出ない。印と回数には触らない（原型の negiHit L2337-2356 も触らない）。

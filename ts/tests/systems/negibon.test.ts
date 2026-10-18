@@ -164,11 +164,37 @@ describe('倒れたら外周へ回る', () => {
     expect(laneSpot(lane.along)).toMatchObject({ side: 'top', position: { x: 7.5 } });
     expect(lane.readyAt).toBe(100 + LEEK_FIRST_COOLDOWN);
     // 状態と、とくぎを持っている印は持ち越さない。とくぎの回数は残る（原型の toNegibon L2255 は chicken だけを
-    // 消し、chickenCharges には触らない）。火力と、盤面に残った爆弾の数は持ち越す。
+    // 消し、chickenCharges には触らない）。火力は持ち越す。置いている爆弾の数は 0 に戻す（原型 L2256）。
     expect(player.effects.active()).toEqual([]);
     expect([player.hasSpecial, player.specialCharges]).toEqual([false, 2]);
     expect(player.power).toBe(4);
+    expect(player.activeBombs).toBe(0);
+  });
+
+  it('盤面に残した自分の爆弾が外周にいる間に爆発しても、置いている数は 0 のまま（原型 L2256 で 0 にし、L1494 は 0 で止める）', () => {
+    const world = makeWorld(3, ['rabbit', 'elephant']);
+    clearBoard(world);
+    const player = world.players[0]!;
+    player.position = centerOf({ col: 3, row: 3 });
+    placeBombAt(world, player, { col: 3, row: 3 });
     expect(player.activeBombs).toBe(1);
+    player.hp = 2;
+    hurt(world, player, 1, 2);
+    expect(player.activeBombs).toBe(0);
+    const sim = new Simulation();
+    for (let i = 0; i < 300 && world.bombs.length > 0; i += 1) stepWith(world, sim, press({}));
+    expect(world.bombs).toEqual([]);
+    expect(player.activeBombs).toBe(0);
+  });
+
+  it('葱で戻るとき、撃った側の置いている爆弾の数を 0 に戻す（原型の negiHit L2347）', () => {
+    const world = makeWorld(3, ['rabbit', 'elephant']);
+    const [shooter, victim] = world.players as [PlayerState, PlayerState];
+    onLane(shooter, 5);
+    shooter.activeBombs = 2;
+    swapPlaces(world, shooter, victim);
+    expect(isAlive(shooter)).toBe(true);
+    expect(shooter.activeBombs).toBe(0);
   });
 
   it('残りが外周の閉じる時刻を切っていれば、外周へ回らず退場する', () => {
