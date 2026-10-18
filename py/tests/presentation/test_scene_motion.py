@@ -1,0 +1,309 @@
+"""試合の状態に無い、見た目だけの値を数える所（`scene/` の `SceneTracker`）の検査。
+
+試合を実際に進めて（`simulation.step`）、tick ごとに `SceneTracker.observe` へ渡し、
+数えた値が原型の式（原型の movePlayer・updateCharge・hurt・frogSlime・updateSlimes・
+updateFoxfires）と同じになるかを見る。描く時点は step のあと（原型の update のあとに
+draw を呼ぶのと同じ）。
+"""
+
+from collections.abc import Sequence
+
+import pytest
+
+from animal_bomber.domain.abilities.elephant import CHARGE_SPEED_RATIO
+from animal_bomber.domain.abilities.frog import SLIME_FLY_TICKS
+from animal_bomber.domain.core.coord import Cell, Direction, Point
+from animal_bomber.domain.core.entity_id import EntityId
+from animal_bomber.domain.core.tick import Tick
+from animal_bomber.domain.events import Moment, SimEvent, TechniqueMoment
+from animal_bomber.domain.input.player_input import PlayerInput
+from animal_bomber.domain.rules.animals import Animal
+from animal_bomber.domain.rules.items import ItemKind
+from animal_bomber.domain.rules.tuning import MAX_SPEED
+from animal_bomber.domain.state.actors import Foxfire, SlimeBomb
+from animal_bomber.domain.state.board import Tile
+from animal_bomber.domain.state.effects import EffectKind
+from animal_bomber.domain.state.item import Item
+from animal_bomber.domain.state.player import PlayerId, PlayerState, speed_of
+from animal_bomber.domain.state.world import WorldState
+from animal_bomber.domain.systems import simulation
+from animal_bomber.domain.systems.blast import add_blast
+from animal_bomber.presentation.render.scene.actors import TRAIL_TICKS
+from animal_bomber.presentation.render.scene.motion import HURT_FRAMES
+from animal_bomber.presentation.render.scene.tracker import SceneTracker
+from tests.helpers import clear_board, idle, make_world, only_for
+
+
+def arena(animals: tuple[Animal, Animal]) -> WorldState:
+    """壊せるブロックとアイテムを片付けた盤面。0番は (1, 13)、1番は (21, 1) に立つ。"""
+    world = make_world(2468, animals)
+    clear_board(world)
+    world.items.clear()
+    first, second = world.players
+    first.position = Cell(1, 13).center()
+    second.position = Cell(21, 1).center()
+    return world
+
+
+def step(
+    world: WorldState,
+    tracker: SceneTracker,
+    inputs: dict[PlayerId, PlayerInput],
+) -> list[SimEvent]:
+    events = simulation.step(world, inputs)
+    tracker.observe(world, events)
+    return events
+
+
+def started(world: WorldState) -> SceneTracker:
+    """盤面を、進める前の控えから数え始める。"""
+    tracker = SceneTracker()
+    world.now = Tick(0)
+    tracker.observe(world, [])
+    return tracker
+
+
+def speed_now(player: PlayerState, standing: Tile = Tile.EMPTY) -> float:
+    """いまの状態で 1 tick に進む距離（原型の getSpeed(p)·dt）。"""
+    return speed_of(player, standing)
+
+
+class Test歩いた距離:
+    def test_動けたtickごとに_その速さを足し_最後に動いた時刻を盤面の時刻にする(
+        self,
+    ) -> None:
+        """原型の movePlayer の `walk += getSpeed(p)·dt; lastMoveAt = G.elapsed`。
+
+        lastMoveAt は、その tick の update の頭で進めた経過時間。step のあとの盤面の
+        時刻と同じ。
+        """
+        world = arena((Animal.RABBIT, Animal.FOX))
+        rabbit = world.players[0]
+        tracker = started(world)
+        right = only_for(world, rabbit.id, PlayerInput.RIGHT)
+        walked = 0.0
+        for _ in range(20):
+            walked += speed_now(rabbit)
+            step(world, tracker, right)
+            motion = tracker.motion(rabbit.id)
+            assert motion.walked == pytest.approx(walked)
+            assert motion.last_moved_at == world.now
+
+    def test_壁に向かって押しても_動けなければ足さない(self) -> None:
+        """原型は、動けたとき（moveAxis が進めたとき）だけ足す。向きは変わる。"""
+        world = arena((Animal.RABBIT, Animal.FOX))
+        rabbit = world.players[0]
+        tracker = started(world)
+        left = only_for(world, rabbit.id, PlayerInput.LEFT)
+        # 左は外周の壁。体が壁に着くまで歩く。
+        while True:
+            position = rabbit.position
+            step(world, tracker, left)
+            if rabbit.position == position:
+                break
+        motion = tracker.motion(rabbit.id)
+        assert motion.walked > 0
+        for _ in range(3):
+            step(world, tracker, left)
+        assert rabbit.facing is Direction.LEFT
+        assert tracker.motion(rabbit.id) == motion
+
+    def test_拾ったtickは拾う前の速さを足す(self) -> None:
+        """拾うのは動いたあと（原型も同じ）。
+
+        靴を拾った tick は、靴の数が増える前の速さ。
+        """
+        world = arena((Animal.RABBIT, Animal.FOX))
+        rabbit = world.players[0]
+        rabbit.position = Point(1.5, 13.5)
+        world.items.append(Item(EntityId(500), Cell(2, 13), ItemKind.SHOE))
+        tracker = started(world)
+        right = only_for(world, rabbit.id, PlayerInput.RIGHT)
+        increments = []
+        for _ in range(15):
+            before = tracker.motion(rabbit.id).walked
+            expected = speed_now(rabbit)
+            shoes = rabbit.shoes
+            step(world, tracker, right)
+            increments.append((tracker.motion(rabbit.id).walked - before, expected))
+            if rabbit.shoes > shoes:
+                break
+        assert rabbit.shoes == 1
+        got, expected = increments[-1]
+        assert got == pytest.approx(expected)
+        assert got < speed_now(rabbit)
+
+    def test_滑っている間は足さない(self) -> None:
+        """原型の滑り（バナナ）は movePlayer を通らないので、脚を振らない。"""
+        world = arena((Animal.RABBIT, Animal.FOX))
+        rabbit = world.players[0]
+        rabbit.facing = Direction.RIGHT
+        rabbit.effects.set(EffectKind.SLIDE, Tick(60))
+        tracker = started(world)
+        start = rabbit.position
+        for _ in range(10):
+            step(world, tracker, idle(world))
+        assert rabbit.position.x > start.x
+        assert tracker.motion(rabbit.id).walked == 0
+        assert tracker.motion(rabbit.id).last_moved_at is None
+
+    def test_突進の間は_突進の速さを足す(self) -> None:
+        """原型の updateCharge の `walk += SPEED_MAX·1.25·dt`。"""
+        world = arena((Animal.ELEPHANT, Animal.FOX))
+        elephant = world.players[0]
+        elephant.special_charges = 1
+        tracker = started(world)
+        step(world, tracker, only_for(world, elephant.id, PlayerInput.SPECIAL))
+        before = tracker.motion(elephant.id).walked
+        for count in range(1, 6):
+            step(world, tracker, idle(world))
+            walked = tracker.motion(elephant.id).walked - before
+            assert walked == pytest.approx(count * MAX_SPEED * CHARGE_SPEED_RATIO)
+            assert tracker.motion(elephant.id).last_moved_at == world.now
+
+    def test_跳んだtickは足さない(self) -> None:
+        """跳ぶのは movePlayer を通らない（原型の hop）。"""
+        world = arena((Animal.RABBIT, Animal.FOX))
+        rabbit = world.players[0]
+        rabbit.facing = Direction.UP
+        tracker = started(world)
+        step(world, tracker, only_for(world, rabbit.id, PlayerInput.ACTION))
+        assert rabbit.position == Cell(1, 11).center()
+        assert tracker.motion(rabbit.id).walked == 0
+
+    def test_新しいラウンドの盤面では_全部忘れる(self) -> None:
+        world = arena((Animal.RABBIT, Animal.FOX))
+        rabbit = world.players[0]
+        tracker = started(world)
+        for _ in range(5):
+            step(world, tracker, only_for(world, rabbit.id, PlayerInput.RIGHT))
+        assert tracker.motion(rabbit.id).walked > 0
+        fresh = arena((Animal.RABBIT, Animal.FOX))
+        tracker.observe(fresh, [])
+        assert tracker.motion(rabbit.id).walked == 0
+        assert tracker.motion(rabbit.id).last_moved_at is None
+
+
+class Test被弾の揺れ:
+    def test_被弾したtickの絵を含めて19枚揺らし_止まった盤面では減らない(self) -> None:
+        """原型の hurtFlash。
+
+        0.3 秒から 1/60 秒ずつ引き、誤差で 0 に届くのが1回遅れる。
+        """
+        flash = 0.3
+        legacy = 0
+        while flash > 0:
+            legacy += 1
+            flash = max(0.0, flash - 1 / 60)
+        assert legacy == HURT_FRAMES == 19
+        world = arena((Animal.RABBIT, Animal.FOX))
+        rabbit = world.players[0]
+        rabbit.hp = 10
+        tracker = started(world)
+        add_blast(world, rabbit.position.cell(), 1, is_center=True)
+        frames = 0
+        for _ in range(40):
+            step(world, tracker, idle(world))
+            if tracker.motion(rabbit.id).hurt_shake > 0:
+                frames += 1
+        assert frames == HURT_FRAMES
+
+    def test_盤面が止まっている間は減らない(self) -> None:
+        """決着のあとの待ちの間（同じ時刻の盤面を渡す）は数えない。
+
+        原型の update も止まる。
+        """
+        world = arena((Animal.RABBIT, Animal.FOX))
+        rabbit = world.players[0]
+        rabbit.hp = 10
+        tracker = started(world)
+        add_blast(world, rabbit.position.cell(), 1, is_center=True)
+        step(world, tracker, idle(world))
+        step(world, tracker, idle(world))
+        left = tracker.motion(rabbit.id).hurt_shake
+        assert left == HURT_FRAMES - 1
+        for _ in range(30):
+            tracker.observe(world, [])
+        assert tracker.motion(rabbit.id).hurt_shake == left
+
+
+class Test粘膜爆弾:
+    def test_投げた位置と_着地してから跳ねたか(self) -> None:
+        """跳ねたのは、跳ねた知らせ（どの粘膜爆弾かは運ばない）と同じ tick に分かる。"""
+        world = arena((Animal.FROG, Animal.RABBIT))
+        frog = world.players[0]
+        frog.facing = Direction.RIGHT
+        frog.special_charges = 1
+        thrown_from = (frog.position.x, frog.position.y)
+        tracker = started(world)
+        step(world, tracker, only_for(world, frog.id, PlayerInput.SPECIAL))
+        [slime] = [a for a in world.actors if isinstance(a, SlimeBomb)]
+        assert tracker.slime(slime) == (thrown_from, False)
+        hopped_at = None
+        landed_at = None
+        for _ in range(200):
+            events = step(world, tracker, idle(world))
+            if slime.flown >= SLIME_FLY_TICKS and landed_at is None:
+                landed_at = world.now
+            if _hopped(events):
+                hopped_at = world.now
+                break
+            assert tracker.slime(slime)[1] is False
+            # 歩いても、投げた位置は変わらない。
+        assert landed_at is not None and hopped_at is not None
+        assert hopped_at > landed_at
+        assert tracker.slime(slime) == (thrown_from, True)
+
+
+def _hopped(events: Sequence[SimEvent]) -> bool:
+    return any(
+        isinstance(e, TechniqueMoment) and e.moment is Moment.SLIME_HOPPED
+        for e in events
+    )
+
+
+class Test炎の通った跡:
+    def test_1マス進むたびに元のマスを足し_1tickに1_30ずつ薄れて消える(self) -> None:
+        """原型の updateFoxfires。
+
+        trail に濃さ 1 で足し、a −= dt / 0.5、0 以下で消す。
+        """
+        world = arena((Animal.FOX, Animal.RABBIT))
+        fox, rabbit = world.players
+        fox.position = Cell(3, 13).center()
+        rabbit.position = Cell(15, 13).center()
+        fox.special_charges = 1
+        tracker = started(world)
+        step(world, tracker, only_for(world, fox.id, PlayerInput.SPECIAL))
+        [fire] = [a for a in world.actors if isinstance(a, Foxfire)]
+        assert tracker.trail(fire, world.now) == ()
+        cells = [fire.cell]
+        legacy: list[tuple[Cell, float]] = []
+        while fire in world.actors:
+            seen_steps = fire.steps
+            before = fire.cell
+            step(world, tracker, idle(world))
+            legacy = [(cell, a - (1 / 60) / 0.5) for cell, a in legacy]
+            legacy = [(cell, a) for cell, a in legacy if a > 1e-9]
+            if fire.steps > seen_steps and fire.cell != before:
+                legacy.append((before, 1.0))
+                cells.append(fire.cell)
+            if fire not in world.actors:
+                break
+            marks = tracker.trail(fire, world.now)
+            assert [m.cell for m in marks] == [cell for cell, _ in legacy]
+            for mark, (_, alpha) in zip(marks, legacy, strict=True):
+                assert mark.alpha == pytest.approx(alpha)
+        assert len(cells) >= 4
+        assert TRAIL_TICKS == 30
+
+    def test_寿命で消えた炎のマスに_煙を出す(self) -> None:
+        world = arena((Animal.FOX, Animal.RABBIT))
+        fire = Foxfire(cell=Cell(5, 13), owner=0, elapsed=Tick(90), steps=8)
+        world.actors.append(fire)
+        tracker = started(world)
+        step(world, tracker, idle(world))
+        assert fire not in world.actors
+        smoke = [p for p in tracker.particles if p.text is not None]
+        assert [(p.text, p.color) for p in smoke] == [("\N{DASH SYMBOL}", "#8ce0ff")]
+        assert (smoke[0].x, round(smoke[0].y, 1)) == (5.5, 13.5)

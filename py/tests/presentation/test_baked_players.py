@@ -47,11 +47,8 @@ from animal_bomber.presentation.render.art.animals.mole import (
 from animal_bomber.presentation.render.art.player import PlayerLook, draw_player
 from animal_bomber.presentation.render.baked.art import BakedArt
 from animal_bomber.presentation.render.baked.bodies import quantized
-from animal_bomber.presentation.render.baked.techniques import (
-    DIG_LEVELS,
-    gauge_level,
-    snap,
-)
+from animal_bomber.presentation.render.baked.digging import DIG_LEVELS
+from animal_bomber.presentation.render.baked.techniques import gauge_level, snap
 from animal_bomber.presentation.render.canvas.protocol import Canvas
 from animal_bomber.presentation.render.canvas.recording import RecordingCanvas
 from animal_bomber.presentation.render.canvas.surface import SUPERSAMPLE

@@ -9,6 +9,7 @@ from animal_bomber.presentation.render.baked.actors import FoxfireSprites, Slime
 from animal_bomber.presentation.render.baked.board import BoardSprites
 from animal_bomber.presentation.render.baked.bodies import BodySprites
 from animal_bomber.presentation.render.baked.bombs import BlastSprites, BombSprites
+from animal_bomber.presentation.render.baked.digging import DigSprites
 from animal_bomber.presentation.render.baked.items import (
     ItemSprites,
     prebuild_items,
@@ -16,10 +17,7 @@ from animal_bomber.presentation.render.baked.items import (
 )
 from animal_bomber.presentation.render.baked.particles import ParticleSprites
 from animal_bomber.presentation.render.baked.players import PlayerSprites
-from animal_bomber.presentation.render.baked.techniques import (
-    DigSprites,
-    TongueSprites,
-)
+from animal_bomber.presentation.render.baked.techniques import TongueSprites
 from animal_bomber.presentation.render.layout import Layout
 from animal_bomber.presentation.render.sprites import SpriteCache
 
@@ -50,29 +48,31 @@ class BakedArt:
     def prebuild(self, animals: Iterable[Animal]) -> None:
         """試合で使う絵を先に描いておく（初めて出たときに描くと、そのフレームが遅れる）。
 
-        段の数で決まる組み合わせの全部（爆弾・爆風・アイテム。点滅するうんこを含む）と、
-        試合に出る動物ごとに次を描く。
+        床と壁のマス、段の数で決まる組み合わせの全部（爆弾・爆風・アイテム。点滅する
+        うんこを含む）と、試合に出る動物ごとに次を描く。
 
         - 歩く姿と止まった姿・接地影と輪を、ふだんの濃さと無敵の点滅の薄さで（被弾の
           あとの 1.25 秒は、脚を振りながら点滅する）
         - ブロックを通り抜ける動物は、ブロックの中の薄さでも
         - とくぎの印と、長押しのゲージの長さの全部（チキンを拾うと出る）
-        - 落とし穴を掘る動物が出るなら、ほかの動物の、落とし穴にはまって止まった姿と、
-          穴の縁・目印の顔・残りのゲージ、掘る身ぶりの絵
+        - 落とし穴を掘る動物が出るなら、ほかの動物の、落とし穴にはまって止まった姿と
+          穴の縁（ふだんの濃さと、はまったまま被弾した点滅の薄さで）・目印の顔・残りの
+          ゲージ、掘る身ぶりの絵
         - 舌の部品と粘膜爆弾の形の全部（かえる）・追いかける炎（きつね）
         - ぞうが出るなら、鼻水で溶けていくうんこ
 
         撒いている身ぶりと跳び上がりの姿、状態の印の組み合わせは、出たときに描く（1匹に
         つき1秒ほどしか出ないか、組み合わせが多い）。
 
-        かかる時間（`tools/bench_art.py --first-draw` の `prebuild_rabbit`・
-        `prebuild_all`）は、マス 60 で、うさぎだけ 1.35 秒（1197 枚）・5匹全部 4.45 秒
-        （2573 枚）。体の絵（1枚 4ms ほど）を点滅の薄さでも描くようにして、体の枚数が
-        倍になったのがおもな増え方（技の部品を足す前は、うさぎだけ 1.1 秒・5匹全部
-        2.4 秒）。取っておいた絵はラウンドをまたいで使えるので、マスの大きさが変わら
-        なければ描き直さない。
+        かかる時間（`tools/bench_render.py --first-draw` の `prebuild_rabbit`・
+        `prebuild_all`）は、マス 60 で、うさぎだけ 1.46 秒（1201 枚）・5匹全部 4.71 秒
+        （2594 枚。2026-10-18 に、負荷 2.6 で測った）。体の絵（1枚 4ms ほど）を点滅の
+        薄さでも描くようにして、体の枚数が倍になったのがおもな増え方（技の部品を足す前は、
+        うさぎだけ 1.1 秒・5匹全部 2.4 秒）。取っておいた絵はラウンドをまたいで使える
+        ので、マスの大きさが変わらなければ描き直さない。
         """
         chosen = list(dict.fromkeys(animals))
+        self.board.prebuild()
         self.bombs.prebuild()
         self.blasts.prebuild()
         prebuild_items(self.items)
@@ -89,7 +89,9 @@ class BakedArt:
             self.players.prebuild(animal, tuple(alphas))
             self.players.marks(special_emoji(animal), 1.0)
             if pits and animal is not Animal.MOLE:
+                # はまったまま被弾すると点滅する（穴の中でも爆風は当たる）。
                 self.bodies.prebuild_pit(animal)
+                self.bodies.prebuild_pit(animal, BLINK_ALPHA)
         if pits:
             self.digs.prebuild()
         if Animal.FROG in chosen:

@@ -1,7 +1,9 @@
-"""技の最中の絵（舌・掘る身ぶり。`art/animals/frog.py`・`mole.py`）を取っておいて貼る。
+"""技の最中の絵のうち、舌（`art/animals/frog.py` の draw_tongue）を取っておいて貼る。
 
-どちらもプレイヤーの体より先に（下に）、プレイヤーの不透明度を掛けずに描く（原型の
-drawPlayer も、点滅の不透明度を決める前に描く）。
+掘る身ぶりは `digging.py`。どちらもプレイヤーの体より先に（下に）、プレイヤーの
+不透明度を掛けずに描く（原型の drawPlayer も、点滅の不透明度を決める前に描く）。
+ここには、どちらも使う、貼る位置の丸め方（`snap`）とゲージの長さの丸め方
+（`gauge_level`）も置く。
 
 ## 舌
 
@@ -15,21 +17,22 @@ drawPlayer も、点滅の不透明度を決める前に描く）。
 
 根元と舌先の位置は整数の px に丸める（ずれは 0.5px まで）。
 
-## 掘る身ぶり
+## 薄く描くとき
 
-掘りかけの穴と、掻き出した土の山の大きさは、掘り終わるまでの進みで決まる。進みを段に
-丸め、段ごとに1枚ずつ取っておく。土の山・土くれ・つるはしの位置は、手の振り（毎フレーム
-続けて変わる）で動くので、絵は1枚にして、位置を整数の px に丸めて貼る（ずれは 0.5px
-まで）。ゲージは下地と進んだぶんを別の絵にし、進んだぶんの長さを描く面の画素（0.5px）
-ごとに丸める。
+舌と掘る身ぶりは、ふだんは不透明度 1 で描く。同じフレームで先に描いた、落とし穴に
+はまって点滅しているプレイヤーが不透明度を戻し忘れると（`art/player.py` の
+draw_player の注記）、そのあとのプレイヤーの舌と掘る身ぶりも薄く描かれる。原型は塗る
+命令ごとに薄めるので、部品をまとめて薄めると、重なった所の色が違う。そこで、塗る命令
+1つずつの絵を薄めて、原型の命令の順に重ねる。舌の帯の濃い線と明るい線は、原型ではそれ
+ぞれ根元から舌先までの1本の線なので、根元の丸い端と帯を1枚に合わせてから薄める。
+落とし穴にはまったプレイヤーが2体以上いるときにしか起きないので、薄めた絵は先に描いて
+おかない。
 """
 
 import math
-from typing import Final
 
 import pygame
 
-from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.presentation.render.art.animals.frog import (
     TONGUE_WIDTH,
@@ -40,44 +43,10 @@ from animal_bomber.presentation.render.art.animals.frog import (
     draw_tongue_tip,
     tongue_reach,
 )
-from animal_bomber.presentation.render.art.animals.mole import (
-    SPRAY_FROM,
-    clod_centers,
-    dig_progress,
-    dig_swing,
-    draw_clod,
-    draw_dig_gauge,
-    draw_dig_hole,
-    draw_dig_pile,
-    draw_pickaxe,
-    pile_offset,
-    set_clod_style,
-    set_pile_style,
-)
 from animal_bomber.presentation.render.canvas.protocol import Canvas
 from animal_bomber.presentation.render.canvas.surface import SUPERSAMPLE
 from animal_bomber.presentation.render.layout import Layout
-from animal_bomber.presentation.render.sprites import (
-    Sprite,
-    SpriteCache,
-    level_value,
-    quantize,
-)
-
-DIG_LEVELS: Final = 31
-"""掘る進み（0〜1）を何段に丸めるか（掘りかけの穴と土の山の大きさ）。
-
-穴の横の半径はマスの 0.1＋0.22×進み 倍、縦は 0.05＋0.13×進み 倍で、進みで変わる幅は
-マス 60 で 13.2px と 7.8px。31 段（1/30 刻み）に丸めると、ずれは横 0.22px・縦 0.13px
-まで。土の山の大きさ（マスの 0.05×進み 倍まで変わる）は 0.05px まで。
-"""
-
-GAUGE_HEIGHT: Final = 0.11
-"""掘る身ぶりのゲージの高さ（マス。原型の値）。
-
-取っておく絵の範囲を決めるのに使う（四方に 6px のゆとりを足すので、少し違っても絵は
-変わらない）。ゲージを描くのは `render/art/animals/mole.py` の `draw_dig_gauge`。
-"""
+from animal_bomber.presentation.render.sprites import Sprite, SpriteCache, opacity
 
 
 def snap(value: float) -> int:
@@ -96,45 +65,110 @@ class TongueSprites:
     def __init__(self, layout: Layout, cache: SpriteCache) -> None:
         self._layout = layout
         self._cache = cache
-        self._strips: dict[bool, Sprite] = {}
+        self._strips: dict[tuple[bool, int | None], Sprite] = {}
 
     def draw(
-        self, target: pygame.Surface, x: float, y: float, look: TongueLook
+        self,
+        target: pygame.Surface,
+        x: float,
+        y: float,
+        look: TongueLook,
+        alpha: float = 1.0,
     ) -> None:
-        """プレイヤーの中心 (x, y)（px）から伸びる舌を、`target` に貼る。"""
+        """プレイヤーの中心 (x, y)（px）から伸びる舌を、`target` に貼る。
+
+        `alpha` は描くときの不透明度（ふつうは 1。モジュールの説明の「薄く描くとき」）。
+        """
         tile = self._layout.tile
         reach = tongue_reach(look) * tile
         dx, dy = look.direction.delta
-        rx, ry = snap(x), snap(y)
-        tx, ty = snap(x + dx * reach), snap(y + dy * reach)
-        self.root().blit(target, rx, ry)
-        length = abs(tx - rx) + abs(ty - ry)
-        if length > 0:
-            strip = self.strip(horizontal=dx != 0)
-            width, height = strip.surface.get_size()
-            if dx != 0:
-                band = pygame.transform.scale(strip.surface, (length, height))
-                target.blit(band, (min(rx, tx), ry + strip.top))
-            else:
-                band = pygame.transform.scale(strip.surface, (width, length))
-                target.blit(band, (rx + strip.left, min(ry, ty)))
-        self.tip().blit(target, tx, ty)
+        root = (snap(x), snap(y))
+        tip = (snap(x + dx * reach), snap(y + dy * reach))
+        level = opacity(alpha)
+        if level < 255:
+            self._draw_faded(target, root, tip, look, level)
+            return
+        self.root().blit(target, *root)
+        self._band(target, root, tip, None)
+        self.tip().blit(target, *tip)
         if look.caught is not None:
-            self.item(look.caught).blit(target, tx, ty)
+            self.item(look.caught).blit(target, *tip)
 
-    def root(self) -> Sprite:
-        """根元の丸い端（根元が原点）。"""
+    def _draw_faded(
+        self,
+        target: pygame.Surface,
+        root: tuple[int, int],
+        tip: tuple[int, int],
+        look: TongueLook,
+        level: int,
+    ) -> None:
+        """塗る命令ごとに整数の不透明度 `level` で薄め、原型の順に重ねる。"""
+        reach = math.ceil(self._layout.tile * TONGUE_WIDTH / 2) + 2
+        left, top = min(root[0], tip[0]) - reach, min(root[1], tip[1]) - reach
+        size = (
+            abs(tip[0] - root[0]) + 2 * reach,
+            abs(tip[1] - root[1]) + 2 * reach,
+        )
+        for paint in (0, 1):
+            # 帯の1本の線（根元の丸い端と帯）を1枚に合わせてから薄める。
+            layer = pygame.Surface(size, pygame.SRCALPHA)
+            near = (root[0] - left, root[1] - top)
+            far = (tip[0] - left, tip[1] - top)
+            self.root(paint).blit(layer, *near)
+            self._band(layer, near, far, paint)
+            layer.fill((255, 255, 255, level), special_flags=pygame.BLEND_RGBA_MULT)
+            target.blit(layer, (left, top))
+        for paint in (0, 1):
+            sprite = self.tip(paint)
+            self._cache.faded(("tongue-tip", paint), sprite, level).blit(target, *tip)
+        if look.caught is not None:
+            for paint in (0, 1):
+                key = ("tongue-item", look.caught, paint)
+                sprite = self.item(look.caught, paint)
+                self._cache.faded(key, sprite, level).blit(target, *tip)
+
+    def _band(
+        self,
+        target: pygame.Surface,
+        root: tuple[int, int],
+        tip: tuple[int, int],
+        paint: int | None,
+    ) -> None:
+        """根元から舌先までの帯を、断面を引き伸ばして貼る。"""
+        length = abs(tip[0] - root[0]) + abs(tip[1] - root[1])
+        if length <= 0:
+            return
+        horizontal = tip[1] == root[1]
+        strip = self.strip(horizontal=horizontal, paint=paint)
+        width, height = strip.surface.get_size()
+        if horizontal:
+            band = pygame.transform.scale(strip.surface, (length, height))
+            target.blit(band, (min(root[0], tip[0]), root[1] + strip.top))
+        else:
+            band = pygame.transform.scale(strip.surface, (width, length))
+            target.blit(band, (root[0] + strip.left, min(root[1], tip[1])))
+
+    def root(self, paint: int | None = None) -> Sprite:
+        """根元の丸い端（根元が原点）。
+
+        `paint` が 0 なら濃い円だけ、1 なら明るい円だけ。None なら両方。
+        """
         tile = self._layout.tile
         reach = tile * TONGUE_WIDTH / 2 + 1
 
         def draw(canvas: Canvas) -> None:
             draw_tongue_root(canvas, tile, 0, 0)
 
-        return self._cache.get(("tongue-root",), (-reach, -reach, reach, reach), draw)
+        key = ("tongue-root",) if paint is None else ("tongue-root", paint)
+        box = (-reach, -reach, reach, reach)
+        return self._cache.get(key, box, draw, only_paint=paint)
 
-    def strip(self, *, horizontal: bool) -> Sprite:
-        """帯の途中の断面（幅 1px の絵。帯の真ん中の線が原点の高さ・横の位置）。"""
-        cached = self._strips.get(horizontal)
+    def strip(self, *, horizontal: bool, paint: int | None = None) -> Sprite:
+        """帯の途中の断面（幅 1px の絵。帯の真ん中の線が原点の高さ・横の位置）。
+
+        `paint` が 0 なら濃い線だけ、1 なら明るい線だけ。None なら両方。
+        """
+        cached = self._strips.get((horizontal, paint))
         if cached is not None:
             return cached
         tile = self._layout.tile
@@ -148,7 +182,8 @@ class TongueSprites:
                 draw_tongue_band(canvas, tile, (0, -span), (0, span), "butt")
 
         box = (-span, -half, span, half) if horizontal else (-half, -span, half, span)
-        band = self._cache.get(("tongue-band", horizontal), box, draw)
+        key = ("tongue-band", horizontal, paint)
+        band = self._cache.get(key, box, draw, only_paint=paint)
         # 帯の真ん中（原点の列か行）の、幅 1px を切り出す。
         if horizontal:
             rect = (-band.left, 0, 1, band.surface.get_height())
@@ -156,30 +191,35 @@ class TongueSprites:
         else:
             rect = (0, -band.top, band.surface.get_width(), 1)
             cut = Sprite(band.surface.subsurface(rect).copy(), band.left, 0)
-        self._strips[horizontal] = cut
+        self._strips[(horizontal, paint)] = cut
         return cut
 
-    def tip(self) -> Sprite:
-        """舌先の吸盤（舌先が原点）。"""
+    def tip(self, paint: int | None = None) -> Sprite:
+        """舌先の吸盤（舌先が原点）。`paint` が 0 なら塗りだけ、1 なら縁だけ。"""
         tile = self._layout.tile
         reach = tile * 0.14 + 2
 
         def draw(canvas: Canvas) -> None:
             draw_tongue_tip(canvas, tile, 0, 0)
 
-        return self._cache.get(("tongue-tip",), (-reach, -reach, reach, reach), draw)
+        key = ("tongue-tip",) if paint is None else ("tongue-tip", paint)
+        box = (-reach, -reach, reach, reach)
+        return self._cache.get(key, box, draw, only_paint=paint)
 
-    def item(self, kind: ItemKind) -> Sprite:
-        """舌先に掴んだアイテムの絵文字（舌先が原点）。"""
+    def item(self, kind: ItemKind, paint: int | None = None) -> Sprite:
+        """舌先に掴んだアイテムの絵文字（舌先が原点）。
+
+        `paint` が 0 なら黒い縁だけ、1 なら絵文字だけ。None なら両方。
+        """
         tile = self._layout.tile
         reach = tile * 0.4 + 3
 
         def draw(canvas: Canvas) -> None:
             draw_caught_item(canvas, tile, 0, 0, kind)
 
-        return self._cache.get(
-            ("tongue-item", kind), (-reach, -reach, reach, reach), draw
-        )
+        key = ("tongue-item", kind) if paint is None else ("tongue-item", kind, paint)
+        box = (-reach, -reach, reach, reach)
+        return self._cache.get(key, box, draw, only_paint=paint)
 
     def prebuild(self) -> None:
         """部品の絵を全部描いておく（掴みうるアイテムの絵文字も）。"""
@@ -189,113 +229,3 @@ class TongueSprites:
         self.tip()
         for kind in ItemKind:
             self.item(kind)
-
-
-class DigSprites:
-    """掘る身ぶりの絵。"""
-
-    def __init__(self, layout: Layout, cache: SpriteCache) -> None:
-        self._layout = layout
-        self._cache = cache
-
-    def draw(
-        self, target: pygame.Surface, x: float, y: float, remaining: Tick, now: Tick
-    ) -> None:
-        """プレイヤーの中心 (x, y)（px）に、掘る身ぶりを貼る（原型の drawDigging）。"""
-        tile = self._layout.tile
-        k = dig_progress(remaining)
-        swing = dig_swing(now)
-        level = quantize(k, 0, 1, DIG_LEVELS)
-        ix, iy = snap(x), snap(y)
-        self.hole(level).blit(target, ix, iy)
-        for s in (-1, 1):
-            self.pile(level).blit(target, snap(x + pile_offset(tile, k, swing, s)), iy)
-        if abs(swing) > SPRAY_FROM:
-            for cx, cy in clod_centers(tile, x, y, swing):
-                self.clod().blit(target, snap(cx), snap(cy))
-        self.pickaxe().blit(target, snap(x + swing * tile * 0.1), iy)
-        self.gauge(None).blit(target, ix, iy)
-        self.gauge(gauge_level(tile * 0.6 * k)).blit(target, ix, iy)
-
-    def hole(self, level: int) -> Sprite:
-        """掘りかけの穴（進みの段 `level`。プレイヤーの中心が原点）。"""
-        tile = self._layout.tile
-        k = level_value(level, 0, 1, DIG_LEVELS)
-
-        def draw(canvas: Canvas) -> None:
-            draw_dig_hole(canvas, tile, 0, 0, k)
-
-        # 穴の中心は下へマスの 0.16 倍、縦の半径はいちばん大きくてマスの 0.18 倍。
-        box = (-tile * 0.34, -tile * 0.04, tile * 0.34, tile * 0.36)
-        return self._cache.get(("dig-hole", level), box, draw)
-
-    def pile(self, level: int) -> Sprite:
-        """掻き出した土の山1つ（進みの段 `level`）。
-
-        原点は、横が山の中心、縦がプレイヤーの中心。
-        """
-        tile = self._layout.tile
-        k = level_value(level, 0, 1, DIG_LEVELS)
-
-        def draw(canvas: Canvas) -> None:
-            set_pile_style(canvas)
-            draw_dig_pile(canvas, tile, 0, 0, k)
-
-        box = (-tile * 0.13 - 2, tile * 0.14 - 2, tile * 0.13 + 2, tile * 0.30 + 2)
-        return self._cache.get(("dig-pile", level), box, draw)
-
-    def clod(self) -> Sprite:
-        """飛び散る土くれ1つ（中心が原点）。"""
-        tile = self._layout.tile
-        reach = tile * 0.045 + 1
-
-        def draw(canvas: Canvas) -> None:
-            set_clod_style(canvas)
-            draw_clod(canvas, tile, 0, 0)
-
-        return self._cache.get(("dig-clod",), (-reach, -reach, reach, reach), draw)
-
-    def pickaxe(self) -> Sprite:
-        """つるはし（振れた横の位置・プレイヤーの中心の縦が原点）。"""
-        tile = self._layout.tile
-        reach = tile * 0.25 + 2
-
-        def draw(canvas: Canvas) -> None:
-            draw_pickaxe(canvas, tile, 0, 0)
-
-        return self._cache.get(("dig-pickaxe",), (-reach, -reach, reach, reach), draw)
-
-    def gauge(self, level: int | None) -> Sprite:
-        """ゲージ（プレイヤーの中心が原点）。
-
-        `level` が None なら下地、数なら進んだぶん。
-
-        `level` は進んだぶんの長さを描く面の画素（0.5px）で数えた数。
-        """
-        tile = self._layout.tile
-        full = tile * 0.6
-        k = 0.0 if level is None else level / SUPERSAMPLE / full
-        paint = 0 if level is None else 1
-
-        def draw(canvas: Canvas) -> None:
-            draw_dig_gauge(canvas, tile, 0, 0, k)
-
-        # 角の丸みは 4px なので、短いゲージでは角の弧がはみ出す（原型の roundRect）。
-        box = (
-            -full / 2 - 6,
-            -tile * 0.5 - 6,
-            full / 2 + 6,
-            -tile * 0.5 + tile * GAUGE_HEIGHT + 6,
-        )
-        return self._cache.get(("dig-gauge", level), box, draw, only_paint=paint)
-
-    def prebuild(self) -> None:
-        """進みの段・ゲージの長さの全部と、土くれ・つるはしの絵を描いておく。"""
-        for level in range(DIG_LEVELS):
-            self.hole(level)
-            self.pile(level)
-        self.clod()
-        self.pickaxe()
-        self.gauge(None)
-        for level in range(gauge_level(self._layout.tile * 0.6) + 1):
-            self.gauge(level)

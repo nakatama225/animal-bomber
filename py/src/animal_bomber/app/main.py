@@ -7,15 +7,18 @@
 
 1. 試合の設定を作る（1台で2人。対角から始める）
 2. 操作の出どころを、プレイヤーごとに割り当てる（キーボードの左右と、パッド）
-3. 実時間を tick の数に換えて試合を進める（`shell/loop.py` の `frames`）
-4. 起きたイベントを音と通知に変え（`Presenter`）、残り時間の秒読みと曲を鳴らし
-   （`Countdown`・`RoundMusic`）、盤面を描く
+3. 画面の大きさから描く面の寸法を決めて窓を開き（`window_layout`）、「じゅんびちゅう」を
+   出してから、試合で使う絵を描いておく（`prepare_renderer`）
+4. 実時間を tick の数に換えて試合を進める（`shell/loop.py` の `frames`）
+5. 起きたイベントを音と通知に変え（`Presenter`）、残り時間の秒読みと曲を鳴らし
+   （`Countdown`・`RoundMusic`）、見た目だけの値を数え（`SceneTracker`）、盤面を描く
+   （`Renderer`）
 
 起動は `uv run python -m animal_bomber.app.main`。窓を閉じるか Esc で終わる。
 
 ⚠️ 窓を開いて遊んで確かめていない（段階 4 の遊んでの確かめは、Mac の前で行う）。
-音も、鳴らして聞いては確かめていない。テストは SDL の dummy ドライバで、窓を開かず、
-音も出さずに数フレーム回す。
+絵を窓に出して見たことも、音を鳴らして聞いたことも無い。テストは SDL の dummy
+ドライバで、窓を開かず、音も出さずに数フレーム回す。
 """
 
 import time
@@ -36,7 +39,12 @@ from animal_bomber.presentation.audio.bank import open_sound_bank
 from animal_bomber.presentation.audio.countdown import Countdown
 from animal_bomber.presentation.audio.music import RoundMusic, open_music
 from animal_bomber.presentation.presenter import Presenter
-from animal_bomber.presentation.render.placeholder import SCREEN_SIZE, draw_match
+from animal_bomber.presentation.render.baked.art import BakedArt
+from animal_bomber.presentation.render.band import BAND_HEIGHT
+from animal_bomber.presentation.render.layout import Layout, fit_layout
+from animal_bomber.presentation.render.loading import draw_loading
+from animal_bomber.presentation.render.renderer import Renderer
+from animal_bomber.presentation.render.scene.tracker import SceneTracker
 from animal_bomber.shell.gamepad import ControllerReader, GamepadSource, PadClaims
 from animal_bomber.shell.keyboard import (
     PLAYER1_KEYS,
@@ -59,6 +67,9 @@ MIXER_BUFFER: Final = 512
 大きくすると、爆発の音が絵より遅れて聞こえる。小さくしすぎると、出口へ渡すのが
 間に合わずに音が途切れる。
 """
+
+WINDOW_SHARE: Final = 0.9
+"""画面の大きさのうち、窓に使う割合（窓の枠と、画面の端の帯の分を残す）。"""
 
 
 class TickObserver(Protocol):
@@ -101,12 +112,44 @@ def animal_of(session: GameSession, player: PlayerId) -> Animal | None:
     return animals[player] if player < len(animals) else None
 
 
+def window_layout(desktop: tuple[int, int]) -> Layout:
+    """画面の大きさ `desktop`（px）に収まる、描く面の寸法（盤面の上の帯を含む）。
+
+    マスは 26〜60px（`fit_layout`）。描く面はマス 60 までにし、それより大きい窓では、
+    描いた面を拡大して出す（`main` の `pygame.SCALED`。py/AGENTS.md「描画の重さ」）。
+    """
+    width, height = desktop
+    return fit_layout(
+        int(width * WINDOW_SHARE), int(height * WINDOW_SHARE), BAND_HEIGHT
+    )
+
+
+def prepare_renderer(
+    screen: pygame.Surface, layout: Layout, animals: Iterable[Animal]
+) -> Renderer:
+    """窓に「じゅんびちゅう」を出してから、試合で使う絵を描いておき、描くものを作る。
+
+    描いておく絵は、出る動物の分だけ（`BakedArt.prebuild`）。窓を開いたあとに呼ぶ
+    （取っておく絵を窓の面と同じ画素の形式に直すため）。
+    """
+    draw_loading(screen)
+    pygame.display.flip()
+    # 届いたイベントを一度さばいておく。macOS では、窓を出したあとイベントを読まない
+    # 間は、最初の絵が出ないことがある（⚠️ 実機で確かめていない）。
+    pygame.event.pump()
+    art = BakedArt(layout)
+    art.prebuild(animals)
+    return Renderer(art)
+
+
 def run(
     screen: pygame.Surface,
     session: GameSession,
     keyboard: KeyboardWatcher,
     presenter: Presenter,
     ticks_per_frame: Iterable[int],
+    renderer: Renderer,
+    scene: SceneTracker,
     events: Callable[[], list[pygame.event.Event]] = pygame.event.get,
     observers: Sequence[TickObserver] = (),
 ) -> None:
@@ -118,11 +161,15 @@ def run(
         keyboard: キーボードのイベントを渡す先。
         presenter: 起きたイベントを渡す先。
         ticks_per_frame: フレームごとに進める tick の数（`frames()`）。
+        renderer: 盤面を描くもの。
+        scene: 見た目だけの値を数えるもの。1 tick ごとに盤面とイベントを渡し、描くときに
+            読ませる。
         events: そのフレームに届いたイベントを返す関数。テストで差し替える。
         observers: 1 tick 進めるたびに、盤面とイベントを渡す先（秒読みと曲）。
     """
-    canvas = pygame.Surface(SCREEN_SIZE)
-    font = pygame.font.Font(None, 22)
+    # 描く面はアルファの桁の無い面にし、窓の面へは 1 フレームに 1 回だけ貼る
+    # （py/AGENTS.md「描画の重さ」。合否はこの形で測って決めた）。
+    canvas = pygame.Surface(renderer.layout.surface_size).convert()
     for ticks in ticks_per_frame:
         for event in events():
             if event.type == pygame.QUIT:
@@ -133,10 +180,11 @@ def run(
         for _ in range(ticks):
             tick_events = session.tick()
             presenter.consume(tick_events)
+            scene.observe(session.world, tick_events)
             for observer in observers:
                 observer.observe(session.world, tick_events)
             keyboard.end_tick()
-        draw_match(canvas, session.world, session.match, font)
+        renderer.draw(canvas, session.world, session.match, scene)
         screen.blit(canvas, (0, 0))
         pygame.display.flip()
 
@@ -175,18 +223,29 @@ def main() -> None:
     """窓を開いて、1台で2人の試合を始める。"""
     preset_mixer()
     pygame.init()
-    screen = pygame.display.set_mode(SCREEN_SIZE)
+    layout = window_layout(pygame.display.get_desktop_sizes()[0])
+    screen = pygame.display.set_mode(layout.surface_size, pygame.SCALED)
     pygame.display.set_caption("animal bomber")
     # 文字の入力（日本語の変換）を止める。止めないと、変換中の文字キーが KEYDOWN として
     # 届かないことがある。⚠️ 実機で確かめていない。
     pygame.key.stop_text_input()
+    renderer = prepare_renderer(screen, layout, ANIMALS)
     # 種は起動のたびに変える。実時間を読むのは、ルールの層ではなくこの層の役目。
     seed = time.time_ns() & 0xFFFFFFFF
     keyboard = KeyboardWatcher()
     session = new_session(seed, keyboard)
     presenter, observers = open_audio(session)
     try:
-        run(screen, session, keyboard, presenter, frames(), observers=observers)
+        run(
+            screen,
+            session,
+            keyboard,
+            presenter,
+            frames(),
+            renderer,
+            SceneTracker(),
+            observers=observers,
+        )
     finally:
         pygame.quit()
 

@@ -33,8 +33,9 @@ from animal_bomber.presentation.render.baked.bombs import (
     SCALE_LEVELS,
     SPARK_LEVELS,
 )
+from animal_bomber.presentation.render.baked.digging import DIG_LEVELS
 from animal_bomber.presentation.render.baked.items import quantized
-from animal_bomber.presentation.render.baked.techniques import DIG_LEVELS, gauge_level
+from animal_bomber.presentation.render.baked.techniques import gauge_level
 from animal_bomber.presentation.render.canvas.surface import SUPERSAMPLE
 from animal_bomber.presentation.render.sprites import level_value, quantize
 

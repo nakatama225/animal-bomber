@@ -201,7 +201,7 @@ class BodySprites:
                 swing = level_value(level, -1, 1, SWING_LEVELS)
                 self.sprite(animal, facing, BodyMotion(swing, None, None), alpha)
 
-    def prebuild_pit(self, animal: Animal) -> None:
+    def prebuild_pit(self, animal: Animal, alpha: float = 1.0) -> None:
         """落とし穴にはまって止まっている姿を、4つの向きについて描いておく。"""
         for facing in Direction:
-            self.pit_sprite(animal, facing, BodyMotion(0.0, None, None))
+            self.pit_sprite(animal, facing, BodyMotion(0.0, None, None), alpha)

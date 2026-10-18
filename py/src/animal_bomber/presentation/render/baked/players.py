@@ -13,8 +13,9 @@
 描く canvas の不透明度を先に下げて描き直したものを取っておく（`baked/bodies.py`）。
 
 ⚠️ 落とし穴にはまっているプレイヤーを描くと、原型はフレームの残りを、そのプレイヤーの
-不透明度のまま描く（`art/player.py` の draw_player の注記）。ここはプレイヤーを1体ずつ
-貼るだけなので、それを写さない。フレームを貼る側（原型の draw にあたる所）が写す。
+不透明度のまま描く（`art/player.py` の draw_player の注記）。`draw` は描き始めるときの
+不透明度を受け取り、描いたあとの不透明度を返す。フレームを貼る側（`render/renderer.py`）が
+それを次のプレイヤーと炎へ渡す。
 """
 
 import math
@@ -27,6 +28,7 @@ from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng
 from animal_bomber.presentation.render.art.player import (
+    BLINK_ALPHA,
     HURT_SHAKE,
     PIT_HOLD,
     PlayerLook,
@@ -44,8 +46,8 @@ from animal_bomber.presentation.render.art.player_marks import (
 )
 from animal_bomber.presentation.render.art.timing import seconds
 from animal_bomber.presentation.render.baked.bodies import BodySprites
+from animal_bomber.presentation.render.baked.digging import DigSprites
 from animal_bomber.presentation.render.baked.techniques import (
-    DigSprites,
     TongueSprites,
     gauge_level,
     snap,
@@ -91,20 +93,24 @@ class PlayerSprites:
         now: Tick,
         rng: CosmeticRng,
         offset: tuple[int, int] = (0, 0),
-    ) -> None:
-        """プレイヤーを `target` に貼る（原型の drawPlayer）。
+        start: float = 1.0,
+    ) -> float:
+        """プレイヤーを貼り（原型の drawPlayer）、描いたあとの不透明度を返す。
 
         被弾の揺れの間は、見た目の乱数を2つ引く（原型と同じ）。`offset` は画面の揺れ
-        などで全体をずらす px。
+        などで全体をずらす px。`start` は描き始めるときの canvas の不透明度（原型の
+        globalAlpha。ふつうは 1）。掘る身ぶりと舌はこの不透明度で、接地影から上は
+        `player_alpha` で描く。返すのは、ふつうは `start`（原型は描き終えて戻す）、
+        落とし穴にはまっていればこのプレイヤーの不透明度（原型は戻し忘れる）。
         """
         layout = self._layout
         tile = layout.tile
         x, y = layout.px(look.x) + offset[0], layout.py(look.y) + offset[1]
         if look.digging is not None:
-            self._digs.draw(target, x, y, look.digging, now)
+            self._digs.draw(target, x, y, look.digging, now, start)
         if look.tongue is not None:
-            self._tongues.draw(target, x, y, look.tongue)
-        alpha = player_alpha(look)
+            self._tongues.draw(target, x, y, look.tongue, start)
+        alpha = player_alpha(look, start)
         ix, iy = snap(x), snap(y)
         self.footprint(look.pose.animal, alpha).blit(target, ix, iy)
         if look.pitfall:
@@ -115,7 +121,7 @@ class PlayerSprites:
             k = seconds(look.pitfall) / PIT_HOLD
             level = gauge_level(tile * PIT_GAUGE_WIDTH * k)
             self.pit_gauge(level, alpha).blit(target, ix, iy)
-            return
+            return alpha
         bx, by = x, y
         if look.hurt_shake > 0:
             bx += (rng.random() - 0.5) * HURT_SHAKE
@@ -129,6 +135,7 @@ class PlayerSprites:
         marks = look.marks[:MAX_MARKS]
         if marks:
             self.marks("".join(marks), alpha).blit(target, ix, iy)
+        return start
 
     def _single(
         self,
@@ -236,7 +243,8 @@ class PlayerSprites:
     def prebuild_gauges(self, *, pits: bool) -> None:
         """とくぎの長押しのゲージ（どの動物もチキンを拾えば出る）の長さの全部を描く。
 
-        `pits` なら、落とし穴の縁・目印の顔・残りのゲージも描く。
+        `pits` なら、落とし穴の縁・目印の顔・残りのゲージも描く。縁は、はまったまま
+        被弾して点滅する薄さでも描く（塗る命令が2つなので、不透明度ごとに描き直す）。
         """
         tile = self._layout.tile
         self.hold_gauge(None, False, 1.0)
@@ -247,6 +255,7 @@ class PlayerSprites:
         if not pits:
             return
         self.pit_rim(1.0)
+        self.pit_rim(BLINK_ALPHA)
         self.pit_face(1.0)
         self.pit_gauge(None, 1.0)
         for level in range(gauge_level(tile * PIT_GAUGE_WIDTH) + 1):

@@ -62,6 +62,18 @@ def run_pacing(
     )
 
 
+SKIP_PREBUILD = (
+    "import animal_bomber.presentation.render.baked.art as _baked_art\n"
+    "_baked_art.BakedArt.prebuild = lambda self, animals: None\n"
+)
+"""試合の前に絵を描いておく分を飛ばす前置き。
+
+`BakedArt.prebuild` は、マス 60 で1行 3 秒ほどかかる。
+測り方（何を測り、どう出すか）を確かめるテストに付ける。測る値は見ないので、絵を
+出たときに描いても確かめることは変わらない。
+"""
+
+
 def run_patched(code: str) -> subprocess.CompletedProcess[str]:
     """測定のモジュールを読み込み、`code` で一部を差し替えてから走らせる。"""
     return subprocess.run(

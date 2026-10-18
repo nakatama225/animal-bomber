@@ -180,8 +180,16 @@ class FoxfireSprites:
         look: FoxfireLook,
         now: Tick,
         offset: tuple[int, int] = (0, 0),
+        start: float = 1.0,
     ) -> None:
-        """炎を `target` に貼る（`offset` は画面の揺れなどで全体をずらす px）。"""
+        """炎を `target` に貼る（`offset` は画面の揺れなどで全体をずらす px）。
+
+        `start` は描き始めるときの canvas の不透明度（原型の globalAlpha。ふつうは 1）。
+        原型は通った跡と芯の不透明度を代入するが、火の玉は代入せずに描くので、同じ
+        フレームで先に描いた落とし穴のプレイヤーが不透明度を戻し忘れると、火の玉だけ
+        薄くなる（`art/player.py` の draw_player の注記）。火の玉は塗る命令1つなので、
+        薄めた写しが原型と同じになる。
+        """
         size = self._layout.tile
         trail = self.trail()
         for mark in look.trail:
@@ -196,9 +204,11 @@ class FoxfireSprites:
         dx = look.cell.col * size + offset[0]
         dy = look.cell.row * size + offset[1]
         low, high = FLAME_RANGE
-        self.flame(quantize(flame_flicker(now), low, high, FLAME_LEVELS)).blit(
-            target, dx, dy
+        level = quantize(flame_flicker(now), low, high, FLAME_LEVELS)
+        flame = self._cache.faded(
+            ("foxfire-flame", level), self.flame(level), opacity(start)
         )
+        flame.blit(target, dx, dy)
         low, high = (value * size for value in CORE_RANGE)
         self.core(quantize(core_width(size, now), low, high, CORE_LEVELS)).blit(
             target, dx, dy

@@ -1,15 +1,19 @@
-"""描画の重さを測る場面（`tools/bench_scene.py` ほか）が、決めた描き方で描くことの検査。
+"""段階 0 の描画の重さの測定の場面（`tools/bench_scene.py` ほか）の、描き方の検査。
+
+この場面は、描画の層を作る前に、代わりの絵で同じ数の場面を描いて測ったもの
+（README の Design Choice 1. の経緯）。いまはフレームの間の待ち方の測定
+（`tools/bench_pacing.py`）がこの場面を描く。描画の重さの測定（`bench_render.py`）は、
+段階 7 から本物の描画の層で描く（`bench_match_scene.py`）。
 
 描く先を、塗りと貼りを数える面に差し替えて、場面を描く。描き方の誤りの多くは、
-壊れても場面は最後まで描け、時間だけが黙って軽く（または重く）出る。見た目が
-変わらないことは `test_bench_render.py` が画素で確かめる。
+壊れても場面は最後まで描け、時間だけが黙って軽く（または重く）出る。
 
-描き方を変えたら（AGENTS.md の「描画の重さ」）、ここの数も直す。
+描き方を変えたら、ここの数も直す。
 """
 
 import json
 
-from .runner import report_of, run_bench, run_patched
+from .runner import run_patched
 
 # 描く先を、塗りと貼りを数える面にして、場面を 1 周（BLAST_TICKS フレーム）描く。
 # 画素ごとの透明を持つ絵かどうかは get_masks()[3] で見分ける（get_flags() の
@@ -89,12 +93,66 @@ class TestScene:
 
         いつも 1 を返すように壊れると、位相をそろえ損ねても気づけない。
         """
-        report = report_of(
-            run_bench("--tiles", "26", "--kinds", "square", "--phases", "spread")
+        completed = run_patched(
+            "import random\n"
+            "import pygame\n"
+            "from bench_scene import Scene, SceneSpec\n"
+            "pygame.display.init()\n"
+            "pygame.display.set_mode((630, 474))\n"
+            "rng = random.Random(1)\n"
+            "spread = Scene(SceneSpec(26, 'square', phases='spread'), rng)\n"
+            "sync = Scene(SceneSpec(26, 'square'), rng)\n"
+            "print(spread.blast_phases, sync.blast_phases)\n"
         )
-        [result] = report["results"]
-        assert result["phases"] == "spread"
-        assert result["blast_phases"] > 1
+        assert completed.returncode == 0, completed.stderr
+        spread, sync = map(int, completed.stdout.split()[-2:])
+        assert (spread > 1, sync) == (True, 1)
+
+    def test_薄めた絵を先に作っても_1枚ごとの見た目は貼るたびに薄めるのと同じ(
+        self,
+    ) -> None:
+        """薄れる絵を先に作っておく形（fade が baked）が、見た目を変えないこと。
+
+        爆風1件・光の玉1個だけの場面を、同じ乱数で、貼るたびに薄める形と先に作って
+        おく形で 60 フレームずつ描き（爆風の 28 刻みと光の玉の寿命の 30 刻みを1周以上
+        通る）、画面の全部の画素で色の差が 2 以下かを見る。絵の選び方（どの不透明度の
+        写しを貼るか）まで通して確かめる。不透明度を粗い段に丸めると、差が 5 まで出た。
+
+        1枚ごとの差は丸めの違い（貼るときに薄めるのと、写しを作るときの計算の違い）で、
+        この機械では 1 だった。何枚も重なる所では足し合わさり、全部を描く場面では
+        最大 6 になった（255 段のうち。README に書いてある）。
+
+        差は2つの面の引き算（BLEND_RGB_SUB は 0 で切れるので、両方の向きで引く）で
+        作り、黒から 3 未満の画素を数える。
+        """
+        completed = run_patched(
+            "import random\n"
+            "import pygame\n"
+            "from bench_scene import Scene, SceneSpec\n"
+            "pygame.display.init()\n"
+            "pygame.display.set_mode((630, 474))\n"
+            "few = {'particles': 1, 'spinners': 0, 'blasts': 1,\n"
+            "       'players': 0, 'bombs': 0}\n"
+            "def scene(fade):\n"
+            "    spec = SceneSpec(26, 'glow', fade=fade, **few)\n"
+            "    return Scene(spec, random.Random(7))\n"
+            "by_alpha, baked = scene('alpha'), scene('baked')\n"
+            "a = pygame.Surface((630, 474)).convert()\n"
+            "b = pygame.Surface((630, 474)).convert()\n"
+            "outside = 0\n"
+            "for frame in range(60):\n"
+            "    by_alpha.draw(a, frame)\n"
+            "    baked.draw(b, frame)\n"
+            "    for x, y in ((a, b), (b, a)):\n"
+            "        diff = x.copy()\n"
+            "        diff.blit(y, (0, 0), special_flags=pygame.BLEND_RGB_SUB)\n"
+            "        near = pygame.mask.from_threshold(\n"
+            "            diff, (0, 0, 0), (3, 3, 3, 255))\n"
+            "        outside += 630 * 474 - near.count()\n"
+            "print(outside)\n"
+        )
+        assert completed.returncode == 0, completed.stderr
+        assert int(completed.stdout.strip()) == 0
 
     def test_faded_は写しを返し_元の絵を変えない(self) -> None:
         """元の絵を薄めると、同じ絵から作るほかの不透明度の写しまで薄くなる。"""

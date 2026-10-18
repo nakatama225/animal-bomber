@@ -3,6 +3,9 @@
 別のプロセスで、SDL のドライバを dummy にして走らせる（テストのプロセスで pygame の
 画面を初期化しない。`tests/tools/runner.py` と同じ理由）。走らせる側で、ドライバが
 dummy であることを確かめてから画面を作る。音の出口も dummy にする（音は出さない）。
+
+試合の前に絵を描いておく所（`prepare_renderer`）は時間がかかるので、それを確かめる
+テストだけが通す。ほかのテストは、絵を出たときに描く `Renderer` で回す。
 """
 
 import json
@@ -13,23 +16,44 @@ import sys
 DUMMY_ENV = {**os.environ, "SDL_VIDEODRIVER": "dummy", "SDL_AUDIODRIVER": "dummy"}
 
 # 試合を作り、決めたイベントと tick の数でフレームを回して、結果を JSON で出す。
-# 2つ目の引数が "audio" なら、遊ぶときと同じく音を開いて回す。
+# 2つ目以降の引数に "audio" があれば、遊ぶときと同じく音を開いて回す。"prepare" が
+# あれば、遊ぶときと同じく「じゅんびちゅう」を出してから絵を描いておく。
 SMOKE = """
 import json, sys
 import pygame
-from animal_bomber.app.main import new_session, open_audio, preset_mixer, run
-from animal_bomber.presentation.presenter import Presenter
-from animal_bomber.presentation.render.placeholder import (
-    CELL, HUD_HEIGHT, PLAYER_COLORS, SCREEN_SIZE,
+from animal_bomber.app.main import (
+    ANIMALS, new_session, open_audio, prepare_renderer, preset_mixer, run,
+    window_layout,
 )
+from animal_bomber.presentation.presenter import Presenter
+from animal_bomber.presentation.render.baked.art import BakedArt
+from animal_bomber.presentation.render.loading import BACKGROUND, TEXT_COLOR
+from animal_bomber.presentation.render.renderer import Renderer
+from animal_bomber.presentation.render.scene.tracker import SceneTracker
 from animal_bomber.shell.keyboard import KeyboardWatcher
 
-audio = sys.argv[2:] == ["audio"]
-if audio:
+options = sys.argv[2:]
+if "audio" in options:
     preset_mixer()
 pygame.init()
 assert pygame.display.get_driver() == "dummy", pygame.display.get_driver()
-screen = pygame.display.set_mode(SCREEN_SIZE)
+layout = window_layout(pygame.display.get_desktop_sizes()[0])
+screen = pygame.display.set_mode(layout.surface_size)
+loading = {}
+if "prepare" in options:
+    prebuild = BakedArt.prebuild
+    def watched(self, animals):
+        # 絵を描き始める時点で、窓に「じゅんびちゅう」が出ているか。
+        width, height = screen.get_size()
+        pixels = [screen.get_at((x, height // 2))[:3] for x in range(width)]
+        loading["corner"] = list(screen.get_at((0, 0))[:3])
+        loading["text"] = sum(1 for p in pixels if tuple(p) == TEXT_COLOR)
+        loading["animals"] = [a.value for a in animals]
+        prebuild(self, animals)
+    BakedArt.prebuild = watched
+    renderer = prepare_renderer(screen, layout, ANIMALS)
+else:
+    renderer = Renderer(BakedArt(layout))
 def key(scancode, code, kind=pygame.KEYDOWN):
     return pygame.event.Event(kind, scancode=scancode, key=code)
 EVENTS = {
@@ -64,19 +88,28 @@ def ticks():
             probes.append(channel_states())
         current[:] = EVENTS[name]
         yield ticks_
-presenter, observers = open_audio(session) if audio else (Presenter(), ())
+presenter, observers = open_audio(session) if "audio" in options else (Presenter(), ())
 run(
-    screen, session, keyboard, presenter, ticks(),
+    screen, session, keyboard, presenter, ticks(), renderer, SceneTracker(),
     events=lambda: list(current), observers=observers,
 )
 first = session.world.players[0]
-x, y = round(first.position.x * CELL), HUD_HEIGHT + round(first.position.y * CELL)
+x, y = layout.px(first.position.x), layout.py(first.position.y)
+# 1P（うさぎ）の体があるはずの範囲で、体の色に近い画素を数える。
+body = 0
+for px in range(int(x - layout.tile * 0.5), int(x + layout.tile * 0.5)):
+    for py in range(int(y - layout.tile), int(y)):
+        r, g, b = screen.get_at((px, py))[:3]
+        body += abs(r - 255) < 30 and abs(g - 45) < 40 and abs(b - 120) < 40
 print(json.dumps({
     "elapsed": session.clock.now,
     "first": [first.position.x, first.position.y],
     "second": [p.position.cell().col for p in session.world.players][1],
-    "pixel": list(screen.get_at((x, y)))[:3],
-    "color": list(PLAYER_COLORS[0]),
+    "body": body,
+    "size": list(screen.get_size()),
+    "tile": layout.tile,
+    "band": layout.band,
+    "loading": loading,
     "bombs": len(session.world.bombs),
     "previous": int(first.previous_input),
     "mixer": pygame.mixer.get_init(),
@@ -109,7 +142,27 @@ def test_フレームごとに_決めた数だけ試合を進めて描く() -> N
     assert first[0] == 1.5
     assert first[1] > 1.5
     assert result["second"] == 21
-    assert result["pixel"] == result["color"]
+    body = result["body"]
+    assert isinstance(body, int) and body > 20
+
+
+def test_画面の大きさに収まる寸法で窓を作る() -> None:
+    """dummy の画面（1024×768）の 9 割に、盤面と上の帯が収まるいちばん大きいマス。"""
+    result = _run([(0, "none")])
+    assert result["band"] == 32
+    assert result["tile"] == 36
+    assert result["size"] == [873, 32 + 657]
+
+
+def test_じゅんびちゅうを出してから_出る動物の絵を描いておく() -> None:
+    """絵を描いておく間（5匹で 4.5 秒ほど）、窓が黒いままにならないこと。"""
+    result = _run([(0, "none"), (1, "none")], "prepare")
+    loading = result["loading"]
+    assert isinstance(loading, dict)
+    assert loading["animals"] == ["rabbit", "elephant"]
+    assert loading["corner"] == [21, 14, 10]
+    assert loading["text"] > 0
+    assert result["elapsed"] == 1
 
 
 def test_押してすぐ離した爆弾のキーは_1_tick_だけ押したことにする() -> None:

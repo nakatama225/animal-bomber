@@ -6,15 +6,15 @@
 
 どれも別のプロセスで走らせる（このプロセスで pygame の画面を初期化しないため。
 `runner.py`）。ほとんどは小さな場面を数フレームだけ描く。判定に使う行を確かめる
-ものだけは、マス 60 を 100 フレーム描く。合わせて数秒で終わる。測る範囲と列の値は
-`test_bench_measure.py`、描き方の数は `test_bench_scene.py` が確かめる。
+ものだけは、マス 60 を描く（試合の前に絵を描いておくので、1行に数秒かかる）。測る範囲と
+列の値は `test_bench_measure.py`、描き方の数は `test_bench_match_scene.py` が確かめる。
 """
 
 import os
 
 import pytest
 
-from .runner import report_of, run_bench, run_patched
+from .runner import SKIP_PREBUILD, report_of, run_bench, run_patched
 
 
 class TestBenchRender:
@@ -27,6 +27,7 @@ class TestBenchRender:
         """
         report = report_of(run_bench("--tiles", "26", "--kinds", "glow"))
         assert report["driver"] == "dummy"
+        assert report["measured_at"]
         [result] = report["results"]
         assert (result["tile"], result["particle_kind"]) == (26, "glow")
         assert (result["phases"], result["fade"], result["pace"]) == (
@@ -52,7 +53,10 @@ class TestBenchRender:
         別の行で合否を出すずれは、`test_bench_gate.py` が値で確かめる。
         合否そのものは機械と負荷で変わるので、ここでは見ない。
         """
-        completed = run_bench("--tiles", "60", "--frames", "100")
+        completed = run_patched(
+            SKIP_PREBUILD + "sys.exit(bench_render.main(['--tiles', '60',"
+            " '--frames', '100', '--warmup', '1', '--json']))\n"
+        )
         assert report_of(completed)["gate_passed"] in (True, False)
 
     def test_フレームが少ないと_合否を出さない(self) -> None:
@@ -60,7 +64,11 @@ class TestBenchRender:
 
         100 フレームより少ないと、99 パーセンタイルが最大と同じ値になる。
         """
-        report = report_of(run_bench("--tiles", "60"))
+        completed = run_patched(
+            SKIP_PREBUILD + "sys.exit(bench_render.main(['--tiles', '60',"
+            " '--frames', '3', '--warmup', '1', '--json']))\n"
+        )
+        report = report_of(completed)
         assert report["frames"] == 3
         assert report["gate_passed"] is None
 
@@ -77,7 +85,7 @@ class TestBenchRender:
         時間にする。合否の文字の取り違えと、秒とミリ秒の取り違えを見つける。
         """
         completed = run_patched(
-            "ticks = itertools.count()\n"
+            SKIP_PREBUILD + "ticks = itertools.count()\n"
             f"bench_render.time.perf_counter = lambda: next(ticks) * {step}\n"
             "sys.exit(bench_render.main(['--tiles', '60', '--frames', '100',"
             " '--warmup', '0']))\n"
@@ -130,57 +138,12 @@ class TestBenchRender:
         assert "dummy 以外のドライバ（cocoa）では測らない" in completed.stderr
         assert "set_mode に来た" not in completed.stderr
 
-    def test_薄めた絵を先に作っても_1枚ごとの見た目は貼るたびに薄めるのと同じ(
-        self,
-    ) -> None:
-        """薄れる絵を先に作っておく形（fade が baked）が、見た目を変えないこと。
-
-        爆風1件・光の玉1個だけの場面を、同じ乱数で、貼るたびに薄める形と先に作って
-        おく形で 60 フレームずつ描き（爆風の 28 刻みと光の玉の寿命の 30 刻みを1周以上
-        通る）、画面の全部の画素で色の差が 2 以下かを見る。絵の選び方（どの不透明度の
-        写しを貼るか）まで通して確かめる。不透明度を粗い段に丸めると、差が 5 まで出た。
-
-        1枚ごとの差は丸めの違い（貼るときに薄めるのと、写しを作るときの計算の違い）で、
-        この機械では 1 だった。何枚も重なる所では足し合わさり、全部を描く場面では
-        最大 6 になった（255 段のうち。README に書いてある）。
-
-        差は2つの面の引き算（BLEND_RGB_SUB は 0 で切れるので、両方の向きで引く）で
-        作り、黒から 3 未満の画素を数える。
-        """
-        completed = run_patched(
-            "import random\n"
-            "import pygame\n"
-            "from bench_scene import Scene, SceneSpec\n"
-            "pygame.display.init()\n"
-            "pygame.display.set_mode((630, 474))\n"
-            "few = {'particles': 1, 'spinners': 0, 'blasts': 1,\n"
-            "       'players': 0, 'bombs': 0}\n"
-            "def scene(fade):\n"
-            "    spec = SceneSpec(26, 'glow', fade=fade, **few)\n"
-            "    return Scene(spec, random.Random(7))\n"
-            "by_alpha, baked = scene('alpha'), scene('baked')\n"
-            "a = pygame.Surface((630, 474)).convert()\n"
-            "b = pygame.Surface((630, 474)).convert()\n"
-            "outside = 0\n"
-            "for frame in range(60):\n"
-            "    by_alpha.draw(a, frame)\n"
-            "    baked.draw(b, frame)\n"
-            "    for x, y in ((a, b), (b, a)):\n"
-            "        diff = x.copy()\n"
-            "        diff.blit(y, (0, 0), special_flags=pygame.BLEND_RGB_SUB)\n"
-            "        near = pygame.mask.from_threshold(\n"
-            "            diff, (0, 0, 0), (3, 3, 3, 255))\n"
-            "        outside += 630 * 474 - near.count()\n"
-            "print(outside)\n"
-        )
-        assert completed.returncode == 0, completed.stderr
-        assert int(completed.stdout.strip()) == 0
-
     @pytest.mark.parametrize(
         ("args", "message"),
         [
             (("--frames", "0"), "1 以上にする"),
             (("--tiles", "0"), "1 以上にする"),
+            (("--tiles", "61"), "マスは 26〜60 にする"),
             (("--warmup", "-1"), "0 以上にする"),
         ],
     )
@@ -190,6 +153,7 @@ class TestBenchRender:
         """0 フレームを「測った」ことにしたり、大きさ 0 の面で黙って測ったりしないこと。
 
         大きさ 0 の面を頼むと、pygame は別の大きさの面を作って、そのまま測り終える。
+        描く面の寸法（`Layout`）が受け付けないマス（60 より大きい）も、測る前に止める。
         """
         completed = run_bench("--tiles", "26", *args)
         assert completed.returncode == 2

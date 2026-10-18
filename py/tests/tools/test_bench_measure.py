@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 
-from .runner import report_of, run_patched
+from .runner import SKIP_PREBUILD, report_of, run_patched
 
 # 実時間・CPU の時間・眠り・負荷を差し替える。時計は、描いたとき（DRAW_MS ミリ秒。
 # CPU の時間はその半分）と、描いた面を窓の面へ貼ったとき（1 ms）だけ進む。窓の面への
@@ -33,13 +33,13 @@ def sleep(seconds):
     clock["wall"] += seconds
 bench_render.time.sleep = sleep
 bench_render.os.getloadavg = lambda: next(loads)
-draw = bench_render.Scene.draw
+draw = bench_render.MatchScene.draw
 def timed_draw(self, target, frame):
     draw(self, target, frame)
     ms = DRAW_MS(frame)
     clock["wall"] += ms / 1000
     clock["cpu"] += ms / 2000
-bench_render.Scene.draw = timed_draw
+bench_render.MatchScene.draw = timed_draw
 presented = []
 class Window(pygame.Surface):
     def blit(self, source, dest, *rest, **kwargs):
@@ -73,7 +73,7 @@ SHUFFLED_STATS = {
 def run_clocked(draw_ms: str, argv: list[str]) -> subprocess.CompletedProcess[str]:
     """時計を差し替えて測定を走らせる。`draw_ms` は、frame からミリ秒を出す式。"""
     code = CLOCKED.replace("DRAW_MS", f"(lambda frame: {draw_ms})")
-    return run_patched(code.replace("ARGV", repr(argv)))
+    return run_patched(SKIP_PREBUILD + code.replace("ARGV", repr(argv)))
 
 
 def side_record(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
@@ -115,8 +115,9 @@ class TestClocked:
         completed = run_clocked(SHUFFLED, GATE_ARGV)
         assert completed.returncode == 0, completed.stderr
         lines = completed.stdout.strip().splitlines()
-        assert lines[1].endswith("測る前 [1.0, 1.0, 1.0] → 後 [2.0, 2.0, 2.0]")
-        assert lines[2] == (
+        assert lines[0].startswith("測った時刻：")
+        assert lines[2].endswith("測る前 [1.0, 1.0, 1.0] → 後 [2.0, 2.0, 2.0]")
+        assert lines[3] == (
             "100 フレームを測った（前の 2 フレームは捨てた）・爆風の位相 そろえる"
             "・薄れる絵 薄めた絵を先に作っておく・全速"
         )
@@ -166,7 +167,8 @@ class TestEdgeCases:
         この引数では判定に使う行もそろっていないが、理由はフレームの数のほうを出す。
         """
         completed = run_patched(
-            "sys.exit(bench_render.main(['--tiles', '60', '--kinds', 'glow',"
+            SKIP_PREBUILD + "sys.exit(bench_render.main(['--tiles', '60',"
+            " '--kinds', 'glow',"
             " '--frames', '3', '--warmup', '1']))\n"
         )
         assert completed.returncode == 0, completed.stderr

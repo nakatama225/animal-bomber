@@ -19,31 +19,70 @@ uv run tools/verify.sh   # ruff → ruff format --check → mypy --strict → li
 
 ## 描画の重さ
 
-`uv run python tools/bench_render.py` で、いちばん重い場面の描画時間を測れます。
-窓は開きません（SDL の dummy ドライバで描きます。`tests/tools/test_bench_render.py` が確かめています）。
-合格基準は `tools/bench_gate.py`、測った結果と経緯は README の Design Choice にあります。
+`uv run python tools/bench_render.py` で、いちばん重い場面を本物の描画の層（`Renderer`）で描いて、
+描画時間を測れます。窓は開きません（SDL の dummy ドライバで描きます。`tests/tools/test_bench_render.py` が
+確かめています）。場面は `tools/bench_match_scene.py`、合格基準は `tools/bench_gate.py`、測った結果と
+経緯は README の Design Choice 1. にあります。
 
-- 測定は描画の層（`src/animal_bomber/presentation/`）を import せず、自前の場面
-  （`tools/bench_scene.py`・`bench_particles.py`・`bench_sprites.py`）を描いています。描画の層で
-  毎フレームの描き方（貼る絵の作り方・半透明の掛け方・描く数など）を変えたら、先にそれらを
-  同じ描き方に直してから測り直し、README の数字も直してください。描き方を数えるテスト
-  （`tests/tools/test_bench_scene.py`）は失敗するので、その数も直します。描画の層ができたら（段階 7）、
-  測定をその層を通して描く形に替えます
+- 描画の層で毎フレームの描き方（貼る絵の作り方・半透明の掛け方・描く数・場面の揺れ方など）を変えたら、
+  測り直して README の数字も直してください。場面が貼る数を数えるテスト
+  （`tests/tools/test_bench_match_scene.py`）が失敗したら、その数も直します
+- 段階 0 の測定（描画の層を作る前に、代わりの絵で描いた場面）は `tools/bench_scene.py`・
+  `bench_sprites.py`・`bench_particles.py` に残してあります。フレームの間の待ち方の測定
+  （`tools/bench_pacing.py`）がこの場面を描きます。README の段階 0 の数字はこの場面で測ったものなので、
+  場面を変えないでください
 - 合否は次の決め方で出してください。ほかの重い処理を止めて 3 回走らせ、3 回とも判定に使う値
   （出力のいちばん下の「判定：」で始まる行に出ます）がしきい値（8.33 ms）以下なら合格。1 回でも
   超えたら、ほかの重い処理を止めて 5 回測り直し、中央値で決めます。回ごとに表の頭の負荷
   （load average）と時刻を残してください（`tools/bench_render.py` の冒頭と同じ）
 - ⛔ 画素ごとの透明を持つ薄れる絵（爆風の芯・光の玉など）を、貼るたびに `set_alpha` で
   薄めないでください。重く、しきい値を超えた回がありました。貼るたびに薄めるのと同じ整数の
-  不透明度ごとに薄めた絵を先に作っておき、薄めずに貼ります（`tools/bench_sprites.py` の `faded`）。
-  段を粗くして丸めると見た目が変わります。例外は回りながら浮かぶ顔で、回した絵を毎フレーム
-  作り直すので、貼るときに薄めています（測定の場面も同じ。数が少ないので重さに効きません）
+  不透明度ごとに薄めた写しを作っておき、薄めずに貼ります（`render/sprites.py` の
+  `SpriteCache.faded`）。段を粗くして丸めると見た目が変わります。例外は回りながら浮かぶ顔で、
+  回した絵を毎フレーム作り直し、薄めた形の絵にしてから重ねます（数が少ないので重さに効きません）
 - ⛔ 窓の面へ直接描かないでください。アルファの桁の無い面に描き、窓の面へは 1 フレームに
   1 回だけ貼ります（合否はこの形で測って決めました。窓の面がアルファの桁を持つ形式だと、
-  直接描く形は重くなります）
-- ⛔ 描く面をマス 60px より大きくしないでください。大きい窓では、描いた面を拡大して出します。
-  上げるなら測り直してください（マス 96 は、3 回測った四角い粒と光の玉の p99 の 6 つのうち 5 つが、
-  しきい値を超えました）
+  直接描く形は重くなります。`app/main.py` の `run`）
+- ⛔ 描く面をマス 60px より大きくしないでください（`render/layout.py` の `TILE_MAX`）。大きい窓では、
+  描いた面を拡大して出します（`pygame.SCALED`）。上げるなら測り直してください（段階 0 の測定で、
+  マス 96 は、3 回測った四角い粒と光の玉の p99 の 6 つのうち 5 つが、しきい値を超えました）
+
+## 絵と音（`src/animal_bomber/presentation/`）
+
+どこまで原型を逐語に写し、どこを作り直したかは `docs/08-絵と音.md` にあります。
+
+- 試合の状態は読むだけにしてください。書き換えると、画面を出したときだけ試合が変わります
+  （`tests/presentation/test_render_match.py` が、描く前と後で状態の要約が変わらないことを見ます）。
+  試合の乱数（`world.rng`）も引きません
+- 見た目の乱数は `presentation/cosmetic_rng.py` の `CosmeticRng` から引いてください。`random` を
+  直に使わないでください。テストは原型が引いた値の列を差して、同じ順・同じ数だけ引くかを見ます
+  （画面の揺れ → 爆風 → 被弾の揺れの順。`art/frame.py` の `draw_frame` と `render/renderer.py`）
+- 描く関数（`render/art/`）は、原型の canvas の命令の列と同じにします。命令・値・見た目の乱数を
+  引く順を変えると `tests/presentation/test_legacy_art.py` が失敗します。毎フレームはそれを
+  取っておいた絵（`render/baked/`）を貼って描き、手本の `draw_frame` と画素で比べます
+  （`test_renderer.py`）。描く順を変えるときは、`draw_frame` と `Renderer` を同じく変えます
+- 薄れる絵は、原型の `globalAlpha` と同じく塗る命令ごとに薄めます。命令が重なる絵をまとめて
+  薄めると、重なった所の色が原型と違います（命令1つずつの絵を薄めて重ねるか、canvas の不透明度を
+  下げてから描き直して取っておく）。落とし穴にはまったプレイヤーの不透明度の戻し忘れ（原型の
+  不具合）も写してあります。`PlayerSprites.draw` が返す不透明度を、次のプレイヤーと炎へ渡して
+  ください
+- 取っておく絵の段の数（`PULSE_LEVELS` など）を変えるときは、ずれの上限のテスト
+  （`tests/presentation/test_quantization_bounds.py`）と、取っておいた絵の検査（`test_baked*.py`）も
+  直します。段の数は、先にずれの上限を決めてから出します（定数の docstring に上限を書く）
+- 試合の状態に無い見た目だけの値（粒子・画面の揺れ・歩いた距離・被弾の揺れ・粘膜爆弾を投げた
+  位置・炎の通った跡）は、`render/scene/` の `SceneTracker` が 1 tick ごとに数えます。盤面が進んだ
+  tick にだけ進め、ラウンドが替わったら忘れます。ルールの層に、見た目のためだけの値を足さないで
+  ください（足すなら、見分けに要るイベントを足します。`domain/events.py` の決まり）
+- 原型の命令の列の固定値（`tests/presentation/legacy_art_ops.json`）・音の表の固定値
+  （`legacy_sound_values.json`）・粒子の固定値（`legacy_particles.json`）は、原型を node で
+  読み込んで書き出したものです。手で直さず、リポジトリのいちばん上で書き出し直してください。
+  どれも何度作っても同じものになります
+
+```sh
+node py/tools/legacy_oracle/legacy_art.js py/tests/presentation/legacy_art_ops.json
+node py/tools/legacy_oracle/legacy_sound.js py/tests/presentation/legacy_sound_values.json
+node py/tools/legacy_oracle/legacy_particles.js py/tests/presentation/legacy_particles.json
+```
 
 ## フレームの間の待ち方
 
@@ -158,10 +197,11 @@ set の反復は、import でも構文木でも止められません。`tests/de
 ## イベント（`domain/events.py`）
 
 - ルールの層から音・画面・通知を呼ばないでください。起きたことは `SimEvent` の種類に足して
-  `step()` の戻り値で返し、音と通知に変えるのは `presentation/presenter.py` です
-- 種類を足すと、`presentation/presenter.py` の `match` と、TypeScript 版と比べるテストの
-  `event_row`（`tests/ts_rows.py`）が mypy で失敗します。扱いを書いてから完了として
-  ください。`case _:` には `assert_never` だけを置きます
+  `step()` の戻り値で返し、音と通知に変えるのは `presentation/presenter.py`、粒子と画面の揺れに
+  変えるのは `presentation/render/scene/effects.py` です
+- 種類を足すと、`presentation/presenter.py` と `presentation/render/scene/effects.py` の
+  `match` と、TypeScript 版と比べるテストの `event_row`（`tests/ts_rows.py`）が mypy で
+  失敗します。扱いを書いてから完了としてください。`case _:` には `assert_never` だけを置きます
 - TypeScript 版と比べる固定値（`tests/systems/test_simulation_ts.py`・
   `test_techniques_ts.py`・`tests/app/test_session_ts.py`）は、同じコミットの TypeScript 版
   （`ts/`）の `domain/` と `app/GameSession.ts` を写し、この版にまだ無いものを止めて、同じ

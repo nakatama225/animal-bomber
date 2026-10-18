@@ -119,12 +119,15 @@ def is_blinking_off(invulnerable: Tick) -> bool:
     return left > 0 and math.floor(left * BLINK_RATE) % 2 == 0
 
 
-def player_alpha(look: PlayerLook) -> float:
+def player_alpha(look: PlayerLook, start: float = 1.0) -> float:
     """プレイヤーを描くときの不透明度（原型の drawPlayer の前半）。
 
-    無敵の点滅で薄くなっている間と、ブロックの中を通っている間は薄く描く。
+    無敵の点滅で薄くなっている間と、ブロックの中を通っている間は薄く描く。`start` は
+    描き始めるときの canvas の不透明度（ふつうは 1。同じフレームで先に描いた、落とし穴に
+    はまったプレイヤーが戻し忘れた値。`draw_player` の注記）。点滅は代入、ブロックの中は
+    いまの値との小さいほうなので、点滅していなければ `start` を引き継ぐ。
     """
-    alpha = BLINK_ALPHA if is_blinking_off(look.invulnerable) else 1.0
+    alpha = BLINK_ALPHA if is_blinking_off(look.invulnerable) else start
     if look.in_block:
         alpha = min(alpha, IN_BLOCK_ALPHA)
     return alpha

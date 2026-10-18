@@ -99,8 +99,8 @@ def direct_groups(
     return as_array(surface, box)
 
 
-def baked(layout: Layout, box: Box, paste: Callable[[pygame.Surface], None]) -> Image:
-    """取っておいた絵を `paste` で床に貼った画素。"""
+def baked(layout: Layout, box: Box, paste: Callable[[pygame.Surface], object]) -> Image:
+    """取っておいた絵を `paste` で床に貼った画素（`paste` が返す値は使わない）。"""
     surface = blank(layout)
     paste(surface)
     return as_array(surface, box)
