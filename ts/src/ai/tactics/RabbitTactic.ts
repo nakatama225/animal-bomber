@@ -14,7 +14,7 @@ export const RABBIT_TACTIC: AnimalTactic = {
   animal: 'rabbit',
 
   afterMove(ctx) {
-    if (ctx.me.specialCharges <= 0 || ctx.inDanger) return false;
+    if (!ctx.me.hasSpecial || ctx.inDanger) return false;
     return ctx.foePathDistance(SCATTER_RANGE + 1) <= SCATTER_RANGE && ctx.skillReady();
   },
 };

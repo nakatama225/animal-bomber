@@ -132,10 +132,14 @@ export function hearts(hp: number, maxHp: number): string {
 }
 
 /**
- * かかっている状態と、使えるとくぎ。盤面にいる人だけ。
+ * かかっている状態と、使えるとくぎ。盤面にいるプレイヤーだけ。
  *
- * ⚠️ 盤面にいない人は出さない。残り1分を切ってから倒れた人は退場するだけで、
- * とくぎの回数やかかっていた状態は試合の側で消されずに残る（もう使われない）。
+ * ⚠️ 盤面にいないプレイヤーは出さない。残り1分を切ってから倒れたプレイヤーは退場するだけで、
+ * とくぎの印と回数やかかっていた状態は試合の側で消されずに残る（もう使われない）。
+ *
+ * とくぎは、持っている印（`hasSpecial`）があるときだけ出す。原型の名札（L5512）と同じく回数では見ない。
+ * 外周から戻ったプレイヤーは、回数だけが残って印が外れていることがある（そのとくぎは出せない）。
+ * 「×N」は回数が2以上のとき（原型の L5513）。
  */
 function effectsOf(
   world: Readonly<WorldState>,
@@ -144,7 +148,7 @@ function effectsOf(
 ): string[] {
   if (player.life.kind !== 'alive') return [];
   const effects: string[] = [];
-  if (player.specialCharges > 0) {
+  if (player.hasSpecial) {
     const times = player.specialCharges > 1 ? `×${player.specialCharges}` : '';
     effects.push(`${special.emoji}${special.name}${times}`);
   }

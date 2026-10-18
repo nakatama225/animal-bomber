@@ -28,11 +28,11 @@ export const FROG_TACTIC: AnimalTactic = {
   beforePlan: {
     button: 'action',
     endsTurn: true,
-    when: (ctx) => !ctx.inDanger && ctx.me.specialCharges <= 0 && goodItemAhead(ctx),
+    when: (ctx) => !ctx.inDanger && !ctx.me.hasSpecial && goodItemAhead(ctx),
   },
 
   afterMove(ctx) {
-    if (ctx.me.specialCharges <= 0 || ctx.inDanger) return false;
+    if (!ctx.me.hasSpecial || ctx.inDanger) return false;
     return ctx.foePathDistance(SLIME_RANGE + 1) <= SLIME_RANGE && ctx.skillReady();
   },
 };

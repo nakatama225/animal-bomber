@@ -21,7 +21,7 @@ export const ELEPHANT_TACTIC: AnimalTactic = {
     button: 'special',
     endsTurn: false,
     when(ctx) {
-      if (ctx.me.specialCharges <= 0 || !ctx.inDanger || !ctx.skillReady()) return false;
+      if (!ctx.me.hasSpecial || !ctx.inDanger || !ctx.skillReady()) return false;
       ctx.memory.thinkIn = 0;
       return true;
     },

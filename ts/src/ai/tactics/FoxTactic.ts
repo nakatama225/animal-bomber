@@ -76,7 +76,7 @@ export const FOX_TACTIC: AnimalTactic = {
   },
 
   afterMove(ctx) {
-    if (ctx.me.specialCharges <= 0 || ctx.inDanger) return false;
+    if (!ctx.me.hasSpecial || ctx.inDanger) return false;
     // 寿命のうちに届く距離の 8 割まで。遠いと届く前に消える。
     return ctx.foePathDistance(FOXFIRE_REACH) <= Math.floor(FOXFIRE_REACH * 0.8) && ctx.skillReady();
   },

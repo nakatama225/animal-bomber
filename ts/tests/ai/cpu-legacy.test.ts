@@ -100,6 +100,72 @@ describe('うさぎ・かえる・きつね：歩いて置いたあとに、と�
   }
 });
 
+describe('とくぎを持っているかは、回数ではなく持っている印で見る（原型 cpuUpdate は p.chicken を見る）', () => {
+  /**
+   * 外周から戻ったときの形にする。回数は残り、持っている印だけが外れている。原型の toNegibon（L2255）は
+   * chicken だけを消して chickenCharges を残し、この版の sendToLane も同じ（tests/systems/negibon.test.ts）。
+   */
+  function returnedFromLane(player: PlayerState, charges: number): void {
+    grantSpecial(player, charges);
+    player.hasSpecial = false;
+  }
+
+  it('ぞう：危ないマスに立っていても、印が無ければ突進のボタンを押さない（原型 L1946。印があれば押す）', () => {
+    const pressed = (mark: boolean): boolean => {
+      const scene = duel('elephant', { col: 3, row: 7 }, { col: 19, row: 13 });
+      if (mark) grantSpecial(scene.me, 2);
+      else returnedFromLane(scene.me, 2);
+      scene.me.facing = 'right';
+      scene.foe.maxBombs = 5;
+      placeBombAt(scene.world, scene.foe, { col: 3, row: 7 });
+      return scene.source.next(scene.world).special;
+    };
+    expect(pressed(true)).toBe(true);
+    expect(pressed(false)).toBe(false);
+  });
+
+  it('もぐら：相手が歩いて来られる空いたマスでも、印が無ければ掘らない（原型 L1926。印があれば掘る）', () => {
+    const pressed = (mark: boolean): boolean => {
+      const scene = duel('mole', { col: 5, row: 7 }, { col: 11, row: 7 });
+      if (mark) grantSpecial(scene.me, 2);
+      else returnedFromLane(scene.me, 2);
+      return scene.source.next(scene.world).special;
+    };
+    expect(pressed(true)).toBe(true);
+    expect(pressed(false)).toBe(false);
+  });
+
+  for (const [animal, distance, line] of [
+    ['rabbit', 5, 'L2059'],
+    ['frog', 8, 'L2054'],
+    ['fox', 6, 'L2046'],
+  ] as const) {
+    it(`${animal}：相手まで歩いて ${distance} マスでも、印が無ければとくぎのボタンを押さない（原型 ${line}。印があれば押す）`, () => {
+      const pressed = (mark: boolean): boolean => {
+        const scene = duel(animal, { col: 1, row: 7 }, { col: 1 + distance, row: 7 });
+        if (mark) grantSpecial(scene.me, 2);
+        else returnedFromLane(scene.me, 2);
+        return scene.source.next(scene.world).special;
+      };
+      expect(pressed(true)).toBe(true);
+      expect(pressed(false)).toBe(false);
+    });
+  }
+
+  it('かえる：回数が残っていても印が無ければ、正面のアイテムへ舌を伸ばす（原型 L1931 の `!p.chicken`。印があれば伸ばさない）', () => {
+    const tongue = (mark: boolean): boolean => {
+      const scene = duel('frog', { col: 1, row: 1 }, { col: 19, row: 13 });
+      scene.world.items = [{ id: scene.world.ids.take(), cell: { col: 3, row: 1 }, kind: 'fire' }];
+      scene.me.facing = 'right';
+      if (mark) grantSpecial(scene.me, 2);
+      else returnedFromLane(scene.me, 2);
+      return scene.source.next(scene.world).action;
+    };
+    expect(tongue(true)).toBe(false);
+    expect(tongue(false)).toBe(true);
+  });
+});
+
 describe('きつね：爆弾を置くときは一列に並べる（原型 cpuUpdate の foxLineShot）', () => {
   it('前が空いていれば技のボタン（一列）を押す。この tick に歩く向きに並ぶ', () => {
     // 射線に相手がいて、すぐ置きたい場面。右へ一列（手持ち 2）。

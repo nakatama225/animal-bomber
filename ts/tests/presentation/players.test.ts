@@ -163,6 +163,23 @@ describe('とくぎの溜めのゲージ', () => {
     expect(gauge(during(true))).toBe(gauge(during(false)));
     expect(gauge(during(true))).toBeGreaterThan(0);
   });
+
+  it('回数が残っていても、持っている印が外れていればゲージを出さない（原型 L4823 は p.chicken で見る）', () => {
+    // 外周から戻ると回数だけが残る（原型の toNegibon L2255 は chicken だけを消す）。そのとくぎは出せない。
+    const holding = (mark: boolean): Case => ({
+      name: mark ? '印あり' : '回数だけ',
+      setup: (_w, p) => {
+        grantSpecial(p, 2);
+        p.hasSpecial = mark;
+        p.actionHeld = tick(10);
+        p.actionFired = false;
+      },
+    });
+    const rects = (c: Case): number => drawOnce('elephant', 'down', false, c).calls.get('fillRect') ?? 0;
+    const none = rects({ name: '押していない', setup: () => undefined });
+    expect(rects(holding(true))).toBeGreaterThan(none);
+    expect(rects(holding(false))).toBe(none);
+  });
 });
 
 describe('頭の登録表', () => {
@@ -189,6 +206,16 @@ describe('足元の絵文字', () => {
     grantSpecial(player, 1);
     player.effects.add('slow', tick(60), tick(120));
     expect(statusIcons(player, '👅')).toEqual(['🟢', '👅', '🐌']);
+  });
+
+  it('回数が残っていても、持っている印が外れていればとくぎの絵文字を出さない（原型 L4813 は p.chicken で見る）', () => {
+    // 外周から戻ると回数だけが残る（原型の toNegibon L2255 は chicken だけを消す）。対照は上の並びの確認。
+    const world = makeWorld(7, ['frog']);
+    const player = world.players[0]!;
+    grantSpecial(player, 2);
+    player.hasSpecial = false;
+    player.effects.add('slow', tick(60), tick(120));
+    expect(statusIcons(player, '👅')).toEqual(['👅', '🐌']);
   });
 });
 

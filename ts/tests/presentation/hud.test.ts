@@ -141,6 +141,17 @@ describe('名札の中身', () => {
     expect(second).toMatchObject({ state: 'out', condition: '💀 退場', stars: '☆☆☆' });
   });
 
+  it('外周から戻って回数だけが残っている（持っている印が外れている）ときは、とくぎを出さない（原型の名札 L5512 は p.chicken で見る）', () => {
+    // 原型の toNegibon（L2255）は chicken だけを消し、回数は残す。残った回数は使えないので、名札にも出ない。
+    // 対照は上の「勝ち星・…」（印があれば「×2」まで出る）。
+    const session = game();
+    const rabbit = session.world.players[0]!;
+    grantSpecial(rabbit, 2);
+    rabbit.hasSpecial = false;
+    rabbit.effects.add('slow', tick(60), tick(600));
+    expect(describePlayers(hudOf(session))[0]?.effects).toEqual(['🐌超スロー']);
+  });
+
   it('焼けた舌は、いま伸ばせる長さと次に戻るまでの秒数を出す（原型の名札と同じ形）', () => {
     // 盤面には描くものが無いので、名札に出さないと短くなったことが分からない。
     const session = new GameSession(defaultMatchConfig(5, ['frog', 'elephant']));

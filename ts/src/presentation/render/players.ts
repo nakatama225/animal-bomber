@@ -120,9 +120,12 @@ function drawFootprint(
  * 出た後も押し続けると、押している長さは伸び続ける。そのままでは満タンの
  * ゲージが残るので、この押し方のとくぎを出し終えたら（`actionFired`）消す（原型と同じ）。
  * ラウンドの始まりに押していた押し方も、出し終えた扱いなので描かない。
+ *
+ * とくぎを持っているかは印（`hasSpecial`）で見る。原型の L4823 と同じく、回数が残っていても印が外れていれば
+ * （外周から戻ったとき）とくぎは出ないので描かない。
  */
 function drawHoldGauge(g: CanvasRenderingContext2D, tile: number, player: PlayerState, x: number, y: number): void {
-  if (player.specialCharges <= 0 || player.actionHeld <= 0 || player.actionFired) return;
+  if (!player.hasSpecial || player.actionHeld <= 0 || player.actionFired) return;
   const hold = abilityOf(player.animal).holdTicks;
   const k = Math.min(1, player.actionHeld / hold);
   const width = tile * 0.62;

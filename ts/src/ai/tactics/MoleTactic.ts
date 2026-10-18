@@ -25,7 +25,7 @@ export const MOLE_TACTIC: AnimalTactic = {
     button: 'special',
     endsTurn: true,
     when(ctx) {
-      if (ctx.me.specialCharges <= 0 || ctx.inDanger) return false;
+      if (!ctx.me.hasSpecial || ctx.inDanger) return false;
       const alreadyDug = ctx.world.actors.some(
         (actor) => actor instanceof PitActor && sameCell(actor.cell, ctx.here),
       );
