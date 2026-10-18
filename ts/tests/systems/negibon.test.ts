@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { ActiveAction } from '../../src/domain/abilities/ActiveAction.js';
 import { centerOf, cellOf, DIRECTIONS, type Cell, type Direction } from '../../src/domain/core/Coord.js';
-import { tick } from '../../src/domain/core/Tick.js';
+import { secondsToTicks, tick } from '../../src/domain/core/Tick.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
 import type { PlayerInput } from '../../src/domain/input/PlayerInput.js';
 import { placeBombAt } from '../../src/domain/mutations/bombs.js';
@@ -311,14 +311,29 @@ describe('葱が飛ぶ', () => {
   });
 });
 
+/**
+ * 3:00 の設定。原型は 180 秒から update ごとに 1/60 を引き（L4288）、7200 回目の update で残りが 60 秒を切る
+ * （59.99999999996）。この版の step は `now` が n のとき原型の n+1 回目の update に当たるので、境目は now=7199 の step。
+ */
+const THREE_MINUTES = secondsToTicks(180);
+const LAST_OPEN_STEP = tick(7198);
+const CLOSING_STEP = tick(7199);
+
+/** その場に長く残る爆風を1マスに置く（倒すため）。 */
+function blastOn(world: WorldState, cell: Cell): void {
+  world.blasts.push({ id: world.ids.take(), cell, owner: 1, isCenter: true, remaining: tick(1000) });
+}
+
 describe('外周が閉じる', () => {
-  it('残りが閉じる時刻を切ったら、外周の全員が退場して、飛んでいる葱も消える', () => {
+  it('残りが閉じる時刻を切ったら、その tick の最後に外周の全員が退場して、飛んでいる葱も消える（原型 3:00 は 7200 回目の update の最後）', () => {
+    // 原型は update の最後の checkEnd の頭（L4405 → L4411 → L2359-2362）で閉じる。
     const world = makeWorld(3, ['rabbit', 'elephant', 'mole']);
     const sim = new Simulation();
     onLane(world.players[0]!, 5);
     onLane(world.players[2]!, 40);
     world.actors.push(new LeekActor({ x: 5.5, y: 0.5 }, 'down', 0));
-    world.endsAt = tick(world.now + NEGIBON_CUTOFF + 1);
+    world.endsAt = THREE_MINUTES;
+    world.now = LAST_OPEN_STEP;
 
     expect(stepWith(world, sim, press({})).some((e) => e.type === 'lanesClosed')).toBe(false);
     const closed = stepWith(world, sim, press({}));
@@ -328,6 +343,64 @@ describe('外周が閉じる', () => {
     expect(world.actors.some((a) => a instanceof LeekActor)).toBe(false);
     // 2度目は出ない。
     expect(stepWith(world, sim, press({})).some((e) => e.type === 'lanesClosed')).toBe(false);
+  });
+
+  it('3:00 の境目の tick（now=7199 の step）に倒れたプレイヤーは外周へ回らず退場し、外周にほかにだれもいなければ lanesClosed が出ない', () => {
+    // 原型の 7200 回目の update：倒れたプレイヤーの行き先（kill の L1700 → L2364）は、引いたあとの残り
+    // 59.99999999996 で見るので退場。update の最後の negibonCutoff（L2362）は、外周にだれもいなければ何もしない。
+    const world = makeWorld(3, ['rabbit', 'elephant']);
+    clearBoard(world);
+    world.endsAt = THREE_MINUTES;
+    world.now = CLOSING_STEP;
+    const player = world.players[0]!;
+    player.hp = 2;
+    blastOn(world, cellOf(player.position));
+
+    const events = stepWith(world, new Simulation(), press({}));
+    expect(events).toContainEqual(expect.objectContaining({ type: 'playerDown', target: 0 }));
+    expect(player.life).toBe(OUT);
+    expect(events.some((e) => e.type === 'lanesClosed')).toBe(false);
+  });
+
+  it('その1つ前の tick（now=7198 の step）に倒れたプレイヤーは外周へ回り、次の tick の最後に退場する', () => {
+    // 原型の 7199 回目の update は残り 60.0166… なので外周へ回り、7200 回目の update の最後に閉じる。
+    const world = makeWorld(3, ['rabbit', 'elephant']);
+    clearBoard(world);
+    world.endsAt = THREE_MINUTES;
+    world.now = LAST_OPEN_STEP;
+    const player = world.players[0]!;
+    player.hp = 2;
+    blastOn(world, cellOf(player.position));
+    const sim = new Simulation();
+
+    stepWith(world, sim, press({}));
+    expect(player.life.kind).toBe('negibon');
+    expect(stepWith(world, sim, press({}))).toContainEqual({ type: 'lanesClosed', players: [0] });
+    expect(player.life).toBe(OUT);
+  });
+
+  it('閉じる tick の中でも、外周のプレイヤーは動いて撃ち、飛んでいる葱は当たって入れ替わる。当たった相手はその tick の最後に退場する', () => {
+    // 原型の入力の輪（L4333-4338。外周のプレイヤーが動いて撃つ）と葱（L4346 → negiHit L2337-2349）は、
+    // 外周を閉じる checkEnd（L4405）より前に回る。negiHit は時刻を見ない。
+    const world = makeWorld(3, ['rabbit', 'elephant', 'mole']);
+    clearBoard(world);
+    world.endsAt = THREE_MINUTES;
+    world.now = CLOSING_STEP;
+    const [shooter, target, thrower] = world.players as [PlayerState, PlayerState, PlayerState];
+    onLane(shooter, topAlongFor(9));
+    onLane(thrower, topAlongFor(11));
+    target.position = centerOf({ col: 5, row: 3 });
+    // 次の tick に1歩進むと、相手の当たり枠（0.28）に入る葱。
+    world.actors.push(new LeekActor({ x: 5.5, y: 3.2 }, 'down', shooter.id));
+
+    const events = stepWith(world, new Simulation(), press({ bomb: true }), thrower.id);
+    expect(events).toContainEqual(expect.objectContaining({ type: 'leekThrown', player: thrower.id }));
+    expect(events).toContainEqual(expect.objectContaining({ type: 'revived', player: shooter.id, replaced: target.id }));
+    expect(events).toContainEqual({ type: 'lanesClosed', players: [target.id, thrower.id] });
+    expect(isAlive(shooter)).toBe(true);
+    expect(target.life).toBe(OUT);
+    expect(thrower.life).toBe(OUT);
+    expect(world.actors.some((a) => a instanceof LeekActor)).toBe(false);
   });
 });
 

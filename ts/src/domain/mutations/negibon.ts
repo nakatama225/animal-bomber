@@ -13,13 +13,22 @@ import type { PlayerState } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 
 /**
- * 倒れた人がまだ外周へ回れるか。残り時間が短くなると、外周は閉じる。
+ * 倒れたプレイヤーがまだ外周へ回れるか。残り時間が短くなると、外周は閉じる。1 tick を進める処理（`step`）の中で呼ぶ。
+ *
+ * 残りは、この tick のぶんを引いたあとの値（`endsAt − (now + 1)`）で見る。原型の L4288 と同じ形にするため。
+ * 原型は update の頭（L4288）で残り時間 G.time から1フレームぶんを先に引き、倒れたプレイヤーの行き先（kill の L1700 →
+ * negibonAvailable の L2364）も、外周を閉じるか（update の最後の checkEnd の L4411 → negibonCutoff の L2359）も、
+ * 引いたあとの値で比べる。`now` を進めるのは step の最後なので、step の中の `now` で数えると1 tick 多く残っている
+ * ことになり、3:00 なら残り60秒ちょうどの tick（now=7199）に倒れたプレイヤーが外周へ回ってしまう（原型はその場で退場）。
+ *
+ * ⚠️ 7:00 の設定だけは、原型が外周を閉じるのが1 tick 遅い（21601 回目の update）。1/60 を小数で引き続けた
+ * 誤差で、実数で数えれば 21600 回目になる。この版は実数の数え方のまま。
  *
  * ⚠️ 残り時間は設定の制限時間ではなく `world.endsAt` から数える。延長戦に入ると
  * 残りは延長戦の長さちょうどになり、外周は開かない。
  */
 export function lanesOpen(world: Readonly<WorldState>): boolean {
-  return world.endsAt - world.now > NEGIBON_CUTOFF;
+  return world.endsAt - (world.now + 1) > NEGIBON_CUTOFF;
 }
 
 /**
