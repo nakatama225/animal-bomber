@@ -26,6 +26,7 @@ for kind in ("square", "glow"):
         def __init__(self, size):
             super().__init__(size)
             self.alpha_blits = self.faded_blits = self.shaken_boards = 0
+            self.spinner_blits = 0
         def blit(self, source, dest, area=None, special_flags=0):
             if source.get_masks()[3]:
                 self.alpha_blits += 1
@@ -33,21 +34,26 @@ for kind in ("square", "glow"):
                 if alpha is not None and alpha < 255:
                     self.faded_blits += 1
             board = source.get_width() > self.get_width() // 2
-            if board and special_flags == pygame.BLEND_PREMULTIPLIED:
-                self.shaken_boards += 1
+            if special_flags == pygame.BLEND_PREMULTIPLIED:
+                if board:
+                    self.shaken_boards += 1
+                else:
+                    self.spinner_blits += 1
             return super().blit(source, dest, area, special_flags)
     scene = MatchScene(spec, random.Random(1))
     built = scene.renders
     frames = []
     shaken = []
+    spinners = []
     for frame in range(40):
         target = Counting(spec.size)
         scene.draw(target, frame)
         frames.append([target.alpha_blits, target.faded_blits])
         shaken.append(target.shaken_boards)
+        spinners.append(target.spinner_blits)
     out[kind] = {{"frames": frames, "drawn": scene.renders - built,
                   "counts": scene.counts, "phases": scene.blast_phases,
-                  "shaken": shaken}}
+                  "shaken": shaken, "spinners": spinners}}
 print(json.dumps(out))
 """
 
@@ -67,7 +73,10 @@ def test_場面は_取っておいた絵を薄めずに貼り_測る間に絵を
       20 個は2枚か7枚ずつ・爆弾 8 個は4〜6枚ずつ・プレイヤー 4 体（接地影と輪・体・印の
       3枚に、かえるは舌の根元と吸盤の2枚以上、もぐらは掘る身ぶりの穴・土の山2つ・
       つるはし・ゲージ2枚の6枚以上、きつねはゲージ2枚）・粘膜爆弾1枚以上・炎（火の玉と
-      芯と跡）・粒子 105 個と顔 4 個
+      芯と跡）・粒子 105 個（四角い粒の行）
+    - 回りながら浮かぶ顔 4 個を、どのフレームにも貼っている。顔は、色に不透明度を掛けた
+      形で貼った小さい絵（幅が描く先の半分以下）の数で数える（ほかに同じ形で貼るのは、
+      揺れている間の盤面の1枚だけ）。上の下限は余りが大きく、顔が消えても下回らない
     """
     completed = subprocess.run(
         [sys.executable, "-c", COUNTING],
@@ -94,6 +103,7 @@ def test_場面は_取っておいた絵を薄めずに貼り_測る間に絵を
             4,
         ]
         assert (counts["players"], counts["bombs"], counts["items"]) == (4, 8, 20)
+        assert result["spinners"] == [counts["spinners"]] * len(result["spinners"])
         fire = 2 + counts["trail"]
         least = 297 * 2 + 20 * 2 + 8 * 4 + players + 1 + fire
         least += 105 if kind == "square" else 0

@@ -5,9 +5,10 @@
 測定は開発のたびには走らせないので、壊れていても気づきにくい。
 
 どれも別のプロセスで走らせる（このプロセスで pygame の画面を初期化しないため。
-`runner.py`）。ほとんどは小さな場面を数フレームだけ描く。判定に使う行を確かめる
-ものだけは、マス 60 を描く（試合の前に絵を描いておくので、1行に数秒かかる）。測る範囲と
-列の値は `test_bench_measure.py`、描き方の数は `test_bench_match_scene.py` が確かめる。
+`runner.py`）。ほとんどは小さな場面を数フレームだけ描く。判定に使う行を確かめるものは、
+マス 60 を描く。試合の前に絵を描いておく所は飛ばす（`runner.py` の `SKIP_PREBUILD`）が、
+絵を出たときに描くので1本 3 秒ほどかかる。測る範囲と列の値は `test_bench_measure.py`、
+描き方の数は `test_bench_match_scene.py` が確かめる。
 """
 
 import os
@@ -23,7 +24,7 @@ class TestBenchRender:
 
         場面が持っている数（描くはずの数）も見る。数を減らして場面を軽くしても、
         時間の値だけを見ていると気づけない。実際に描いた回数は JSON に出ないので、
-        `test_bench_scene.py` が描く先の面で数える。
+        `test_bench_match_scene.py` が描く先の面で数える。
         """
         report = report_of(run_bench("--tiles", "26", "--kinds", "glow"))
         assert report["driver"] == "dummy"

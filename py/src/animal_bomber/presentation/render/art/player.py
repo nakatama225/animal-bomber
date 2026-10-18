@@ -137,6 +137,12 @@ def gauge_progress(look: PlayerLook) -> float | None:
     """とくぎの長押しのゲージの溜まり（0〜1）。出さないなら None。
 
     とくぎを溜めてあって、押していて、まだ出し終えていないときだけ出す（原型の条件）。
+
+    ⚠️ CPU が技のボタンを押した tick にもゲージが1フレーム出る（チキンを持ったまま、
+    爆弾を一列に置く技を出したときなど）。原型の CPU は技を直に呼び、actHold を増やさ
+    ないので出ない。いまの Python 版は CPU を窓に出さない。CPU を窓に出す段階 10 で、
+    CPU のプレイヤーにはゲージを出さない形にする（docs/08 の「原型と違うまま残した
+    所」）。
     """
     if not look.special or look.held <= 0 or look.fired:
         return None

@@ -27,6 +27,7 @@ from animal_bomber.domain.events import (
     BurntOff,
     EffectApplied,
     Exploded,
+    ExplosionCause,
     ItemTaken,
     SimEvent,
     TechniqueMoment,
@@ -128,6 +129,26 @@ class Test粘膜爆弾が跳ね終わったとき:
         assert all(world.board.at(cell) is Tile.SOFT for cell in around)
         assert world.bombs == []
         assert len([e for e in events if isinstance(e, Exploded)]) == 1
+
+    def test_爆風だけなら爆風だけの爆発と知らせ_降りて起こせば導火線の爆発と同じ(
+        self,
+    ) -> None:
+        """原型の降りられない枝は shake を呼ばない。降りた爆弾は導火線 0 として起こす。
+
+        描く側が画面の揺れを決めるのに使う（`render/scene/effects.py`）。
+        """
+        world, _, _ = arena()
+        for d_col, d_row in NEIGHBOURS:
+            world.board.put(Cell(8 + d_col, 8 + d_row), Tile.SOFT)
+        boxed = run_until_done(world, SlimeBomb(cell=Cell(8, 8), owner=0, hops_left=1))
+        assert [e.cause for e in boxed if isinstance(e, Exploded)] == [
+            ExplosionCause.BLAST_ONLY
+        ]
+        world, _, _ = arena()
+        landed = run_until_done(world, SlimeBomb(cell=Cell(8, 6), owner=0, hops_left=1))
+        assert [e.cause for e in landed if isinstance(e, Exploded)] == [
+            ExplosionCause.FUSE
+        ]
 
     def test_本物の爆弾を出したままでも爆発し_その爆弾と手持ちの数は変わらない(
         self,

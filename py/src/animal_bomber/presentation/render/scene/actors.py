@@ -20,14 +20,20 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, assert_never
 
 from animal_bomber.domain.abilities.frog import SLIME_FLY_TICKS
 from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import PlayerDown, SimEvent
 from animal_bomber.domain.query.board import player_by_id
-from animal_bomber.domain.state.actors import Foxfire, SlimeBomb
+from animal_bomber.domain.state.actors import (
+    BurntTongue,
+    Foxfire,
+    Pit,
+    Scatter,
+    SlimeBomb,
+)
 from animal_bomber.domain.state.player import Life
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.presentation.render.art.foxfires import TrailMark
@@ -107,35 +113,50 @@ class ActorTracker:
         trails: list[_Trail] = []
         for actor in world.actors:
             seen = None if before is None else before.actor(actor)
-            if isinstance(actor, SlimeBomb):
-                slimes.append(self._advance_slime(world, actor, seen is not None))
-                if seen is not None:
-                    landed = seen.flown >= SLIME_FLY_TICKS
-                    if landed and actor.timer > seen.timer:
-                        slimes[-1].hopped = True
-            elif isinstance(actor, Foxfire):
-                marks = [
-                    mark
-                    for mark in self._marks(actor)
-                    if world.now - mark.born < TRAIL_TICKS
-                ]
-                if seen is not None and seen.cell is not None:
-                    moved = actor.cell != seen.cell
-                    stayed = _foe_on(world, actor, downed)
-                    if actor.steps > seen.steps and (moved or stayed):
-                        marks.append(_Mark(seen.cell, world.now))
-                trails.append(_Trail(actor, marks))
+            match actor:
+                case SlimeBomb():
+                    slimes.append(self._advance_slime(world, actor, seen is not None))
+                    if seen is not None:
+                        landed = seen.flown >= SLIME_FLY_TICKS
+                        if landed and actor.timer > seen.timer:
+                            slimes[-1].hopped = True
+                case Foxfire():
+                    marks = [
+                        mark
+                        for mark in self._marks(actor)
+                        if world.now - mark.born < TRAIL_TICKS
+                    ]
+                    if seen is not None and seen.cell is not None:
+                        moved = actor.cell != seen.cell
+                        stayed = _foe_on(world, actor, downed)
+                        if actor.steps > seen.steps and (moved or stayed):
+                            marks.append(_Mark(seen.cell, world.now))
+                    trails.append(_Trail(actor, marks))
+                case Pit() | Scatter() | BurntTongue():
+                    # 原型も、これらには見た目だけの値を持たせない（描かない。
+                    # `renderer.py`）。種類を足したら、数える値があるかをここで決める。
+                    pass
+                case _:
+                    assert_never(actor)
         self._slimes, self._trails = slimes, trails
         if before is None:
             return []
-        current = world.actors
-        return [
-            seen.cell
-            for seen in before.actors
-            if isinstance(seen.actor, Foxfire)
-            and seen.cell is not None
-            and not any(seen.actor is actor for actor in current)
-        ]
+        burned_out: list[Cell] = []
+        for seen in before.actors:
+            if any(seen.actor is actor for actor in world.actors):
+                continue
+            match seen.actor:
+                case Foxfire():
+                    # 寿命で消えた炎には煙を出す（原型の updateFoxfires の puff）。
+                    if seen.cell is not None:
+                        burned_out.append(seen.cell)
+                case SlimeBomb() | Pit() | Scatter() | BurntTongue():
+                    # 原型も、消えたことでは煙を出さない（粘膜爆弾は爆発のイベントで
+                    # 揺らし、落とし穴は落ちた状態のイベントで煙を出す。`effects.py`）。
+                    pass
+                case _:
+                    assert_never(seen.actor)
+        return burned_out
 
     def _advance_slime(
         self, world: WorldState, actor: SlimeBomb, known: bool

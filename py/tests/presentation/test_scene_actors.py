@@ -3,19 +3,29 @@
 炎の通った跡は、進もうとした回数（`steps`）が増えた tick に、炎が動いたか・相手のいる
 マスに留まったかで足すかを決める。粘膜爆弾を投げた位置は、初めて見た tick に決める。
 どれも、取り違えると原型（updateFoxfires・frogSlime）と違う絵になる場面を作り、試合を
-実際に進めて（`simulation.step`）確かめる。
+実際に進めて（`simulation.step`）確かめる。最後のクラスだけは、知らない種類の盤面の物を
+渡して、種類で分ける所が黙って飛ばさないことを見る。
 """
 
 from itertools import count
+from typing import cast
+
+import pytest
 
 from animal_bomber.domain.abilities.fox import steps_by
 from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import PlayerDown, SimEvent
 from animal_bomber.domain.rules.animals import Animal
-from animal_bomber.domain.state.actors import Foxfire, SlimeBomb
+from animal_bomber.domain.state.actors import Actor, Foxfire, SlimeBomb
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.player import Life
+from animal_bomber.presentation.render.scene.actors import ActorTracker
+from animal_bomber.presentation.render.scene.snapshot import (
+    ActorSnapshot,
+    Snapshot,
+    snapshot_of,
+)
 from tests.helpers import idle
 
 from .scene_helpers import arena, started, step
@@ -98,3 +108,39 @@ class Test粘膜爆弾:
             step(world, tracker, idle(world))
         assert world.players[0].position == Cell(1, 13).center()
         assert tracker.slime(slime) == ((7.5, 13.5), False)
+
+
+UNKNOWN = cast(Actor, object())
+"""型検査をすり抜けた、知らない種類の盤面の物。"""
+
+
+class Test知らない種類の盤面の物:
+    """盤面の物で分ける所は、知らない種類を黙って飛ばさない（`assert_never` が止める）。
+
+    種類を足したときの書き忘れは型検査（mypy）が見つける。ここでは、分ける所が種類を
+    拾い出す形（知らない種類を黙って飛ばす形）に戻っていないことを見る。
+    """
+
+    def test_控えを取る所で止まる(self) -> None:
+        world = arena((Animal.FROG, Animal.RABBIT))
+        world.actors.append(UNKNOWN)
+        with pytest.raises(AssertionError):
+            snapshot_of(world)
+
+    def test_数える所で止まる(self) -> None:
+        world = arena((Animal.FROG, Animal.RABBIT))
+        world.actors.append(UNKNOWN)
+        with pytest.raises(AssertionError):
+            ActorTracker().advance(world, [], None)
+
+    def test_前のtickにあって消えたものを見る所で止まる(self) -> None:
+        world = arena((Animal.FROG, Animal.RABBIT))
+        before = Snapshot(
+            world=world,
+            now=world.now,
+            players={},
+            items=(),
+            actors=(ActorSnapshot(UNKNOWN, None),),
+        )
+        with pytest.raises(AssertionError):
+            ActorTracker().advance(world, [], before)

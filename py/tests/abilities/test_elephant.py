@@ -12,6 +12,8 @@ from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import (
     BombDoused,
+    Exploded,
+    ExplosionCause,
     ItemDropped,
     ItemWashed,
     SimEvent,
@@ -165,6 +167,27 @@ class Test突進:
         advance(world, idle(world), 30)
         assert world.bombs == []
         assert player.position.x > before
+
+    def test_爆弾に突っ込んで起こした爆発は_体当たりで起こしたと知らせる(self) -> None:
+        """原型の updateCharge は、起こした爆弾に揺れ 7 を足す。
+
+        描く側が、揺れを足す爆発を見分けるのに使う（`render/scene/effects.py`）。
+        """
+        world = elephant_world()
+        player, other = world.players
+        player.position = Cell(1, 3).center()
+        player.facing = Direction.RIGHT
+        other.position = Cell(5, 3).center()
+        for col in (2, 3, 4, 5, 6, 7):
+            world.board.put(Cell(col, 3), Tile.EMPTY)
+        place_bomb(world, other)
+        trigger_charge(world)
+        events: list[SimEvent] = []
+        for _ in range(30):
+            events += simulation.step(world, idle(world))
+        assert [e.cause for e in events if isinstance(e, Exploded)] == [
+            ExplosionCause.RAMMED
+        ]
 
     def test_残り時間が尽きると終わる(self) -> None:
         world = arena((Animal.ELEPHANT, Animal.RABBIT))

@@ -4,7 +4,8 @@
 イベント（`SimEvent`）には、同じ種類で場面の違うものや、イベントの出ない場面がある。
 そこを、前後のイベント・進めたあとの盤面・前の tick の控え（`snapshot.py`）で見分ける。
 
-- 落ちたアイテム（`ItemDropped`）は4つの場面で出る。被弾して吐き出した（すぐ前が被弾）・
+- 落ちたアイテム（`ItemDropped`）は4つの場面で出る。被弾して吐き出した（すぐ前が被弾で、
+  強くなる系のアイテム）・
   とくぎで撒いた（そのマスのアイテムが撒かれたもの）・突進が止まって撒いた（すぐ前の
   並びが「撒き散らした」の知らせ）は煙を出し、壊れたブロックから出たものは出さない
   （原型の destroySoft も出さない）
@@ -37,6 +38,7 @@ from animal_bomber.domain.events import (
 )
 from animal_bomber.domain.query.board import item_at, player_by_id
 from animal_bomber.domain.rules.animals import Animal
+from animal_bomber.domain.rules.items import POWER_UP_KINDS
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.presentation.render.art.items import is_harmful, item_emoji
@@ -80,7 +82,10 @@ def dropped_color(
     """
     event = events[index]
     assert isinstance(event, ItemDropped)
-    if index > 0 and isinstance(events[index - 1], PlayerHurt):
+    # 吐き出すのは強くなる系だけ。吐き出す場所が無かった被弾のすぐあとに、撒く本体が
+    # 撒いたうんこが続くことがある（原型は、そのうんこに撒いたものの煙を出す）。
+    spat = event.kind in POWER_UP_KINDS
+    if spat and index > 0 and isinstance(events[index - 1], PlayerHurt):
         return GOOD_SMOKE
     landed = item_at(world, event.cell)
     if landed is not None and landed.scattered_by is not None:

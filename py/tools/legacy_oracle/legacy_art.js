@@ -95,10 +95,14 @@ for (const tile of TILES) {
   }
 }
 
-/* ---------- drawBlast ---------- */
+/* ---------- drawBlast ----------
+   原型の爆風の残り t は BLAST_DUR（0.46 秒）から始まり、update ごとに 1/60 秒ずつ引かれる。
+   Python 版は 0.46 秒を tick に切り上げた 28 tick から数えるので、残り left tick の爆風の
+   t は、出てから引いた tick の数（28 − left）を BLAST_DUR から引いたものになる。 */
+const BLAST_TICKS = Math.ceil(X.BLAST_DUR * 60);
 for (const tile of TILES) {
   for (const left of [28, 27, 20, 9, 1]) {
-    const bl = { x: 6, y: 7, t: left / 60, center: left % 2 === 0 };
+    const bl = { x: 6, y: 7, t: X.BLAST_DUR - (BLAST_TICKS - left) / 60, center: left % 2 === 0 };
     run('drawBlast', `left-${left}@${tile}`, { tile, elapsedTicks: 100, blast: { x: 6, y: 7, remainingTicks: left, center: bl.center } }, () => X.drawBlast(bl));
   }
 }
@@ -238,7 +242,8 @@ for (const tile of TILES) {
   X.players = [p0, p1, p2];
   X.items = [{ x: 4, y: 3, kind: 'fire', born: 0 }];
   X.bombs = [{ x: 5, y: 5, timer: 1.0 }];
-  X.blasts = [{ x: 6, y: 5, t: 0.3, center: true }];
+  // 残り 18 tick の爆風（t の出し方は上の drawBlast のケースと同じ）
+  X.blasts = [{ x: 6, y: 5, t: X.BLAST_DUR - (BLAST_TICKS - 18) / 60, center: true }];
   X.foxfires = []; X.slimes = []; X.negis = [];
   X.particles = [{ x: 4.3, y: 6.1, vx: 1, vy: -2, life: 0.4, col: '#ffd23f', sz: 5 }];
   X.G.paused = false;

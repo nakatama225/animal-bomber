@@ -353,6 +353,29 @@ class Test被弾:
             SoundName.SPIT,
         ]
 
+    def test_吐き出せなかった被弾のすぐあとの撒いたうんこには_吐き出す音を鳴らさない(
+        self,
+    ) -> None:
+        """吐き出すのは強くなる系だけ。うんこは吐き出したものではない。
+
+        うさぎが撒いている最中に炎が当たり、吐き出す 13 マスがどれも塞がっていて吐き
+        出せなかった tick。撒く本体（盤面の物の番で炎のあと）が同じ tick に輪を撒く。
+        原型は炎の当たる音（L2690）・被弾の音（L1667）・撒く輪の音（L2773）だけで、
+        spitPowerup は置けなければ音を鳴らさない（L1673-1693）。
+        """
+        events: list[SimEvent] = [
+            TechniqueMoment(player=1, moment=Moment.CHASER_HIT),
+            PlayerHurt(target=0, by=1, amount=2),
+            ItemDropped(cell=Cell(2, 1), kind=ItemKind.POOP),
+            ItemDropped(cell=Cell(1, 2), kind=ItemKind.POOP),
+            TechniqueMoment(player=0, moment=Moment.RING_SCATTERED),
+        ]
+        assert sounds_of(events, {0: Animal.RABBIT, 1: Animal.FOX}) == [
+            SoundName.FOXFIRE_HIT,
+            SoundName.HURT,
+            SoundName.POOP,
+        ]
+
     def test_体当たりは_押しつけた状態の音_体当たりの音_被弾の音(self) -> None:
         """原型の updateCharge（L2874-2882）に合わせる。
 

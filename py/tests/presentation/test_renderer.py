@@ -12,8 +12,10 @@
 """
 
 from collections.abc import Iterator
+from typing import cast
 
 import numpy as np
+import pygame
 import pytest
 
 from animal_bomber.domain.core.coord import Cell, Direction, Point
@@ -21,15 +23,15 @@ from animal_bomber.domain.core.entity_id import EntityId
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
-from animal_bomber.domain.rules.tuning import BLAST_DURATION
 from animal_bomber.domain.state.actions import Dig, Tongue
-from animal_bomber.domain.state.actors import Foxfire, SlimeBomb
+from animal_bomber.domain.state.actors import Actor, Foxfire, SlimeBomb
 from animal_bomber.domain.state.bomb import Blast, Bomb
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
 from animal_bomber.domain.state.match import MatchState
 from animal_bomber.domain.state.player import Life
 from animal_bomber.domain.state.world import WorldState, create_world, hash_world
+from animal_bomber.presentation.render.art.blasts import progress_of
 from animal_bomber.presentation.render.art.foxfires import TrailMark
 from animal_bomber.presentation.render.art.particles import ParticleLook
 from animal_bomber.presentation.render.art.player import is_blinking_off
@@ -43,6 +45,7 @@ from animal_bomber.presentation.render.baked import (
 from animal_bomber.presentation.render.baked.art import BakedArt
 from animal_bomber.presentation.render.band import BAND_HEIGHT
 from animal_bomber.presentation.render.layout import Layout
+from animal_bomber.presentation.render.renderer import Renderer
 from animal_bomber.presentation.render.views.player import (
     TrackedMotion,
     invulnerable_left,
@@ -84,10 +87,10 @@ def fine_levels(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 def flicker_random(remaining: int) -> float:
     """爆風のちらつく芯の一辺が、描く面の画素（0.5px）にちょうど乗る見た目の乱数。
 
-    芯の一辺はマス ×（0.16 ＋ 0.2 × 乱数）× 残りの割合。取っておく絵は一辺を 0.5px に
-    丸めるので、丸めのずれが出ない値を選ぶ。
+    芯の一辺はマス ×（0.16 ＋ 0.2 × 乱数）× 残りの割合（`progress_of`）。取っておく絵は
+    一辺を 0.5px に丸めるので、丸めのずれが出ない値を選ぶ。
     """
-    k = remaining / BLAST_DURATION
+    k = progress_of(remaining)
     side = round(LAYOUT.tile * 0.26 * k * 2) / 2
     return (side / (LAYOUT.tile * k) - 0.16) / 0.2
 
@@ -234,6 +237,21 @@ class Test手本と同じ絵:
             frames.append(got)
         assert np.abs(frames[0] - frames[1]).max() > 64
 
+    def test_揺れのずれは_いちばん近い整数のpxに丸めて貼る(self) -> None:
+        """揺れ 8px で、横の乱数 0.575（ずれ +0.6px）・縦の乱数 0.175（ずれ −2.6px）。
+
+        取っておいた絵は、手本を横 +1px・縦 −3px（乱数 0.625・0.125）ずらした絵と同じに
+        なる（丸めのずれは 0.5px まで）。切り捨てると横が 0px になり、盤面全体が 1px
+        ずれて差の幅を超える。
+        """
+        world, visuals, randoms = ordinary()
+        assert visuals.shake == 8.0
+        tail = randoms[2:]
+        art = BakedArt(LAYOUT)
+        got, _ = renderer_image(art, world, visuals, [0.575, 0.175, *tail])
+        wanted, _ = direct_image(LAYOUT, world, visuals, [0.625, 0.125, *tail])
+        assert_same_frame(got, wanted, FADED)
+
     def test_揺れが小さければ_揺れの乱数を引かない(self) -> None:
         world, visuals, randoms = ordinary()
         visuals.shake = 0.2
@@ -290,6 +308,22 @@ def test_プレイヤーは_一覧の順でなく上にいる順に重ねる() -
     got, _ = renderer_image(BakedArt(LAYOUT), world, visuals, [])
     wanted, _ = direct_image(LAYOUT, world, visuals, [])
     assert_same_frame(got, wanted, FADED)
+
+
+def test_知らない種類の盤面の物が来たら止まる() -> None:
+    """盤面の物を描く輪は、知らない種類を黙って飛ばさない（`assert_never` が止める）。
+
+    種類を足したときの描き忘れは型検査（mypy）が見つける。ここでは、輪が種類を拾い出す
+    形（知らない種類を描かずに飛ばす形）に戻っていないことを見る。
+    """
+    layout = Layout(26)
+    world = create_world(5, (Animal.RABBIT, Animal.ELEPHANT))
+    for player in world.players:
+        player.life = Life.DEAD
+    world.actors = [cast(Actor, object())]
+    target = pygame.Surface(layout.surface_size)
+    with pytest.raises(AssertionError):
+        Renderer(BakedArt(layout)).draw(target, world, MatchState(), FixedVisuals())
 
 
 @pytest.mark.parametrize("tile", [26, 44, 60])

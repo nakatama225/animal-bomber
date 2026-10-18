@@ -2,18 +2,20 @@
 
 原型は、粒子を出す・画面を揺らす所を、ルールの処理の中から直接呼んでいた。この版は、
 1 tick ぶんのイベントを起きた順に見て、同じ場面で同じものを出す。イベント1つでは場面が
-決まらない所は、前後のイベントか盤面を見て決める（`clues.py`）。ほかに2つ、イベントの
-並びと原型の順が違う所がある。
+決まらない所は、前後のイベントか盤面を見て決める（`clues.py`）。
 
-- 突進が爆弾に当たって起こした爆発（原型は揺れ 7 を足す）は、前の tick に導火線が残って
-  いた爆弾のマスで起きた爆発で見分ける（導火線で爆発する爆弾は、前の tick の残りが 1）
-- 鼻水は、原型ではマスごとに「消した爆弾の煙 → 水しぶき」の順に出す。この版の
-  イベントは、消した爆弾が全部先に来て、届いたマスの一覧（`Sprayed`）があとに来るので、
-  消した爆弾の煙を `Sprayed` まで待たせ、マスごとに並べ直す
+爆発の揺れは、爆発を何が起こしたか（`Exploded.cause`）だけで決める（`exploded_shake`）。
+前の tick の導火線の残りで見分けると、導火線の残りが 1 の爆弾に突進が当たったとき
+（原型は揺れ 7）と、同じ tick に鼻水で爆弾を消したマスに粘膜爆弾が降りて爆ぜたとき
+（原型は 4.6）を取り違えるため。
+
+鼻水は、原型ではマスごとに「消した爆弾の煙 → 水しぶき」の順に出す。この版のイベントは、
+消した爆弾が全部先に来て、届いたマスの一覧（`Sprayed`）があとに来るので、消した爆弾の
+煙を `Sprayed` まで待たせ、マスごとに並べ直す（イベントの並びと原型の順が違う所）。
 
 揺れは足さずに大きいほうを取る（原型の shake）。壊れたブロックには、爆発で壊れたものにも
-揺れ 4 を足す（原型が揺れ 4 を足すのは突進で壊したときだけだが、爆発の揺れはいつも
-4.6 以上なので、足しても同じになる）。
+揺れ 4 を足す（原型が揺れ 4 を足すのは突進で壊したときだけだが、ブロックを壊す爆発の
+揺れはいつも 4.6 以上なので、足しても同じになる）。
 
 ⚠️ 突進が抱えた悪いアイテムの煙は、原型では突進を進める所（その tick の初めのほう）で
 出るが、ここではその tick の粒子の最後に足す（イベントが無く、どこに並べるか分からない
@@ -31,6 +33,7 @@ from animal_bomber.domain.events import (
     BurntOff,
     EffectApplied,
     Exploded,
+    ExplosionCause,
     ItemBlown,
     ItemBurned,
     ItemDropped,
@@ -93,12 +96,36 @@ BLOCK_SHAKE: Final = 4.0
 """突進でブロックを壊したときの画面の揺れ（px。原型の updateCharge）。"""
 
 RAM_BOMB_SHAKE: Final = 7.0
-"""突進が爆弾に当たって起こしたときに足す揺れ（px。原型の updateCharge）。"""
+"""突進が爆弾に当たって起こしたときの揺れ（px。原型の updateCharge）。
+
+連鎖の揺れとの大きいほうを取る（`exploded_shake`）。
+"""
 
 
 def explosion_shake(count: int) -> float:
     """連鎖1つの画面の揺れ（px。原型の min(10, 3 + 連鎖の数 × 1.6)）。"""
     return min(10, 3 + count * 1.6)
+
+
+def exploded_shake(count: int, cause: ExplosionCause) -> float:
+    """爆発1件の画面の揺れ（px）。爆発を何が起こしたかで決める。
+
+    - 導火線（連鎖も、跳ね回る爆弾が降りて起こした爆弾も）：連鎖の揺れ（原型の
+      explodeChain）
+    - 体当たり：連鎖の揺れと 7 の大きいほう（原型の updateCharge は、起こした爆弾の
+      導火線の残りによらず explodeChain のあとに shake(7) を呼ぶ）
+    - 爆弾なしで爆風だけ：揺らさない（原型の slimeBurst の降りられない枝は、爆風と
+      爆発の音だけで shake を呼ばない）
+    """
+    match cause:
+        case ExplosionCause.FUSE:
+            return explosion_shake(count)
+        case ExplosionCause.RAMMED:
+            return max(explosion_shake(count), RAM_BOMB_SHAKE)
+        case ExplosionCause.BLAST_ONLY:
+            return 0.0
+        case _:
+            assert_never(cause)
 
 
 class EffectField:
@@ -134,10 +161,8 @@ class EffectField:
         swept: list[PlayerId] = []
         for index, event in enumerate(events):
             match event:
-                case Exploded(cell=cell, count=count):
-                    self._shake(explosion_shake(count))
-                    if before is not None and before.bombs.get(cell, 0) > 1:
-                        self._shake(RAM_BOMB_SHAKE)
+                case Exploded(count=count, cause=cause):
+                    self._shake(exploded_shake(count, cause))
                 case BlockDestroyed(cell=cell):
                     self.particles += debris(cell, self._rng)
                     self._shake(BLOCK_SHAKE)

@@ -60,6 +60,7 @@ from .baked_helpers import (
     Image,
     baked,
     direct,
+    direct_groups,
     direct_per_paint,
     max_difference,
     neighbor_bound,
@@ -259,6 +260,12 @@ class Test爆弾と爆風:
         assert (np.abs(pasted - truth) <= bound).all()
 
     def test_爆風は_描いた絵との差が丸めた幅に収まる(self) -> None:
+        """取っておいた絵は、炎の絵（下地と炎の芯の2命令）の上に白い芯の絵を貼る。
+
+        取っておかずに描くほうも、同じ組（2命令・1命令）で重ねた絵と比べる
+        （`direct_groups`。1枚に描いた絵と比べると、芯の縁が炎の明るい所に重なる画素で、
+        重ね方の違いだけで丸めの幅を 1 段超えることがある）。
+        """
         cell = Cell(6, 7)
         blast = Blast(EntityId(1), cell, 0, False, Tick(9))
         art = BakedArt(LAYOUT)
@@ -282,7 +289,7 @@ class Test爆弾と爆風:
                 draw_blast_flicker_sized(canvas, LAYOUT, cell.col, cell.row, k, length)
                 canvas.restore()
 
-            return direct(LAYOUT, box, draw)
+            return direct_groups(LAYOUT, box, draw, [2, 1])
 
         assert max_difference(pasted, render(rounded)) <= ROUNDING
         bound = neighbor_bound(render, rounded, 0.5 / SUPERSAMPLE) + ROUNDING

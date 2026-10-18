@@ -35,6 +35,15 @@ from animal_bomber.presentation.render.layout import Layout
 from animal_bomber.presentation.render.sprites import Sprite, SpriteCache, opacity
 
 
+def particle_side(size: float) -> int:
+    """四角い粒の一辺（px）を、描く面の画素（0.5px）の数に丸める。
+
+    いちばん近い段に丸めるので、ずれは 0.25px まで（切り捨てると 0.5px 近くまで
+    ずれる）。
+    """
+    return round(size * SUPERSAMPLE)
+
+
 class ParticleSprites:
     """粒子の絵。"""
 
@@ -60,7 +69,7 @@ class ParticleSprites:
             key: tuple[object, ...] = ("particle-text", look.text, look.size)
             sprite = self.text(look.text, look.size)
         else:
-            side = round(look.size * SUPERSAMPLE)
+            side = particle_side(look.size)
             key = ("particle-square", look.color, side)
             sprite = self.square(look.color, side)
         self._cache.faded(key, sprite, alpha).blit(target, snap(x), snap(y))

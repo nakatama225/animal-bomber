@@ -20,6 +20,7 @@ from animal_bomber.domain.events import (
     BlockDestroyed,
     BombDoused,
     Exploded,
+    ExplosionCause,
     ItemDropped,
     ItemTaken,
     Moment,
@@ -157,12 +158,15 @@ def advance_charge(world: WorldState, player: PlayerState, charge: Charge) -> Pr
     bomb = bomb_at(world, ahead)
     if bomb is not None and not bomb.chained:
         result = detonate(world, bomb)
+        # 原型は、体当たりで起こした爆弾には導火線の残りによらず揺れ 7 を足す
+        # （updateCharge）。描く側が見分けられるよう、起こしたものを付けて返す。
         events.append(
             Exploded(
                 cell=bomb.cell,
                 owner=bomb.owner,
                 count=result.exploded,
                 blocks=len(result.destroyed),
+                cause=ExplosionCause.RAMMED,
             )
         )
         events.extend(result.events)

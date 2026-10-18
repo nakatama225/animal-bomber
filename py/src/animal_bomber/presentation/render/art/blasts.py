@@ -8,7 +8,7 @@
 （`render/sprites.py`）。
 """
 
-from animal_bomber.domain.rules.tuning import BLAST_DURATION_SECONDS
+from animal_bomber.domain.rules.tuning import BLAST_DURATION, BLAST_DURATION_SECONDS
 from animal_bomber.domain.state.bomb import Blast
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng
 from animal_bomber.presentation.render.art.timing import seconds
@@ -24,13 +24,18 @@ def blast_progress(blast: Blast) -> float:
 def progress_of(remaining: int) -> float:
     """残り `remaining` tick の爆風の、残りの割合（原型の k = t / BLAST_DUR）。
 
-    原型と同じく、残りの秒を爆風の長さの秒（0.46。`BLAST_DURATION_SECONDS`）で割る。
-    ルールの層は 0.46 秒を tick に切り上げて 28 tick 残す（`BLAST_DURATION`）ので、
-    出た直後（残り 28 tick）は k が 1 をわずかに超え、芯の膨らみ `grow` がわずかに
-    負になる。原型も 0.46 秒を 1/60 秒ずつ引くので、同じことが起きる。原型どおり
-    止めずに写す（TypeScript 版は 0〜1 に止める）。
+    原型の爆風の残り t は、0.46 秒（`BLAST_DURATION_SECONDS`）から始まり、update の
+    爆風の輪で 1/60 秒ずつ引かれる。ルールの層は 0.46 秒を tick に切り上げて 28 tick
+    残す（`BLAST_DURATION`）ので、残りの tick を秒に直しただけでは、原型の t より
+    28 tick と 0.46 秒の差（0.0067 秒）だけ長く、k が毎フレーム 0.0145 大きくなる。
+    そこで、出てから引いた tick の数（28 − 残り）を 0.46 秒から引いて t にする。
+
+    爆風は出た tick のうちに1つ減る（`systems/blast.py` の `expire_blasts`。原型も、
+    爆風を作るのはどれも爆風の輪より前）ので、描くのは残り 27 tick から。原型の最初の
+    絵の k は 0.9638 で、1 を超えない（取っておく残り 28 tick の絵は使われない）。
     """
-    return seconds(remaining) / BLAST_DURATION_SECONDS
+    elapsed = BLAST_DURATION - remaining
+    return (BLAST_DURATION_SECONDS - seconds(elapsed)) / BLAST_DURATION_SECONDS
 
 
 def flicker_size(tile: float, k: float, rng: CosmeticRng) -> float:

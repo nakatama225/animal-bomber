@@ -9,6 +9,7 @@ from animal_bomber.domain.events import (
     BurntOff,
     EffectApplied,
     Exploded,
+    ExplosionCause,
     ItemTaken,
     Moment,
     SimEvent,
@@ -345,7 +346,11 @@ def _burst(world: WorldState, slime: SlimeBomb) -> list[SimEvent]:
         )
         if landing is None:
             add_blast(world, cell, slime.owner, is_center=True)
-            return [Exploded(cell=cell, owner=slime.owner, count=1, blocks=0)]
+            # 原型のこの枝は爆風と爆発の音だけで、画面を揺らさない（slimeBurst）。
+            cause = ExplosionCause.BLAST_ONLY
+            return [
+                Exploded(cell=cell, owner=slime.owner, count=1, blocks=0, cause=cause)
+            ]
         cell = landing
     # 投げたプレイヤーが倒れていても、その爆弾として起こす（爆風の持ち主も
     # そのプレイヤー）。

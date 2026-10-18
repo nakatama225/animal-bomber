@@ -115,8 +115,13 @@ def animal_of(session: GameSession, player: PlayerId) -> Animal | None:
 def window_layout(desktop: tuple[int, int]) -> Layout:
     """画面の大きさ `desktop`（px）に収まる、描く面の寸法（盤面の上の帯を含む）。
 
-    マスは 26〜60px（`fit_layout`）。描く面はマス 60 までにし、それより大きい窓では、
-    描いた面を拡大して出す（`main` の `pygame.SCALED`。py/AGENTS.md「描画の重さ」）。
+    マスは 26〜60px（`fit_layout`）。描く面はマス 60 まで（py/AGENTS.md
+    「描画の重さ」）。pygame の SCALED（`main`）は整数倍でしか広げないので、拡大する
+    のは、画面の縦が描く面の 2 倍以上あるときだけ。それより小さい画面では、窓は描く面と
+    同じ大きさ（マス 60 で 1454×1126）。原型はマス 96 まで広げるので、大きい画面では
+    盤面が原型より小さい（2560×1440 相当でマス 60 と 69、3840×2160 を等倍で使うとき
+    60 と 96）。整数でない倍率で広げる設定は、実機の窓で見た目と重さを確かめてから
+    決める。
     """
     width, height = desktop
     return fit_layout(

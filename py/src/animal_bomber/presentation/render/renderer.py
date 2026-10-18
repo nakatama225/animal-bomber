@@ -31,12 +31,18 @@
 """
 
 from collections.abc import Sequence
-from typing import Protocol
+from typing import Protocol, assert_never
 
 import pygame
 
 from animal_bomber.domain.core.tick import Tick
-from animal_bomber.domain.state.actors import Foxfire, SlimeBomb
+from animal_bomber.domain.state.actors import (
+    BurntTongue,
+    Foxfire,
+    Pit,
+    Scatter,
+    SlimeBomb,
+)
 from animal_bomber.domain.state.match import MatchState
 from animal_bomber.domain.state.player import Life, PlayerId
 from animal_bomber.domain.state.world import WorldState
@@ -138,14 +144,34 @@ class Renderer:
         for player in sorted(on_board, key=lambda p: p.position.y):
             look = player_look(world, player, visuals.motion(player.id))
             alpha = art.players.draw(target, look, now, rng, offset, alpha)
+        # 盤面の物は、炎を全部描いてから粘膜爆弾を描く（原型の draw の順）ので、
+        # 輪を2つに分ける。種類を足すと、どちらの `match` も型検査で失敗する。
+        # 描くかどうかと、どの輪で描くかを決めてから、扱いを書く。
         for actor in world.actors:
-            if isinstance(actor, Foxfire):
-                fire = FoxfireLook(actor.cell, visuals.trail(actor, now))
-                art.foxfires.draw(target, fire, now, offset, alpha)
+            match actor:
+                case Foxfire():
+                    fire = FoxfireLook(actor.cell, visuals.trail(actor, now))
+                    art.foxfires.draw(target, fire, now, offset, alpha)
+                case SlimeBomb():
+                    pass  # 次の輪で描く
+                case Pit() | Scatter() | BurntTongue():
+                    # 原型の draw も描かない（落とし穴は見えないのが技の要点。撒く本体と
+                    # 焼けた舌は、盤面に姿を持たない）。
+                    pass
+                case _:
+                    assert_never(actor)
         for actor in world.actors:
-            if isinstance(actor, SlimeBomb):
-                origin, hopped = visuals.slime(actor)
-                art.slimes.draw(target, slime_look(actor, origin, hopped), now, offset)
+            match actor:
+                case SlimeBomb():
+                    origin, hopped = visuals.slime(actor)
+                    slime = slime_look(actor, origin, hopped)
+                    art.slimes.draw(target, slime, now, offset)
+                case Foxfire():
+                    pass  # 前の輪で描いた
+                case Pit() | Scatter() | BurntTongue():
+                    pass  # 原型も描かない（前の輪の説明）
+                case _:
+                    assert_never(actor)
         for particle in visuals.particles:
             art.particles.draw(target, particle, offset)
         if self._band is not None:

@@ -7,11 +7,19 @@
 """
 
 from dataclasses import dataclass
+from typing import assert_never
 
 from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.state.actions import Charge
-from animal_bomber.domain.state.actors import Actor, Foxfire, SlimeBomb
+from animal_bomber.domain.state.actors import (
+    Actor,
+    BurntTongue,
+    Foxfire,
+    Pit,
+    Scatter,
+    SlimeBomb,
+)
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
@@ -57,8 +65,6 @@ class Snapshot:
     """控えを取った盤面（ラウンドが替わると、別の実体になる）。"""
     now: Tick
     players: dict[PlayerId, PlayerSnapshot]
-    bombs: dict[Cell, Tick]
-    """爆弾のあるマスと、その導火線の残り。"""
     items: tuple[Item, ...]
     actors: tuple[ActorSnapshot, ...]
 
@@ -91,16 +97,27 @@ def snapshot_of(world: WorldState) -> Snapshot:
         world=world,
         now=world.now,
         players=players,
-        bombs={bomb.cell: bomb.fuse for bomb in world.bombs},
         items=tuple(world.items),
         actors=tuple(_actor_snapshot(actor) for actor in world.actors),
     )
 
 
 def _actor_snapshot(actor: Actor) -> ActorSnapshot:
-    """盤面の物1つの控え。"""
-    if isinstance(actor, Foxfire):
-        return ActorSnapshot(actor, actor.cell, steps=actor.steps)
-    if isinstance(actor, SlimeBomb):
-        return ActorSnapshot(actor, actor.cell, flown=actor.flown, timer=actor.timer)
-    return ActorSnapshot(actor, None)
+    """盤面の物1つの控え。
+
+    種類を足すと、ここの `match` が型検査で失敗する。前の tick と比べて数える値が
+    あるかを決めてから、扱いを書く。
+    """
+    match actor:
+        case Foxfire():
+            return ActorSnapshot(actor, actor.cell, steps=actor.steps)
+        case SlimeBomb():
+            return ActorSnapshot(
+                actor, actor.cell, flown=actor.flown, timer=actor.timer
+            )
+        case Pit() | Scatter() | BurntTongue():
+            # 前の tick と比べて数える値が無いので、実体だけを控える（数えるのは、粘膜
+            # 爆弾を投げた位置と跳ねたか・炎の通った跡と消えたことだけ。`actors.py`）。
+            return ActorSnapshot(actor, None)
+        case _:
+            assert_never(actor)

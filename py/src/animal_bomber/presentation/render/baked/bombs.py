@@ -60,8 +60,11 @@ PULSE_SWING: Final = 0.195
 SCALE_LEVELS: Final = 21
 """脈打ちの倍率（1 ± 0.195）を何段に丸めるか。
 
-21 段（0.0195 刻み）に丸めると、ずれは倍率で 0.00975 まで。いちばん大きい部品（赤い
-光。半径はマスの 0.52 倍に倍率を掛けたもの）の縁が動く幅は、マス 60 で 0.36px まで。
+21 段（0.0195 刻み）に丸めると、ずれは倍率で 0.00975 まで。倍率は爆弾の中心のまわりに
+掛かるので、部品の縁が動く幅は、中心からの遠さに比例する。マス 60 で、いちばん大きい
+部品（赤い光。半径はマスの 0.52 倍に倍率を掛けたもの）の半径は 0.30px まで、中心から
+いちばん遠い火花の外の縁（中心からマスの 0.64 倍。火花の円の中心までの 0.52 倍に、
+半径の上限の 0.12 倍を足したもの）は 0.38px まで（0.374px）ずれる。
 """
 
 SPARK_LEVELS: Final = 13
@@ -70,6 +73,15 @@ SPARK_LEVELS: Final = 13
 火花の外の円の半径はマスの 0.07〜0.12 倍（マス 60 で 4.2〜7.2px）。13 段に丸めると、
 半径のずれは 0.125px まで。
 """
+
+
+def flicker_side(length: float) -> int:
+    """爆風のちらつく白い芯の一辺（px）を、描く面の画素（0.5px）の数に丸める。
+
+    いちばん近い段に丸めるので、ずれは 0.25px まで（切り捨てると 0.5px 近くまで
+    ずれる）。
+    """
+    return round(length * SUPERSAMPLE)
 
 
 class BombSprites:
@@ -186,7 +198,7 @@ class BlastSprites:
         dx = blast.cell.col * size + offset[0]
         dy = blast.cell.row * size + offset[1]
         self.fire(blast.remaining).blit(target, dx, dy)
-        side = round(flicker_size(size, k, rng) * SUPERSAMPLE)
+        side = flicker_side(flicker_size(size, k, rng))
         self.flicker(blast.remaining, side).blit(target, dx, dy)
 
     def fire(self, remaining: Tick) -> Sprite:
@@ -225,7 +237,7 @@ class BlastSprites:
             k = progress_of(remaining)
             self.fire(Tick(remaining))
             # 白い芯の一辺はマスの (0.16〜0.36) × k 倍（見た目の乱数が 0〜1）。
-            low = round(size * 0.16 * k * SUPERSAMPLE)
-            high = round(size * 0.36 * k * SUPERSAMPLE)
+            low = flicker_side(size * 0.16 * k)
+            high = flicker_side(size * 0.36 * k)
             for side in range(low, high + 1):
                 self.flicker(Tick(remaining), side)

@@ -20,7 +20,8 @@
 
 - 倒れる被弾は、倒れる音だけ（原型の `hurt` は、体力が尽きれば `kill` の音だけを鳴らす）
 - 被弾して吐き出したアイテムには吐き出す音（原型の `spitPowerup`）。吐き出したことを
-  知らせるイベントは無く、被弾のすぐあとに落ちたアイテム（`ItemDropped`）で見分ける
+  知らせるイベントは無く、被弾のすぐあとに落ちた強くなる系のアイテム（`ItemDropped`）で
+  見分ける
 - 技が一列に並べた爆弾は、何本でも置く音1回（原型の `placeLineBombs`）
 - 優勝が決まったラウンドは、優勝の音だけ（原型の `endGame`）
 
@@ -62,6 +63,7 @@ from animal_bomber.domain.events import (
     TechniqueUsed,
 )
 from animal_bomber.domain.rules.animals import Animal
+from animal_bomber.domain.rules.items import POWER_UP_KINDS
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.presentation.audio.cues import (
@@ -162,13 +164,20 @@ class _Tick:
     def spat_after(self, index: int) -> bool:
         """`index` の被弾のすぐあとに、吐き出したアイテムが落ちたか。
 
+        吐き出すのは強くなる系のアイテムだけ（`POWER_UP_KINDS`）なので、種類も見る。
+        吐き出す場所が無かった被弾のすぐあとに、同じ tick に撒く本体が撒いたうんこが
+        続くことがある（原型は、吐き出せなければ吐き出す音を鳴らさない）。
+
         ⚠️ 被弾の処理（`domain/systems/damage.py` の `hurt`）が、被弾・吐き出した
         アイテム・倒れた、の順にイベントを並べることに頼っている。並びを変えると、
         吐き出す音が鳴らなくなる（`tests/presentation/test_presenter.py` の、試合を
         進めて確かめるテストが失敗する）。
         """
         following = self.events[index + 1 : index + 2]
-        return any(isinstance(event, ItemDropped) for event in following)
+        return any(
+            isinstance(event, ItemDropped) and event.kind in POWER_UP_KINDS
+            for event in following
+        )
 
     def places_after(self, index: int, player: PlayerId) -> bool:
         """`index` の技のすぐあとに、そのプレイヤーの爆弾が置かれたか。"""

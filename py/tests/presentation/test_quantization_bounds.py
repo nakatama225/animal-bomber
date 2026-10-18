@@ -3,11 +3,18 @@
 `test_baked.py` は、取っておいた絵と直接描いた絵の差が「段の幅から決まる幅」に収まるかを
 見る。段を粗くすると許す幅も一緒に広がるので、そちらだけでは段の数そのものが足りて
 いるかは分からない。ここでは、本物の見た目の値をたくさん流して、段に丸めたときのずれが、
-定数の説明に書いた上限（色で 255 段のうち 2 段・揺れで 0.25px・赤い光の縁で 0.36px・
-火花の半径で 0.125px・掘りかけの穴の半径で横 0.22px と縦 0.13px・ゲージの長さで
-0.25px・火の玉の半径と芯の縦の半径で 0.25px・四角い粒の一辺で 0.25px。どれもマス 60）を
+定数の説明に書いた上限（色で 255 段のうち 2 段・揺れで 0.25px・爆弾の脈打ちで赤い光の
+半径 0.30px と火花の外の縁 0.38px・火花の半径で 0.125px・掘りかけの穴の半径で
+横 0.22px と縦 0.13px・ゲージの長さで 0.25px・火の玉の半径と芯の縦の半径で 0.25px・
+四角い粒の一辺と爆風のちらつく芯の一辺で 0.25px・位置で 0.5px。どれもマス 60）を
 超えないことを見る。ゲージの長さ・穴の大きさ・芯の太さは、試合で出る値を全部流す。
+
+⚠️ 鼻水で溶けている間のアイテムの段（`baked/items.py` の `MELT_PULSE_LEVELS`・
+`MELT_BOB_LEVELS`）は、ここに入れていない（取っておいた絵を画素で比べる `test_baked.py`
+には入っている）。
 """
+
+import pygame
 
 from animal_bomber.domain.abilities.mole import DIG_TIME, HOLD_TIME
 from animal_bomber.domain.core.coord import Cell
@@ -15,28 +22,35 @@ from animal_bomber.domain.core.entity_id import EntityId
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.animals import Animal, stats_of
 from animal_bomber.domain.rules.items import ItemKind
-from animal_bomber.domain.rules.tuning import BOMB_FUSE
-from animal_bomber.domain.state.bomb import Bomb
+from animal_bomber.domain.rules.tuning import BLAST_DURATION, BOMB_FUSE
+from animal_bomber.domain.state.bomb import Blast, Bomb
 from animal_bomber.domain.state.item import Item
+from animal_bomber.presentation.cosmetic_rng import CosmeticRng, ScriptedRandom
 from animal_bomber.presentation.render.art.animals.mole import dig_progress
+from animal_bomber.presentation.render.art.blasts import flicker_size, progress_of
 from animal_bomber.presentation.render.art.bombs import bomb_look
 from animal_bomber.presentation.render.art.foxfires import core_width, flame_flicker
 from animal_bomber.presentation.render.art.items import item_look
+from animal_bomber.presentation.render.art.particles import ParticleLook
 from animal_bomber.presentation.render.baked.actors import (
     CORE_LEVELS,
     CORE_RANGE,
     FLAME_LEVELS,
     FLAME_RANGE,
 )
+from animal_bomber.presentation.render.baked.art import BakedArt
 from animal_bomber.presentation.render.baked.bombs import (
     PULSE_SWING,
     SCALE_LEVELS,
     SPARK_LEVELS,
+    flicker_side,
 )
 from animal_bomber.presentation.render.baked.digging import DIG_LEVELS
 from animal_bomber.presentation.render.baked.items import quantized
-from animal_bomber.presentation.render.baked.techniques import gauge_level
+from animal_bomber.presentation.render.baked.particles import particle_side
+from animal_bomber.presentation.render.baked.techniques import gauge_level, snap
 from animal_bomber.presentation.render.canvas.surface import SUPERSAMPLE
+from animal_bomber.presentation.render.layout import Layout
 from animal_bomber.presentation.render.sprites import level_value, quantize
 
 TILE = 60
@@ -74,8 +88,13 @@ def test_絵文字の揺れのずれは_0_25pxまで() -> None:
     assert worst <= 0.25 + EPSILON
 
 
-def test_爆弾の赤い光の縁のずれは_0_36pxまで() -> None:
-    """赤い光の半径はマスの 0.52 倍に脈打ちの倍率を掛けたもの（原型の drawBomb）。"""
+def test_爆弾の脈打ちのずれは_赤い光の半径で0_30px_火花の外の縁で0_38pxまで() -> None:
+    """倍率は爆弾の中心のまわりに掛かる（原型の drawBomb）。
+
+    赤い光の半径はマスの 0.52 倍。中心からいちばん遠いのは火花の外の縁で、マスの
+    0.64 倍（火花の円の中心までの √(0.17² + 0.49²) ≒ 0.52 倍に、半径の上限の 0.12 倍を
+    足したもの）。
+    """
     worst = 0.0
     for fuse in range(1, BOMB_FUSE + 1, 3):
         bomb = Bomb(EntityId(0), Cell(3, 3), 0, 1, Tick(fuse))
@@ -85,8 +104,9 @@ def test_爆弾の赤い光の縁のずれは_0_36pxまで() -> None:
             assert low - EPSILON <= pulse <= high + EPSILON
             level = quantize(pulse, low, high, SCALE_LEVELS)
             rounded = level_value(level, low, high, SCALE_LEVELS)
-            worst = max(worst, abs(rounded - pulse) * TILE * 0.52)
-    assert worst <= 0.36 + 0.01
+            worst = max(worst, abs(rounded - pulse))
+    assert worst * TILE * 0.52 <= 0.31
+    assert worst * TILE * 0.64 <= 0.38
 
 
 def test_火花の半径のずれは_0_125pxまで() -> None:
@@ -146,9 +166,67 @@ def test_火の玉と芯の大きさのずれは_0_25pxまで() -> None:
 
 
 def test_四角い粒の一辺のずれは_0_25pxまで() -> None:
-    """一辺は原型の乱数（3〜9px）。描く面の画素（0.5px）ごとに丸める。"""
+    """一辺は原型の乱数（3〜9px）。描く面の画素（0.5px）ごとに丸める（`particle_side`）。"""
     worst = 0.0
     for step in range(601):
         size = 3 + step * 0.01
-        worst = max(worst, abs(round(size * SUPERSAMPLE) / SUPERSAMPLE - size))
+        worst = max(worst, abs(particle_side(size) / SUPERSAMPLE - size))
     assert worst <= 0.25 + EPSILON
+
+
+def test_爆風のちらつく芯の一辺のずれは_0_25pxまで() -> None:
+    """一辺はマスの (0.16 ＋ 0.2 × 乱数) × 残りの割合 倍（原型の drawBlast）。
+
+    描く面の画素（0.5px）ごとに丸める（`flicker_side`）。残りは全部、乱数は 0.005 おきに
+    流す。
+    """
+    worst = 0.0
+    for remaining in range(1, BLAST_DURATION + 1):
+        k = progress_of(remaining)
+        for step in range(201):
+            rng = CosmeticRng(ScriptedRandom([step / 200]))
+            length = flicker_size(TILE, k, rng)
+            worst = max(worst, abs(flicker_side(length) / SUPERSAMPLE - length))
+    assert worst <= 0.25 + EPSILON
+
+
+def test_位置は_いちばん近い整数のpxに丸める() -> None:
+    """体・舌・粒子の位置と画面の揺れのずれ（`snap`）。ずれは 0.5px まで。"""
+    assert [snap(0.6), snap(-0.6), snap(0.4)] == [1, -1, 0]
+    worst = max(abs(snap(step / 100) - step / 100) for step in range(-300, 301))
+    assert worst <= 0.5 + EPSILON
+
+
+class Test描く所がこの丸めを使う:
+    """上の丸めの関数を、描く所が通っていることを、取っておいた絵の鍵で見る。
+
+    鍵の一辺は、描く面の画素（0.5px）の数。2倍した一辺の小数部が 0.5 以上になる大きさに
+    して、いちばん近い段（切り上げ）と切り捨てで鍵が違うようにする。
+    """
+
+    def test_四角い粒(self) -> None:
+        """一辺 5.3px は描く面で 10.6 画素。いちばん近い段は 11（切り捨てなら 10）。"""
+        art = BakedArt(Layout(50))
+        target = pygame.Surface(art.layout.surface_size)
+        art.particles.draw(target, ParticleLook(4.0, 6.0, 1.0, "#a2703f", 5.3))
+        keys = dict(art.cache.entries())
+        assert ("particle-square", "#a2703f", 11) in keys
+        assert ("particle-square", "#a2703f", 10) not in keys
+
+    def test_爆風のちらつく芯(self) -> None:
+        """描く面で 18.7 画素になる乱数を差す。
+
+        いちばん近い段は 19（切り捨てなら 18）。
+        """
+        layout = Layout(50)
+        remaining = Tick(20)
+        k = progress_of(remaining)
+        value = (18.7 / SUPERSAMPLE / (layout.tile * k) - 0.16) / 0.2
+        assert 0 <= value < 1
+        art = BakedArt(layout)
+        target = pygame.Surface(layout.surface_size)
+        blast = Blast(EntityId(1), Cell(6, 7), 0, False, remaining)
+        art.blasts.draw(target, blast, CosmeticRng(ScriptedRandom([value])))
+        keys = dict(art.cache.entries())
+        assert ("blast-flicker", remaining, 19) in keys
+        assert ("blast-flicker", remaining, 18) not in keys

@@ -5,7 +5,9 @@ description = "どうぶつボンバーの Python 版（デスクトップ・pyg
 requires-python = ">=3.11"
 # 実際に import しているものだけを書く。pygame-ce は画面・入力・音の出口
 # （presentation・shell・app）と描画の重さの測定（tools/）、numpy は音の合成
-# （presentation/audio/）が使う。numpy はルールの層では禁じてある（下の banned-api）。
+# （presentation/audio/）と、原型の canvas の写しで絵を描く所（presentation/render/canvas/・
+# baked/particles.py）が使う。numpy が無いと、取っておく絵が1枚も描けない。
+# numpy はルールの層では禁じてある（下の banned-api）。
 # numpy を 2.5 未満にしているのは、2.5 の型の定義が Python 3.12 からの書き方（type 文）を
 # 使っていて、3.11 の文法で読む mypy（下の python_version）が読めずに止まるため。
 dependencies = [

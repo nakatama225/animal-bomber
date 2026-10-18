@@ -153,6 +153,30 @@ class Test粒子:
         )
         assert_matches(got, wanted, faded=1)
 
+    def test_四角い粒の位置は_いちばん近い整数のpxに丸めて貼る(self) -> None:
+        """位置の小数部が 0.6px（マス 50 で 4.012 マス）。
+
+        比べる絵は、次の整数の px に描く（丸めのずれは 0.5px まで）。切り捨てると 1px
+        手前に貼られ、差が幅を超える。
+        """
+        look = ParticleLook(4.012, 6.012, 0.4, "#ffd23f", 7.5)
+        art = BakedArt(LAYOUT)
+        x, y = LAYOUT.px(look.x), LAYOUT.py(look.y)
+        assert (x % 1, y % 1) == pytest.approx((0.6, 0.6))
+        box = (x - 30, y - 30, x + 30, y + 30)
+        got = baked(LAYOUT, box, lambda t: art.particles.draw(t, look))
+        shown = ParticleLook(
+            (round(x) - LAYOUT.origin_x) / LAYOUT.tile,
+            (round(y) - LAYOUT.origin_y) / LAYOUT.tile,
+            opacity(min(1, look.life * 2)) / 255 / 2,
+            look.color,
+            look.size,
+        )
+        wanted = direct_groups(
+            LAYOUT, box, lambda c: draw_particle(c, LAYOUT, shown), [1]
+        )
+        assert_matches(got, wanted, faded=1)
+
     @pytest.mark.parametrize("life", [1.1, 0.9, 0.3])
     def test_回りながら浮かぶ絵文字は_描いた絵と同じ位置と向きと濃さ(
         self, life: float
