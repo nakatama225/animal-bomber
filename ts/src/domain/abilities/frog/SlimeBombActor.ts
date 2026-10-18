@@ -1,7 +1,7 @@
 import { centerOf, cellOf, sameCell, step, type Cell, type Point } from '../../core/Coord.js';
 import { tick, type Tick } from '../../core/Tick.js';
 import type { SimEvent } from '../../events/SimEvent.js';
-import { addBlast, detonate } from '../../mutations/explode.js';
+import { addBlast } from '../../mutations/explode.js';
 import { spawnBomb } from '../../mutations/bombs.js';
 import { bombAt } from '../../query/BoardQuery.js';
 import type { PlayerId, PlayerState } from '../../state/PlayerState.js';
@@ -46,7 +46,8 @@ const HOP_MAX = 8;
  * 柱の上にも乗る。通れない場所を越えて飛んでいくのがこの技の
  * 面白さで、爆弾を置けない位置まで攻められる。
  *
- * 爆風に触れたら、飛んでいる間でもすぐに爆発する（原型の updateSlimes）。
+ * 爆風に触れたら、飛んでいる間でも、その tick のうちに爆発する（原型の updateSlimes）。跳ね終わったときと
+ * 同じく、導火線 0 の爆弾を生やし、導火線の尽きた爆弾の番に起こす（`#burst`）。
  */
 export class SlimeBombActor implements WorldActor {
   readonly kind = 'slime';
@@ -180,11 +181,12 @@ export class SlimeBombActor implements WorldActor {
   }
 
   /**
-   * いまのマスで爆発する。爆弾として1つ生やして、すぐ起こす。
+   * いまのマスで爆発させる。導火線 0 の爆弾として1つ生やし、爆発は導火線の尽きた爆弾の番（1 tick の 5.）に任せる。
    *
    * 空きでないマス（柱・壊せるブロック）や爆弾のマスで跳ね終わったら、まわりの8マスを決まった
    * 順に見て、最初の降りられるマスへずれてから爆発する（柱の上のまま爆発すると、四方が塞がれて
-   * 中心の1マスしか燃えない）。どこにも降りられなければ、その場に中心の爆風だけを出す。
+   * 中心の1マスしか燃えない）。どこにも降りられなければ、その場に中心の爆風だけを出す（原型 L2937 も
+   * その場ですぐ出す）。
    *
    * 手持ちの数は見ない。とくぎの爆発なので、手持ちを出し切っていても起こる（`spawnBomb`）。
    *
@@ -193,11 +195,19 @@ export class SlimeBombActor implements WorldActor {
    * いるが、爆発のときにもう一度減るので、かえるが自分の爆弾を盤面に置いていれば1つ少なく数えられ、そのぶん
    * 上限より1つ多く置ける（自分の爆弾が盤面から無くなると、0 で止まって数がそろう）。原型と同じにしてある。
    *
-   * ⚠️ 爆発する時点は原型と違う（まだ直していない）。原型は導火線 0 の爆弾として生やし（L2945）、同じ update の
-   * 爆弾の輪（L4374-4377）で爆発させる。そのため、アイテムの寿命の処理（L4355-4369）より後で、同じ update に
-   * 導火線が尽きるほかの爆弾（配列の前にある）より後に爆発する。この版は盤面の物の番（1 tick の 3.）ですぐ
-   * 起こすので、それらより先になる。重なるマスの爆風の持ち主が入れ替わり、そこで傷を受けたプレイヤーの
-   * `lastHitBy`（被弾の by）が変わる（原型ではあとから爆発した粘膜爆弾の持ち主、この版はほかの爆弾の持ち主）。
+   * ⚠️ ここで起こさない。原型も導火線 0 の爆弾として生やすだけで（L2942-2945）、爆発するのは同じ update の
+   * 爆弾の輪（L4374-4377。bombs.slice() の並びで、生やした爆弾は配列の後ろ）。この版も `world.bombs` の後ろに
+   * 足し、5. の `BlastSystem.detonateExpired` が並びの順に起こすので、原型と同じ時点になる。ここで起こすと、
+   * 次の4つが原型と変わる。
+   * - 同じ tick に導火線が尽きるほかの爆弾より先に爆発する。ブロックを壊すのは連鎖の最後なので、同じ壊せる
+   *   ブロックに別々の連鎖が届くと、その先まで腕が伸びるのが粘膜爆弾のほうでなくなり、傷を受けるプレイヤーが変わる
+   * - ふつうの爆弾の腕がこのマスに届いても、その連鎖に入らない（別の連鎖になり、重なるマスの爆風の持ち主が変わる）
+   * - その tick に寿命の尽きるうんこ（1 tick の 4.）が爆風に触れると、消える前に吹き飛び、残る長さを数え直す
+   * - 同じ tick にあとから進める粘膜爆弾が、その爆風に触れてすぐ爆発する（原型ではまだ爆風が無い）
+   * いずれも `tests/abilities/frog.test.ts` の「粘膜爆弾が爆発する番」で確かめている。
+   *
+   * ⚠️ 同じ tick に2つ以上が爆発するときの順は、原型と揃えていない。原型の updateSlimes は配列を後ろから
+   * 回すが（L2949）、この版は出た順に進めるので、生やす爆弾の並びも、5. で爆発する順も原型と逆になる。
    */
   #burst(world: WorldState): SimEvent[] {
     const blocked = (cell: Cell): boolean =>
@@ -215,11 +225,8 @@ export class SlimeBombActor implements WorldActor {
     }
     const bomb = spawnBomb(world, this.shooter, cell);
     this.shooter.activeBombs = Math.max(0, this.shooter.activeBombs - 1);
-    const result = detonate(world, bomb);
-    return [
-      { type: 'exploded', cell, owner: this.shooter.id, chained: result.chained, blocks: result.destroyed.length },
-      ...result.events,
-    ];
+    bomb.fuse = tick(0);
+    return [];
   }
 
   encode(): string {

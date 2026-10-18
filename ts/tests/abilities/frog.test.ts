@@ -19,6 +19,7 @@ import { enterSuddenDeath } from '../../src/domain/mutations/suddenDeath.js';
 import { OUT } from '../../src/domain/state/Life.js';
 import { isFrozen, type PlayerState } from '../../src/domain/state/PlayerState.js';
 import type { WorldState } from '../../src/domain/state/WorldState.js';
+import { BlastSystem } from '../../src/domain/systems/BlastSystem.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
 import { clearBoard, makeWorld, onlyFor, press, sameForAll } from '../helpers.js';
 
@@ -40,13 +41,20 @@ function arena(seed = 2468): { world: WorldState; frog: PlayerState; rabbit: Pla
   return { world, frog, rabbit };
 }
 
-/** 粘膜爆弾の actor だけを、終わるまで進める（ほかの System を通さない。上限 200 tick）。 */
+/**
+ * 粘膜爆弾の actor だけを、終わるまで進める（上限 200 tick）。終わったら、導火線の尽きた爆弾を1回だけ起こす
+ * （`Simulation` の 5. と同じ処理）。粘膜爆弾は導火線 0 の爆弾を生やすだけで、爆発はその番に起きるため。
+ * ほかの System は通さない。
+ */
 function runUntilDone(world: WorldState, actor: SlimeBombActor): SimEvent[] {
   const events: SimEvent[] = [];
   for (let i = 0; i < 200; i += 1) {
     const result = actor.tick(world);
     events.push(...result.events);
-    if (result.done) return events;
+    if (result.done) {
+      events.push(...new BlastSystem().detonateExpired(world));
+      return events;
+    }
   }
   throw new Error('粘膜爆弾が 200 tick たっても終わらない');
 }
@@ -237,8 +245,9 @@ describe('粘膜爆弾の時間（原型 frogSlime・updateSlimes）', () => {
     expect([...intervals].sort((a, b) => a - b)).toEqual([19, 20, 21, 22, 23, 24]);
   });
 
-  it('爆風に触れたら、飛んでいる間でもすぐ爆発する', () => {
-    // 原型：投げて1フレーム後（まだ飛んでいる）に着地するマスへ爆風を置くと、次のフレームで爆発して消える。
+  it('爆風に触れたら、飛んでいる間でも導火線 0 の爆弾になって消え、その tick の爆弾の番に爆発する', () => {
+    // 原型：投げて1フレーム後（まだ飛んでいる）に着地するマスへ爆風を置くと、次のフレームの updateSlimes で
+    // slimeBurst が導火線 0 の爆弾を生やして消え（L2942-2945）、同じフレームの爆弾の輪（L4374-4377）で爆発する。
     const { world, frog } = arena();
     frog.position = centerOf({ col: 9, row: 7 });
     frog.facing = 'right';
@@ -249,7 +258,111 @@ describe('粘膜爆弾の時間（原型 frogSlime・updateSlimes）', () => {
     addBlast(world, { col: 12, row: 7 }, 1, false);
     const result = actor.tick(world);
     expect(result.done).toBe(true);
-    expect(result.events.some((event) => event.type === 'exploded' && event.owner === frog.id)).toBe(true);
+    expect(world.bombs.map(({ cell, owner, fuse }) => ({ cell, owner, fuse }))).toEqual([
+      { cell: { col: 12, row: 7 }, owner: frog.id, fuse: 0 },
+    ]);
+    const events = new BlastSystem().detonateExpired(world);
+    expect(events.some((event) => event.type === 'exploded' && event.owner === frog.id)).toBe(true);
+    expect(world.bombs).toEqual([]);
+  });
+});
+
+describe('粘膜爆弾が爆発する番（原型 slimeBurst L2942-2945・update の爆弾の輪 L4374-4377）', () => {
+  /*
+   * 原型の slimeBurst は爆弾を生やして導火線を 0 にするだけで、爆発させるのは同じ update の爆弾の輪
+   * （bombs.slice() の並び。生やした爆弾は配列の後ろ）。そのため、うんこの寿命の処理（L4353-4369）よりあとで、
+   * 同じ update に導火線が尽きるほかの爆弾よりもあとに爆発し、ほかの爆弾の連鎖にも入りうる。
+   * 期待値は、どれも原型を画面なしで dt=1/60 ずつ動かして見た結果。
+   */
+
+  /** 次の tick に区切りが尽きて爆発するか。次の区切りまでの残りは、状態の要約の値の最後（`SlimeBombActor.encode`）。 */
+  const burstsNextTick = (slime: SlimeBombActor): boolean =>
+    slime.flight === null && slime.hopsLeft === 1 && Number(slime.encode().split(',').at(-1)) === 1;
+
+  /**
+   * かえるの粘膜爆弾（区切り1、火力3）を (9,7) に置き、次の tick に跳ね終わって爆発するところまで進める。
+   * うさぎの火力は 2。
+   */
+  function slimeAboutToBurst(): { world: WorldState; frog: PlayerState; rabbit: PlayerState; sim: Simulation } {
+    const { world, frog, rabbit } = arena(7);
+    frog.power = 3;
+    rabbit.power = 2;
+    rabbit.hp = 10;
+    const slime = new SlimeBombActor({ col: 9, row: 7 }, frog, 1);
+    world.actors.push(slime);
+    const sim = new Simulation();
+    for (let i = 0; i < 100 && !burstsNextTick(slime); i += 1) sim.step(world, sameForAll(world, press({})));
+    if (!burstsNextTick(slime)) throw new Error('粘膜爆弾が爆発する前の tick に届かない');
+    return { world, frog, rabbit, sim };
+  }
+
+  /** この tick の爆弾の連鎖を、起きた順に。 */
+  const explodedAt = (events: readonly SimEvent[]): string[] =>
+    events.flatMap((e) => (e.type === 'exploded' ? [`${e.cell.col},${e.cell.row}`] : []));
+
+  const hurts = (events: readonly SimEvent[]): SimEvent[] => events.filter((e) => e.type === 'playerHurt');
+
+  it('同じ tick に導火線が尽きるほかの爆弾よりあとに爆発する。同じ壊せるブロックに別々の連鎖が届くと、先の連鎖が壊したあとに粘膜爆弾の腕がその先へ伸びる', () => {
+    // 原型：ブロック (7,7)、うさぎの爆弾 (7,5)、うさぎは (6,7)。うさぎの爆弾が先に爆発して、連鎖の最後に (7,7) を
+    // 壊す（L1543）。あとから爆発する粘膜爆弾の左の腕は (8,7)・(7,7)・(6,7) まで伸び、うさぎが傷を受ける
+    // （lastHitBy はかえる）。粘膜爆弾が先に爆発すると、左の腕は (7,7) で止まり、うさぎの腕も火力2で (7,7) までなので、
+    // (6,7) にはどちらの爆風も届かない。
+    const { world, frog, rabbit, sim } = slimeAboutToBurst();
+    world.board.set({ col: 7, row: 7 }, 'soft');
+    rabbit.position = centerOf({ col: 6, row: 7 });
+    const bomb = placeBombAt(world, rabbit, { col: 7, row: 5 });
+    if (bomb === undefined) throw new Error('爆弾を置けなかった');
+    bomb.fuse = tick(1);
+    const events = sim.step(world, sameForAll(world, press({})));
+    expect(explodedAt(events)).toEqual(['7,5', '9,7']);
+    expect(world.board.at({ col: 7, row: 7 })).toBe('empty');
+    expect(blastCells(world)).toContain('6,7');
+    expect(hurts(events)).toMatchObject([{ target: rabbit.id, by: frog.id }]);
+    expect(rabbit.lastHitBy).toBe(frog.id);
+  });
+
+  it('ふつうの爆弾の腕が届けば、その連鎖に入る。両方の腕が重なるマスの爆風の持ち主は、あとから爆発する粘膜爆弾', () => {
+    // 原型：うさぎの爆弾 (7,7)（この update に導火線が尽きる）の右の腕が、生えたばかりの粘膜爆弾 (9,7) に届き、
+    // 1つの連鎖で うさぎの爆弾 → 粘膜爆弾 の順に爆発する。重なる (8,7) に立つうさぎは、かえるの爆風で傷を受ける。
+    // 粘膜爆弾が先に爆発すると、うさぎの爆弾のほうが粘膜爆弾の連鎖に入ってあとに爆発し、うさぎの自爆になる。
+    const { world, frog, rabbit, sim } = slimeAboutToBurst();
+    rabbit.position = centerOf({ col: 8, row: 7 });
+    const bomb = placeBombAt(world, rabbit, { col: 7, row: 7 });
+    if (bomb === undefined) throw new Error('爆弾を置けなかった');
+    bomb.fuse = tick(1);
+    const events = sim.step(world, sameForAll(world, press({})));
+    expect(events.filter((e) => e.type === 'exploded')).toEqual([
+      { type: 'exploded', cell: { col: 7, row: 7 }, owner: rabbit.id, chained: 2, blocks: 0 },
+    ]);
+    expect(hurts(events)).toMatchObject([{ target: rabbit.id, by: frog.id }]);
+    expect(world.bombs).toEqual([]);
+  });
+
+  it('その tick に寿命が尽きるうんこは、粘膜爆弾の爆風が届いても吹き飛ばずに消える（うんこの寿命の処理が先）', () => {
+    // 原型：粘膜爆弾の右の腕 (10,7) に寿命の尽きたうんこがあると、L4365 で先に消える。粘膜爆弾が先に爆発すると、
+    // うんこは吹き飛んで残る長さを数え直し、さらに15秒残る。
+    const { world, sim } = slimeAboutToBurst();
+    world.items.push({ id: world.ids.take(), cell: { col: 10, row: 7 }, kind: 'poop', expiresAt: tick(world.now - 1) });
+    const events = sim.step(world, sameForAll(world, press({})));
+    expect(blastCells(world)).toContain('10,7');
+    expect(events.some((e) => e.type === 'itemBlown')).toBe(false);
+    expect(events.some((e) => e.type === 'itemExpired' && e.kind === 'poop')).toBe(true);
+    expect(world.items).toEqual([]);
+  });
+
+  it('同じ tick にあとから進める粘膜爆弾は、まだ爆風が無いのでその tick には爆発せず、次の tick に爆発する', () => {
+    // 原型：爆発する粘膜爆弾 (9,7) の右の腕 (11,7) に、飛んでいる最中の別の粘膜爆弾がいる。その update の
+    // updateSlimes にはまだ爆風が無いので、別の粘膜爆弾は次の update に爆風に触れて爆発する。
+    const { world, frog, sim } = slimeAboutToBurst();
+    const second = new SlimeBombActor({ col: 11, row: 7 }, frog, 5);
+    world.actors.push(second);
+    const first = sim.step(world, sameForAll(world, press({})));
+    expect(explodedAt(first)).toEqual(['9,7']);
+    expect(blastCells(world)).toContain('11,7');
+    expect(world.actors).toContain(second);
+    const next = sim.step(world, sameForAll(world, press({})));
+    expect(explodedAt(next)).toEqual(['11,7']);
+    expect(world.actors).not.toContain(second);
   });
 });
 
