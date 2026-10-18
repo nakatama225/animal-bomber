@@ -15,7 +15,14 @@ from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.items import apply_item
-from tests.helpers import advance, clear_board, idle, make_world, only_for
+from tests.helpers import (
+    advance,
+    clear_board,
+    grant_special,
+    idle,
+    make_world,
+    only_for,
+)
 
 ACTION = PlayerInput.ACTION
 
@@ -155,7 +162,7 @@ class Test技を使ったイベント:
     def test_とくぎが出たら_とくぎとして知らせる(self) -> None:
         """押した瞬間の通常技は、とくぎではない技として先に知らせる。"""
         world = make_world(3, (Animal.ELEPHANT, Animal.RABBIT))
-        world.players[0].special_charges = 1
+        grant_special(world.players[0], 1)
         events = simulation.step(world, idle(world))
         for _ in range(stats_of(Animal.ELEPHANT).hold_ticks):
             events.extend(simulation.step(world, only_for(world, 0, ACTION)))
@@ -167,7 +174,7 @@ class Test技を使ったイベント:
     def test_掘ったもぐらは自分の穴で止まらない(self) -> None:
         world = make_world(2468, (Animal.MOLE, Animal.RABBIT))
         mole = world.players[0]
-        mole.special_charges = 1
+        grant_special(mole, 1)
         simulation.step(world, idle(world))
         advance(world, only_for(world, 0, ACTION), stats_of(Animal.MOLE).hold_ticks)
         advance(world, idle(world), 120)

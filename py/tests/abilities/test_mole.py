@@ -28,7 +28,14 @@ from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.bomb import place_bomb
 from animal_bomber.domain.systems.items import apply_item
-from tests.helpers import advance, clear_board, idle, make_world, only_for
+from tests.helpers import (
+    advance,
+    clear_board,
+    grant_special,
+    idle,
+    make_world,
+    only_for,
+)
 
 RABBIT_HOLD = stats_of(Animal.RABBIT).hold_ticks
 ACTION = PlayerInput.ACTION
@@ -86,7 +93,7 @@ class Test掘る:
         mole, rabbit = world.players
         place(mole, Cell(5, 5))
         place(rabbit, Cell(19, 13))
-        mole.special_charges = 1
+        grant_special(mole, 1)
         press_special(world, 0)
         assert isinstance(mole.action, Dig)
         advance(world, only_for(world, 0, PlayerInput.RIGHT), 30)
@@ -101,7 +108,7 @@ class Test掘る:
         mole, rabbit = world.players
         place(mole, Cell(5, 5))
         place(rabbit, Cell(19, 13))
-        mole.special_charges = 1
+        grant_special(mole, 1)
         press_special(world, 0)
         advance(world, idle(world), 89)
         assert (isinstance(mole.action, Dig), pit_cells(world)) == (True, [])
@@ -119,7 +126,7 @@ class Test掘る:
         mole, rabbit = world.players
         place(mole, Cell(5, 5))
         place(rabbit, Cell(19, 13))
-        mole.special_charges = 2
+        grant_special(mole, 2)
         press_special(world, 0)
         advance(world, idle(world), 100)
         press_special(world, 0)
@@ -139,7 +146,7 @@ class Test掘る:
         place(mole, Cell(5, 5))
         place(rabbit, Cell(19, 13))
         world.board.put(Cell(5, 5), Tile.SOFT)
-        mole.special_charges = 1
+        grant_special(mole, 1)
         press_special(world, 0)
         assert mole.action is None
         advance(world, idle(world), 100)
@@ -154,7 +161,7 @@ class Test掘る:
         bomb = place_bomb(world, mole)
         assert bomb is not None
         bomb.fuse = Tick(9999)
-        mole.special_charges = 1
+        grant_special(mole, 1)
         press_special(world, 0)
         assert mole.action is None
         advance(world, idle(world), 100)
@@ -166,7 +173,7 @@ class Test掘る:
         mole, rabbit = world.players
         place(mole, Cell(5, 5))
         place(rabbit, Cell(19, 13))
-        mole.special_charges = 1
+        grant_special(mole, 1)
         press_special(world, 0)
         assert isinstance(mole.action, Dig)
         advance(world, idle(world), 30)
@@ -189,7 +196,7 @@ class Test掘る:
             mole, rabbit = world.players
             place(mole, Cell(5, 5))
             place(rabbit, Cell(19, 13))
-            mole.special_charges = 1
+            grant_special(mole, 1)
             press_special(world, 0)
             assert isinstance(mole.action, Dig)
             for tick in range(100):
@@ -215,7 +222,8 @@ class Test掘る:
         m0, m1 = world.players
         place(m0, Cell(5, 5))
         place(m1, Cell(5, 5))
-        m0.special_charges = m1.special_charges = 1
+        grant_special(m0, 1)
+        grant_special(m1, 1)
         simulation.step(world, idle(world))
         both = {player.id: ACTION for player in world.players}
         simulation.step(world, both)
@@ -231,7 +239,7 @@ class Test掘る:
         mole, rabbit = world.players
         place(mole, Cell(5, 5))
         place(rabbit, Cell(19, 13))
-        mole.special_charges = 1
+        grant_special(mole, 1)
         simulation.step(world, idle(world))
         simulation.step(world, only_for(world, 0, ACTION))
         assert isinstance(mole.action, Dig)
@@ -371,7 +379,7 @@ class Test落ちる:
             rabbit, mole = world.players
             place(rabbit, Cell(5, 5))
             place(mole, Cell(1, 3))
-            rabbit.special_charges = 1
+            grant_special(rabbit, 1)
             # 押した瞬間の跳躍は、間隔の途中にして出さない（その場で撒かせる）。
             rabbit.ability_cooldown = Tick(600)
             simulation.step(world, idle(world))

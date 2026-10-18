@@ -91,7 +91,7 @@ def player_look(
         in_block=world.board.at(player.position.cell()) is not Tile.EMPTY,
         pitfall=effects.remaining(EffectKind.PITFALL),
         effects=tuple(effects.active()),
-        special=player.special_charges > 0,
+        special=player.has_special,
         held=player.action_held,
         fired=player.action_fired,
         tongue=tongue,

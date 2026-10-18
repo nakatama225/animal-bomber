@@ -40,6 +40,7 @@ from animal_bomber.domain.state.item import Item
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState, create_world
 from animal_bomber.domain.systems import simulation
+from tests.helpers import grant_special
 
 Script = Callable[[PlayerId, int], PlayerInput]
 
@@ -190,7 +191,7 @@ def set_up(scenario: TechniqueScenario) -> WorldState:
         world.items.append(Item(id=world.ids.take(), cell=cell, kind=kind))
     for player, cell in zip(world.players, scenario.cells, strict=True):
         player.previous_input = PlayerInput.IDLE
-        player.special_charges = scenario.chickens
+        grant_special(player, scenario.chickens)
         player.hp = HP
         player.position = cell.center()
     return world

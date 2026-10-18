@@ -19,7 +19,7 @@ from animal_bomber.domain.state.player import PlayerState
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.bomb import place_bomb_at
-from tests.helpers import clear_board, make_world, only_for
+from tests.helpers import clear_board, grant_special, make_world, only_for
 
 SPECIAL = PlayerInput.SPECIAL
 
@@ -35,7 +35,7 @@ def duel(
     me.position = Cell(3, 7).center()
     me.facing = Direction.RIGHT
     foe.position = Cell(19, 13).center()
-    me.special_charges = 1
+    grant_special(me, 1)
     me.action_fired = False
     return world, me, foe
 
@@ -84,7 +84,7 @@ class Testとくぎを直に出すボタン:
 
     def test_押しっぱなしでも1回だけ_離して押し直すともう1回(self) -> None:
         world, me, _ = duel(Animal.FOX)
-        me.special_charges = 2
+        grant_special(me, 2)
         held = press_for(world, 60, set(range(1, 61)))
         assert techniques(held) == [True]
         assert me.special_charges == 1
@@ -94,7 +94,7 @@ class Testとくぎを直に出すボタン:
 
     def test_チキンが無ければ何も出ない_通常技も出ない(self) -> None:
         world, me, _ = duel(Animal.RABBIT)
-        me.special_charges = 0
+        grant_special(me, 0)
         events = press_for(world, 1, {1})
         assert me.position.x == 3.5
         assert world.actors == []
@@ -121,7 +121,7 @@ class Testとくぎを直に出すボタン:
     def test_技のボタンの押した長さと_出し終えた印には触れない(self) -> None:
         """長押しの数え方は技のボタンだけのもの。数え直しも出し終えた扱いも起きない。"""
         world, me, _ = duel(Animal.FOX)
-        me.special_charges = 2
+        grant_special(me, 2)
         for _ in range(10):
             simulation.step(world, only_for(world, 0, PlayerInput.ACTION))
         simulation.step(world, only_for(world, 0, PlayerInput.ACTION | SPECIAL))

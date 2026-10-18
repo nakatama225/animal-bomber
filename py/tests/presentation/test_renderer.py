@@ -50,7 +50,7 @@ from animal_bomber.presentation.render.views.player import (
     TrackedMotion,
     invulnerable_left,
 )
-from tests.helpers import clear_board
+from tests.helpers import clear_board, grant_special
 
 from .frame_scenes import (
     FixedVisuals,
@@ -112,7 +112,7 @@ def ordinary() -> tuple[WorldState, FixedVisuals, list[float]]:
     rabbit, elephant, frog, mole = world.players
     rabbit.position = Cell(3, 3).center()
     rabbit.effects.add(EffectKind.SLOW, Tick(100), Tick(100))
-    rabbit.special_charges = 1
+    grant_special(rabbit, 1)
     elephant.position = Cell(9, 5).center()
     elephant.invulnerable_until = Tick(world.now + 30)
     frog.position = Cell(5, 7).center()

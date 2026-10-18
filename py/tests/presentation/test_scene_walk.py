@@ -20,7 +20,7 @@ from animal_bomber.domain.rules.tuning import MAX_SPEED
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from tests.helpers import idle, only_for
+from tests.helpers import grant_special, idle, only_for
 
 from .scene_helpers import arena, speed_now, started, step
 
@@ -77,7 +77,7 @@ class Test歩いた距離の見分け:
         elephant = world.players[0]
         elephant.position = Cell(3, 13).center()
         elephant.facing = Direction.LEFT
-        elephant.special_charges = 1
+        grant_special(elephant, 1)
         tracker = started(world)
         step(world, tracker, only_for(world, elephant.id, PlayerInput.SPECIAL))
         start = elephant.position.x

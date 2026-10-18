@@ -22,7 +22,7 @@ from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.actors import step_actors, step_owned_actors
 from animal_bomber.domain.systems.bomb import place_bomb_at
-from tests.helpers import clear_board, idle, make_world, only_for
+from tests.helpers import clear_board, grant_special, idle, make_world, only_for
 
 IDLE = PlayerInput.IDLE
 NEVER_HIT = Tick(9999)
@@ -72,7 +72,7 @@ class Test1tickの中の並び:
         elephant.position = Cell(3, 7).center()
         frog.position = Cell(19, 13).center()
         elephant.facing = Direction.DOWN
-        elephant.special_charges = 1
+        grant_special(elephant, 1)
         # ラウンドの途中の、何も押していない状態にする（ラウンドの始まりは、とくぎを出し
         # 終えた扱い）。
         elephant.action_fired = False

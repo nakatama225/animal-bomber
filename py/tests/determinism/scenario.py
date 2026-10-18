@@ -35,6 +35,7 @@ from animal_bomber.net.input_log import (
     RecordingInputSource,
     ReplayInputSource,
 )
+from tests.helpers import grant_special
 
 SEED = 4658
 """盤面と試合の乱数の種。
@@ -157,7 +158,7 @@ def new_world(seed: int = SEED) -> WorldState:
         player.shoes = shoes
         player.max_bombs = max_bombs
         player.power = power
-        player.special_charges = CHICKENS
+        grant_special(player, CHICKENS)
     return world
 
 

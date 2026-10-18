@@ -26,7 +26,7 @@ from animal_bomber.domain.state.item import Item
 from animal_bomber.domain.systems.blast import add_blast
 from animal_bomber.presentation.render.scene.actors import TRAIL_TICKS
 from animal_bomber.presentation.render.scene.motion import HURT_FRAMES
-from tests.helpers import idle, only_for
+from tests.helpers import grant_special, idle, only_for
 
 from .scene_helpers import arena, speed_now, started, step
 
@@ -114,7 +114,7 @@ class Test歩いた距離:
         """原型の updateCharge の `walk += SPEED_MAX·1.25·dt`。"""
         world = arena((Animal.ELEPHANT, Animal.FOX))
         elephant = world.players[0]
-        elephant.special_charges = 1
+        grant_special(elephant, 1)
         tracker = started(world)
         step(world, tracker, only_for(world, elephant.id, PlayerInput.SPECIAL))
         before = tracker.motion(elephant.id).walked
@@ -218,7 +218,7 @@ class Test粘膜爆弾:
         world = arena((Animal.FROG, Animal.RABBIT))
         frog = world.players[0]
         frog.facing = Direction.RIGHT
-        frog.special_charges = 1
+        grant_special(frog, 1)
         thrown_from = (frog.position.x, frog.position.y)
         tracker = started(world)
         step(world, tracker, only_for(world, frog.id, PlayerInput.SPECIAL))
@@ -257,7 +257,7 @@ class Test炎の通った跡:
         fox, rabbit = world.players
         fox.position = Cell(3, 13).center()
         rabbit.position = Cell(15, 13).center()
-        fox.special_charges = 1
+        grant_special(fox, 1)
         tracker = started(world)
         step(world, tracker, only_for(world, fox.id, PlayerInput.SPECIAL))
         [fire] = [a for a in world.actors if isinstance(a, Foxfire)]

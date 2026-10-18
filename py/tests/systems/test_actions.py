@@ -30,7 +30,14 @@ from animal_bomber.domain.state.player import OUT, PlayerState
 from animal_bomber.domain.state.world import WorldState, create_world, hash_world
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.bomb import place_bomb_at
-from tests.helpers import advance, clear_board, idle, make_world, only_for
+from tests.helpers import (
+    advance,
+    clear_board,
+    grant_special,
+    idle,
+    make_world,
+    only_for,
+)
 
 ACTION = PlayerInput.ACTION
 
@@ -59,7 +66,7 @@ def duel(
     place(me, Cell(3, 7))
     me.facing = Direction.RIGHT
     place(foe, Cell(19, 13))
-    me.special_charges = 1
+    grant_special(me, 1)
     me.action_fired = False
     return world, me, foe
 
@@ -183,7 +190,7 @@ class Test押した瞬間の通常技と_しきい値のとくぎ:
         place(rabbit, Cell(3, 7))
         rabbit.facing = Direction.RIGHT
         place(frog, Cell(19, 13))
-        rabbit.special_charges = 1
+        grant_special(rabbit, 1)
         moved_at = None
         for t in range(1, 71):
             pressed = ACTION if t <= 60 or t >= 62 else PlayerInput.IDLE
@@ -223,7 +230,7 @@ class Test振る舞いの最中の技のボタン:
         突進がやり直しになった tick・残ったアイテム・撒いた数を返す。
         """
         world, elephant, _ = duel(Animal.ELEPHANT)
-        elephant.special_charges = 0
+        grant_special(elephant, 0)
         elephant.ability_cooldown = Tick(9999)  # 鼻水は出ないようにしておく
         onion = Item(id=world.ids.take(), cell=Cell(4, 7), kind=ItemKind.ONION)
         world.items.append(onion)
@@ -238,7 +245,7 @@ class Test振る舞いの最中の技のボタン:
                 first.append(charge)
                 elephant.action = charge
                 if restart:
-                    elephant.special_charges = 1
+                    grant_special(elephant, 1)
             current = elephant.action
             replaced = first and current is not None and current is not first[0]
             if replaced and not restart_at:
@@ -269,7 +276,7 @@ class Test振る舞いの最中の技のボタン:
         done_at = None
         for t in range(2, 121):
             if t == 10:
-                mole.special_charges = 1
+                grant_special(mole, 1)
             pressed = ACTION if press_again and t >= 11 else PlayerInput.IDLE
             simulation.step(world, only_for(world, 0, pressed))
             if mole.action is None:
@@ -290,7 +297,7 @@ class Test振る舞いの最中の技のボタン:
     @staticmethod
     def _tongue_then_press(press_at: int) -> tuple[int | None, Tongue | None]:
         world, frog, _ = duel(Animal.FROG, Animal.FOX)
-        frog.special_charges = 0
+        grant_special(frog, 0)
         fire = Item(id=world.ids.take(), cell=Cell(5, 7), kind=ItemKind.FIRE)
         world.items.append(fire)
         simulation.step(world, only_for(world, 0, ACTION))
@@ -329,7 +336,7 @@ def rabbit_scene(
     place(rabbit, Cell(5, 5))
     rabbit.facing = Direction.RIGHT
     place(frog, Cell(19, 13))
-    rabbit.special_charges = 1
+    grant_special(rabbit, 1)
     hop_at = None
     x0 = rabbit.position.x
     for tick in range(260):
@@ -397,7 +404,7 @@ class Test動けない間の技のボタン:
         place(player, Cell(5, 5))
         player.facing = Direction.RIGHT
         place(other, Cell(19, 13))
-        player.special_charges = 1
+        grant_special(player, 1)
         world.items.append(
             Item(id=world.ids.take(), cell=Cell(8, 5), kind=ItemKind.FIRE)
         )
@@ -426,7 +433,7 @@ class Test技のボタンの数え方:
         place(fox, Cell(1, 1))
         fox.facing = Direction.UP
         place(rabbit, Cell(19, 13))
-        fox.special_charges = 1
+        grant_special(fox, 1)
         simulation.step(world, idle(world))
         events: list[SimEvent] = []
         for _ in range(stats_of(Animal.FOX).hold_ticks + 5):
@@ -444,7 +451,7 @@ class Test技のボタンの数え方:
         place(fox, Cell(1, 1))
         fox.facing = Direction.UP
         place(rabbit, Cell(19, 13))
-        fox.special_charges = 2
+        grant_special(fox, 2)
         simulation.step(world, idle(world))
         events: list[SimEvent] = []
         for _ in range(stats_of(Animal.FOX).hold_ticks + 5):
@@ -509,6 +516,78 @@ class Test技のボタンの数え方:
         rabbit.ability_cooldown = Tick(10)
         advance(world, idle(world), 4)
         assert rabbit.ability_cooldown == 6
+
+
+def specials_in(events: list[SimEvent]) -> int:
+    """0番がとくぎを出した回数。"""
+    return sum(
+        1
+        for event in events
+        if isinstance(event, TechniqueUsed) and event.player == 0 and event.special
+    )
+
+
+class Testとくぎを持っている印と回数:
+    """とくぎを持っているか（原型の chicken）と回数（chickenCharges）を分けて持つ。
+
+    原型は外周へ回ると（toNegibon L2255）印だけを外して回数を残す。ここでは、その形
+    （印が外れて回数だけが残っている）を直に作って確かめる。
+    """
+
+    def leftover(self, animal: Animal) -> tuple[WorldState, PlayerState]:
+        """回数 2 が残り、印が外れた0番。とくぎを出し終えた扱いは外してある。"""
+        world, me, _ = duel(animal)
+        me.has_special = False
+        me.special_charges = 2
+        return world, me
+
+    def test_回数だけでは_とくぎを直に出すボタンでも出ない(self) -> None:
+        """原型の doSpecial（L2455）は chicken を見る。"""
+        world, me = self.leftover(Animal.RABBIT)
+        events = simulation.step(world, only_for(world, 0, PlayerInput.SPECIAL))
+        assert specials_in(events) == 0
+        assert me.special_charges == 2
+
+    def test_回数だけでは_長押しでも出ない(self) -> None:
+        world, me = self.leftover(Animal.RABBIT)
+        events: list[SimEvent] = []
+        hold = stats_of(Animal.RABBIT).hold_ticks + 5
+        hold_for(world, hold, lambda _t, step_events: events.extend(step_events))
+        assert specials_in(events) == 0
+        assert me.special_charges == 2
+
+    def test_回数だけでは_通常技の無い動物のポン押しでも出ない(self) -> None:
+        """原型の doAction（L2445）も chicken を見る。"""
+        world, me = self.leftover(Animal.MOLE)
+        events = simulation.step(world, only_for(world, 0, ACTION))
+        assert specials_in(events) == 0
+        assert me.action is None
+        assert me.special_charges == 2
+
+    @pytest.mark.parametrize(
+        ("animal", "expected"), [(Animal.RABBIT, 3), (Animal.FROG, 4)]
+    )
+    def test_チキンを拾うと印が戻り_残っていた回数に足される(
+        self, animal: Animal, expected: int
+    ) -> None:
+        """原型の L1616-1617。倍率はうさぎ 1・かえる 2。"""
+        world, me = self.leftover(animal)
+        world.items.append(
+            Item(id=world.ids.take(), cell=me.position.cell(), kind=ItemKind.CHICKEN)
+        )
+        simulation.step(world, only_for(world, 0, PlayerInput.IDLE))
+        assert (me.has_special, me.special_charges) == (True, expected)
+
+    def test_使うと回数が1つ減り_0になると印が外れる(self) -> None:
+        """原型の useSpecial（L2607-2608）。"""
+        world, me, _ = duel(Animal.RABBIT)
+        grant_special(me, 2)
+        special = only_for(world, 0, PlayerInput.SPECIAL)
+        assert specials_in(simulation.step(world, special)) == 1
+        assert (me.has_special, me.special_charges) == (True, 1)
+        simulation.step(world, only_for(world, 0, PlayerInput.IDLE))
+        assert specials_in(simulation.step(world, special)) == 1
+        assert (me.has_special, me.special_charges) == (False, 0)
 
 
 class Test技を進める_勝手に設置_技を始めるの順:

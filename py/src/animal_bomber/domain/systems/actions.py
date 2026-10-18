@@ -18,11 +18,11 @@ humanUpdate と同じ）。
 通らずにとくぎを呼んでいた）。出せる条件（動けない間・ボタンを受け付けない振る舞いの最中・
 チキンが無い）は長押しのとくぎと同じ。
 
-何がどちらになるかは `domain/abilities/` の動物ごとの技が決める。とくぎはチキンを拾って
-溜めた回数（`PlayerState.special_charges`）ぶんだけ出せる。しきい値は押し方1回につき
-1回だけ見る（`PlayerState.action_fired`）。届いた tick に出せなければ（動けない・
-チキンが無い・ボタンを受け付けない振る舞いの最中）、その押し方のとくぎはそれきり。
-離すと数え直す。
+何がどちらになるかは `domain/abilities/` の動物ごとの技が決める。とくぎは、チキンを
+拾って持っている間（`PlayerState.has_special`）だけ出せる。出すたびに回数を1つ減らし、
+使い切ると持っていない状態に戻る。しきい値は押し方1回につき1回だけ見る
+（`PlayerState.action_fired`）。届いた tick に出せなければ（動けない・チキンが無い・
+ボタンを受け付けない振る舞いの最中）、その押し方のとくぎはそれきり。離すと数え直す。
 
 ## ラウンドの始まりに押していたボタンは、一度離すまで効かない
 
@@ -149,7 +149,7 @@ def _watch_button(
     if (
         just_pressed(player, player_input, PlayerInput.SPECIAL)
         and _accepts(player)
-        and player.special_charges > 0
+        and player.has_special
     ):
         events.extend(_special(world, player))
     if just_pressed(player, player_input, PlayerInput.ACTION):
@@ -165,7 +165,7 @@ def _watch_button(
     ):
         # ⚠️ 出せるかを見る前に立てる。出せなくても、この押し方のとくぎはそれきり。
         player.action_fired = True
-        if _accepts(player) and player.special_charges > 0:
+        if _accepts(player) and player.has_special:
             events.extend(_special(world, player))
     return events
 
@@ -184,7 +184,7 @@ def _tap(world: WorldState, player: PlayerState) -> list[SimEvent]:
     tap = tap_technique(player.animal)
     # 通常技の無い動物は、押した瞬間にとくぎが出る（チキンがあれば）。
     if tap is None:
-        return _special(world, player) if player.special_charges > 0 else []
+        return _special(world, player) if player.has_special else []
     cooldown_before = player.ability_cooldown
     started = tap(world, player)
     _take_over(player, started)
@@ -208,8 +208,14 @@ def _special(world: WorldState, player: PlayerState) -> list[SimEvent]:
 
     掘れないマスでの穴掘りのように、とくぎが何もせずに終わっても、チキンは減る（原型も、
     とくぎを使った時点で減らしてから中身を見る）。
+
+    回数を1つ減らし、0 になったら持っている印を外す（原型の useSpecial L2607-2608）。
+    原型は回数が 0 でも印があれば1回ぶんとして数える `(回数 || 1) − 1` の形なので、
+    そのまま写した（TypeScript 版と同じ）。
     """
-    player.special_charges -= 1
+    player.special_charges = max(0, (player.special_charges or 1) - 1)
+    if player.special_charges <= 0:
+        player.has_special = False
     started = hold_technique(player.animal)(world, player)
     _take_over(player, started)
     return [TechniqueUsed(player=player.id, special=True), *started.events]

@@ -26,6 +26,15 @@ TypeScript 版は、戦い方を登録の表に足す形にしている（6匹�
 起きない）。開いているか、漏れが無いかの交換で、この版は漏れが無いほうを選んだ
 （`domain/abilities/techniques.py` と同じ選び方）。
 
+## とくぎを持っているかは印で見る
+
+とくぎを持っているかは、持っている印（`PlayerState.has_special`）で見て、回数
+（`special_charges`）では見ない。原型の CPU も cpuUpdate の L1926・L1931・L1946・
+L2046・L2054・L2059 で、回数ではなく chicken を見る。原型では、外周から戻った
+プレイヤーに回数だけが残って印が外れていることがある。回数で見ると、出ないとくぎの
+ボタンを押し、舌を伸ばす動物は正面のアイテムへ舌を伸ばさなくなる（TypeScript 版と
+同じ）。
+
 ## ⚠️ ルールの層に置かない理由
 
 「いつ突進するか」はゲームの決まりではなく、CPU の考え方にすぎない。人間は同じ能力を
@@ -102,7 +111,7 @@ def _rabbit_scatters(ctx: CpuContext) -> bool:
 
     逃げる役には立たないので、危ないときには使わない。とくぎを直に出すので跳ばない。
     """
-    if ctx.me.special_charges <= 0 or ctx.in_danger:
+    if not ctx.me.has_special or ctx.in_danger:
         return False
     return (
         ctx.foe_path_distance(SCATTER_RANGE + 1) <= SCATTER_RANGE and ctx.skill_ready()
@@ -123,7 +132,7 @@ def _elephant_escapes(ctx: CpuContext) -> bool:
     置かない（原型も、突進を始めたフレームは突進の最中なので歩けず、置けない）。出した
     あとは、その tick のうちに考え直す。
     """
-    if ctx.me.special_charges <= 0 or not ctx.in_danger or not ctx.skill_ready():
+    if not ctx.me.has_special or not ctx.in_danger or not ctx.skill_ready():
         return False
     ctx.memory.think_in = 0
     return True
@@ -155,7 +164,7 @@ def _mole_digs(ctx: CpuContext) -> bool:
     ⚠️ 足元の爆弾は見ない。原型の CPU も見ずにとくぎを出し、爆弾の上では掘れずに
     チキンだけ減る。
     """
-    if ctx.me.special_charges <= 0 or ctx.in_danger:
+    if not ctx.me.has_special or ctx.in_danger:
         return False
     dug = any(isinstance(a, Pit) and a.cell == ctx.here for a in ctx.world.actors)
     if dug or ctx.world.board.at(ctx.here) is not Tile.EMPTY:
@@ -183,7 +192,7 @@ def _frog_licks(ctx: CpuContext) -> bool:
     原型 cpuUpdate の `!p.chicken`。舌は良いものも悪いものも区別なく掴み、かえるは効果が
     2倍になるので、手前に悪いアイテムがあれば伸ばさない。爆弾の手前で打ち切る。
     """
-    if ctx.in_danger or ctx.me.special_charges > 0:
+    if ctx.in_danger or ctx.me.has_special:
         return False
     for distance in range(1, tongue_reach_of(ctx.world, ctx.me) + 1):
         cell = ctx.here.step(ctx.me.facing, distance)
@@ -199,7 +208,7 @@ def _frog_licks(ctx: CpuContext) -> bool:
 
 def _frog_throws(ctx: CpuContext) -> bool:
     """とくぎは投げっぱなしの爆弾なので、相手がほどよく近いときに投げる（舌は出ない）。"""
-    if ctx.me.special_charges <= 0 or ctx.in_danger:
+    if not ctx.me.has_special or ctx.in_danger:
         return False
     return ctx.foe_path_distance(SLIME_RANGE + 1) <= SLIME_RANGE and ctx.skill_ready()
 
@@ -293,7 +302,7 @@ def _fox_casts(ctx: CpuContext) -> bool:
 
     遠いと届く前に消える。とくぎを直に出すので一列は並ばない。
     """
-    if ctx.me.special_charges <= 0 or ctx.in_danger:
+    if not ctx.me.has_special or ctx.in_danger:
         return False
     near = ctx.foe_path_distance(FOXFIRE_REACH) <= math.floor(FOXFIRE_REACH * 0.8)
     return near and ctx.skill_ready()

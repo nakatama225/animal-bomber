@@ -36,11 +36,11 @@ from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.bomb import Blast
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import PLAYER_IDS, PlayerId
+from animal_bomber.domain.state.player import PLAYER_IDS, PlayerId, PlayerState
 from animal_bomber.domain.state.world import WorldState, hash_world
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.bomb import place_bomb_at
-from tests.helpers import clear_board, make_world
+from tests.helpers import clear_board, grant_special, make_world
 
 IDLE = PlayerInput.IDLE
 HARD, ONI = CpuLevelKey.HARD, CpuLevelKey.ONI
@@ -209,7 +209,7 @@ class Testとくぎを直に出す:
     def test_うさぎは最初のtickに_跳ばずにその場で撒く(self) -> None:
         world = arena(Animal.RABBIT)
         me = world.players[0]
-        me.special_charges = 1
+        grant_special(me, 1)
         world.players[1].position = Cell(4, 1).center()
         start = me.position.cell()
         pressed, events = step(world, cpu())
@@ -227,7 +227,7 @@ class Testとくぎを直に出す:
         me = world.players[0]
         me.position = Cell(5, 7).center()
         world.players[1].position = Cell(11, 7).center()
-        me.special_charges = 1
+        grant_special(me, 1)
         me.previous_input = PlayerInput.BOMB | PlayerInput.ACTION
         step(world, cpu())
         assert isinstance(me.action, Dig)
@@ -238,7 +238,7 @@ class Testとくぎを直に出す:
         me, foe = world.players
         me.position = Cell(3, 7).center()
         me.facing = Direction.RIGHT
-        me.special_charges = 1
+        grant_special(me, 1)
         foe.position = Cell(19, 13).center()
         foe.max_bombs = 5
         place_bomb_at(world, foe, Cell(3, 7))
@@ -253,7 +253,7 @@ class Testとくぎを直に出す:
         me, foe = world.players
         me.position = Cell(3, 7).center()
         foe.position = Cell(7, 7).center()
-        me.special_charges = 1
+        grant_special(me, 1)
         source = cpu()
         for _ in range(30):
             pressed, _ = step(world, source)
@@ -274,7 +274,7 @@ class Testとくぎを直に出す:
             me = world.players[0]
             me.position = Cell(1, 7).center()
             world.players[1].position = Cell(1 + gap, 7).center()
-            me.special_charges = 1
+            grant_special(me, 1)
             return cpu().next_input(world, MatchTick(0))
 
         assert PlayerInput.SPECIAL in pressed(near)
@@ -286,7 +286,7 @@ class Testとくぎを直に出す:
         world = arena(Animal.RABBIT)
         me, foe = world.players
         me.position = Cell(1, 1).center()
-        me.special_charges = 1
+        grant_special(me, 1)
         foe.position = Cell(4, 1).center()
         foe.max_bombs = 5
         place_bomb_at(world, foe, Cell(1, 1))
@@ -297,7 +297,7 @@ class Testとくぎを直に出す:
         world = arena(Animal.RABBIT)
         me = world.players[0]
         me.position = Cell(1, 1).center()
-        me.special_charges = 2
+        grant_special(me, 2)
         me.previous_input = PlayerInput.SPECIAL
         world.players[1].position = Cell(4, 1).center()
         source = cpu()
@@ -312,7 +312,7 @@ class Testとくぎを直に出す:
         me = world.players[0]
         me.position = Cell(5, 7).center()
         world.players[1].position = Cell(11, 7).center()
-        me.special_charges = 1
+        grant_special(me, 1)
         source = cpu()
         step(world, source)
         assert isinstance(me.action, Dig)
@@ -326,18 +326,85 @@ class Testとくぎを直に出す:
         world = arena(Animal.ELEPHANT)
         me, foe = world.players
         me.position = Cell(3, 7).center()
-        me.special_charges = 0
+        grant_special(me, 0)
         foe.position = Cell(19, 13).center()
         foe.max_bombs = 5
         place_bomb_at(world, foe, Cell(3, 7))
         source = cpu()
         step(world, source)
         assert source.memory.mode is CpuMode.FLEE
-        me.special_charges = 1
+        grant_special(me, 1)
         source.memory.think_in = 99
         pressed, _ = step(world, source)
         assert pressed == PlayerInput.SPECIAL
         assert source.memory.think_in < 10
+
+
+def charges_without_mark(player: PlayerState, charges: int) -> None:
+    """とくぎの回数だけが残り、持っている印が外れた状態にする。
+
+    原型では、とくぎを持ったまま倒れて外周へ回り、葱で戻ったプレイヤーがこの形になる
+    （toNegibon L2255 は chicken だけを消し、回数は残す）。残った回数ではとくぎを
+    出せない。
+    """
+    player.has_special = False
+    player.special_charges = charges
+
+
+class Test回数だけが残って印が外れているとき:
+    """CPU も、とくぎを持っているかを印で見る。
+
+    原型の cpuUpdate L1926・L1931・L1946・L2046・L2054・L2059 も chicken を見る。
+    どの場面も、印があればとくぎのボタンを押す（`Testとくぎを直に出す` の同じ場面）。
+    """
+
+    def test_ぞうは危なくても_突進のボタンを押さない(self) -> None:
+        world = arena(Animal.ELEPHANT)
+        me, foe = world.players
+        me.position = Cell(3, 7).center()
+        me.facing = Direction.RIGHT
+        charges_without_mark(me, 1)
+        foe.position = Cell(19, 13).center()
+        foe.max_bombs = 5
+        place_bomb_at(world, foe, Cell(3, 7))
+        pressed, _ = step(world, cpu())
+        assert PlayerInput.SPECIAL not in pressed
+        assert me.action is None
+
+    def test_もぐらは掘れるマスでも_掘るボタンを押さない(self) -> None:
+        world = arena(Animal.MOLE)
+        me = world.players[0]
+        me.position = Cell(5, 7).center()
+        world.players[1].position = Cell(11, 7).center()
+        charges_without_mark(me, 1)
+        pressed, _ = step(world, cpu())
+        assert PlayerInput.SPECIAL not in pressed
+        assert not isinstance(me.action, Dig)
+
+    @pytest.mark.parametrize(
+        ("animal", "near"), [(Animal.RABBIT, 5), (Animal.FROG, 8), (Animal.FOX, 6)]
+    )
+    def test_相手が届く距離にいても_とくぎのボタンを押さない(
+        self, animal: Animal, near: int
+    ) -> None:
+        world = arena(animal)
+        me = world.players[0]
+        me.position = Cell(1, 7).center()
+        world.players[1].position = Cell(1 + near, 7).center()
+        charges_without_mark(me, 1)
+        assert PlayerInput.SPECIAL not in cpu().next_input(world, MatchTick(0))
+
+    def test_舌を伸ばす動物は_正面のアイテムへ舌を伸ばす(self) -> None:
+        """原型 L1931 の `!p.chicken`。回数で見ると、伸ばさなくなる。"""
+        world = arena(Animal.FROG)
+        world.items.append(
+            Item(id=world.ids.take(), cell=Cell(3, 1), kind=ItemKind.FIRE)
+        )
+        world.players[0].facing = Direction.RIGHT
+        charges_without_mark(world.players[0], 1)
+        early = tactic_of(Animal.FROG).before_plan
+        assert early is not None
+        assert early.when(context(world, Cell(1, 1)))
 
 
 class Testかえるの舌:
@@ -374,7 +441,7 @@ class Testかえるの舌:
         world.items.append(
             Item(id=world.ids.take(), cell=Cell(3, 1), kind=ItemKind.FIRE)
         )
-        world.players[0].special_charges = charges
+        grant_special(world.players[0], charges)
         assert self.licks(self.frog(world)) is expected
 
     def test_手前に悪いアイテムがあれば伸ばさない(self) -> None:
@@ -692,7 +759,7 @@ class Test1tickの流れ:
         me, foe = world.players
         me.position = Cell(5, 5).center()
         foe.position = Cell(7, 5).center()
-        me.special_charges = 1
+        grant_special(me, 1)
         me.effects.add(kind, Tick(30), Tick(30))
         source = cpu(ONI)
         pressed = [step(world, source)[0] for _ in range(30)]

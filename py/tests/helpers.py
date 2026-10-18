@@ -33,6 +33,17 @@ def make_world(
     return world
 
 
+def grant_special(player: PlayerState, charges: int) -> None:
+    """とくぎを `charges` 回ぶん持った状態にする。0 なら持たない状態にする。
+
+    ⚠️ とくぎを持っているか（`has_special`）と回数（`special_charges`）は別に持つ（原型の
+    chicken と chickenCharges）。回数だけを書いても、とくぎは出ない（TypeScript 版の
+    `grantSpecial` と同じ）。
+    """
+    player.has_special = charges > 0
+    player.special_charges = charges
+
+
 def only_for(
     world: WorldState, player_id: PlayerId, player_input: PlayerInput
 ) -> dict[PlayerId, PlayerInput]:

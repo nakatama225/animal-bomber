@@ -159,6 +159,7 @@ class MatchScene:
         ):
             player.position = Point(x, y)
             player.facing = facing
+            player.has_special = True
             player.special_charges = 1
         return world
 

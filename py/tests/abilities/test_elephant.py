@@ -32,7 +32,14 @@ from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.bomb import place_bomb, place_bomb_at
 from animal_bomber.domain.systems.damage import hurt
 from animal_bomber.domain.systems.items import step_items
-from tests.helpers import advance, clear_board, idle, make_world, only_for
+from tests.helpers import (
+    advance,
+    clear_board,
+    grant_special,
+    idle,
+    make_world,
+    only_for,
+)
 
 ELEPHANT_HOLD = stats_of(Animal.ELEPHANT).hold_ticks
 ACTION = PlayerInput.ACTION
@@ -54,7 +61,7 @@ def elephant_world() -> WorldState:
 
 def trigger_charge(world: WorldState) -> None:
     """技のボタンを押し続けて、とくぎ（突進）を出す。チキンを1つ持たせる。"""
-    world.players[0].special_charges = 1
+    grant_special(world.players[0], 1)
     # ラウンドの始まりの「とくぎを出し終えた扱い」を外すため、まず 1 tick 離す。
     simulation.step(world, idle(world))
     advance(world, only_for(world, 0, ACTION), ELEPHANT_HOLD)
@@ -92,7 +99,7 @@ class Testとくぎの出し方:
 
     def test_チキンを1つ使う(self) -> None:
         world = elephant_world()
-        world.players[0].special_charges = 2
+        grant_special(world.players[0], 2)
         simulation.step(world, idle(world))
         advance(world, only_for(world, 0, ACTION), ELEPHANT_HOLD)
         assert world.players[0].special_charges == 1
@@ -100,7 +107,7 @@ class Testとくぎの出し方:
     def test_ぞうのとくぎは_1点5秒押し続けないと出ない(self) -> None:
         """強い技ほど長押しを長くする。ほかの動物の 0.5 秒では出ない。"""
         world = elephant_world()
-        world.players[0].special_charges = 1
+        grant_special(world.players[0], 1)
         simulation.step(world, idle(world))
         advance(world, only_for(world, 0, ACTION), ELEPHANT_HOLD - 1)
         assert world.players[0].action is None
@@ -110,7 +117,7 @@ class Testとくぎの出し方:
     def test_ラウンドの始まりから押していると_離すまで出ない(self) -> None:
         """パッドは次の tick で押下が戻るので、これが無いと開始直後に暴発する。"""
         world = elephant_world()
-        world.players[0].special_charges = 1
+        grant_special(world.players[0], 1)
         advance(world, only_for(world, 0, ACTION), ELEPHANT_HOLD + 30)
         assert world.players[0].action is None
 

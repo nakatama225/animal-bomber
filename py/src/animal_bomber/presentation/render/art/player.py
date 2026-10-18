@@ -82,7 +82,12 @@ class PlayerLook:
     effects: tuple[EffectKind, ...] = ()
     """かかっている状態（状態の印に使う）。"""
     special: bool = False
-    """とくぎを溜めてあるか（原型の chicken。とくぎはいつも自分の動物のもの）。"""
+    """とくぎを持っているか（原型の chicken。とくぎはいつも自分の動物のもの）。
+
+    持っている印（`PlayerState.has_special`）で見て、回数では見ない（原型の足元の印
+    L4813・溜めのゲージ L4823 も chicken を見る）。回数だけが残って印が外れているとき
+    （原型では外周から戻ったとき）は、とくぎを出せないので描かない。
+    """
     held: Tick = Tick(0)
     """技のボタンを押し続けている長さ（原型の actHold）。"""
     fired: bool = True
@@ -136,7 +141,8 @@ def player_alpha(look: PlayerLook, start: float = 1.0) -> float:
 def gauge_progress(look: PlayerLook) -> float | None:
     """とくぎの長押しのゲージの溜まり（0〜1）。出さないなら None。
 
-    とくぎを溜めてあって、押していて、まだ出し終えていないときだけ出す（原型の条件）。
+    とくぎを持っていて（印で見る。`PlayerLook.special`）、押していて、まだ出し終えていない
+    ときだけ出す（原型の条件）。
 
     ⚠️ CPU が技のボタンを押した tick にもゲージが1フレーム出る（チキンを持ったまま、
     爆弾を一列に置く技を出したときなど）。原型の CPU は技を直に呼び、actHold を増やさ

@@ -150,8 +150,22 @@ class PlayerState:
     """無敵が切れる盤面の時刻。それより前は爆風に当たらない。"""
     effects: EffectBag = field(default_factory=EffectBag)
     """かかっている一時的な状態。"""
+    has_special: bool = False
+    """とくぎを持っているか（原型の chicken）。とくぎを出せるかは、こちらで見る。
+
+    チキンを拾うと立ち、回数を使い切ると外れる（原型の applyItem L1616・useSpecial
+    L2608）。原型の doAction（L2445）と doSpecial（L2455）も chicken を見る。
+
+    ⚠️ 回数（`special_charges`）とは別に持つ。原型は外周へ回ると（toNegibon L2255）、
+    この印だけを外して回数を残す。残った回数ではとくぎを出せず、次にチキンを拾うと
+    足される（TypeScript 版と同じ）。
+    """
     special_charges: int = 0
-    """溜めてあるとくぎの回数。チキンを拾うと増え、とくぎを出すと減る。"""
+    """溜めてあるとくぎの回数（原型の chickenCharges）。
+
+    チキンを拾うと増え、とくぎを出すと減る。持っている印（`has_special`）が外れている
+    間も残ることがある。
+    """
     action: Action | None = None
     """いまプレイヤーを乗っ取っている振る舞い（突進・穴掘り・舌）。無ければ None。
 

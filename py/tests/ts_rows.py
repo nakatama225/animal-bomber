@@ -106,9 +106,9 @@ def life_row(life: Life) -> list[object]:
 def world_rows(world: WorldState) -> dict[str, object]:
     """盤面の状態を、TypeScript 版の出力と同じ形に並べる。
 
-    プレイヤー（位置・向き・体力・無敵の切れる tick・一時的な状態・強さ・「勝手に
-    設置」の待ち・技の振る舞いと長押しと間隔）・盤面の爆弾と爆風とアイテム（識別子も）・
-    盤面の物・盤面の中身・発番した識別子の数・乱数を引いた回数。
+    プレイヤー（位置・向き・状態・体力・無敵の切れる tick・一時的な状態・とくぎを持って
+    いるかと回数・強さ・「勝手に設置」の待ち・技の振る舞いと長押しと間隔）・盤面の爆弾と
+    爆風とアイテム（識別子も）・盤面の物・盤面の中身・発番した識別子の数・乱数を引いた回数。
     """
     return {
         "players": [
@@ -121,6 +121,7 @@ def world_rows(world: WorldState) -> dict[str, object]:
                 p.hp,
                 p.invulnerable_until,
                 p.effects.encode(),
+                p.has_special,
                 p.special_charges,
                 p.last_hit_by,
                 p.power,

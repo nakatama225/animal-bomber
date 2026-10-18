@@ -206,6 +206,7 @@ def hash_world(world: WorldState) -> int:
             .add_int(player.hp)
             .add_int(player.invulnerable_until)
             .add_text(player.effects.encode())
+            .add_bool(player.has_special)
             .add_int(player.special_charges)
             .add_int(-1 if player.last_hit_by is None else player.last_hit_by)
             .add_int(player.autobomb_wait)

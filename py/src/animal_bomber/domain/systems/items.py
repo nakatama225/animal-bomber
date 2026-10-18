@@ -188,6 +188,9 @@ def apply_item(
             player.effects.set(EffectKind.STUN, seconds_to_ticks(STUN_SECONDS * times))
             return [EffectApplied(target=player.id, effect=EffectKind.STUN)]
         case ItemKind.CHICKEN:
+            # 持っている印を立て、回数を足す（原型の L1616-1617）。印が外れて回数だけが
+            # 残っていたとき（原型では外周から戻ったとき）は、残りの回数に足される。
+            player.has_special = True
             player.special_charges += times
             return []
         case ItemKind.POOP:

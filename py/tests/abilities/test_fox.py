@@ -22,7 +22,14 @@ from animal_bomber.domain.state.player import OUT, PlayerState
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.blast import add_blast
-from tests.helpers import advance, clear_board, idle, make_world, only_for
+from tests.helpers import (
+    advance,
+    clear_board,
+    grant_special,
+    idle,
+    make_world,
+    only_for,
+)
 
 ACTION = PlayerInput.ACTION
 FOX_HOLD = stats_of(Animal.FOX).hold_ticks
@@ -224,7 +231,7 @@ def leap() -> tuple[WorldState, PlayerState, list[SimEvent]]:
     world, (fox, rabbit) = arena((Animal.FOX, Animal.RABBIT))
     place(fox, Cell(3, 7))
     place(rabbit, Cell(19, 7))
-    fox.special_charges = 1
+    grant_special(fox, 1)
     simulation.step(world, idle(world))
     advance(world, only_for(world, 0, ACTION), FOX_HOLD - 1)
     events = simulation.step(world, only_for(world, 0, ACTION))
@@ -258,7 +265,7 @@ class Testキツネ跳び:
         world, (fox, rabbit) = arena((Animal.FOX, Animal.RABBIT))
         place(fox, Cell(3, 7))
         rabbit.life = OUT
-        fox.special_charges = 1
+        grant_special(fox, 1)
         simulation.step(world, idle(world))
         advance(world, only_for(world, 0, ACTION), FOX_HOLD)
         assert fox.effects.has(EffectKind.LEAP)

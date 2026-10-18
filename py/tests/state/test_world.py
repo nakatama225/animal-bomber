@@ -88,7 +88,8 @@ class Test始めの状態:
         for player in world.players:
             assert player.invulnerable_until == 0
             assert player.effects.active() == []
-            assert (player.special_charges, player.last_hit_by) == (0, None)
+            assert (player.has_special, player.special_charges) == (False, 0)
+            assert player.last_hit_by is None
             assert player.autobomb_wait == 0
             assert (player.action, player.action_held) == (None, 0)
             assert (player.action_fired, player.ability_cooldown) == (True, 0)
@@ -181,6 +182,11 @@ def _invulnerable(world: WorldState) -> None:
 
 def _effect(world: WorldState) -> None:
     world.players[1].effects.add(EffectKind.SLOW, Tick(10), Tick(30))
+
+
+def _has_special(world: WorldState) -> None:
+    """回数は変えずに、とくぎを持っている印だけを立てる（印と回数を別々に見るか）。"""
+    world.players[1].has_special = True
 
 
 def _special_charges(world: WorldState) -> None:
@@ -487,6 +493,7 @@ class Test状態の要約:
             _hp,
             _invulnerable,
             _effect,
+            _has_special,
             _special_charges,
             _last_hit_by,
             _autobomb_wait,

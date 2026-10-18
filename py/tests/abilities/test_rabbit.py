@@ -23,7 +23,14 @@ from animal_bomber.domain.state.player import PlayerState
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.bomb import place_bomb_at
-from tests.helpers import advance, clear_board, idle, make_world, only_for
+from tests.helpers import (
+    advance,
+    clear_board,
+    grant_special,
+    idle,
+    make_world,
+    only_for,
+)
 
 ACTION = PlayerInput.ACTION
 POOP_EFFECTS = (
@@ -60,7 +67,7 @@ def hold_special(world: WorldState) -> None:
     通常技（跳躍）は、間隔の途中にして出さない（その場で撒かせる）。
     """
     player = world.players[0]
-    player.special_charges = 1
+    grant_special(player, 1)
     player.ability_cooldown = Tick(600)
     simulation.step(world, idle(world))
     advance(world, only_for(world, 0, ACTION), stats_of(player.animal).hold_ticks)

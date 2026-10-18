@@ -44,7 +44,7 @@ from animal_bomber.presentation.render.views.player import (
     invulnerable_left,
     player_look,
 )
-from tests.helpers import clear_board, idle, make_world, only_for
+from tests.helpers import clear_board, grant_special, idle, make_world, only_for
 
 from .legacy_models import DT, LegacySlime, LegacyTongue, countdown
 
@@ -136,7 +136,7 @@ class Test舌:
 class Test掘る:
     def test_掘り終わるまでの残りは原型の_D_t_と同じ(self) -> None:
         world, mole = arena((Animal.MOLE, Animal.RABBIT))
-        mole.special_charges = 1
+        grant_special(mole, 1)
         # もぐらには通常技が無いので、押した瞬間にとくぎ（穴掘り）が出る。
         simulation.step(world, only_for(world, mole.id, PlayerInput.ACTION))
         legacy = countdown(1.5)
@@ -158,7 +158,7 @@ class Test粘膜爆弾:
         """跳ねたあとは潰れて揺れ、着地しただけ（最初の区切り）では潰れない。"""
         world, frog = arena((Animal.FROG, Animal.RABBIT))
         frog.facing = Direction.RIGHT
-        frog.special_charges = 1
+        grant_special(frog, 1)
         origin = (frog.position.x, frog.position.y)
         simulation.step(world, only_for(world, frog.id, PlayerInput.SPECIAL))
         [slime] = [actor for actor in world.actors if isinstance(actor, SlimeBomb)]
@@ -225,7 +225,7 @@ class Test無敵と状態:
 
     def test_跳び上がりの残りは原型の_foxLeap_と同じ(self) -> None:
         world, fox = arena((Animal.FOX, Animal.RABBIT))
-        fox.special_charges = 1
+        grant_special(fox, 1)
         simulation.step(world, only_for(world, fox.id, PlayerInput.SPECIAL))
         legacy = countdown(1.0)
         copied: list[float] = []
@@ -255,15 +255,35 @@ class Test無敵と状態:
     def test_チキンを持つと_自分の動物のとくぎの印が先頭に出る(self) -> None:
         world, mole = arena((Animal.MOLE, Animal.RABBIT))
         assert look_of(world, mole).marks == []
-        mole.special_charges = 2
+        grant_special(mole, 2)
         assert look_of(world, mole).marks == [special_emoji(Animal.MOLE)]
+
+    def test_回数だけが残って印が外れていると_とくぎの印も溜めのゲージも出さない(
+        self,
+    ) -> None:
+        """原型の足元の印（L4813）と溜めのゲージ（L4823）は chicken を見る。
+
+        原型では、とくぎを持ったまま外周へ回って戻るとこの形になる（印だけが外れる）。
+        対照として、印があれば両方とも出る。
+        """
+        world, mole = arena((Animal.MOLE, Animal.RABBIT))
+        mole.special_charges = 2
+        mole.action_held = Tick(5)
+        mole.action_fired = False
+        mole.has_special = False
+        look = look_of(world, mole)
+        assert (look.marks, gauge_progress(look)) == ([], None)
+        mole.has_special = True
+        look = look_of(world, mole)
+        assert look.marks == [special_emoji(Animal.MOLE)]
+        assert gauge_progress(look) is not None
 
 
 class Test長押し:
     def test_溜まりは原型の_actHold_と同じで_出し終えたら消える(self) -> None:
         """ぞうは 1.5 秒の長押しでとくぎ。押した tick から 1/60 秒ずつ溜まる。"""
         world, elephant = arena((Animal.ELEPHANT, Animal.RABBIT))
-        elephant.special_charges = 1
+        grant_special(elephant, 1)
         elephant.action_fired = False
         held = 0.0
         copied, legacy = [], []
