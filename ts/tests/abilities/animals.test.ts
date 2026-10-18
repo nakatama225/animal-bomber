@@ -8,7 +8,7 @@ import { applyItem } from '../../src/domain/mutations/items.js';
 import { isSolidFor } from '../../src/domain/query/BoardQuery.js';
 import { isBlastProof, isInvulnerable, isUntouchable } from '../../src/domain/state/PlayerState.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
-import { advance, clearBoard, makeWorld, onlyFor, press } from '../helpers.js';
+import { advance, clearBoard, grantSpecial, makeWorld, onlyFor, press } from '../helpers.js';
 import { SlimeBombActor } from '../../src/domain/abilities/frog/SlimeBombActor.js';
 
 /** プレイヤー0をその動物にした世界。 */
@@ -26,7 +26,7 @@ function tap(world: ReturnType<typeof makeWorld>, sim = new Simulation()): void 
 /** 技のボタンを長押ししてとくぎを出す。 */
 function hold(world: ReturnType<typeof makeWorld>, animal: string): void {
   const sim = new Simulation();
-  world.players[0]!.specialCharges = 1;
+  grantSpecial(world.players[0]!, 1);
   sim.step(world, onlyFor(world, 0, press({})));
   for (let i = 0; i < abilityOf(animal).holdTicks; i += 1) {
     sim.step(world, onlyFor(world, 0, press({ action: true })));
@@ -154,7 +154,7 @@ describe('もぐら', () => {
     const world = worldWith('mole');
     clearBoard(world);
     const mole = world.players[0]!;
-    mole.specialCharges = 1;
+    grantSpecial(mole, 1);
     const sim = new Simulation();
     sim.step(world, onlyFor(world, 0, press({})));
     const events = sim.step(world, onlyFor(world, 0, press({ action: true })));
@@ -168,7 +168,7 @@ describe('もぐら', () => {
       const world = worldWith('mole');
       clearBoard(world);
       const mole = world.players[0]!;
-      mole.specialCharges = charges;
+      grantSpecial(mole, charges);
       if (stunned) mole.effects.add('stun', tick(120), tick(120));
       tap(world);
       return { action: mole.action?.kind ?? null, charges: mole.specialCharges };

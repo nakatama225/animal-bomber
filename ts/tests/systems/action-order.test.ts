@@ -16,7 +16,7 @@ import { itemEffectTicks } from '../../src/domain/rules/items.js';
 import type { PlayerState } from '../../src/domain/state/PlayerState.js';
 import { createWorld, hashWorld, type WorldState } from '../../src/domain/state/WorldState.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
-import { clearBoard, makeWorld, onlyFor, press, sameForAll } from '../helpers.js';
+import { clearBoard, grantSpecial, makeWorld, onlyFor, press, sameForAll } from '../helpers.js';
 
 /*
  * 技のボタンと「勝手に設置」を、原型（legacy/animal-bomber.html の humanUpdate・doAction・doSpecial・
@@ -47,7 +47,7 @@ function duel(animal: string, other = 'frog'): { world: WorldState; me: PlayerSt
   place(me, { col: 3, row: 7 });
   me.facing = 'right';
   place(foe, { col: 19, row: 13 });
-  me.specialCharges = 1;
+  grantSpecial(me, 1);
   me.actionFired = false;
   return { world, me, foe, sim: new Simulation() };
 }
@@ -143,7 +143,7 @@ describe('押した瞬間の通常技と、しきい値のとくぎ（原型 hum
     place(rabbit, { col: 3, row: 7 });
     rabbit.facing = 'right';
     place(frog, { col: 19, row: 13 });
-    rabbit.specialCharges = 1;
+    grantSpecial(rabbit, 1);
     const sim = new Simulation();
     let movedAt: number | null = null;
     for (let t = 1; t <= 70; t += 1) {
@@ -175,7 +175,7 @@ describe('振る舞いの最中の技のボタン（原型は舌の間だけボ�
     // 原型：85 フレーム押したところで突進を始め、91 フレーム目にやり直し（残り 5 秒・抱えた物は空・アイテム 0）。
     const run = (restart: boolean): { restartAt: number | null; items: string[]; spat: number } => {
       const { world, me: elephant, sim } = duel('elephant');
-      elephant.specialCharges = 0;
+      grantSpecial(elephant, 0);
       elephant.abilityCooldown = tick(9999); // 鼻水は出ないようにしておく
       world.items.push({ id: world.ids.take(), cell: { col: 4, row: 7 }, kind: 'onion' });
       const events: SimEvent[] = [];
@@ -186,7 +186,7 @@ describe('振る舞いの最中の技のボタン（原型は舌の間だけボ�
         if (t === 84) {
           first = new ChargeAction('right');
           elephant.action = first;
-          if (restart) elephant.specialCharges = 1;
+          if (restart) grantSpecial(elephant, 1);
         }
         if (restartAt === null && first !== null && elephant.action !== null && elephant.action !== first) restartAt = t;
       });
@@ -210,7 +210,7 @@ describe('振る舞いの最中の技のボタン（原型は舌の間だけボ�
       expect([mole.action?.kind, mole.specialCharges]).toEqual(['dig', 0]);
       let doneAt: number | null = null;
       for (let t = 2; t <= 120 && doneAt === null; t += 1) {
-        if (t === 10) mole.specialCharges = 1;
+        if (t === 10) grantSpecial(mole, 1);
         sim.step(world, onlyFor(world, 0, press({ action: pressAgain && t >= 11 })));
         if (mole.action === null) doneAt = t;
       }
@@ -225,7 +225,7 @@ describe('振る舞いの最中の技のボタン（原型は舌の間だけボ�
     // 原型：2 マス先を掴んで戻る舌は 32 フレーム目に戻り、そのフレームに押すと長さ 0 の舌が出る。
     const run = (pressAt: number): { endAt: number | null; tongue: unknown } => {
       const { world, me: frog, sim } = duel('frog', 'fox');
-      frog.specialCharges = 0;
+      grantSpecial(frog, 0);
       world.items.push({ id: world.ids.take(), cell: { col: 5, row: 7 }, kind: 'fire' });
       sim.step(world, onlyFor(world, 0, press({ action: true })));
       const first = frog.action;
@@ -257,7 +257,7 @@ function rabbitScene({ pressAt, releaseAt, stunAt, stunTicks }: RabbitScene) {
   place(rabbit, { col: 5, row: 5 });
   rabbit.facing = 'right';
   place(frog, { col: 19, row: 13 });
-  rabbit.specialCharges = 1;
+  grantSpecial(rabbit, 1);
   const sim = new Simulation();
   let hopAt: number | null = null;
   const x0 = rabbit.position.x;
@@ -323,7 +323,7 @@ describe('泣いている・はまっている間の技のボタン（原型 doA
         place(player, { col: 5, row: 5 });
         player.facing = 'right';
         place(other, { col: 19, row: 13 });
-        player.specialCharges = 1;
+        grantSpecial(player, 1);
         world.items.push({ id: world.ids.take(), cell: { col: 8, row: 5 }, kind: 'fire' });
         player.effects.add(effect, tick(240), tick(240));
         const sim = new Simulation();
@@ -434,7 +434,7 @@ describe('CPU は泣いている・はまっている間は何もしない（原
       const [rabbit, frog] = world.players as [PlayerState, PlayerState];
       place(rabbit, { col: 5, row: 5 });
       place(frog, { col: 7, row: 5 });
-      rabbit.specialCharges = 1;
+      grantSpecial(rabbit, 1);
       rabbit.effects.add(effect, tick(30), tick(30));
       const source = new CpuInputSource(0, CPU_LEVELS.oni, 1);
       const sim = new Simulation();

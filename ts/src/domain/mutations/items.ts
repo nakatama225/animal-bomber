@@ -84,6 +84,9 @@ export function applyItem(
       player.effects.set('stun', itemEffectTicks(STUN_SECONDS * multiplier));
       return [{ type: 'effectApplied', target: player.id, effect: 'stun' }];
     case 'chicken':
+      // 持っている印を立て、回数を足す（原型の L1616-1617）。外周へ回って外れた印も戻り、
+      // そのとき残っていた回数にも足される。
+      player.hasSpecial = true;
       player.specialCharges += multiplier;
       return [];
     case 'poop': {

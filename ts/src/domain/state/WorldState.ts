@@ -176,6 +176,8 @@ export function createWorld(config: WorldSeed): WorldState {
       walked: 0,
       previousInput: HELD_AT_ROUND_START,
       effects: new EffectBag(),
+      // とくぎはどちらも持たずに始まる（原型の startRound L4177 も chicken と chickenCharges を両方戻す）。
+      hasSpecial: false,
       specialCharges: 0,
       action: null,
       actionHeld: tick(0),
@@ -239,6 +241,7 @@ export function hashWorld(world: WorldState): number {
       .int(player.invulnerableUntil)
       .int(packInput(player.previousInput))
       .text(player.effects.encode())
+      .bool(player.hasSpecial)
       .int(player.specialCharges)
       .text(player.action?.kind ?? '')
       .int(player.actionHeld)

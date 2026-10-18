@@ -126,7 +126,7 @@ export class ActionSystem {
   ): SimEvent[] {
     const events: SimEvent[] = [];
     // とくぎを直に出すボタン（人間の操作には無い。`PlayerInput.special`）。技のボタンの長さには触れない。
-    if (justPressed(player, playerInput, 'special') && this.#accepts(player) && player.specialCharges > 0) {
+    if (justPressed(player, playerInput, 'special') && this.#accepts(player) && player.hasSpecial) {
       events.push(...this.#special(world, player));
     }
     if (justPressed(player, playerInput, 'action')) events.push(...this.#tap(world, player));
@@ -139,7 +139,7 @@ export class ActionSystem {
     if (player.actionHeld >= abilityOf(player.animal).holdTicks && !player.actionFired) {
       // ⚠️ 出せるかを見る前に立てる。出せなくても、この押し方のとくぎはそれきり。
       player.actionFired = true;
-      if (this.#accepts(player) && player.specialCharges > 0) events.push(...this.#special(world, player));
+      if (this.#accepts(player) && player.hasSpecial) events.push(...this.#special(world, player));
     }
     return events;
   }
@@ -154,7 +154,7 @@ export class ActionSystem {
     if (!this.#accepts(player)) return [];
     const ability = abilityOf(player.animal);
     // 通常技の無い動物は、押した瞬間にとくぎが出る（チキンがあれば）。
-    if (ability.onTap === undefined) return player.specialCharges > 0 ? this.#special(world, player) : [];
+    if (ability.onTap === undefined) return player.hasSpecial ? this.#special(world, player) : [];
     const cooldownBefore = player.abilityCooldown;
     const result = ability.onTap(world, player);
     if (result.action !== null) player.action = result.action;
@@ -168,11 +168,17 @@ export class ActionSystem {
     return [{ type: 'techniqueUsed', player: player.id, special: false }, ...result.events];
   }
 
-  /** とくぎを出す。チキンを1つ使う（出せる形かどうかは呼び出し側が見る）。 */
+  /**
+   * とくぎを出す。チキンを1つ使う（出せる形かどうかは呼び出し側が見る）。
+   *
+   * 回数を1つ減らし、0 になったら持っている印を外す（原型の useSpecial L2607-2608 と同じ。原型は回数が無くても
+   * 印があれば1回ぶんとして数える `(回数 || 1) − 1` の形なので、そのまま写した）。
+   */
   #special(world: WorldState, player: PlayerState): SimEvent[] {
     const ability = abilityOf(player.animal);
     if (ability.onHold === undefined) return [];
-    player.specialCharges -= 1;
+    player.specialCharges = Math.max(0, (player.specialCharges || 1) - 1);
+    if (player.specialCharges <= 0) player.hasSpecial = false;
     const result = ability.onHold(world, player);
     if (result.action !== null) player.action = result.action;
     return [{ type: 'techniqueUsed', player: player.id, special: true }, ...result.events];

@@ -12,7 +12,7 @@ import { itemEffectTicks } from '../../src/domain/rules/items.js';
 import { isFrozen, type PlayerState } from '../../src/domain/state/PlayerState.js';
 import type { WorldState } from '../../src/domain/state/WorldState.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
-import { advance, clearBoard, makeWorld, onlyFor, press, sameForAll } from '../helpers.js';
+import { advance, clearBoard, grantSpecial, makeWorld, onlyFor, press, sameForAll } from '../helpers.js';
 
 /*
  * 落とし穴を原型（legacy/animal-bomber.html の startDigPit・updateDigging・pitfallCheck）に合わせる。
@@ -74,7 +74,7 @@ describe('掘る（原型 startDigPit・updateDigging）', () => {
     const [mole, rabbit] = world.players as [PlayerState, PlayerState];
     place(mole, { col: 5, row: 5 });
     place(rabbit, { col: 19, row: 13 });
-    mole.specialCharges = 2;
+    grantSpecial(mole, 2);
     const sim = new Simulation();
     pressSpecial(world, 0, sim);
     advance(world, onlyFor(world, 0, press({})), 100, sim);
@@ -99,7 +99,7 @@ describe('掘る（原型 startDigPit・updateDigging）', () => {
     place(mole, { col: 5, row: 5 });
     place(rabbit, { col: 19, row: 13 });
     world.board.set({ col: 5, row: 5 }, 'soft');
-    mole.specialCharges = 1;
+    grantSpecial(mole, 1);
     const sim = new Simulation();
     pressSpecial(world, 0, sim);
     expect(mole.action).toBeNull();
@@ -116,7 +116,7 @@ describe('掘る（原型 startDigPit・updateDigging）', () => {
     const bomb = placeBomb(world, mole);
     if (bomb === undefined) throw new Error('爆弾を置けなかった');
     bomb.fuse = tick(9999);
-    mole.specialCharges = 1;
+    grantSpecial(mole, 1);
     const sim = new Simulation();
     pressSpecial(world, 0, sim);
     expect(mole.action).toBeNull();
@@ -130,7 +130,7 @@ describe('掘る（原型 startDigPit・updateDigging）', () => {
     const [mole, rabbit] = world.players as [PlayerState, PlayerState];
     place(mole, { col: 5, row: 5 });
     place(rabbit, { col: 19, row: 13 });
-    mole.specialCharges = 1;
+    grantSpecial(mole, 1);
     const sim = new Simulation();
     pressSpecial(world, 0, sim);
     expect(mole.action?.kind).toBe('dig');
@@ -150,7 +150,7 @@ describe('掘る（原型 startDigPit・updateDigging）', () => {
       const [mole, rabbit] = world.players as [PlayerState, PlayerState];
       place(mole, { col: 5, row: 5 });
       place(rabbit, { col: 19, row: 13 });
-      mole.specialCharges = 1;
+      grantSpecial(mole, 1);
       const sim = new Simulation();
       pressSpecial(world, 0, sim);
       expect(mole.action?.kind).toBe('dig');
@@ -182,7 +182,7 @@ describe('掘る（原型 startDigPit・updateDigging）', () => {
     const [mole, rabbit] = world.players as [PlayerState, PlayerState];
     place(mole, { col: 5, row: 5 });
     place(rabbit, { col: 19, row: 13 });
-    mole.specialCharges = 1;
+    grantSpecial(mole, 1);
     const sim = new Simulation();
     pressSpecial(world, 0, sim);
     advance(world, onlyFor(world, 0, press({})), 100, sim);
@@ -250,8 +250,8 @@ describe('落ちる（原型 pitfallCheck）', () => {
     const [m0, m1] = world.players as [PlayerState, PlayerState];
     place(m0, { col: 5, row: 5 });
     place(m1, { col: 5, row: 5 });
-    m0.specialCharges = 1;
-    m1.specialCharges = 1;
+    grantSpecial(m0, 1);
+    grantSpecial(m1, 1);
     const sim = new Simulation();
     sim.step(world, sameForAll(world, press({})));
     sim.step(world, sameForAll(world, press({ action: true })));
@@ -331,7 +331,7 @@ describe('落ちる（原型 pitfallCheck）', () => {
       const [rabbit, mole] = world.players as [PlayerState, PlayerState];
       place(rabbit, { col: 5, row: 5 });
       place(mole, { col: 1, row: 3 });
-      rabbit.specialCharges = 1;
+      grantSpecial(rabbit, 1);
       // 押した瞬間の跳躍は、間隔の途中にして出さない（その場で撒かせる）。
       rabbit.abilityCooldown = tick(600);
       const sim = new Simulation();

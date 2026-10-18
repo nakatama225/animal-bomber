@@ -80,6 +80,8 @@ function clearRoundState(player: PlayerState): void {
   player.activeBombs = 0;
   for (const kind of EFFECT_KINDS) player.effects.clear(kind);
   player.action = null;
+  // とくぎは印も回数も戻す（原型の enterSuddenDeath L4448。外周で残った回数もここで消える）。
+  player.hasSpecial = false;
   player.specialCharges = 0;
   // 技のボタンの長押しは数え直す（原型の enterSuddenDeath）。押したまま延長戦に入ると、
   // そこからしきい値ぶん押し続ければ、とくぎがもう一度出る（チキンを拾っていれば）。

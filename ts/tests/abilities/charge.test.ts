@@ -12,7 +12,7 @@ import { isAlive, isBlastProof, isUntouchable, type PlayerState } from '../../sr
 import type { WorldState } from '../../src/domain/state/WorldState.js';
 import { ItemSystem } from '../../src/domain/systems/ItemSystem.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
-import { advance, clearBoard, makeWorld, onlyFor, press, sameForAll } from '../helpers.js';
+import { advance, clearBoard, grantSpecial, makeWorld, onlyFor, press, sameForAll } from '../helpers.js';
 
 const ELEPHANT_HOLD = abilityOf('elephant').holdTicks;
 
@@ -27,7 +27,7 @@ function triggerCharge(
   sim = new Simulation(),
 ): void {
   const player = world.players[0]!;
-  player.specialCharges = 1;
+  grantSpecial(player, 1);
   // ラウンド開始時のロックを外すため、まず1 tick 離す。
   sim.step(world, onlyFor(world, 0, press({})));
   for (let i = 0; i < ELEPHANT_HOLD; i += 1) {
@@ -55,7 +55,7 @@ describe('とくぎの出し方', () => {
 
   it('溜めを1つ使う', () => {
     const world = elephantWorld();
-    world.players[0]!.specialCharges = 2;
+    grantSpecial(world.players[0]!, 2);
     const sim = new Simulation();
     sim.step(world, onlyFor(world, 0, press({})));
     for (let i = 0; i < ELEPHANT_HOLD; i += 1) {
@@ -69,7 +69,7 @@ describe('とくぎの出し方', () => {
     // ゲームパッドは次の tick で押下が戻るため、これが無いと
     // 開始 0.5 秒でとくぎが暴発する。
     const world = elephantWorld();
-    world.players[0]!.specialCharges = 1;
+    grantSpecial(world.players[0]!, 1);
     const sim = new Simulation();
     for (let i = 0; i < ELEPHANT_HOLD + 30; i += 1) {
       sim.step(world, onlyFor(world, 0, press({ action: true })));

@@ -30,7 +30,7 @@ import { BLAST_DURATION, BOMB_FUSE } from '../../src/domain/rules/tuning.js';
 import type { PlayerId, PlayerState } from '../../src/domain/state/PlayerState.js';
 import { hashWorld, type WorldState } from '../../src/domain/state/WorldState.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
-import { clearBoard, makeWorld } from '../helpers.js';
+import { clearBoard, grantSpecial, makeWorld } from '../helpers.js';
 
 
 interface CpuSpec {
@@ -194,7 +194,7 @@ describe('攻める', () => {
     const world = makeWorld(3, ['rabbit', 'elephant']);
     clearBoard(world);
     const cpu = world.players[0]!;
-    cpu.specialCharges = 1;
+    grantSpecial(cpu, 1);
     world.players[1]!.position = centerOf({ col: 4, row: 1 });
     const game = arena(world, [{ id: 0, level: 'hard' }]);
     const start = cellOf(cpu.position);
@@ -442,7 +442,7 @@ describe('技の最中と技の出し方', () => {
     clearBoard(world);
     const cpu = world.players[0]!;
     const foe = world.players[1]!;
-    cpu.specialCharges = 1;
+    grantSpecial(cpu, 1);
     foe.position = centerOf({ col: 4, row: 1 });
     const game = arena(world, [{ id: 0, level: 'oni' }]);
     for (let i = 0; i < 120 && !cpu.effects.has('scattering'); i += 1) game.run(1);
@@ -490,7 +490,7 @@ describe('技の最中と技の出し方', () => {
     const mole = world.players[0]!;
     mole.position = centerOf({ col: 5, row: 7 });
     world.players[1]!.position = centerOf({ col: 11, row: 7 });
-    mole.specialCharges = 1;
+    grantSpecial(mole, 1);
     // ラウンドの始まりと同じく、前の tick に技のボタンを押していた扱いにする（`HELD_AT_ROUND_START`）。
     // 技のボタンで出すなら、一度離す tick が要る。とくぎを直に出すボタンなら、最初の tick に出る。
     mole.previousInput = { ...IDLE_INPUT, bomb: true, action: true };
@@ -592,7 +592,7 @@ describe('かえるの舌', () => {
       const world = makeWorld(3, ['frog', 'rabbit']);
       clearBoard(world);
       world.items = [{ id: world.ids.take(), cell: { col: 3, row: 1 }, kind: 'fire' }];
-      world.players[0]!.specialCharges = charges;
+      grantSpecial(world.players[0]!, charges);
       return FROG_TACTIC.beforePlan?.when(frogContext(world)) ?? false;
     };
     expect(decide(0)).toBe(true);
@@ -612,7 +612,7 @@ describe('きつねの狐火', () => {
       const [me, foe] = world.players as [PlayerState, PlayerState];
       me.position = centerOf({ col: 1, row: 1 });
       foe.position = centerOf({ col: 1 + distance, row: 1 });
-      me.specialCharges = 1;
+      grantSpecial(me, 1);
       // 技を使うかの抽選が必ず当たる強さ（skillUse 1）にする。乱数を確かめるテストにしないため。
       const ctx = new CpuContext(
         world, me, { col: 1, row: 1 }, DangerMap.of(world), false, CPU_LEVELS.hard, freshMemory(new Rng(1)), new Rng(1),

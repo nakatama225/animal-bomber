@@ -32,10 +32,14 @@ export function lanesOpen(world: Readonly<WorldState>): boolean {
 }
 
 /**
- * 倒れた人を外周へ送る。倒れた位置にいちばん近い外周の位置から始める。
+ * 倒れたプレイヤーを外周へ送る。倒れた位置にいちばん近い外周の位置から始める。
  *
- * かかっている状態ととくぎの回数は持ち越さない。火力・爆弾の数・靴は持ち越す。
+ * かかっている状態と、とくぎを持っている印（`hasSpecial`）は持ち越さない。火力・爆弾の数・靴は持ち越す。
  * 戻るたびに初期値へ戻すと、終盤に誰も強くならず決着がつかない。
+ *
+ * とくぎの回数（`specialCharges`）は残す。原型の toNegibon（L2255）と同じ形にするため。原型は持っている印
+ * （chicken）だけを消し、回数（chickenCharges）には触らない。残った回数は見えず使えないが、同じラウンドのうちに
+ * 盤面へ戻ってチキンを拾うと、その回数に足される（L1616-1617）。
  *
  * ⚠️ 盤面に置いたままの爆弾の数（`activeBombs`）は戻さない。爆発したときに
  * 数え直すので、ここで 0 にすると、まだ盤面にある爆弾のぶんだけ多く置けてしまう。
@@ -47,7 +51,7 @@ export function sendToLane(world: WorldState, player: PlayerState): void {
     readyAt: tick(world.now + LEEK_FIRST_COOLDOWN),
   };
   for (const kind of EFFECT_KINDS) player.effects.clear(kind);
-  player.specialCharges = 0;
+  player.hasSpecial = false;
 }
 
 /**
@@ -70,8 +74,8 @@ export function swapPlaces(
   shooter.invulnerableUntil = tick(world.now + REVIVE_INVULNERABLE);
   shooter.lastHitBy = null;
   // 技のボタンの押した長さには触らない（原型の negiHit も触らない）。外周にいる間は数えないので、
-  // 倒れたときの長さが残る。押したまま戻ると、そこから数え続ける。とくぎの回数は外周へ回るときに
-  // 0 にしてあるので、拾わない限りとくぎは出ない。
+  // 倒れたときの長さが残る。押したまま戻ると、そこから数え続ける。とくぎを持っている印は外周へ回るときに
+  // 外してあるので、拾わない限りとくぎは出ない。印と回数には触らない（原型の negiHit L2337-2356 も触らない）。
 
   return [{ type: 'revived', player: shooter.id, replaced: victim.id, at: { ...at } }];
 }

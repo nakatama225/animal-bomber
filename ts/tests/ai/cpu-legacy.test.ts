@@ -17,7 +17,7 @@ import { DangerMap } from '../../src/domain/query/DangerMap.js';
 import type { PlayerState } from '../../src/domain/state/PlayerState.js';
 import type { WorldState } from '../../src/domain/state/WorldState.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
-import { clearBoard, makeWorld } from '../helpers.js';
+import { clearBoard, grantSpecial, makeWorld } from '../helpers.js';
 
 /*
  * CPU を原型（legacy/animal-bomber.html の cpuUpdate・planCPU）に合わせた所。
@@ -55,7 +55,7 @@ function step(scene: Duel): { input: PlayerInput; events: SimEvent[] } {
 describe('ぞう：危ないときに突進で逃げる（原型 cpuUpdate の `p.chicken===\'elephant\' && inDanger`）', () => {
   it('危ないマスに立っていてチキンがあれば、最初の tick に突進する。鼻水は出ず、その tick は歩かない', () => {
     const scene = duel('elephant', { col: 3, row: 7 }, { col: 19, row: 13 });
-    scene.me.specialCharges = 1;
+    grantSpecial(scene.me, 1);
     scene.me.facing = 'right';
     scene.foe.maxBombs = 5;
     placeBombAt(scene.world, scene.foe, { col: 3, row: 7 });
@@ -72,7 +72,7 @@ describe('ぞう：危ないときに突進で逃げる（原型 cpuUpdate の `
 
   it('危なくなければ、一直線上に相手がいても突進しない（攻めには使わない）', () => {
     const scene = duel('elephant', { col: 3, row: 7 }, { col: 7, row: 7 });
-    scene.me.specialCharges = 1;
+    grantSpecial(scene.me, 1);
     for (let t = 0; t < 30; t += 1) {
       const { input } = step(scene);
       expect(input.special).toBe(false);
@@ -91,7 +91,7 @@ describe('うさぎ・かえる・きつね：歩いて置いたあとに、と�
     it(`${animal}：相手まで歩いて ${distance} マスなら出し、${out} マスなら出さない。出すときは通常技のボタンを押さない`, () => {
       const run = (gap: number): PlayerInput => {
         const scene = duel(animal, { col: 1, row: 7 }, { col: 1 + gap, row: 7 });
-        scene.me.specialCharges = 1;
+        grantSpecial(scene.me, 1);
         return scene.source.next(scene.world);
       };
       expect(run(distance)).toMatchObject({ special: true, action: false });

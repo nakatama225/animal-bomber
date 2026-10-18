@@ -4,7 +4,7 @@ import { abilityOf } from '../../src/domain/abilities/registry.js';
 import { centerOf } from '../../src/domain/core/Coord.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
-import { clearBoard, makeWorld, onlyFor, press } from '../helpers.js';
+import { clearBoard, grantSpecial, makeWorld, onlyFor, press } from '../helpers.js';
 
 /**
  * 技を使ったことを知らせるイベント。
@@ -47,7 +47,7 @@ describe('技を使ったイベント', () => {
 
   it('とくぎが出たら、とくぎとして知らせる（押した瞬間の通常技は、とくぎではない技として先に知らせる）', () => {
     const world = makeWorld(3, ['elephant', 'rabbit']);
-    world.players[0]!.specialCharges = 1;
+    grantSpecial(world.players[0]!, 1);
     const sim = new Simulation();
     const events: SimEvent[] = [...sim.step(world, onlyFor(world, 0, press({})))];
     for (let i = 0; i < abilityOf('elephant').holdTicks; i += 1) {

@@ -413,6 +413,21 @@ describe('状態の要約', () => {
     expect(hashWorld(world)).toBe(alive);
   });
 
+  it('とくぎを持っているかと回数を、別々に見る', () => {
+    // 外周へ回ると、持っている印だけが外れて回数は残る（原型の chicken と chickenCharges）。片方だけを混ぜると、
+    // もう片方がずれても検出できない。
+    const world = createWorld({ seed: SEED, animals: ANIMALS });
+    const player = world.players[0]!;
+    player.hasSpecial = true;
+    player.specialCharges = 2;
+    const base = hashWorld(world);
+    player.hasSpecial = false;
+    expect(hashWorld(world)).not.toBe(base);
+    player.hasSpecial = true;
+    player.specialCharges = 1;
+    expect(hashWorld(world)).not.toBe(base);
+  });
+
   it('外周にいる間は、外周上の位置と次に撃てる時刻も見る', () => {
     // 状態の種類だけを混ぜると、外周を回る速さや撃つ間隔がずれても検出できない。
     const world = createWorld({ seed: SEED, animals: ANIMALS });

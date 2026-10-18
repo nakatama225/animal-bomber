@@ -17,6 +17,7 @@ import {
   hearts,
   type HudSource,
 } from '../../src/presentation/hud/scoreboard.js';
+import { grantSpecial } from '../helpers.js';
 
 const ROSTER: Roster = [
   { kind: 'human', label: '1P', local: false },
@@ -120,7 +121,7 @@ describe('名札の中身', () => {
     // 残り1分を切ってから倒れた人は退場するだけで、とくぎの回数や状態は試合の側に残る。
     const session = game();
     const rabbit = session.world.players[0]!;
-    rabbit.specialCharges = 2;
+    grantSpecial(rabbit, 2);
     rabbit.effects.add('slow', tick(60), tick(600));
     rabbit.life = OUT;
     expect(describePlayers(hudOf(session))[0]).toMatchObject({ condition: '💀 退場', effects: [] });
@@ -130,7 +131,7 @@ describe('名札の中身', () => {
     const session = game({ winsToTake: 3 });
     session.match.wins.set(0, 2);
     const rabbit = session.world.players[0]!;
-    rabbit.specialCharges = 2;
+    grantSpecial(rabbit, 2);
     rabbit.effects.add('slow', tick(60), tick(600));
     session.world.players[1]!.life = OUT;
 

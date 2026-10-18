@@ -16,7 +16,7 @@ import { EFFECT_ICONS, statusIcons } from '../../src/presentation/render/effectI
 import type { Frame } from '../../src/presentation/render/Frame.js';
 import { layoutFor } from '../../src/presentation/render/Layout.js';
 import { drawPlayer } from '../../src/presentation/render/players.js';
-import { clearBoard, makeWorld } from '../helpers.js';
+import { clearBoard, grantSpecial, makeWorld } from '../helpers.js';
 import { fakeCanvas, type FakeCanvas } from './fakeCanvas.js';
 
 /**
@@ -46,7 +46,7 @@ const CASES: readonly Case[] = [
   {
     name: 'とくぎを溜めている途中',
     setup: (_w, p) => {
-      p.specialCharges = 1;
+      grantSpecial(p, 1);
       p.actionHeld = tick(Math.floor(abilityOf(p.animal).holdTicks / 2));
       p.actionFired = false;
     },
@@ -140,7 +140,7 @@ describe('とくぎの溜めのゲージ', () => {
     const held = (fired: boolean): Case => ({
       name: fired ? '出し終えた' : '溜めている途中',
       setup: (_w, p) => {
-        p.specialCharges = 2;
+        grantSpecial(p, 2);
         p.actionHeld = abilityOf(p.animal).holdTicks;
         p.actionFired = fired;
       },
@@ -153,7 +153,7 @@ describe('とくぎの溜めのゲージ', () => {
     const during = (withAction: boolean): Case => ({
       name: withAction ? '突進の最中' : '突進していない',
       setup: (_w, p) => {
-        p.specialCharges = 1;
+        grantSpecial(p, 1);
         p.actionHeld = tick(10);
         p.actionFired = false;
         if (withAction) p.action = new ChargeAction(p.facing);
@@ -186,7 +186,7 @@ describe('足元の絵文字', () => {
   it('溜めてあるとくぎ → 技 → 状態の順に並ぶ', () => {
     const world = makeWorld(7, ['frog']);
     const player = world.players[0]!;
-    player.specialCharges = 1;
+    grantSpecial(player, 1);
     player.effects.add('slow', tick(60), tick(120));
     expect(statusIcons(player, '👅')).toEqual(['🟢', '👅', '🐌']);
   });

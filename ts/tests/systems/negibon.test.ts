@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ActiveAction } from '../../src/domain/abilities/ActiveAction.js';
+import { abilityOf } from '../../src/domain/abilities/registry.js';
 import { centerOf, cellOf, DIRECTIONS, type Cell, type Direction } from '../../src/domain/core/Coord.js';
 import { secondsToTicks, tick } from '../../src/domain/core/Tick.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
 import type { PlayerInput } from '../../src/domain/input/PlayerInput.js';
 import { placeBombAt } from '../../src/domain/mutations/bombs.js';
 import { hurt } from '../../src/domain/mutations/damage.js';
+import { swapPlaces } from '../../src/domain/mutations/negibon.js';
 import {
   alongsFacing,
   LANE_LENGTH,
@@ -31,7 +33,7 @@ import { isAlive, type PlayerId, type PlayerState } from '../../src/domain/state
 import type { WorldState } from '../../src/domain/state/WorldState.js';
 import { RoundSystem } from '../../src/domain/systems/RoundSystem.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
-import { clearBoard, makeWorld, press } from '../helpers.js';
+import { clearBoard, grantSpecial, makeWorld, press } from '../helpers.js';
 
 /** 外周にいる状態にする。すぐ撃てる。 */
 function onLane(player: PlayerState, along: number, readyAt = 0): void {
@@ -153,7 +155,7 @@ describe('倒れたら外周へ回る', () => {
     player.hp = 2;
     player.power = 4;
     player.activeBombs = 1;
-    player.specialCharges = 2;
+    grantSpecial(player, 2);
     player.effects.add('slow', tick(300), tick(300));
     const events = hurt(world, player, 1, 2);
 
@@ -161,9 +163,10 @@ describe('倒れたら外周へ回る', () => {
     const lane = laneOf(player);
     expect(laneSpot(lane.along)).toMatchObject({ side: 'top', position: { x: 7.5 } });
     expect(lane.readyAt).toBe(100 + LEEK_FIRST_COOLDOWN);
-    // 状態ととくぎは持ち越さない。火力と、盤面に残った爆弾の数は持ち越す。
+    // 状態と、とくぎを持っている印は持ち越さない。とくぎの回数は残る（原型の toNegibon L2255 は chicken だけを
+    // 消し、chickenCharges には触らない）。火力と、盤面に残った爆弾の数は持ち越す。
     expect(player.effects.active()).toEqual([]);
-    expect(player.specialCharges).toBe(0);
+    expect([player.hasSpecial, player.specialCharges]).toEqual([false, 2]);
     expect(player.power).toBe(4);
     expect(player.activeBombs).toBe(1);
   });
@@ -206,6 +209,76 @@ describe('倒れたら外周へ回る', () => {
     expect(ticked).toBe(0);
     expect(finished).toBe(1);
     expect(player.action).toBeNull();
+  });
+});
+
+describe('とくぎを持っている印と回数（原型の chicken と chickenCharges）', () => {
+  /** とくぎを2回ぶん持ったまま倒れて外周へ回り、葱を当てて盤面の (5,5) へ戻ったプレイヤー。 */
+  function backFromLane(animal: string): { world: WorldState; player: PlayerState; sim: Simulation } {
+    const world = makeWorld(3, [animal, 'elephant']);
+    clearBoard(world);
+    const [player, other] = world.players as [PlayerState, PlayerState];
+    grantSpecial(player, 2);
+    player.hp = 2;
+    hurt(world, player, 1, 2);
+    other.position = centerOf({ col: 5, row: 5 });
+    swapPlaces(world, player, other);
+    const sim = new Simulation();
+    // ラウンドの始まりの「とくぎは出し終えた扱い」を外すため、1 tick 離しておく。
+    stepWith(world, sim, press({}));
+    return { world, player, sim };
+  }
+
+  const specialsIn = (events: readonly SimEvent[]): number =>
+    events.filter((e) => e.type === 'techniqueUsed' && e.special).length;
+
+  it('葱で戻っても印は外れたまま、回数は残っている（原型の negiHit L2337-2356 はどちらにも触らない）', () => {
+    const { player } = backFromLane('rabbit');
+    expect(isAlive(player)).toBe(true);
+    expect([player.hasSpecial, player.specialCharges]).toEqual([false, 2]);
+  });
+
+  it.each([
+    { animal: 'rabbit', expected: 3 },
+    { animal: 'frog', expected: 4 },
+  ])('戻ってチキンを拾うと印が戻り、残っていた回数に足される（原型 L1616-1617。$animal は 2 + 倍率）', ({ animal, expected }) => {
+    const { world, player, sim } = backFromLane(animal);
+    world.items.push({ id: world.ids.take(), cell: cellOf(player.position), kind: 'chicken' });
+    stepWith(world, sim, press({}));
+    expect([player.hasSpecial, player.specialCharges]).toEqual([true, expected]);
+  });
+
+  it('残った回数だけでは、とくぎを直に出すボタンでも出ない（原型の doSpecial L2455 は chicken を見る）', () => {
+    const { world, player, sim } = backFromLane('rabbit');
+    expect(specialsIn(stepWith(world, sim, press({ special: true })))).toBe(0);
+    expect(player.specialCharges).toBe(2);
+  });
+
+  it('残った回数だけでは、長押しでも出ない（原型の doSpecial L2455）', () => {
+    const { world, player, sim } = backFromLane('rabbit');
+    const events: SimEvent[] = [];
+    for (let i = 0; i < abilityOf('rabbit').holdTicks + 5; i += 1) events.push(...stepWith(world, sim, press({ action: true })));
+    expect(specialsIn(events)).toBe(0);
+    expect(player.specialCharges).toBe(2);
+  });
+
+  it('残った回数だけでは、通常技の無い動物のポン押しでも出ない（原型の doAction L2445）', () => {
+    const { world, player, sim } = backFromLane('mole');
+    expect(specialsIn(stepWith(world, sim, press({ action: true })))).toBe(0);
+    expect(player.specialCharges).toBe(2);
+  });
+
+  it('使うと回数が1つ減り、0 になると印が外れる（原型の useSpecial L2607-2608）', () => {
+    const world = makeWorld(3, ['rabbit', 'elephant']);
+    clearBoard(world);
+    const player = world.players[0]!;
+    grantSpecial(player, 2);
+    const sim = new Simulation();
+    expect(specialsIn(stepWith(world, sim, press({ special: true })))).toBe(1);
+    expect([player.hasSpecial, player.specialCharges]).toEqual([true, 1]);
+    stepWith(world, sim, press({}));
+    expect(specialsIn(stepWith(world, sim, press({ special: true })))).toBe(1);
+    expect([player.hasSpecial, player.specialCharges]).toEqual([false, 0]);
   });
 });
 

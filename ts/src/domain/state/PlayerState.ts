@@ -60,7 +60,19 @@ export interface PlayerState {
   /** かかっている一時的な状態。 */
   readonly effects: EffectBag;
 
-  /** 溜めてあるとくぎの回数。チキンを拾うと増える。 */
+  /**
+   * とくぎを持っているか（原型の chicken）。チキンを拾うと立ち、回数を使い切るか外周へ回ると外れる。
+   * とくぎを出せるかはこちらで見る（原型の doAction L2445・doSpecial L2455 も chicken を見る）。
+   *
+   * ⚠️ 回数（`specialCharges`）とは別に持つ。外周へ回ると、原型の toNegibon（L2255）と同じく、持っている印だけが
+   * 外れて回数は残る。残った回数では出せず、次にチキンを拾うと足される（原型の applyItem L1616-1617）。
+   */
+  hasSpecial: boolean;
+
+  /**
+   * 溜めてあるとくぎの回数（原型の chickenCharges）。チキンを拾うと増え、とくぎを出すと1つ減る。
+   * 持っている印（`hasSpecial`）が外れている間も残ることがある（外周へ回ったとき）。
+   */
   specialCharges: number;
 
   /**

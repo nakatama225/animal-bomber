@@ -1,5 +1,5 @@
 import { IDLE_INPUT, type PlayerInput } from '../src/domain/input/PlayerInput.js';
-import type { PlayerId } from '../src/domain/state/PlayerState.js';
+import type { PlayerId, PlayerState } from '../src/domain/state/PlayerState.js';
 import { createWorld, type WorldState } from '../src/domain/state/WorldState.js';
 import { startingBonusOf } from '../src/app/GameSession.js';
 import { Simulation } from '../src/domain/systems/Simulation.js';
@@ -20,6 +20,17 @@ export function makeWorld(seed = 1234, animals: string[] = ['rabbit', 'elephant'
   const world = createWorld({ seed, animals, bonusOf: startingBonusOf });
   for (const player of world.players) player.previousInput = IDLE_INPUT;
   return world;
+}
+
+/**
+ * チキンを拾ってとくぎを `charges` 回ぶん持った状態にする。0 なら持たない状態にする。
+ *
+ * ⚠️ とくぎを持っているか（`hasSpecial`）と回数（`specialCharges`）は別に持つ（原型の chicken と chickenCharges）。
+ * 回数だけを書いても、とくぎは出ない。
+ */
+export function grantSpecial(player: PlayerState, charges: number): void {
+  player.hasSpecial = charges > 0;
+  player.specialCharges = charges;
 }
 
 /** 指定した向きだけを押している入力。 */

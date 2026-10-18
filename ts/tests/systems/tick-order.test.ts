@@ -11,7 +11,7 @@ import { placeBombAt } from '../../src/domain/mutations/bombs.js';
 import type { PlayerState } from '../../src/domain/state/PlayerState.js';
 import type { WorldState } from '../../src/domain/state/WorldState.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
-import { clearBoard, makeWorld, onlyFor, press, sameForAll } from '../helpers.js';
+import { clearBoard, grantSpecial, makeWorld, onlyFor, press, sameForAll } from '../helpers.js';
 
 /*
  * 1 tick の中の並び（`Simulation` の説明）が原型の update と同じであることの検査。
@@ -56,7 +56,7 @@ describe('1 tick の中の並び（原型の update と同じ）', () => {
     place(elephant, { col: 3, row: 7 });
     place(frog, { col: 19, row: 13 });
     elephant.facing = 'down';
-    elephant.specialCharges = 1;
+    grantSpecial(elephant, 1);
     // ラウンドの途中の、何も押していない状態にする（ラウンドの始まりは、とくぎを出し終えた扱い）。
     elephant.actionFired = false;
     const sim = new Simulation();

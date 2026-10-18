@@ -10,7 +10,7 @@ import { OUT } from '../../src/domain/state/Life.js';
 import type { PlayerState } from '../../src/domain/state/PlayerState.js';
 import type { WorldState } from '../../src/domain/state/WorldState.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
-import { clearBoard, makeWorld, onlyFor, press, sameForAll } from '../helpers.js';
+import { clearBoard, grantSpecial, makeWorld, onlyFor, press, sameForAll } from '../helpers.js';
 
 /*
  * きつねの狐火とキツネ跳び、突進どうしの体当たりを、原型（legacy/animal-bomber.html の castFoxfire・
@@ -111,7 +111,7 @@ describe('キツネ跳び（原型 useSpecial のきつね・isBlastProof）', (
     const { world, p0: fox, p1: rabbit } = arena(['fox', 'rabbit']);
     place(fox, { col: 3, row: 7 });
     place(rabbit, { col: 19, row: 7 });
-    fox.specialCharges = 1;
+    grantSpecial(fox, 1);
     const sim = new Simulation();
     sim.step(world, sameForAll(world, press({})));
     for (let i = 0; i < abilityOf('fox').holdTicks; i += 1) sim.step(world, onlyFor(world, 0, press({ action: true })));
@@ -134,7 +134,7 @@ describe('キツネ跳び（原型 useSpecial のきつね・isBlastProof）', (
     const { world, p0: fox, p1: rabbit } = arena(['fox', 'rabbit']);
     place(fox, { col: 3, row: 7 });
     rabbit.life = OUT;
-    fox.specialCharges = 1;
+    grantSpecial(fox, 1);
     const sim = new Simulation();
     sim.step(world, sameForAll(world, press({})));
     for (let i = 0; i < abilityOf('fox').holdTicks; i += 1) sim.step(world, onlyFor(world, 0, press({ action: true })));

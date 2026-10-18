@@ -12,7 +12,7 @@ import { itemEffectTicks } from '../../src/domain/rules/items.js';
 import type { PlayerState } from '../../src/domain/state/PlayerState.js';
 import type { WorldState } from '../../src/domain/state/WorldState.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
-import { advance, clearBoard, makeWorld, onlyFor, press, sameForAll } from '../helpers.js';
+import { advance, clearBoard, grantSpecial, makeWorld, onlyFor, press, sameForAll } from '../helpers.js';
 
 /*
  * うさぎの撒くのと、きつねの一列置きを、原型（legacy/animal-bomber.html の rabbitPoroporo・
@@ -43,7 +43,7 @@ function place(player: PlayerState, cell: Cell): void {
  */
 function holdSpecial(world: WorldState, sim: Simulation): void {
   const player = world.players[0]!;
-  player.specialCharges = 1;
+  grantSpecial(player, 1);
   player.abilityCooldown = tick(600);
   sim.step(world, sameForAll(world, press({})));
   for (let i = 0; i < abilityOf(player.animal).holdTicks; i += 1) {

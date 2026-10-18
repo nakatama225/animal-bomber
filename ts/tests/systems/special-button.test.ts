@@ -8,7 +8,7 @@ import { placeBombAt } from '../../src/domain/mutations/bombs.js';
 import type { PlayerState } from '../../src/domain/state/PlayerState.js';
 import type { WorldState } from '../../src/domain/state/WorldState.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
-import { clearBoard, makeWorld, onlyFor, press } from '../helpers.js';
+import { clearBoard, grantSpecial, makeWorld, onlyFor, press } from '../helpers.js';
 
 /*
  * とくぎを直に出すボタン（`PlayerInput.special`）。人間の操作には割り当てず、CPU だけが押す。
@@ -39,7 +39,7 @@ function duel(animal: string, other = 'frog'): Scene {
   place(me, { col: 3, row: 7 });
   me.facing = 'right';
   place(foe, { col: 19, row: 13 });
-  me.specialCharges = 1;
+  grantSpecial(me, 1);
   me.actionFired = false;
   return { world, me, foe, sim: new Simulation() };
 }
@@ -88,7 +88,7 @@ describe('とくぎを直に出すボタン（原型の CPU の useSpecial）', 
 
   it('押しっぱなしでも1回だけ出る。離して押し直すと、もう1回出る', () => {
     const scene = duel('fox');
-    scene.me.specialCharges = 2;
+    grantSpecial(scene.me, 2);
     const held = run(scene, 60, () => true);
     expect(techniques(held)).toEqual([true]);
     expect(scene.me.specialCharges).toBe(1);
@@ -99,7 +99,7 @@ describe('とくぎを直に出すボタン（原型の CPU の useSpecial）', 
 
   it('チキンが無ければ何も出ない（通常技も出ない）', () => {
     const scene = duel('rabbit');
-    scene.me.specialCharges = 0;
+    grantSpecial(scene.me, 0);
     const events = run(scene, 1, () => true);
     expect(scene.me.position.x).toBe(3.5);
     expect(scene.world.actors).toEqual([]);
@@ -130,7 +130,7 @@ describe('とくぎを直に出すボタン（原型の CPU の useSpecial）', 
   it('技のボタンの押した長さと、とくぎを出し終えた印には触れない', () => {
     // 長押しの数え方は技のボタンだけのもの。このボタンを押しても、数え直しも出し終えた扱いも起きない。
     const scene = duel('fox');
-    scene.me.specialCharges = 2;
+    grantSpecial(scene.me, 2);
     for (let t = 1; t <= 10; t += 1) {
       scene.sim.step(scene.world, onlyFor(scene.world, 0, press({ action: true })));
     }

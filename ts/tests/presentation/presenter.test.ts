@@ -15,7 +15,7 @@ import type { PlayerState } from '../../src/domain/state/PlayerState.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
 import type { SoundName } from '../../src/presentation/audio/SoundBank.js';
 import { Presenter } from '../../src/presentation/Presenter.js';
-import { clearBoard, makeWorld, onlyFor, press, sameForAll } from '../helpers.js';
+import { clearBoard, grantSpecial, makeWorld, onlyFor, press, sameForAll } from '../helpers.js';
 
 function recorder(): { played: SoundName[]; presenter: Presenter } {
   const played: SoundName[] = [];
@@ -237,7 +237,7 @@ describe('とくぎが空振りしたときの音（原型の useSpecial：技�
   function soundsOfSpecial(world: ReturnType<typeof makeWorld>): SoundName[] {
     const { played, presenter } = recorder();
     const player = world.players[0]!;
-    player.specialCharges = 1;
+    grantSpecial(player, 1);
     player.abilityCooldown = tick(600);
     const sim = new Simulation();
     presenter.consume(sim.step(world, sameForAll(world, press({}))), world);

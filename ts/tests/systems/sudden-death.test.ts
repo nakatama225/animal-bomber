@@ -10,6 +10,7 @@ import type { SimEvent } from '../../src/domain/events/SimEvent.js';
 import { IdleInputSource } from '../../src/domain/input/InputSource.js';
 import { placeBomb, placeBombAt } from '../../src/domain/mutations/bombs.js';
 import { detonate } from '../../src/domain/mutations/explode.js';
+import { applyItem } from '../../src/domain/mutations/items.js';
 import { enterSuddenDeath } from '../../src/domain/mutations/suddenDeath.js';
 import { defaultMatchConfig } from '../../src/domain/rules/MatchConfig.js';
 import {
@@ -22,7 +23,7 @@ import { OUT } from '../../src/domain/state/Life.js';
 import { isAlive, type PlayerState } from '../../src/domain/state/PlayerState.js';
 import { RoundSystem } from '../../src/domain/systems/RoundSystem.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
-import { advance, clearBoard, makeWorld, onlyFor, press } from '../helpers.js';
+import { advance, clearBoard, grantSpecial, makeWorld, onlyFor, press } from '../helpers.js';
 
 const THREE = ['rabbit', 'elephant', 'mole'];
 
@@ -152,7 +153,7 @@ describe('延長戦の準備', () => {
     world.now = tick(500);
     const player = world.players[2]!;
     player.position = centerOf({ col: 9, row: 9 });
-    player.specialCharges = 2;
+    grantSpecial(player, 2);
     player.effects.add('slow', tick(300), tick(300));
     player.action = new PitAction({ col: 9, row: 9 });
     enterSuddenDeath(world, [0, 2], 'allDown');
@@ -164,7 +165,8 @@ describe('延長戦の準備', () => {
     expect(player.power).toBe(MAX_POWER);
     expect(player.shoes).toBe(MAX_SHOES);
     expect(player.invulnerableUntil).toBe(500 + SUDDEN_DEATH_INVULNERABLE);
-    expect(player.specialCharges).toBe(0);
+    // とくぎは印も回数も戻す（原型の enterSuddenDeath L4448）。
+    expect([player.hasSpecial, player.specialCharges]).toEqual([false, 0]);
     expect(player.effects.active()).toEqual([]);
     // 技の途中でも外す。外さないと、技の続きが開始位置で走る。
     expect(player.action).toBeNull();
@@ -182,11 +184,23 @@ describe('延長戦の準備', () => {
     expect([fox.actionHeld, fox.actionFired]).toEqual([0, false]);
     // 押したまま、延長戦の中でチキンを拾った。しきい値ぶん押し続けると、とくぎがもう一度出る。
     // 押した瞬間にはならないので、通常技（一列に置く）は出ない。
-    fox.specialCharges = 1;
+    grantSpecial(fox, 1);
     const events: SimEvent[] = [];
     for (let t = 1; t <= hold; t += 1) events.push(...sim.step(world, onlyFor(world, 0, press({ action: true }))));
     expect(events.filter((e) => e.type === 'techniqueUsed')).toEqual([{ type: 'techniqueUsed', player: 0, special: true }]);
     expect(world.bombs).toHaveLength(0);
+  });
+
+  it('外周で残ったとくぎの回数も延長戦で消え、延長戦の中で拾うと拾ったぶんだけになる（原型 L4448）', () => {
+    // 外周へ回ると、とくぎを持っている印だけが外れて回数は残る（原型の toNegibon L2255）。
+    const world = makeWorld(3, THREE);
+    const player = world.players[2]!;
+    player.hasSpecial = false;
+    player.specialCharges = 2;
+    enterSuddenDeath(world, [0, 2], 'timeUp');
+    expect([player.hasSpecial, player.specialCharges]).toEqual([false, 0]);
+    applyItem(world, player, 'chicken', 1);
+    expect([player.hasSpecial, player.specialCharges]).toEqual([true, 1]);
   });
 
   it('加わらない者は退場する', () => {
