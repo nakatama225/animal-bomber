@@ -156,6 +156,7 @@ describe('延長戦の準備', () => {
     grantSpecial(player, 2);
     player.effects.add('slow', tick(300), tick(300));
     player.action = new PitAction({ col: 9, row: 9 });
+    player.abilityCooldown = tick(100);
     enterSuddenDeath(world, [0, 2], 'allDown');
     // 開始位置は加わる者にプレイヤー番号の順で割り当てる。プレイヤー2は2番目。
     expect(player.position).toEqual(centerOf(SPAWN_CELLS[1]!));
@@ -167,6 +168,9 @@ describe('延長戦の準備', () => {
     expect(player.invulnerableUntil).toBe(500 + SUDDEN_DEATH_INVULNERABLE);
     // とくぎは印も回数も戻す（原型の enterSuddenDeath L4448）。
     expect([player.hasSpecial, player.specialCharges]).toEqual([false, 0]);
+    // 通常技の間隔も戻す（原型 L4452 の hopCool=0・snotCool=0）。時間切れの直前に跳んだり鼻水を出したりしても、
+    // 延長戦の始めから通常技を使える。
+    expect(player.abilityCooldown).toBe(0);
     expect(player.effects.active()).toEqual([]);
     // 技の途中でも外す。外さないと、技の続きが開始位置で走る。
     expect(player.action).toBeNull();

@@ -110,6 +110,18 @@ describe('外周にいる CPU', () => {
     expect(events.flat().some((e) => e.type === 'revived')).toBe(true);
   });
 
+  it('撃てない間に構えて押すと、何も起きずに構え直し、もう一度溜めてから撃つ（原型 L2397 は押すと溜めを 0 に戻し、L2284 の fireNegi は撃てない間は何もしない）', () => {
+    // 撃てるのは 50 tick 目から。37 tick 目に押しても撃てないので、そこから構え直し、もう 37 tick 溜めた 74 tick 目に撃つ。
+    // 押しっぱなしにはしない（押したままだと押した瞬間にならず、撃てるようになっても撃たない）。
+    // 原型は 36 フレームずつで 72 フレーム目。37 tick 目に押す1フレームの差は残している。
+    const { world, cpu, foe } = arena();
+    cpu.life = { kind: 'negibon', along: topAlongFor(5), readyAt: tick(50) };
+    foe.position = centerOf({ col: 5, row: 3 });
+    const events = run(world, [cpuOf(), new IdleInputSource(1)], 120);
+    const thrownAt = events.findIndex((tickEvents) => tickEvents.some((e) => e.type === 'leekThrown'));
+    expect(thrownAt + 1).toBe(74);
+  });
+
   it('間に柱があれば撃たない（原型 L2388）', () => {
     // 6 列目は2行目に柱がある。
     const { world, cpu, foe } = arena();
@@ -127,6 +139,22 @@ describe('外周にいる CPU', () => {
     placeBombAt(world, foe, { col: 5, row: 2 })!.fuse = tick(1000);
     const events = run(world, [cpuOf(), new IdleInputSource(1)], 240);
     expect(events.flat().some((e) => e.type === 'leekThrown')).toBe(false);
+  });
+
+  it('相手の足元に爆弾があっても撃たない。間を見るのは相手のマスまで（原型 L2383-2391 は 0〜ceil(ahead) マス先を見る）', () => {
+    // 上辺の位置から (5,3) の中央までは 3.81 マス。原型は 0〜4 マス先を見るので、4 マス先の (5,3) の爆弾で撃たない。
+    // 対照に、爆弾が無ければ同じ場面で撃つことも見る。
+    const shoots = (bomb: boolean): boolean => {
+      const { world, cpu, foe } = arena();
+      onLane(cpu, topAlongFor(5));
+      foe.position = centerOf({ col: 5, row: 3 });
+      if (bomb) placeBombAt(world, foe, { col: 5, row: 3 })!.fuse = tick(1000);
+      return run(world, [cpuOf(), new IdleInputSource(1)], 240)
+        .flat()
+        .some((e) => e.type === 'leekThrown');
+    };
+    expect(shoots(true)).toBe(false);
+    expect(shoots(false)).toBe(true);
   });
 
   it('射程の外の相手には、射線に入っても撃たない（原型 L2380 の ahead<=NEGI_RANGE-1）', () => {
@@ -240,6 +268,18 @@ describe('外周にいる CPU', () => {
     const { alongs, events } = trace(world, [cpuOf(), new IdleInputSource(1), new IdleInputSource(2)], 5);
     expect(events.some((e) => e.type === 'leekThrown')).toBe(false);
     expect(alongs[4]).toBeCloseTo(9 + way * 5 * LANE_SPEED);
+  });
+
+  it('寄る辺が同じ近さなら、上・右・下・左の順に先の辺へ寄る（原型 L2413-2416 は d<bdist で、先に見た候補を残す）', () => {
+    // 外周の位置 20.5（上辺の右の端）から (20,2) の相手へ。向き合う位置は上辺 19・右辺 22・下辺 37・左辺 70 で
+    // （原型 L2273-2281 の順）、上辺と右辺がどちらも 1.5 で同じ近さ。原型は上辺の 19 を選び、左へ進む。
+    // 5 tick の間は射線に乗らない。
+    const { world, cpu, foe } = arena();
+    onLane(cpu, 20.5);
+    foe.position = centerOf({ col: 20, row: 2 });
+    const { alongs, events } = trace(world, [cpuOf(), new IdleInputSource(1)], 5);
+    expect(events.some((e) => e.type === 'leekThrown')).toBe(false);
+    expect(alongs[4]).toBeCloseTo(20.5 - 5 * LANE_SPEED);
   });
 
   it('外周の道のりは1周をまたいで測る（原型 L2414-2420）', () => {
@@ -409,6 +449,17 @@ describe('盤面にいる CPU と葱', () => {
     world.actors = [new LeekActor({ x: -0.31, y: 5.5 }, 'right', 1)];
     world.board.set({ col: 5, row: 6 }, 'soft');
     expect(dodgeTo(world)).toEqual({ col: 5, row: 4 });
+  });
+
+  it('向きの違う2本の葱が同時に飛んでくれば、古いほう（盤面の物の並びで前）の葱でよける向きを決める（原型 negiThreat L2068-2072 は negis を前から見る）', () => {
+    // CPU は (5,5) の中央。縦に飛ぶ葱が古ければ右の (6,5) へ、横に飛ぶ葱が古ければ下の (5,6) へよける（L2090）。
+    const { world } = leekIncoming();
+    const falling = new LeekActor({ x: 5.5, y: -0.31 }, 'down', 1);
+    const crossing = new LeekActor({ x: -0.31, y: 5.5 }, 'right', 1);
+    world.actors = [falling, crossing];
+    expect(dodgeTo(world)).toEqual({ col: 6, row: 5 });
+    world.actors = [crossing, falling];
+    expect(dodgeTo(world)).toEqual({ col: 5, row: 6 });
   });
 
   it('爆風の届くマスへはよけない', () => {
