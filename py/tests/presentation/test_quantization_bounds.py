@@ -5,9 +5,10 @@
 いるかは分からない。ここでは、本物の見た目の値をたくさん流して、段に丸めたときのずれが、
 定数の説明に書いた上限（色で 255 段のうち 2 段・揺れで 0.25px・爆弾の脈打ちで赤い光の
 半径 0.30px と火花の外の縁 0.38px・火花の半径で 0.125px・掘りかけの穴の半径で
-横 0.22px と縦 0.13px・ゲージの長さで 0.25px・火の玉の半径と芯の縦の半径で 0.25px・
-四角い粒の一辺と爆風のちらつく芯の一辺で 0.25px・位置で 0.5px。どれもマス 60）を
-超えないことを見る。ゲージの長さ・穴の大きさ・芯の太さは、試合で出る値を全部流す。
+横 0.22px と縦 0.13px・ゲージと外周の鍋の撃つ間隔の帯の長さで 0.25px・火の玉の半径と
+芯の縦の半径で 0.25px・四角い粒の一辺と爆風のちらつく芯の一辺で 0.25px・位置で 0.5px。
+どれもマス 60）を超えないことを見る。ゲージ・帯の長さ・穴の大きさ・芯の太さは、試合で
+出る値を全部流す。
 
 ⚠️ 鼻水で溶けている間のアイテムの段（`baked/items.py` の `MELT_PULSE_LEVELS`・
 `MELT_BOB_LEVELS`）は、ここに入れていない（取っておいた絵を画素で比べる `test_baked.py`
@@ -22,7 +23,11 @@ from animal_bomber.domain.core.entity_id import EntityId
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.animals import Animal, stats_of
 from animal_bomber.domain.rules.items import ItemKind
-from animal_bomber.domain.rules.tuning import BLAST_DURATION, BOMB_FUSE
+from animal_bomber.domain.rules.tuning import (
+    BLAST_DURATION,
+    BOMB_FUSE,
+    LEEK_FIRST_COOLDOWN,
+)
 from animal_bomber.domain.state.bomb import Blast, Bomb
 from animal_bomber.domain.state.item import Item
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng, ScriptedRandom
@@ -31,6 +36,7 @@ from animal_bomber.presentation.render.art.blasts import flicker_size, progress_
 from animal_bomber.presentation.render.art.bombs import bomb_look
 from animal_bomber.presentation.render.art.foxfires import core_width, flame_flicker
 from animal_bomber.presentation.render.art.items import item_look
+from animal_bomber.presentation.render.art.negibons import BAND_WIDTH, band_ratio
 from animal_bomber.presentation.render.art.particles import ParticleLook
 from animal_bomber.presentation.render.baked.actors import (
     CORE_LEVELS,
@@ -47,10 +53,11 @@ from animal_bomber.presentation.render.baked.bombs import (
 )
 from animal_bomber.presentation.render.baked.digging import DIG_LEVELS
 from animal_bomber.presentation.render.baked.items import quantized
+from animal_bomber.presentation.render.baked.negibons import BAND_STEP, band_level
 from animal_bomber.presentation.render.baked.particles import particle_side
 from animal_bomber.presentation.render.baked.techniques import gauge_level, snap
 from animal_bomber.presentation.render.canvas.surface import SUPERSAMPLE
-from animal_bomber.presentation.render.layout import Layout
+from animal_bomber.presentation.render.layout import TILE_MAX, TILE_MIN, Layout
 from animal_bomber.presentation.render.sprites import level_value, quantize
 
 TILE = 60
@@ -144,6 +151,20 @@ def test_ゲージの長さのずれは_0_25pxまで() -> None:
     lengths += [TILE * 0.6 * left / HOLD_TIME for left in range(HOLD_TIME + 1)]
     lengths += [TILE * 0.6 * dig_progress(Tick(left)) for left in range(DIG_TIME + 1)]
     worst = max(abs(gauge_level(length) / SUPERSAMPLE - length) for length in lengths)
+    assert worst <= 0.25 + EPSILON
+
+
+def test_撃つ間隔の帯の長さのずれは_0_25pxまで() -> None:
+    """外周の鍋の帯（マス × 0.56 × 残り ÷ 撃つ間隔）を、とりうる残りで全部流す。
+
+    残りは外周へ回った直後の 3.5 秒（`LEEK_FIRST_COOLDOWN`）から 1 tick まで。マスの
+    大きさの範囲（26〜60）の全部で見る（帯の長さはマスに比例する）。
+    """
+    worst = 0.0
+    for tile in range(TILE_MIN, TILE_MAX + 1):
+        for left in range(1, LEEK_FIRST_COOLDOWN + 1):
+            length = tile * BAND_WIDTH * band_ratio(Tick(left))
+            worst = max(worst, abs(band_level(tile, Tick(left)) * BAND_STEP - length))
     assert worst <= 0.25 + EPSILON
 
 

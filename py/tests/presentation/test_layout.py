@@ -6,6 +6,7 @@
 
 import pytest
 
+from animal_bomber.domain.rules.lane import LaneSide, lane_spot
 from animal_bomber.presentation.render.layout import (
     TILE_MAX,
     TILE_MIN,
@@ -72,3 +73,24 @@ def test_丸めは_JavaScript_の_Math_round_と同じ() -> None:
     assert js_round(2.5) == 3
     assert js_round(3.5) == 4
     assert js_round(-2.5) == -2
+
+
+@pytest.mark.parametrize("tile", [TILE_MIN, 44, TILE_MAX])
+def test_外周の鍋は_盤面のまわりの余白の真ん中に乗る(tile: int) -> None:
+    """余白の幅（`LANE`）と、ルールの層の外周の帯の幅（`LANE_WIDTH`）が同じ値か。
+
+    ルールの層は外周のプレイヤーを帯の真ん中に置く。余白の幅が違うと、鍋の中心が余白の
+    真ん中からずれる（4辺とも、描く面の縁から余白の半分の所に乗るはず）。
+    """
+    layout = Layout(tile, band=32)
+    width, height = layout.surface_size
+    margin = layout.origin_x
+    alongs = (3.25, 26.6, 43.1, 61.3)
+    assert [lane_spot(along).side for along in alongs] == list(LaneSide)
+    for along in alongs:
+        spot = lane_spot(along)
+        x, y = layout.px(spot.position.x), layout.py(spot.position.y)
+        across = spot.side in (LaneSide.LEFT, LaneSide.RIGHT)
+        gaps = (x, width - x) if across else (y - layout.band, height - y)
+        # 描く面の大きさは px の整数に丸めてあるので、右と下の余白は 0.5px まで違う。
+        assert min(gaps) == pytest.approx(margin / 2, abs=0.5)

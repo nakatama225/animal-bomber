@@ -17,16 +17,17 @@
 縁を 1px 以上動かして `SUBPIXEL` を超える差を出す。
 """
 
+import math
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 import pygame
 
 from animal_bomber.domain.core.tick import Tick
-from animal_bomber.domain.state.actors import Foxfire, SlimeBomb
+from animal_bomber.domain.state.actors import Foxfire, Leek, SlimeBomb
 from animal_bomber.domain.state.match import MatchState
-from animal_bomber.domain.state.player import PlayerId, is_alive
+from animal_bomber.domain.state.player import Negibon, PlayerId, is_alive
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng, ScriptedRandom
 from animal_bomber.presentation.render.art.foxfires import FoxfireLook, TrailMark
@@ -36,7 +37,8 @@ from animal_bomber.presentation.render.baked.art import BakedArt
 from animal_bomber.presentation.render.canvas.surface import SurfaceCanvas
 from animal_bomber.presentation.render.layout import Layout
 from animal_bomber.presentation.render.renderer import Renderer
-from animal_bomber.presentation.render.views.actors import slime_look
+from animal_bomber.presentation.render.views.actors import leek_look, slime_look
+from animal_bomber.presentation.render.views.lane import negibon_look
 from animal_bomber.presentation.render.views.player import TrackedMotion, player_look
 
 from .baked_helpers import ROUNDING, SUBPIXEL, Image
@@ -104,13 +106,41 @@ class FixedVisuals:
         return ()
 
 
-def frame_scene(world: WorldState, visuals: FixedVisuals) -> FrameScene:
-    """盤面と見た目だけの値から、手本の `draw_frame` に渡す1枚の絵の中身を作る。"""
+def snapped(layout: Layout, x: float, y: float) -> tuple[float, float]:
+    """位置（マス）を、取っておいた絵を貼る整数の px に丸めた位置（マス）。
+
+    外周の鍋と飛んでいる葱は、取っておいた絵を貼るときに位置を整数の px に丸める
+    （ずれは 0.5px まで。`baked/negibons.py`）。外周の帯の真ん中は、どのマスの大きさでも
+    整数の px に乗らない（マス 50 で上の帯は 15.5px）ので、手本も丸めた位置に描いて、
+    並べる順と不透明度を比べる。丸めのずれそのものは `test_baked_negibons.py` が見る。
+    """
+    ix = math.floor(layout.px(x) + 0.5)
+    iy = math.floor(layout.py(y) + 0.5)
+    return (ix - layout.origin_x) / layout.tile, (iy - layout.origin_y) / layout.tile
+
+
+def frame_scene(layout: Layout, world: WorldState, visuals: FixedVisuals) -> FrameScene:
+    """盤面と見た目だけの値から、手本の `draw_frame` に渡す1枚の絵の中身を作る。
+
+    外周の鍋と飛んでいる葱の位置は、整数の px に丸める（`snapped`）。
+    """
     players = [
         player_look(world, player, visuals.motion(player.id))
         for player in world.players
         if is_alive(player)
     ]
+    negibons = []
+    for player in world.players:
+        if isinstance(player.life, Negibon):
+            look = negibon_look(player, player.life, world.now)
+            x, y = snapped(layout, look.x, look.y)
+            negibons.append(replace(look, x=x, y=y))
+    leeks = []
+    for actor in world.actors:
+        if isinstance(actor, Leek):
+            leek = leek_look(actor)
+            x, y = snapped(layout, leek.x, leek.y)
+            leeks.append(replace(leek, x=x, y=y))
     foxfires = [
         FoxfireLook(actor.cell, visuals.trail(actor, world.now))
         for actor in world.actors
@@ -130,6 +160,8 @@ def frame_scene(world: WorldState, visuals: FixedVisuals) -> FrameScene:
         now=world.now,
         foxfires=foxfires,
         slimes=slimes,
+        negibons=negibons,
+        leeks=leeks,
         particles=visuals.particles,
         shake=visuals.shake,
     )
@@ -163,7 +195,8 @@ def direct_image(
     scripted = ScriptedRandom(list(randoms))
     width, height = layout.surface_size
     canvas = SurfaceCanvas(width, height)
-    draw_frame(canvas, layout, frame_scene(world, visuals), CosmeticRng(scripted))
+    scene = frame_scene(layout, world, visuals)
+    draw_frame(canvas, layout, scene, CosmeticRng(scripted))
     target = pygame.Surface((width, height))
     target.blit(canvas.to_surface(), (0, 0))
     return rgb(target), scripted.used

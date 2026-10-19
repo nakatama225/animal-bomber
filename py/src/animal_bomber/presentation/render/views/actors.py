@@ -1,8 +1,9 @@
-"""盤面の物（粘膜爆弾・追いかける炎）の状態から、その絵の入力を作る。"""
+"""盤面の物（粘膜爆弾・追いかける炎・飛んでいる葱）の状態から、その絵の入力を作る。"""
 
 from animal_bomber.domain.abilities.frog import SLIME_FLY_TICKS
-from animal_bomber.domain.state.actors import Foxfire, SlimeBomb
+from animal_bomber.domain.state.actors import Foxfire, Leek, SlimeBomb
 from animal_bomber.presentation.render.art.foxfires import FoxfireLook, TrailMark
+from animal_bomber.presentation.render.art.negibons import LeekLook
 from animal_bomber.presentation.render.art.slimes import SlimeLook
 from animal_bomber.presentation.render.art.timing import seconds
 
@@ -56,3 +57,12 @@ def foxfire_look(fire: Foxfire, trail: tuple[TrailMark, ...]) -> FoxfireLook:
     元のマスを濃さ 1 で足し、1 秒に 2 ずつ薄める。濃さ 0 以下で消す）。
     """
     return FoxfireLook(cell=fire.cell, trail=trail)
+
+
+def leek_look(leek: Leek) -> LeekLook:
+    """飛んでいる葱の状態から、その絵の入力を作る。
+
+    原型の葱は位置と速さ（vx・vy）を持ち、描くときに速さの向きへ回す。この版の葱は
+    飛ぶ向きを持つので、それを渡す。飛んだ距離と残りの寿命は絵に使わない（原型も使わない）。
+    """
+    return LeekLook(x=leek.position.x, y=leek.position.y, facing=leek.facing)

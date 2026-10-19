@@ -21,10 +21,10 @@ from animal_bomber.domain.events import Moment, TechniqueMoment
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
-from animal_bomber.domain.state.actors import Pit, SlimeBomb
+from animal_bomber.domain.state.actors import Leek, Pit, SlimeBomb
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import PlayerState
+from animal_bomber.domain.state.player import Negibon, PlayerState
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.blast import add_blast
@@ -39,6 +39,7 @@ from animal_bomber.presentation.render.art.player_marks import special_emoji
 from animal_bomber.presentation.render.art.slimes import SlimeLook, slime_shape
 from animal_bomber.presentation.render.art.timing import seconds
 from animal_bomber.presentation.render.views.actors import slime_look
+from animal_bomber.presentation.render.views.lane import lane_cooldown_left
 from animal_bomber.presentation.render.views.player import (
     TrackedMotion,
     invulnerable_left,
@@ -301,3 +302,54 @@ class Test長押し:
         # 原型は足し算の誤差で 91 tick 目にしきい値に届くので、90 tick 目にもゲージを
         # 描く（溜まりはほぼ 1）。ルールの層は 90 tick 目に出す。
         assert held / 1.5 > 0.999
+
+
+class Test外周:
+    def test_撃つ間隔の残りは原型の_negiCool_と同じ(self) -> None:
+        """外周へ回った tick の絵が 3.5 秒、撃った tick の絵が 3 秒（帯が満ちる）。
+
+        原型の negiCool は、3.5 秒・3 秒から 1/60 秒を引き続けると、0 になるはずの tick
+        に 1e-15 ほど届かず、もう1枚、長さがほぼ 0 の帯を描く。この版はその1枚で 🌿 を
+        描く（ルールの層がその tick に撃てるため。`views/lane.py` の
+        `lane_cooldown_left`）。撃てるようになった次の tick に撃つ。
+        """
+        world, rabbit = arena((Animal.RABBIT, Animal.FOX))
+        rabbit.hp = 1
+        add_blast(world, rabbit.position.cell(), 1, is_center=True)
+        simulation.step(world, idle(world))
+        for legacy in (countdown(3.5), countdown(3.0)):
+            copied = []
+            while (left := cooldown_of(world, rabbit)) > 0:
+                copied.append(seconds(left))
+                simulation.step(world, idle(world))
+            assert len(legacy) == len(copied) + 1
+            for got, want in zip(copied, legacy, strict=False):
+                assert abs(got - want) < EPSILON
+            assert legacy[-1] < EPSILON
+            leeks = sum(1 for actor in world.actors if isinstance(actor, Leek))
+            simulation.step(world, only_for(world, rabbit.id, PlayerInput.BOMB))
+            assert sum(1 for a in world.actors if isinstance(a, Leek)) == leeks + 1
+
+    def test_撃てるようになる_tick_の前の絵には_帯を描く(self) -> None:
+        """残りが 1 tick の絵の次の tick に撃てる（`now >= ready_at`）。
+
+        1 を足さないと、残り 1 tick の絵で 🌿 を描き、撃てない tick に撃てる印が出る。
+        """
+        world, rabbit = arena((Animal.RABBIT, Animal.FOX))
+        rabbit.hp = 1
+        add_blast(world, rabbit.position.cell(), 1, is_center=True)
+        simulation.step(world, idle(world))
+        while cooldown_of(world, rabbit) > 1:
+            simulation.step(world, idle(world))
+        leeks = sum(1 for actor in world.actors if isinstance(actor, Leek))
+        assert leeks == 0
+        # 残り 1 tick の絵のあとの tick に押すと撃てる。
+        simulation.step(world, only_for(world, rabbit.id, PlayerInput.BOMB))
+        assert sum(1 for actor in world.actors if isinstance(actor, Leek)) == 1
+
+
+def cooldown_of(world: WorldState, player: PlayerState) -> Tick:
+    """外周にいるプレイヤーの、撃つ間隔の残り（描く時点の値）。"""
+    life = player.life
+    assert isinstance(life, Negibon), "外周にいない"
+    return lane_cooldown_left(life, world.now)

@@ -24,12 +24,12 @@ from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.state.actions import Dig, Tongue
-from animal_bomber.domain.state.actors import Actor, Foxfire, SlimeBomb
+from animal_bomber.domain.state.actors import Actor, Foxfire, Leek, SlimeBomb
 from animal_bomber.domain.state.bomb import Blast, Bomb
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
 from animal_bomber.domain.state.match import MatchState
-from animal_bomber.domain.state.player import OUT
+from animal_bomber.domain.state.player import OUT, Negibon
 from animal_bomber.domain.state.world import WorldState, create_world, hash_world
 from animal_bomber.presentation.render.art.blasts import progress_of
 from animal_bomber.presentation.render.art.foxfires import TrailMark
@@ -40,6 +40,7 @@ from animal_bomber.presentation.render.baked import (
     bombs,
     digging,
     items,
+    negibons,
     players,
 )
 from animal_bomber.presentation.render.baked.art import BakedArt
@@ -176,6 +177,31 @@ def pit_then_others() -> tuple[WorldState, FixedVisuals]:
     return world, FixedVisuals(trails=[(fire, (TrailMark(Cell(8, 3), 0.5),))])
 
 
+def lanes_and_leeks(*, pit: bool = True) -> tuple[WorldState, FixedVisuals]:
+    """外周の鍋2つ（帯と 🌿）と飛んでいる葱2本。
+
+    `pit` なら、いちばん上のプレイヤーが落とし穴にはまって点滅している（原型は、その
+    不透明度を戻し忘れる。鍋は不透明度を自分で決めるので受けず、葱は受ける）。1本目の
+    葱は、上の鍋から撃った直後の葱で、鍋に重なる（鍋のあとに描く）。帯の長さはマス 50 で
+    14px ちょうど（丸めのずれが出ない残り）。
+    """
+    world = create_world(5, (Animal.RABBIT, Animal.ELEPHANT, Animal.FROG, Animal.MOLE))
+    world.now = Tick(330)
+    rabbit, elephant, frog, mole = world.players
+    rabbit.position = Cell(5, 1).center()
+    if pit:
+        rabbit.effects.add(EffectKind.PITFALL, Tick(90), Tick(180))
+        blink(world, 0)
+    elephant.position = Cell(7, 7).center()
+    frog.life = Negibon(along=8.4, ready_at=Tick(world.now + 89))
+    mole.life = Negibon(along=40.6, ready_at=Tick(world.now - 5))
+    world.actors = [
+        Leek(Point(9.9, -0.2), Direction.DOWN, frog.id),
+        Leek(Point(15.5, 9.5), Direction.LEFT, mole.id),
+    ]
+    return world, FixedVisuals()
+
+
 @pytest.mark.usefixtures("fine_levels")
 class Test手本と同じ絵:
     def test_ふだんの1枚は_手本と同じ順と揺れで描き_乱数を同じ順に引く(self) -> None:
@@ -220,6 +246,46 @@ class Test手本と同じ絵:
             return 1.0
 
         monkeypatch.setattr(players.PlayerSprites, "draw", restored)
+        got, _ = renderer_image(BakedArt(LAYOUT), world, visuals, [])
+        wanted, _ = direct_image(LAYOUT, world, visuals, [])
+        assert frame_mismatches(got, wanted, FADED) != (0, 0)
+
+    def test_外周の鍋と葱も_手本と同じ順と不透明度で描く(self) -> None:
+        """粘膜爆弾のあとに鍋（プレイヤーの番号の順）、そのあとに葱。
+
+        葱だけが、落とし穴のプレイヤーが戻し忘れた不透明度で描かれる。
+        """
+        world, visuals = lanes_and_leeks()
+        art = BakedArt(LAYOUT)
+        before = hash_world(world)
+        got, _ = renderer_image(art, world, visuals, [])
+        wanted, _ = direct_image(LAYOUT, world, visuals, [])
+        assert hash_world(world) == before
+        assert_same_frame(got, wanted, FADED)
+
+    def test_撃った直後の葱は_鍋の上に重ねる(self) -> None:
+        """原型は鍋を全員ぶん描いてから葱を描く。葱を先に貼ると、鍋に隠れて見分けられる。"""
+        world, visuals = lanes_and_leeks(pit=False)
+        got, _ = renderer_image(BakedArt(LAYOUT), world, visuals, [])
+        wanted, _ = direct_image(LAYOUT, world, visuals, [])
+        assert_same_frame(got, wanted, FADED)
+        hidden = FixedVisuals()
+        world.actors = world.actors[1:]
+        without, _ = direct_image(LAYOUT, world, hidden, [])
+        assert frame_mismatches(got, without, FADED) != (0, 0)
+
+    def test_葱に戻し忘れの不透明度を渡さないと_比べ方が見分ける(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """葱をいつも不透明度 1 で貼ると、手本との差が幅を超える。"""
+        world, visuals = lanes_and_leeks()
+        draw = negibons.NegibonSprites.draw_leek
+
+        def opaque(self: negibons.NegibonSprites, *args: object, **kw: object) -> None:
+            kw["start"] = 1.0
+            draw(self, *args[:3], **kw)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(negibons.NegibonSprites, "draw_leek", opaque)
         got, _ = renderer_image(BakedArt(LAYOUT), world, visuals, [])
         wanted, _ = direct_image(LAYOUT, world, visuals, [])
         assert frame_mismatches(got, wanted, FADED) != (0, 0)

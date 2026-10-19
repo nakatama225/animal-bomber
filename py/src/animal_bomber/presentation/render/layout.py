@@ -19,13 +19,15 @@ import math
 from dataclasses import dataclass
 from typing import Final
 
-from animal_bomber.domain.rules.tuning import COLS, ROWS
+from animal_bomber.domain.rules.tuning import COLS, LANE_WIDTH, ROWS
 
-LANE: Final = 0.62
-"""盤面のまわりの帯の幅（マス）。
+LANE: Final = LANE_WIDTH
+"""盤面のまわりの余白の幅（マス）。外周の帯（ルールの層の `LANE_WIDTH`）と同じ値。
 
-外周を回るプレイヤー（葱ボン）が乗る。1マス丸ごとだと盤面のまわりが余って見えるので
-細くした（原型の注記）。
+外周を回るプレイヤー（葱ボン）の鍋が乗る。1マス丸ごとだと盤面のまわりが余って見えるので
+細くした（原型の注記）。ルールの層は帯の真ん中に外周のプレイヤーを置くので、別々の値に
+すると、余白の真ん中から鍋がずれ、描く面の端で鍋が切れることもある（原型も1つの LANE を
+両方に使う）。
 """
 
 TILE_MIN: Final = 26

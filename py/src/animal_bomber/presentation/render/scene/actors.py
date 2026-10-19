@@ -138,8 +138,8 @@ class ActorTracker:
                     # `renderer.py`）。種類を足したら、数える値があるかをここで決める。
                     pass
                 case Leek():
-                    # いまは数えない。葱の絵（原型の drawNegibons）を写す次の段で、
-                    # 見た目だけの値が要るかを決める。
+                    # 数える値は無い。葱の絵は位置と飛ぶ向きだけで描け、どちらも試合の
+                    # 状態にある（原型の葱も、見た目だけの値を持たない）。
                     pass
                 case _:
                     assert_never(actor)

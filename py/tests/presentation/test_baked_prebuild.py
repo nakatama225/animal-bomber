@@ -1,7 +1,8 @@
 """試合の前に描いておく絵（`BakedArt.prebuild`）と、取っておく絵の範囲の検査。
 
 - 試合でよく出る姿（歩く・止まる・点滅・ブロックの中・落とし穴で止まる・舌・掘る・
-  粘膜爆弾・炎・ゲージ・とくぎの印）は、先に描いておけば、貼るときに描き直さない
+  粘膜爆弾・炎・ゲージ・とくぎの印・外周の鍋と葱）は、先に描いておけば、貼るときに
+  描き直さない
 - どの絵も、描く範囲（`_box` や部品ごとの範囲）からはみ出していない（いちばん外の
   1画素が透明）。線の太さはマスの大きさによらない px なので、いちばん小さいマス（26）と
   いちばん大きいマス（60）の両方で見る
@@ -15,11 +16,14 @@ from animal_bomber.domain.core.coord import Cell, Direction
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
+from animal_bomber.domain.rules.lane import lane_spot
+from animal_bomber.domain.rules.tuning import LEEK_FIRST_COOLDOWN
 from animal_bomber.domain.state.actors import SlimeBomb
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng
 from animal_bomber.presentation.render.art.animals.body import BodyMotion, BodyPose
 from animal_bomber.presentation.render.art.animals.frog import TongueLook
 from animal_bomber.presentation.render.art.foxfires import FoxfireLook, TrailMark
+from animal_bomber.presentation.render.art.negibons import LeekLook, NegibonLook
 from animal_bomber.presentation.render.art.player import PlayerLook
 from animal_bomber.presentation.render.art.player_marks import special_emoji
 from animal_bomber.presentation.render.baked.art import BakedArt
@@ -76,6 +80,17 @@ def test_先に描いておけば_試合でよく出る姿と技は描き直さ�
                 interval=Tick(24),
             )
             art.slimes.draw(surface, slime_look(slime, (0, 0), hopped), Tick(since))
+    # 外周の鍋：撃つ間隔の残りのとりうる値の全部（外周へ回った直後の 3.5 秒から 0 まで）
+    # と、4辺の撃つ向き。葱は4向きを、ふだんの濃さで。
+    for left in range(LEEK_FIRST_COOLDOWN + 1):
+        for index, animal in enumerate(Animal):
+            spot = lane_spot(left * 0.37 + index * 14.5)
+            lane = NegibonLook(
+                animal, spot.position.x, spot.position.y, spot.facing, Tick(left)
+            )
+            art.negibons.draw(surface, lane)
+    for facing in Direction:
+        art.negibons.draw_leek(surface, LeekLook(5.3, 6.7, facing))
     assert art.cache.renders == before
 
 
@@ -84,7 +99,7 @@ def test_取っておいた絵は_範囲からはみ出していない(tile: int
     """絵の範囲が狭いと、絵の端が切れる。いちばん外の1画素がどれも透明か。
 
     5匹・4つの向きの、歩く・止まる・撒く身ぶりの端・跳び上がりと、落とし穴の体、
-    接地影と輪・印・ゲージ・技の部品・粒子を見る。
+    接地影と輪・印・ゲージ・技の部品・外周の鍋の部品と葱・粒子を見る。
     """
     layout = Layout(tile)
     art = BakedArt(layout)
@@ -110,6 +125,7 @@ def test_取っておいた絵は_範囲からはみ出していない(tile: int
     art.digs.prebuild()
     art.slimes.prebuild()
     art.foxfires.prebuild()
+    art.negibons.prebuild(list(Animal))
     for size in (3.0, 9.0):
         art.particles.square("#a2703f", round(size * 2))
     art.particles.text("\N{SKULL}", 26)

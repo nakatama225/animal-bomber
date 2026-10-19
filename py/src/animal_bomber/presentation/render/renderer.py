@@ -2,8 +2,9 @@
 
 並べる順・画面の揺れ・見た目の乱数を引く順は、手本の `art/frame.py` の draw_frame と
 同じ（背景 → 画面の揺れ → 床と壁 → アイテム → 爆弾 → 爆風 → プレイヤー（上にいる順）→
-炎 → 粘膜爆弾 → 粒子）。描く関数を直接呼ぶ手本と違い、ここは取っておいた絵
-（`render/baked/`）を貼る。最後に、盤面の上の帯（`band.py`）を貼る。
+炎 → 粘膜爆弾 → 外周の鍋（プレイヤーの番号の順）→ 飛んでいる葱 → 粒子）。描く関数を
+直接呼ぶ手本と違い、ここは取っておいた絵（`render/baked/`）を貼る。最後に、盤面の上の帯
+（`band.py`）を貼る。
 
 試合の状態（`WorldState`・`MatchState`）は読むだけで書き換えない。試合の状態に無い値
 （粒子・画面の揺れ・歩いた距離など）は `Visuals` から読む（`scene/tracker.py` の
@@ -20,9 +21,10 @@
 
 原型の drawPlayer は、落とし穴にはまったプレイヤーを描くと、不透明度を戻さずに帰る
 （`art/player.py` の draw_player の注記）。そのフレームのそのあとに描くもののうち、
-不透明度を自分で決めないもの（あとに描くプレイヤーとその舌・掘る身ぶり、炎の火の玉）は、
-その不透明度で描かれる。手本の draw_frame は命令どおりに写してあるので、ここも同じく、
-プレイヤーを貼るたびに返る不透明度を、次のプレイヤーと炎へ渡す。
+不透明度を自分で決めないもの（あとに描くプレイヤーとその舌・掘る身ぶり、炎の火の玉、
+飛んでいる葱）は、その不透明度で描かれる。外周の鍋は不透明度を自分で 0.95 にするので
+受けない。手本の draw_frame は命令どおりに写してあるので、ここも同じく、プレイヤーを
+貼るたびに返る不透明度を、次のプレイヤーと炎と葱へ渡す。
 
 ⚠️ 原型では、落とし穴にはまったプレイヤーが同じフレームに2体いて、先に描くほうが点滅して
 いると、フレームを描き終えたあとも canvas の不透明度が戻らず、次のフレームからは背景や
@@ -45,7 +47,13 @@ from animal_bomber.domain.state.actors import (
     SlimeBomb,
 )
 from animal_bomber.domain.state.match import MatchState
-from animal_bomber.domain.state.player import PlayerId, is_alive
+from animal_bomber.domain.state.player import (
+    Alive,
+    Negibon,
+    Out,
+    PlayerId,
+    is_alive,
+)
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng
 from animal_bomber.presentation.render.art.foxfires import FoxfireLook, TrailMark
@@ -57,7 +65,8 @@ from animal_bomber.presentation.render.baked.techniques import snap
 from animal_bomber.presentation.render.band import Band
 from animal_bomber.presentation.render.canvas.surface import SurfaceCanvas
 from animal_bomber.presentation.render.layout import Layout
-from animal_bomber.presentation.render.views.actors import slime_look
+from animal_bomber.presentation.render.views.actors import leek_look, slime_look
+from animal_bomber.presentation.render.views.lane import negibon_look
 from animal_bomber.presentation.render.views.player import TrackedMotion, player_look
 
 
@@ -160,9 +169,7 @@ class Renderer:
                     # 焼けた舌は、盤面に姿を持たない）。
                     pass
                 case Leek():
-                    # いまは描かない。飛んでいる葱は、原型では外周のプレイヤーと一緒に
-                    # 描く（drawNegibons）。原型の絵を写す次の段で足す。
-                    pass
+                    pass  # 外周の鍋のあとの輪で描く
                 case _:
                     assert_never(actor)
         for actor in world.actors:
@@ -176,7 +183,30 @@ class Renderer:
                 case Pit() | Scatter() | BurntTongue():
                     pass  # 原型も描かない（前の輪の説明）
                 case Leek():
-                    pass  # いまは描かない（前の輪の説明）
+                    pass  # 外周の鍋のあとの輪で描く
+                case _:
+                    assert_never(actor)
+        # 外周の鍋を全員ぶん（プレイヤーの番号の順に）描いてから、飛んでいる葱を全部描く
+        # （原型の drawNegibons）。鍋は不透明度を自分で決めるので `alpha` を受けず、葱は
+        # 受ける（モジュールの説明の、落とし穴の戻し忘れ）。
+        for player in world.players:
+            life = player.life
+            match life:
+                case Negibon():
+                    lane = negibon_look(player, life, now)
+                    art.negibons.draw(target, lane, offset)
+                case Alive() | Out():
+                    pass
+                case _:
+                    assert_never(life)
+        for actor in world.actors:
+            match actor:
+                case Leek():
+                    art.negibons.draw_leek(target, leek_look(actor), offset, alpha)
+                case Foxfire() | SlimeBomb():
+                    pass  # 前の輪で描いた
+                case Pit() | Scatter() | BurntTongue():
+                    pass  # 原型も描かない（最初の輪の説明）
                 case _:
                     assert_never(actor)
         for particle in visuals.particles:

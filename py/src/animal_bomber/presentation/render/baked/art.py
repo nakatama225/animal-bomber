@@ -15,6 +15,7 @@ from animal_bomber.presentation.render.baked.items import (
     prebuild_items,
     prebuild_melting,
 )
+from animal_bomber.presentation.render.baked.negibons import NegibonSprites
 from animal_bomber.presentation.render.baked.particles import ParticleSprites
 from animal_bomber.presentation.render.baked.players import PlayerSprites
 from animal_bomber.presentation.render.baked.techniques import TongueSprites
@@ -43,6 +44,7 @@ class BakedArt:
         )
         self.slimes = SlimeSprites(layout, self.cache)
         self.foxfires = FoxfireSprites(layout, self.cache)
+        self.negibons = NegibonSprites(layout, self.cache)
         self.particles = ParticleSprites(layout, self.cache)
 
     def prebuild(self, animals: Iterable[Animal]) -> None:
@@ -60,6 +62,8 @@ class BakedArt:
           ゲージ、掘る身ぶりの絵
         - 舌の部品と粘膜爆弾の形の全部（かえる）・追いかける炎（きつね）
         - ぞうが出るなら、鼻水で溶けていくうんこ
+        - 外周の鍋（動物ごと）と、撃つ間隔の帯の長さの全部・🌿・撃つ向きの点線と葱の
+          4向き（どの試合でも、倒れたプレイヤーは外周へ回る）
 
         撒いている身ぶりと跳び上がりの姿、状態の印の組み合わせは、出たときに描く（1匹に
         つき1秒ほどしか出ないか、組み合わせが多い）。
@@ -99,3 +103,4 @@ class BakedArt:
             self.slimes.prebuild()
         if Animal.FOX in chosen:
             self.foxfires.prebuild()
+        self.negibons.prebuild(chosen)
