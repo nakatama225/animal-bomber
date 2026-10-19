@@ -91,6 +91,22 @@ def ticks():
         current[:] = EVENTS[name]
         yield ticks_
 presenter, observers = open_audio(session) if "audio" in options else (Presenter(), ())
+# "order" があれば、1 tick ごとにイベントと盤面を渡した先を、渡した順に控える。
+order = []
+if "order" in options:
+    consume = presenter.consume
+    def consumed(events):
+        order.append("Presenter")
+        consume(events)
+    presenter.consume = consumed
+    def watched(observer):
+        observe = observer.observe
+        def observed(world, events):
+            order.append(type(observer).__name__)
+            observe(world, events)
+        observer.observe = observed
+        return observer
+    observers = tuple(watched(observer) for observer in observers)
 scene = SceneTracker()
 run(
     screen, session, keyboard, presenter, ticks(), renderer, scene,
@@ -118,6 +134,7 @@ print(json.dumps({
     "previous": int(first.previous_input),
     "mixer": pygame.mixer.get_init(),
     "channels": probes[-1] if probes else channel_states(),
+    "order": order,
 }))
 pygame.quit()
 """
@@ -225,6 +242,18 @@ def test_音を開いて回すと_曲を鳴らし_爆弾を置いた音を鳴ら
     assert isinstance(channels, list)
     assert channels[0] is True
     assert any(channels[1:])
+
+
+def test_1tickごとに_秒読みと曲を_イベントの音より先に回す() -> None:
+    """原型と同じ順にする（秒読みと曲が先、イベントの音があと）。
+
+    原型は update の頭で秒読みを鳴らし（L4292-4293）、決着の tick は倒れる音などのあとで
+    曲を止めてから勝ちの音を鳴らす（endGame の L4469）。曲を止めるのはイベントを受け取る
+    `Presenter` なので、秒読みと曲（`Countdown`・`RoundMusic`）を先に回す。2 tick
+    進めて、渡した先を渡した順に見る。
+    """
+    result = _run([(0, "none"), (2, "none")], "audio", "order")
+    assert result["order"] == ["Countdown", "RoundMusic", "Presenter"] * 2
 
 
 def test_音を開かなければ_何も鳴らさない() -> None:

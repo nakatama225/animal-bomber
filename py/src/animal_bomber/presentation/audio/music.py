@@ -1,12 +1,14 @@
-"""曲を1周ぶん焼いて繰り返し鳴らし、ラウンドの始まりで鳴らし始め、決まったら止める。
+"""曲を1周ぶん焼いて繰り返し鳴らし、ラウンドの始まりで鳴らし始める。
 
 原型（`BGM`）は 25 ミリ秒ごとに起きて、0.16 秒先までの刻みを Web Audio に予約し続けて
 いた。pygame にはその予約の仕組みが無い。曲は 16 刻みの繰り返しで、どの周も中身が
 同じなので、1周ぶんを Sound に焼き、専用のチャンネルで繰り返す（`score.py`）。
 
 鳴らし始めと止めるのは原型と同じ場面にする。ラウンドが始まったら頭から（原型の
-`startRound` の `BGM.start()`）、ラウンドが決まったら止める（`endGame` の
-`BGM.stop()`）。
+`startRound` の `BGM.start()`。`RoundMusic`）、ラウンドが決まったら止める（`endGame` の
+`BGM.stop()`）。止めるのは `presentation/presenter.py` の `Presenter`。原型は、決着の
+update の倒れる音などのあと、勝ち・引き分け・優勝の音の直前に止めるので、イベントの音と
+同じ所で順を決める。
 """
 
 import random
@@ -16,7 +18,7 @@ from typing import Final, Protocol
 import numpy as np
 import pygame
 
-from animal_bomber.domain.events import RoundEnded, SimEvent
+from animal_bomber.domain.events import SimEvent
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.presentation.audio.bank import PCM_SIZE
 from animal_bomber.presentation.audio.oscillator import FloatArray
@@ -112,10 +114,11 @@ def open_music(noise_rng: random.Random | None = None) -> LoopMusic | NullMusic:
 
 
 class RoundMusic:
-    """新しい盤面で曲を頭から鳴らし、ラウンドが決まったら止める。
+    """新しい盤面で曲を頭から鳴らす。
 
     盤面はラウンドごとに作り直される（`app/session.py`）ので、受け取った盤面が前と
-    別のものになったら、新しいラウンドが始まったと見る。
+    別のものになったら、新しいラウンドが始まったと見る。ラウンドが決まったら止めるのは
+    `Presenter`（モジュールの説明）。
     """
 
     def __init__(self, music: Music) -> None:
@@ -124,9 +127,10 @@ class RoundMusic:
         self._world: WorldState | None = None
 
     def observe(self, world: WorldState, events: Sequence[SimEvent]) -> None:
-        """1 tick 進めるたびに、進めたあとの盤面と、その tick のイベントを渡す。"""
+        """1 tick 進めるたびに、進めたあとの盤面と、その tick のイベントを渡す。
+
+        イベントは見ない（秒読みの `Countdown` と同じ形で呼べるように受け取る）。
+        """
         if world is not self._world:
             self._world = world
             self._music.start()
-        if any(isinstance(event, RoundEnded) for event in events):
-            self._music.stop()

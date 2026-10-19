@@ -10,8 +10,8 @@
 3. 画面の大きさから描く面の寸法を決めて窓を開き（`window_layout`）、「じゅんびちゅう」を
    出してから、試合で使う絵を描いておく（`prepare_renderer`）
 4. 実時間を tick の数に換えて試合を進める（`shell/loop.py` の `frames`）
-5. 起きたイベントを音と通知に変え（`Presenter`）、残り時間の秒読みと曲を鳴らし
-   （`Countdown`・`RoundMusic`）、見た目だけの値を数え（`SceneTracker`）、盤面を描く
+5. 残り時間の秒読みと曲を鳴らし（`Countdown`・`RoundMusic`）、起きたイベントを音と
+   通知に変え（`Presenter`）、見た目だけの値を数え（`SceneTracker`）、盤面を描く
    （`Renderer`）
 
 起動は `uv run python -m animal_bomber.app.main`。窓を閉じるか Esc で終わる。
@@ -171,6 +171,7 @@ def run(
             1 tick ごとに盤面とイベントを渡し、描くときに読ませる。
         events: そのフレームに届いたイベントを返す関数。テストで差し替える。
         observers: 1 tick 進めるたびに、盤面とイベントを渡す先（秒読みと曲）。
+            `presenter` より先に渡す。
     """
     # 描く面はアルファの桁の無い面にし、窓の面へは 1 フレームに 1 回だけ貼る
     # （py/AGENTS.md「描画の重さ」。合否はこの形で測って決めた）。
@@ -188,10 +189,16 @@ def run(
             keyboard.handle(event)
         for _ in range(ticks):
             tick_events = session.tick()
-            presenter.consume(tick_events)
-            scene.observe(session.world, tick_events)
+            # 秒読みと曲を、イベントの音より先に回す（原型と同じ順）。原型は
+            # update の頭で秒読みを鳴らし（L4292-4293）、曲はラウンドの最初の
+            # update より前に鳴らし始める（startRound の L4159。1ラウンド目も、
+            # 最初の tick のイベントの音より先になる）。決着の tick に曲を止める
+            # のは `presenter`（倒れる音などのあと、勝ち・引き分け・優勝の音の
+            # 直前。原型の endGame の L4469）。
             for observer in observers:
                 observer.observe(session.world, tick_events)
+            presenter.consume(tick_events)
+            scene.observe(session.world, tick_events)
             keyboard.end_tick()
         renderer.draw(canvas, session.world, session.match, scene)
         screen.blit(canvas, (0, 0))
@@ -217,13 +224,20 @@ def preset_mixer() -> None:
 def open_audio(session: GameSession) -> tuple[Presenter, tuple[TickObserver, ...]]:
     """音を焼き、イベントを渡す先と、1 tick ごとに盤面を渡す先（秒読みと曲）を作る。
 
-    mixer が開いていなければ、どれも何も鳴らさない。
+    曲は、鳴らし始めるのが `RoundMusic`、決着の tick に止めるのが `Presenter`（勝ち・
+    引き分け・優勝の音の直前に止めるため）。mixer が開いていなければ、どれも何も
+    鳴らさない。
     """
     sounds = open_sound_bank()
-    presenter = Presenter(sounds, animal_of=lambda player: animal_of(session, player))
+    music = open_music()
+    presenter = Presenter(
+        sounds,
+        animal_of=lambda player: animal_of(session, player),
+        stop_music=music.stop,
+    )
     observers = (
         Countdown(sounds),
-        RoundMusic(open_music()),
+        RoundMusic(music),
     )
     return presenter, observers
 

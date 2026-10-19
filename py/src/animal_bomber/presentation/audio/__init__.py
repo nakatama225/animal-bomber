@@ -11,6 +11,7 @@
 3. 合成（`synth.py`）… 予定を Web Audio の仕様の式で読み、音の配列にする
 4. 焼く（`bank.py`・`music.py`）… pygame の mixer の周波数で焼き、鳴らすときは再生だけ
 
-鳴らす場面を決めるのは `presenter.py`（イベントから効果音）と `countdown.py`（残り
-時間の秒読み）と `music.py` の `RoundMusic`（曲の始めと終わり）。
+鳴らす場面を決めるのは `presenter.py`（イベントから効果音と、決着の tick に曲を
+止めること）と `countdown.py`（残り時間の秒読み）と `music.py` の `RoundMusic`（曲の
+鳴らし始め）。
 """

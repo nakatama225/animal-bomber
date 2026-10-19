@@ -28,6 +28,10 @@
 同じ音を一定時間まとめて1回にする仕組み（TypeScript 版は 0.03 秒）は入れず、原型が
 1回しか鳴らさない所は、上のように場面を見分けて1回にする。
 
+ラウンドが決まった tick は、勝ち・引き分け・優勝の音の直前に曲を止める（原型の
+`endGame` は `BGM.stop()` のあとで鳴らす）。同じ tick の倒れる音などは、止める前に
+鳴る。曲を鳴らし始めるのは `audio/music.py` の `RoundMusic`。
+
 ## 扱いの書き忘れは型検査で失敗する
 
 `_handle` と `effect_text`（と、種類ごとの音の表 `audio/cues.py`）は `match` で種類
@@ -112,6 +116,10 @@ AnimalOf: TypeAlias = Callable[[PlayerId], Animal | None]
 def no_animal(player: PlayerId) -> Animal | None:
     """動物が分からない（技の音は、とくぎの共通の音だけになる）。"""
     return None
+
+
+def no_music() -> None:
+    """止める曲が無い（何もしない）。"""
 
 
 def numbered_name(player: PlayerId) -> str:
@@ -212,8 +220,8 @@ class _Tick:
 class Presenter:
     """イベントを受け取り、音と通知に変える。
 
-    状態を持たない処理だが、差し替える出し先（音・通知・呼び方・動物の引き方）を4つ
-    抱えるのでクラスにしてある。
+    状態を持たない処理だが、差し替える出し先（音・通知・呼び方・動物の引き方・曲を
+    止める先）を5つ抱えるのでクラスにしてある。
     """
 
     def __init__(
@@ -222,11 +230,13 @@ class Presenter:
         notices: NoticeSink | None = None,
         name_of: PlayerNamer = numbered_name,
         animal_of: AnimalOf = no_animal,
+        stop_music: Callable[[], None] = no_music,
     ) -> None:
         self._sounds: SoundBank = sounds if sounds is not None else NullSoundBank()
         self._notices: NoticeSink = notices if notices is not None else NullNoticeSink()
         self._name_of = name_of
         self._animal_of = animal_of
+        self._stop_music = stop_music
 
     def consume(self, events: Iterable[SimEvent]) -> None:
         """1 tick ぶんのイベントを、起きた順に扱う。
@@ -320,6 +330,10 @@ class Presenter:
                 # には、0 秒の秒読みも鳴る（`audio/countdown.py`）。知らせは段階 10。
                 play(SoundName.SUDDEN)
             case RoundEnded(round=number, winner=winner):
+                # 曲を止めてから、勝ち・引き分けの音を鳴らす（原型の endGame は L4469 で
+                # 曲を止めてから鳴らす）。優勝が決まった tick は、すぐあとに続く
+                # `MatchEnded` が優勝の音だけを鳴らすので、止めるのはここで1回。
+                self._stop_music()
                 # 優勝が決まった tick は、優勝の音だけ（`MatchEnded`。原型の endGame）。
                 if not tick.match_ended:
                     play(SoundName.DRAW if winner is None else SoundName.WIN)

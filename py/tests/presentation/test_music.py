@@ -39,6 +39,7 @@ from animal_bomber.presentation.audio.score import (
 from animal_bomber.presentation.audio.sounds import SoundName
 from animal_bomber.presentation.audio.synth import frame_at, mix, white_noise
 from animal_bomber.presentation.audio.voices import note_voice
+from animal_bomber.presentation.presenter import Presenter
 from tests.helpers import make_world
 from tests.presentation.conftest import samples_of
 
@@ -127,7 +128,10 @@ class _Recording:
 
 
 class Test鳴らす場面:
-    def test_新しい盤面で頭から鳴らし_ラウンドが決まったら止める(self) -> None:
+    def test_新しい盤面で頭から鳴らし_ラウンドが決まっても_ここでは止めない(
+        self,
+    ) -> None:
+        """止めるのは `Presenter`（勝ち・引き分け・優勝の音の直前。`music.py`）。"""
         music = _Recording()
         cue = RoundMusic(music)
         first, second = make_world(), make_world()
@@ -137,16 +141,17 @@ class Test鳴らす場面:
         assert music.calls == ["start"]
         cue.observe(first, ended)
         cue.observe(first, [])
-        assert music.calls == ["start", "stop"]
+        assert music.calls == ["start"]
         cue.observe(second, [])
-        assert music.calls == ["start", "stop", "start"]
+        assert music.calls == ["start", "start"]
 
     def test_試合を進めると_ラウンドごとに鳴らし始めと止めるを繰り返す(self) -> None:
         """制限時間 2 秒（120 tick）の引き分けを2回。決着のあとの待ちの間は止めたまま。
 
-        遊ぶときと同じく、1 tick 進めるたびに進めたあとの盤面を渡す（`app/main.py`）。
-        表の数は、試合を始めてから進めた tick の数。時間切れを引き分けにするため、延長戦
-        は切る。
+        遊ぶときと同じ配線と順（`app/main.py` の `open_audio` と `run`）で、1 tick
+        進めるたびに、進めたあとの盤面を `RoundMusic` に、イベントを曲を止める先を
+        持った `Presenter` に渡す。表の数は、試合を始めてから進めた tick の数。時間切れ
+        を引き分けにするため、延長戦は切る。
         """
         config = MatchConfig(
             seed=5,
@@ -157,11 +162,13 @@ class Test鳴らす場面:
         session = GameSession(config, [IdleSource(0), IdleSource(1)])
         music = _Recording()
         cue = RoundMusic(music)
+        presenter = Presenter(stop_music=music.stop)
         timeline: list[tuple[int, str]] = []
         for tick in range(1, 240 + ROUND_INTERMISSION + 1):
             before = len(music.calls)
             events = session.tick()
             cue.observe(session.world, events)
+            presenter.consume(events)
             timeline += [(tick, call) for call in music.calls[before:]]
         assert timeline == [
             (1, "start"),
