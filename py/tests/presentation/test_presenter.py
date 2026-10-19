@@ -571,7 +571,11 @@ class Test葱ボンと延長戦:
             SoundName.NEGI_HIT
         ]
         assert sounds_of([LanesClosed(players=(1,))]) == [SoundName.NEGI_OUT]
-        sudden = SuddenDeath(reason=SuddenDeathReason.ALL_DOWN, players=(0, 1))
+        sudden = SuddenDeath(
+            reason=SuddenDeathReason.ALL_DOWN,
+            players=(0, 1),
+            moved_from=(Point(3.5, 1.5), Point(5.5, 1.5)),
+        )
         assert sounds_of([sudden]) == [SoundName.SUDDEN]
 
     def test_試合で葱が当たると_入れ替わりの音だけで_倒れる音は鳴らさない(self) -> None:
@@ -621,7 +625,11 @@ ALL_EVENTS: list[SimEvent] = [
     LeekStopped(cell=Cell(1, 2), by=LeekStop.BOMB),
     Revived(player=0, replaced=1, at=Point(1.5, 1.5)),
     LanesClosed(players=(1,)),
-    SuddenDeath(reason=SuddenDeathReason.TIME_UP, players=(0, 1)),
+    SuddenDeath(
+        reason=SuddenDeathReason.TIME_UP,
+        players=(0, 1),
+        moved_from=(Point(1.5, 1.5), Point(2.5, 1.5)),
+    ),
     RoundEnded(round=1, winner=None),
     MatchEnded(champion=1),
 ]

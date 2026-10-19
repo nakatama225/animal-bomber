@@ -60,6 +60,10 @@ def enter_sudden_death(
     world.blasts = []
     world.items = []
     world.actors = []
+    # 開始位置へ移す前の位置を、知らせるイベントに載せる（歩いた距離を数える側が使う）。
+    moved_from = tuple(
+        player.position for player in world.players if player.id in players
+    )
     # 開始位置は、加わるプレイヤーにプレイヤー番号の順で1つずつ割り当てる。
     slot = 0
     for player in world.players:
@@ -78,7 +82,7 @@ def enter_sudden_death(
         player.invulnerable_until = Tick(world.now + SUDDEN_DEATH_INVULNERABLE)
     # 加わるプレイヤーは、渡された順ではなくプレイヤー番号の順で知らせる。
     joined = tuple(player.id for player in world.players if player.id in players)
-    return [SuddenDeath(reason=reason, players=joined)]
+    return [SuddenDeath(reason=reason, players=joined, moved_from=moved_from)]
 
 
 def _clear_round_state(player: PlayerState) -> None:

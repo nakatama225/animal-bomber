@@ -440,7 +440,8 @@ class Test葱ボンと延長戦:
         tracker.observe(world, [PlayerHurt(0, 1, 2), ItemBurned(AT, ItemKind.FIRE)])
         world.actors = []
         world.now = Tick(2)
-        tracker.observe(world, [SuddenDeath(SuddenDeathReason.TIME_UP, (0, 1))])
+        stayed = tuple(player.position for player in world.players)
+        tracker.observe(world, [SuddenDeath(SuddenDeathReason.TIME_UP, (0, 1), stayed)])
         assert tracker.shake == pytest.approx(case["shake"] - 2 * SHAKE_DECAY * DT)
         before = advanced(advanced([particle_of(raw) for raw in burned["particles"]]))
         smoke = advanced([particle_of(raw) for raw in case["particles"][1:]])

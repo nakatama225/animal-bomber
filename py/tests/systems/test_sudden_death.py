@@ -96,8 +96,11 @@ class Test延長戦に入る条件:
         game = session(round_limit=Tick(3))
         events = run_until_round_changes(game, 10)
         assert events
+        # 2体とも動いていないので、開始位置へ移す前の位置は始めの隅のまま。
         assert events[-1] == SuddenDeath(
-            reason=SuddenDeathReason.TIME_UP, players=(0, 1)
+            reason=SuddenDeathReason.TIME_UP,
+            players=(0, 1),
+            moved_from=(SPAWN_CELLS[0].center(), SPAWN_CELLS[1].center()),
         )
         assert game.match.round == 1
         assert game.world.sudden_death
@@ -137,8 +140,11 @@ class Test延長戦に入る条件:
         assert bomb is not None
         bomb.fuse = Tick(1)
         events = run_until_round_changes(game, 5)
+        # 開始位置へ移す前の位置（倒れた位置）を運ぶ。
         assert events[-1] == SuddenDeath(
-            reason=SuddenDeathReason.ALL_DOWN, players=(0, 1)
+            reason=SuddenDeathReason.ALL_DOWN,
+            players=(0, 1),
+            moved_from=(Cell(3, 1).center(), Cell(5, 1).center()),
         )
         # 倒れた位置を運ぶ（受け取る頃には、開始位置の表の隅へ移っている）。
         downs = [e for e in events if isinstance(e, PlayerDown)]
@@ -325,11 +331,20 @@ class Test延長戦の準備:
         hurt(world, player, 1, player.hp)
         assert player.life == OUT
 
-    def test_加わるプレイヤーは番号の順で知らせる(self) -> None:
+    def test_加わるプレイヤーは番号の順で_開始位置へ移す前の位置と一緒に知らせる(
+        self,
+    ) -> None:
+        """移す前の位置は、歩いた距離を数える側が使う（原型は歩いてから移す）。"""
         world = make_world(3, THREE)
+        world.players[0].position = Point(3.5, 3.2)
+        world.players[2].position = Point(9.7, 9.5)
         events = enter_sudden_death(world, (2, 0), SuddenDeathReason.ALL_DOWN)
         assert events == [
-            SuddenDeath(reason=SuddenDeathReason.ALL_DOWN, players=(0, 2))
+            SuddenDeath(
+                reason=SuddenDeathReason.ALL_DOWN,
+                players=(0, 2),
+                moved_from=(Point(3.5, 3.2), Point(9.7, 9.5)),
+            )
         ]
 
     def test_乱数を引かない(self) -> None:

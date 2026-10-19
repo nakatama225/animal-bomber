@@ -12,14 +12,16 @@ import pytest
 from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.core.entity_id import EntityId
 from animal_bomber.domain.core.tick import Tick
-from animal_bomber.domain.events import TechniqueUsed
+from animal_bomber.domain.events import SuddenDeathReason, TechniqueUsed
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
-from animal_bomber.domain.rules.tuning import MAX_SPEED
+from animal_bomber.domain.rules.tuning import MAX_SPEED, SPAWN_CELLS
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
+from animal_bomber.domain.systems import simulation
+from animal_bomber.domain.systems.sudden_death import enter_sudden_death
 from tests.helpers import grant_special, idle, only_for
 
 from .scene_helpers import arena, speed_now, started, step
@@ -130,3 +132,26 @@ class Test歩いた距離の見分け:
         tracker.observe(world, [TechniqueUsed(rabbit.id, special=False)])
         assert 0 < 5.6 - rabbit.position.x < MAX_SPEED
         assert tracker.motion(rabbit.id).walked == 0
+
+    def test_延長戦に入ったtickも_開始位置へ移す前に歩いたぶんを足す(self) -> None:
+        """原型は入力の輪で歩いたぶんを足してから、開始位置へ移す。
+
+        原型の update は、入力の輪（L4333-4343）の movePlayer で歩いた距離を足し、最後の
+        checkEnd で延長戦に入って開始位置へ移す（enterSuddenDeath の L4459-4460）。足す
+        速さは、延長戦で靴が上限になる前のもの。1P が右へ1 tick 歩いた tick に延長戦に
+        入る（試合を進める側と同じく、`step` のあとで延長戦に入れる）。開始位置へ移った
+        ぶんは足さない。
+        """
+        world = arena((Animal.RABBIT, Animal.FOX))
+        rabbit = world.players[0]
+        rabbit.facing = Direction.RIGHT
+        tracker = started(world)
+        speed = speed_now(rabbit)
+        events = simulation.step(world, only_for(world, rabbit.id, PlayerInput.RIGHT))
+        walked_to = rabbit.position.x
+        events += enter_sudden_death(world, (0, 1), SuddenDeathReason.TIME_UP)
+        tracker.observe(world, events)
+        assert rabbit.position == SPAWN_CELLS[0].center()
+        assert tracker.motion(rabbit.id).walked == pytest.approx(walked_to - 1.5)
+        assert tracker.motion(rabbit.id).walked == pytest.approx(speed)
+        assert speed < MAX_SPEED

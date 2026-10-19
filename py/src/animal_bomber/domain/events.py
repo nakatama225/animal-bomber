@@ -360,6 +360,14 @@ class SuddenDeath:
     reason: SuddenDeathReason
     players: tuple[PlayerId, ...]
     """延長戦に加わるプレイヤー（プレイヤー番号の順）。"""
+    moved_from: tuple[Point, ...]
+    """加わるプレイヤーの、開始位置へ移す前の位置（`players` と同じ順）。
+
+    その tick に動いたあとの位置。受け取る頃には、加わるプレイヤーは開始位置へ移って
+    いる。歩いた距離を数える側（`presentation/render/scene/motion.py`）が、移す前の
+    位置で、その tick に歩いたかを見分けるのに使う（原型は歩いたぶんを足してから
+    開始位置へ移す）。TypeScript 版には無い（比べる行にも入れない）。
+    """
 
 
 @dataclass(frozen=True, slots=True)

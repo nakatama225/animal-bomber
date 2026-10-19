@@ -15,6 +15,9 @@
   速さは拾う前のもの。原型も同じ）
 - 滑っていた tick・跳んだ tick・1 tick に歩ける距離より大きく動いた tick（押しのけ
   られた）は足さない
+- 延長戦に入った tick は、開始位置へ移す前の位置（`SuddenDeath.moved_from`）で比べる。
+  原型は入力の輪（L4333-4343）で歩いたぶんを足してから、最後の checkEnd で開始位置へ
+  移す（enterSuddenDeath の L4459-4460）
 
 最後に動いた時刻は、進めたあとの盤面の時刻（`world.now`）。原型の lastMoveAt は、その
 tick の update の頭で進めた経過時間で、同じ値になる（`views/player.py` の
@@ -36,8 +39,9 @@ from collections.abc import Sequence
 from typing import Final
 
 from animal_bomber.domain.abilities.elephant import CHARGE_SPEED_RATIO
+from animal_bomber.domain.core.coord import Point
 from animal_bomber.domain.core.tick import Tick
-from animal_bomber.domain.events import PlayerHurt, SimEvent, TechniqueUsed
+from animal_bomber.domain.events import PlayerHurt, SimEvent, SuddenDeath, TechniqueUsed
 from animal_bomber.domain.rules.tuning import MAX_SPEED
 from animal_bomber.domain.state.effects import EffectBag, EffectKind
 from animal_bomber.domain.state.player import PlayerId, PlayerState, speed_of
@@ -82,17 +86,27 @@ class MotionTracker:
         """盤面を 1 tick 進めたあとに、動きの値を進める。"""
         hurt = [e.target for e in events if isinstance(e, PlayerHurt)]
         jumped = [_jumper(world, e) for e in events]
+        moved = _moved_from(events)
         for player in world.players:
             motion = self.motion(player.id)
             shake = HURT_FRAMES if player.id in hurt else max(0, motion.hurt_shake - 1)
             walked, last = motion.walked, motion.last_moved_at
             seen = None if before is None else before.players.get(player.id)
             if seen is not None and player.id not in jumped:
-                step = walk_step(player, seen)
+                step = walk_step(player, seen, moved.get(player.id, player.position))
                 if step is not None:
                     walked += step
                     last = world.now
             self._motions[player.id] = TrackedMotion(walked, last, Tick(shake))
+
+
+def _moved_from(events: Sequence[SimEvent]) -> dict[PlayerId, Point]:
+    """延長戦に入った tick なら、加わるプレイヤーの開始位置へ移す前の位置。違えば空。"""
+    moved: dict[PlayerId, Point] = {}
+    for event in events:
+        if isinstance(event, SuddenDeath):
+            moved.update(zip(event.players, event.moved_from, strict=True))
+    return moved
 
 
 def _jumper(world: WorldState, event: SimEvent) -> PlayerId | None:
@@ -105,15 +119,18 @@ def _jumper(world: WorldState, event: SimEvent) -> PlayerId | None:
     return user.id
 
 
-def walk_step(player: PlayerState, seen: PlayerSnapshot) -> float | None:
+def walk_step(
+    player: PlayerState, seen: PlayerSnapshot, moved_to: Point
+) -> float | None:
     """この tick に歩いた（突進で進んだ）距離として足す値。歩いていなければ None。
 
-    `seen` はそのプレイヤーの前の tick の終わりの控え。
+    `seen` はそのプレイヤーの前の tick の終わりの控え。`moved_to` はこの tick に動いた
+    あとの位置（ふつうはいまの位置。延長戦に入った tick は開始位置へ移す前の位置）。
     """
     if not seen.alive:
         return None
-    dx = player.position.x - seen.position.x
-    dy = player.position.y - seen.position.y
+    dx = moved_to.x - seen.position.x
+    dy = moved_to.y - seen.position.y
     if seen.charge is not None:
         cx, cy = seen.charge.delta
         return CHARGE_SPEED if dx * cx + dy * cy > 0 else None
