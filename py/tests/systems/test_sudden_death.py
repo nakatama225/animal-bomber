@@ -1,14 +1,14 @@
 """延長戦（サドンデス）に入る条件と、延長戦の準備の検査。
 
-TypeScript 版の `tests/systems/sudden-death.test.ts` と同じ場面（外周の葱ボンが絡む
-ものは、外周を移すときに足す）。原型は checkEnd と enterSuddenDeath
-（`legacy/animal-bomber.html`）。
+TypeScript 版の `tests/systems/sudden-death.test.ts` と同じ場面に、外周（葱ボン）が絡む
+2つ（外周のプレイヤーと葱の片付け・延長戦では外周が開かない）を足した。原型は checkEnd
+と enterSuddenDeath（`legacy/animal-bomber.html`）。
 """
 
 import pytest
 
 from animal_bomber.app.session import GameSession
-from animal_bomber.domain.core.coord import Cell, Point
+from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import (
     PlayerDown,
@@ -33,15 +33,22 @@ from animal_bomber.domain.rules.tuning import (
     SUDDEN_DEATH_LENGTH,
 )
 from animal_bomber.domain.state.actions import Dig
-from animal_bomber.domain.state.actors import Foxfire
+from animal_bomber.domain.state.actors import Foxfire, Leek
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import OUT, PlayerId, is_alive
+from animal_bomber.domain.state.player import (
+    OUT,
+    Life,
+    Negibon,
+    PlayerId,
+    is_alive,
+)
 from animal_bomber.domain.state.world import hash_world
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.blast import detonate
 from animal_bomber.domain.systems.bomb import place_bomb, place_bomb_at
+from animal_bomber.domain.systems.damage import hurt
 from animal_bomber.domain.systems.items import apply_item
 from animal_bomber.domain.systems.round import (
     CONTINUE,
@@ -293,6 +300,30 @@ class Test延長戦の準備:
         world = make_world(3, THREE)
         enter_sudden_death(world, (0, 2), SuddenDeathReason.ALL_DOWN)
         assert world.players[1].life == OUT
+
+    def test_外周のプレイヤーも_加わらなければ退場し_飛んでいる葱は消える(self) -> None:
+        """時間切れで延長戦に入るのは盤面にいるプレイヤーだけ（原型の checkEnd L4429）。
+
+        外周にいたプレイヤーは退場し、葱も盤面の物と一緒に片付ける。
+        """
+        world = make_world(3, THREE)
+        lane: Life = Negibon(along=5.0, ready_at=Tick(0))
+        world.players[1].life = lane
+        world.actors.append(
+            Leek(position=Point(5.5, 0.5), facing=Direction.DOWN, owner=1)
+        )
+        enter_sudden_death(world, (0, 2), SuddenDeathReason.TIME_UP)
+        assert world.players[1].life == OUT
+        assert world.actors == []
+
+    def test_延長戦の中で倒れたプレイヤーは_外周へ回らず退場する(self) -> None:
+        """延長戦の残りは外周が閉じる 60 秒ちょうどなので、外周は開かない。"""
+        world = make_world(3, THREE)
+        enter_sudden_death(world, (0, 1, 2), SuddenDeathReason.TIME_UP)
+        player = world.players[0]
+        player.invulnerable_until = Tick(0)
+        hurt(world, player, 1, player.hp)
+        assert player.life == OUT
 
     def test_加わるプレイヤーは番号の順で知らせる(self) -> None:
         world = make_world(3, THREE)

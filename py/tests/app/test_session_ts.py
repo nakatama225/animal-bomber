@@ -7,9 +7,11 @@
 どれを変えても、盤面の中身か時刻かイベントがずれて失敗する。
 
 期待する値は `ts_session_values.json`。出どころは `tests/systems/test_simulation_ts.py`
-の説明と同じ（同じコミットの TypeScript 版を写し、葱ボンを止め、全員が下を向いて始まる
-形にして流したもの）。延長戦は TypeScript 版の既定どおり入れる（`suddenDeath: true`。
-この版の `MatchConfig.sudden_death` の既定も同じ）。
+の説明と同じ（同じコミットの TypeScript 版を写し、全員が下を向いて始まる形にして流した
+もの）。葱ボンと延長戦は TypeScript 版の既定どおり入れる（`suddenDeath: true`。この版の
+`MatchConfig.sudden_death` の既定も同じ）。どの台本も制限時間が 1200 tick 以下で、残りが
+外周の閉じる 60 秒（3600 tick）を始めから切っているので、倒れたプレイヤーは外周へ回らず
+退場する（2人の試合なので、外周が開いていても、1人倒れれば決着する）。
 
 台本は4つ。
 

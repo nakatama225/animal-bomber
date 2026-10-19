@@ -5,12 +5,20 @@
 （TypeScript 版の `tests/systems/tick-order.test.ts` と同じ場面）。
 """
 
+import pytest
+
 from animal_bomber.domain.abilities.frog import REGEN_TIME, tongue_reach_of
 from animal_bomber.domain.abilities.results import Progress
 from animal_bomber.domain.abilities.techniques import hold_technique
 from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.core.tick import Tick
-from animal_bomber.domain.events import EffectApplied, Exploded, ItemDropped, SimEvent
+from animal_bomber.domain.events import (
+    EffectApplied,
+    Exploded,
+    ItemDropped,
+    PlayerHurt,
+    SimEvent,
+)
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import Animal, stats_of
 from animal_bomber.domain.rules.items import ItemKind
@@ -19,13 +27,14 @@ from animal_bomber.domain.state.actors import (
     Actor,
     BurntTongue,
     Foxfire,
+    Leek,
     Pit,
     Scatter,
     SlimeBomb,
 )
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import PlayerState
+from animal_bomber.domain.state.player import OUT, Negibon, PlayerState, is_alive
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.actors import step_actors, step_owned_actors
@@ -199,6 +208,114 @@ class Test1tickの中の並び:
             simulation.step(world, idle(world))
         assert not frog.effects.has(EffectKind.SLIDE)
         assert abs(frog.position.x - 4.055) < 5e-6
+
+
+class Test外周の処理の並び:
+    """外周で撃つのは入力の輪の中・葱は落とし穴のあとで炎の前・外周を閉じるのは最後。
+
+    原型の update（L4333-4338 の入力の輪 → L4345 pitfallCheck → L4346 updateNegis →
+    L4347 updateFoxfires → … → L4405 checkEnd の頭の negibonCutoff）。期待値は、原型を
+    画面なしで動かし、外周のプレイヤー（`state='NEGIBON'`）と飛んでいる葱を直に置いて、
+    update(1/60) を1回呼んで測ったもの。どれも、並びを変えると答えが変わる場面にして
+    ある。
+    """
+
+    def lane_arena(self, second: Animal) -> tuple[WorldState, PlayerState, PlayerState]:
+        """1P のうさぎを外周（上辺の位置 30）に置き、2P を (5, 3) に立たせる。"""
+        world, shooter, victim = arena(Animal.RABBIT, second)
+        shooter.life = Negibon(along=30.0, ready_at=Tick(0))
+        victim.position = Cell(5, 3).center()
+        return world, shooter, victim
+
+    def incoming(self, world: WorldState) -> None:
+        """次の tick に1歩進むと、(5, 3) に立つ相手の当たり枠（0.28）に入る葱。"""
+        world.actors.append(
+            Leek(position=Point(5.5, 3.2), facing=Direction.DOWN, owner=0)
+        )
+
+    def test_外周のプレイヤーは動いてから撃ち_撃った葱はそのtickに1歩進む(self) -> None:
+        """原型：上辺の位置 10 で右と爆弾を同じフレームに押す。
+
+        位置は 10.091666…、葱は x 11.591666…・y -0.201666…（帯の真ん中 -0.31 から1歩）。
+        動く前の位置から撃てば x は 11.5、葱が次のフレームから進めば y は -0.31 のまま。
+        """
+        world, shooter, other = arena(Animal.RABBIT, Animal.ELEPHANT)
+        other.position = Cell(19, 13).center()
+        shooter.life = Negibon(along=10.0, ready_at=Tick(0))
+        simulation.step(world, only_for(world, 0, PlayerInput.RIGHT | PlayerInput.BOMB))
+        life = shooter.life
+        assert isinstance(life, Negibon)
+        assert abs(life.along - 10.091666666666669) < 5e-6
+        (leek,) = [actor for actor in world.actors if isinstance(actor, Leek)]
+        assert abs(leek.position.x - 11.591666666666669) < 5e-6
+        assert abs(leek.position.y - -0.20166666666666666) < 5e-6
+
+    def test_葱は落とし穴のあと_穴に落ちた相手に当たって入れ替わり_戻った側は落ちない(
+        self,
+    ) -> None:
+        """原型：穴のマスに立つ相手に、同じフレームに葱が届く。
+
+        相手が先に落ちて穴は埋まり、そのあと葱で入れ替わる。相手は外周へ回って落ちた
+        状態も消え、戻った 1P は相手の位置 (5.5, 3.5) に立つが、穴はもう無いので落ち
+        ない。葱が先なら、戻った 1P が穴に落ちる。
+        """
+        world, shooter, victim = self.lane_arena(Animal.FOX)
+        world.actors.append(Pit(cell=Cell(5, 3), owner=1))
+        self.incoming(world)
+        simulation.step(world, idle(world))
+        assert is_alive(shooter)
+        assert shooter.position == Point(5.5, 3.5)
+        assert not shooter.effects.has(EffectKind.PITFALL)
+        assert isinstance(victim.life, Negibon)
+        assert victim.effects.active() == []
+        assert world.actors == []
+
+    def test_葱は炎の前_炎のいるマスで入れ替わると_炎は誰にも当たらない(self) -> None:
+        """原型：炎（持ち主は盤面にいない番号）のマスに立つ相手に、同じフレームで葱。
+
+        葱で入れ替わり、相手は外周へ、戻った 1P は無敵なので、炎はそのフレームに誰にも
+        当たらない（相手の体力 4 のまま、炎は残る）。炎が先なら、相手が傷を受けて無敵に
+        なり、葱は通り抜ける。対照：葱が無ければ、炎は同じフレームに相手を傷つける。
+        """
+        world, shooter, victim = self.lane_arena(Animal.ELEPHANT)
+        hp = victim.hp
+        fire = Foxfire(cell=Cell(5, 3), owner=2)
+        world.actors.append(fire)
+        self.incoming(world)
+        events = simulation.step(world, idle(world))
+        assert not any(isinstance(e, PlayerHurt) for e in events)
+        assert is_alive(shooter)
+        assert isinstance(victim.life, Negibon)
+        assert victim.hp == hp
+        assert world.actors == [fire]
+
+    def test_対照_葱が無ければ_炎は同じtickに相手を傷つける(self) -> None:
+        world, _, victim = self.lane_arena(Animal.ELEPHANT)
+        hp = victim.hp
+        world.actors.append(Foxfire(cell=Cell(5, 3), owner=2))
+        simulation.step(world, idle(world))
+        assert victim.hp < hp
+
+    @pytest.mark.parametrize(
+        ("now", "closes"), [(Tick(7199), True), (Tick(7198), False)]
+    )
+    def test_外周を閉じるのは最後_閉じるtickにも葱で入れ替わり_相手はその最後に退場(
+        self, now: Tick, closes: bool
+    ) -> None:
+        """原型：残り 60.01 秒で始まるフレーム（引いたあと 59.993…）に葱が当たる。
+
+        相手は外周へ回り、同じフレームの最後に退場する。残り 60.03 秒で始まるフレーム
+        なら外周に残る。この版の 3:00 の設定（`ends_at` 10800）では、閉じるのは
+        now=7199 の tick（`tests/systems/test_negibon.py` の説明）。
+        """
+        world, shooter, victim = self.lane_arena(Animal.ELEPHANT)
+        world.ends_at = Tick(10800)
+        world.now = now
+        self.incoming(world)
+        simulation.step(world, idle(world))
+        assert is_alive(shooter)
+        assert (victim.life == OUT) is closes
+        assert isinstance(victim.life, Negibon) is not closes
 
 
 class Test盤面の物を進める順:

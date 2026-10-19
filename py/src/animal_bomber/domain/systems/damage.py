@@ -26,6 +26,7 @@ from animal_bomber.domain.state.player import (
 )
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems.items import spit_power_up
+from animal_bomber.domain.systems.negibon import lanes_open, send_to_lane
 
 
 def step_damage(world: WorldState) -> list[SimEvent]:
@@ -87,6 +88,9 @@ def hurt(
 ) -> list[SimEvent]:
     """体力を `amount` 減らし、無敵にする。0 以下になったら倒れる。
 
+    倒れたプレイヤーは、残り時間があれば外周へ回り（葱ボン。`systems/negibon.py`）、
+    無ければ退場する。
+
     爆風のほか、技の傷（体当たり・追いかける炎）もここを通る。乗っ取り中の振る舞いが
     傷の上限を持っていれば（`ActionTraits.damage_cap`）、そこまでに抑える。⚠️ 上限は 0 に
     しない。無敵と軽減を同じ仕組みで扱うと、「止まらないが痛い」が表せなくなる。
@@ -112,6 +116,12 @@ def hurt(
     events.extend(spit_power_up(world, player))
     if player.hp <= 0:
         player.hp = 0
-        player.life = OUT
-        events.append(PlayerDown(target=player.id, by=by, at=player.position))
+        at = player.position
+        # 残り時間があれば外周へ回り、無ければ退場する（`systems/negibon.py` の
+        # `lanes_open`。原型の kill L1700）。
+        if lanes_open(world):
+            send_to_lane(world, player)
+        else:
+            player.life = OUT
+        events.append(PlayerDown(target=player.id, by=by, at=at))
     return events

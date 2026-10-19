@@ -96,8 +96,8 @@ class Test爆弾を置く:
     def test_倒れているプレイヤーの入力も_前の入力として残る(self) -> None:
         """全員ぶん残す（TypeScript 版と同じ）。
 
-        倒れたプレイヤーが外周から葱を撃つ判定（葱ボン、段階 8）が「押した瞬間」を見る
-        ため。
+        倒れたプレイヤーが外周から葱を撃つ判定（葱ボン。`systems/negibon.py`）が「押した
+        瞬間」を見るため。
         """
         world = make_world()
         world.players[1].life = OUT

@@ -40,9 +40,13 @@ from animal_bomber.domain.events import (
     ItemExpired,
     ItemTaken,
     ItemWashed,
+    LanesClosed,
+    LeekStopped,
+    LeekThrown,
     MatchEnded,
     PlayerDown,
     PlayerHurt,
+    Revived,
     RoundEnded,
     SimEvent,
     Sprayed,
@@ -224,6 +228,11 @@ class EffectField:
                 case BurntOff(cell=cell):
                     self._puff(cell, TONGUE_SMOKE, "\N{TONGUE}")
                 case BombPlaced() | RoundEnded() | MatchEnded():
+                    pass
+                case LeekThrown() | LeekStopped() | Revived() | LanesClosed():
+                    # いまは何もしない。原型は葱が止まったマスに煙（updateNegis の
+                    # puff）を、入れ替わると画面の揺れ 9 と煙（negiHit）を出す。原型の
+                    # 音と絵を写す次の段で足す。
                     pass
                 case SuddenDeath():
                     # いまは何もしない。延長戦に入ったときの見た目（原型の絵と知らせ）

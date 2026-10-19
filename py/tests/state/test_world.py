@@ -17,6 +17,7 @@ from animal_bomber.domain.state.actors import (
     Actor,
     BurntTongue,
     Foxfire,
+    Leek,
     Pit,
     Scatter,
     SlimeBomb,
@@ -413,6 +414,10 @@ def _burnt() -> BurntTongue:
     return BurntTongue(owner=0, limit=5, until_regen=Tick(600))
 
 
+def _leek() -> Leek:
+    return Leek(position=Point(5.5, -0.31), facing=Direction.DOWN, owner=1)
+
+
 ACTOR_FIELDS = [
     pytest.param(_pit, "owner", 1, id="pit-owner"),
     pytest.param(_foxfire, "cell", Cell(5, 6), id="foxfire-cell"),
@@ -430,6 +435,11 @@ ACTOR_FIELDS = [
     pytest.param(_burnt, "owner", 1, id="burnt-owner"),
     pytest.param(_burnt, "limit", 4, id="burnt-limit"),
     pytest.param(_burnt, "until_regen", Tick(599), id="burnt-regen"),
+    pytest.param(_leek, "position", Point(5.5, -0.2), id="leek-position"),
+    pytest.param(_leek, "facing", Direction.UP, id="leek-facing"),
+    pytest.param(_leek, "owner", 0, id="leek-owner"),
+    pytest.param(_leek, "travelled", 0.25, id="leek-travelled"),
+    pytest.param(_leek, "remaining", Tick(179), id="leek-remaining"),
 ]
 """盤面の物の、結果を左右する中身（作り方・変える項目・変えた値）。
 

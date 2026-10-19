@@ -106,6 +106,8 @@ class Testアイテムの効き方:
         elephant, frog = world.players
         elephant.position = Point(3.5, 5.5)
         frog.position = Point(6.5, 5.5)
+        # 体当たりの傷で倒れないようにする（倒れて外周へ回ると、かかった状態は消える）。
+        frog.hp = 10
         charge = Charge(direction=Direction.RIGHT, remaining=CHARGE_DURATION)
         charge.carried.append(ItemKind.ONION)
         elephant.action = charge

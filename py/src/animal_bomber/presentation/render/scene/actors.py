@@ -30,6 +30,7 @@ from animal_bomber.domain.query.board import player_by_id
 from animal_bomber.domain.state.actors import (
     BurntTongue,
     Foxfire,
+    Leek,
     Pit,
     Scatter,
     SlimeBomb,
@@ -136,6 +137,10 @@ class ActorTracker:
                     # 原型も、これらには見た目だけの値を持たせない（描かない。
                     # `renderer.py`）。種類を足したら、数える値があるかをここで決める。
                     pass
+                case Leek():
+                    # いまは数えない。葱の絵（原型の drawNegibons）を写す次の段で、
+                    # 見た目だけの値が要るかを決める。
+                    pass
                 case _:
                     assert_never(actor)
         self._slimes, self._trails = slimes, trails
@@ -153,6 +158,11 @@ class ActorTracker:
                 case SlimeBomb() | Pit() | Scatter() | BurntTongue():
                     # 原型も、消えたことでは煙を出さない（粘膜爆弾は爆発のイベントで
                     # 揺らし、落とし穴は落ちた状態のイベントで煙を出す。`effects.py`）。
+                    pass
+                case Leek():
+                    # いまは何もしない。原型は止まった葱のマスに煙を出す
+                    # （updateNegis）。止まった葱はイベント（`LeekStopped`）で知らせる
+                    # ので、原型の絵を写す次の段では `effects.py` で出す。
                     pass
                 case _:
                     assert_never(seen.actor)

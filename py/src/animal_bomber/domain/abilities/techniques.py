@@ -23,7 +23,7 @@ TypeScript 版は、動物を登録表に1行足すだけで増やせる形（�
 from collections.abc import Callable
 from typing import TypeAlias, assert_never
 
-from animal_bomber.domain.abilities import elephant, fox, frog, mole, rabbit
+from animal_bomber.domain.abilities import elephant, fox, frog, mole, negibon, rabbit
 from animal_bomber.domain.abilities.results import Progress, Started
 from animal_bomber.domain.events import SimEvent
 from animal_bomber.domain.rules.animals import Animal
@@ -32,6 +32,7 @@ from animal_bomber.domain.state.actors import (
     Actor,
     BurntTongue,
     Foxfire,
+    Leek,
     Pit,
     Scatter,
     SlimeBomb,
@@ -162,6 +163,8 @@ def advance_actor(world: WorldState, actor: Actor) -> Progress:
             return rabbit.advance_scatter(world, actor)
         case BurntTongue():
             return frog.advance_burnt_tongue(world, actor)
+        case Leek():
+            return negibon.advance_leek(world, actor)
         case _:
             assert_never(actor)
 
@@ -176,7 +179,7 @@ def settle_actor(world: WorldState, actor: Actor) -> list[SimEvent]:
     match actor:
         case Foxfire():
             return fox.settle_foxfire(world, actor)
-        case Pit() | SlimeBomb() | Scatter() | BurntTongue():
+        case Pit() | SlimeBomb() | Scatter() | BurntTongue() | Leek():
             return []
         case _:
             assert_never(actor)

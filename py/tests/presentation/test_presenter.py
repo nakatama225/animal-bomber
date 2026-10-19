@@ -26,10 +26,15 @@ from animal_bomber.domain.events import (
     ItemExpired,
     ItemTaken,
     ItemWashed,
+    LanesClosed,
+    LeekStop,
+    LeekStopped,
+    LeekThrown,
     MatchEnded,
     Moment,
     PlayerDown,
     PlayerHurt,
+    Revived,
     RoundEnded,
     SimEvent,
     Sprayed,
@@ -44,7 +49,7 @@ from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.rules.match import MatchConfig
 from animal_bomber.domain.state.effects import EffectKind
-from animal_bomber.domain.state.player import OUT, PlayerId
+from animal_bomber.domain.state.player import PlayerId, is_alive
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.blast import add_blast
 from animal_bomber.domain.systems.items import placed_item
@@ -507,7 +512,8 @@ class Testラウンドの終わり:
     ) -> None:
         """ラウンドの終わりと試合の終わりが、同じ tick のイベントに並ぶことの確かめ。
 
-        2P を、体力が尽きる爆風で倒す（倒れる被弾でも、アイテムは吐き出す）。
+        2P を、体力が尽きる爆風で倒す（倒れる被弾でも、アイテムは吐き出す）。倒れた 2P
+        は外周へ回るが、盤面に1人だけ残るので、外周を待たずにその tick に決まる。
         """
         config = MatchConfig(
             seed=3,
@@ -519,7 +525,7 @@ class Testラウンドの終わり:
         loser.hp = 1
         add_blast(session.world, loser.position.cell(), 0, is_center=True)
         events = session.tick()
-        assert loser.life == OUT
+        assert not is_alive(loser)
         assert sounds_of(events) == expected
 
     def test_通知はラウンドごとと優勝(self) -> None:
@@ -553,6 +559,10 @@ ALL_EVENTS: list[SimEvent] = [
     TechniqueUsed(player=1, special=False),
     TechniqueMoment(player=1, moment=Moment.RAMMED),
     BurntOff(player=0, cell=Cell(2, 1)),
+    LeekThrown(player=0, origin=Point(1.5, -0.31), facing=Direction.DOWN),
+    LeekStopped(cell=Cell(1, 2), by=LeekStop.BOMB),
+    Revived(player=0, replaced=1, at=Point(1.5, 1.5)),
+    LanesClosed(players=(1,)),
     SuddenDeath(reason=SuddenDeathReason.TIME_UP, players=(0, 1)),
     RoundEnded(round=1, winner=None),
     MatchEnded(champion=1),

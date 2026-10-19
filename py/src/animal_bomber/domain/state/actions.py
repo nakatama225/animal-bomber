@@ -107,6 +107,15 @@ class ActionTraits:
     """True なら、移動の入力を受け付けない（この振る舞いが位置を決める）。"""
     damage_cap: int | None
     """受ける傷の上限（半分の単位）。None なら減らさない。"""
+    untouchable: bool
+    """True の間、外周から撃った葱が当たらない。
+
+    `state/player.py` の `is_untouchable` が見る。⚠️ 爆風・追いかける炎・体当たりの傷が
+    当たるか（`is_blast_proof`）とは別のもの。突進は「葱は当たらないが、爆風・追いかける
+    炎・ほかの突進の体当たりは当たる」（傷は `damage_cap` で減る）。1つの真偽値に
+    まとめると、どちらかの振る舞いが必ず壊れる（原型の isUntouchable と isBlastProof。
+    原型の注記・TypeScript 版の注記）。
+    """
     can_place_bomb: bool
     """最中に爆弾を置けるか（ボタン・「勝手に設置」・技で並べる爆弾のどれも）。"""
     blocks_buttons: bool
@@ -143,6 +152,7 @@ class ActionTraits:
 _CHARGE_TRAITS: Final = ActionTraits(
     drives_movement=True,
     damage_cap=CHARGE_DAMAGE_CAP,
+    untouchable=True,
     can_place_bomb=False,
     blocks_buttons=False,
     stays_off_board=False,
@@ -151,6 +161,7 @@ _CHARGE_TRAITS: Final = ActionTraits(
 _DIG_TRAITS: Final = ActionTraits(
     drives_movement=True,
     damage_cap=None,
+    untouchable=False,
     can_place_bomb=False,
     blocks_buttons=False,
     stays_off_board=False,
@@ -159,6 +170,7 @@ _DIG_TRAITS: Final = ActionTraits(
 _TONGUE_TRAITS: Final = ActionTraits(
     drives_movement=True,
     damage_cap=None,
+    untouchable=False,
     can_place_bomb=False,
     blocks_buttons=True,
     stays_off_board=True,
@@ -174,10 +186,7 @@ def traits_of(action: Action) -> ActionTraits:
     技のボタンを止めるのは舌だけ（原型の doAction・doSpecial）。盤面を離れても止めて残す
     のも舌だけ（原型の toNegibon・update・tongueBurnCheck）。
 
-    ⚠️ 葱が当たらないか（原型の isUntouchable。突進は当たらない）は、葱ボンを作る段階 8
-    で足す。爆風が当たらないか（`state/player.py` の `is_blast_proof`）とは別のもので、
-    突進は「葱は当たらないが、爆風・追いかける炎・ほかの突進の体当たりは当たる」。
-    1つの真偽値にまとめると、どちらかの振る舞いが必ず壊れる（TypeScript 版の注記）。
+    葱が当たらないのは突進だけ（原型の isUntouchable は charge を見る）。
     """
     match action:
         case Charge():

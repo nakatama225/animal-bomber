@@ -6,14 +6,20 @@
 ある（`abilities/techniques.py` の `advance_actor`）。盤面の物の種類が増えても、進める
 処理（`systems/actors.py`）は1行も変わらない。
 
+外周のプレイヤーが撃つ葱も、ここに盤面の物の1つとして持つ。撃つのは外周の処理
+（`systems/negibon.py`）だが、試合を進める処理は盤面の物の種類を書かない決まりなので、
+作るのはここの `shot_from_lane`、外周を閉じるときに消すかはここの `ends_with_lanes` で
+決める（`docs/09-葱ボンと延長戦.md`）。
+
 どれも `eq=False` にして、同じものかを実体で比べる（`state/bomb.py` と同じ理由）。
 """
 
 from dataclasses import dataclass
 from typing import Final, TypeAlias, assert_never
 
-from animal_bomber.domain.core.coord import Cell
+from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.core.tick import Tick
+from animal_bomber.domain.rules.tuning import LEEK_LIFETIME
 from animal_bomber.domain.state.player import PlayerId
 
 
@@ -90,8 +96,50 @@ class BurntTongue:
     """次に1マス戻るまでの残り tick。"""
 
 
-Actor: TypeAlias = Pit | Foxfire | SlimeBomb | Scatter | BurntTongue
+@dataclass(slots=True, eq=False)
+class Leek:
+    """外周のプレイヤーが撃った葱。まっすぐ飛び、盤面のプレイヤーに当たると入れ替わる。
+
+    進め方と、当たったものごとにどうなるかは `abilities/negibon.py`。
+    """
+
+    position: Point
+    """いまの位置（マス単位の連続座標）。外周の帯から飛び出すので、盤面の外にもある。"""
+    facing: Direction
+    """飛ぶ向き。"""
+    owner: PlayerId
+    """撃ったプレイヤー。"""
+    travelled: float = 0.0
+    """飛んだ距離（マス）。射程（`LEEK_RANGE`）を越えたら落ちる。"""
+    remaining: Tick = LEEK_LIFETIME
+    """消えるまでの残り tick。"""
+
+
+Actor: TypeAlias = Pit | Foxfire | SlimeBomb | Scatter | BurntTongue | Leek
 """盤面で自分の規則で動き続けるもののどれか。"""
+
+
+def shot_from_lane(start: Point, facing: Direction, owner: PlayerId) -> Actor:
+    """外周から撃った葱を作る。外周の処理（`systems/negibon.py`）が呼ぶ。
+
+    試合を進める処理に盤面の物の種類を書かないため、作るのはここに置く（ほかの盤面の
+    物は、技を出す `domain/abilities/` の中で作る）。
+    """
+    return Leek(position=start, facing=facing, owner=owner)
+
+
+def ends_with_lanes(actor: Actor) -> bool:
+    """外周が閉じるとき（`systems/negibon.py`）に盤面から消すか。外周から撃った葱だけ。
+
+    原型の negibonCutoff も、外周を閉じるときに飛んでいる葱をすべて消す（L2362）。
+    """
+    match actor:
+        case Leek():
+            return True
+        case Pit() | Foxfire() | SlimeBomb() | Scatter() | BurntTongue():
+            return False
+        case _:
+            assert_never(actor)
 
 
 OWNER_TURN: Final = -1
@@ -103,7 +151,7 @@ def actor_turn(actor: Actor) -> int:
 
     - 0 以上 … プレイヤーが全員動き終わったあとに、数の小さい順に進める。同じ数どうしは
       出た順（`newest_first` なら新しいものから）。原型は種類ごとに順を決めて回す
-      （落とし穴 → 葱 → 追いかける炎 → 撒く本体 → 跳ねる爆弾）。葱（1）は段階 8 で足す
+      （落とし穴 → 葱 → 追いかける炎 → 撒く本体 → 跳ねる爆弾。L4345-4349）
     - `OWNER_TURN` … 持ち主のプレイヤーの番に、状態の時間を減らす前に進める（焼けた舌が
       戻るのは、原型ではプレイヤーごとの効果の処理の中）
 
@@ -114,6 +162,8 @@ def actor_turn(actor: Actor) -> int:
     match actor:
         case Pit():
             return 0
+        case Leek():
+            return 1
         case Foxfire():
             return 2
         case Scatter():
@@ -130,10 +180,15 @@ def newest_first(actor: Actor) -> bool:
     """同じ `actor_turn` のものどうしを、新しく出たものから進めるか。
 
     False なら出た順（古いものから）。原型は種類ごとの配列を回す向きがまちまちで、
-    後ろから回す種類がある（撒く本体 L2756・跳ねる爆弾 L2949。葱 L2292 は段階 8 で
-    足す）。後ろから回すと、同じ tick に2つが同じマスを取り合えば新しいほうが取り、
-    乱数も新しいほうが先に引く。
+    後ろから回す種類がある（葱 L2292・撒く本体 L2756・跳ねる爆弾 L2949）。後ろから
+    回すと、同じ tick に2つが同じマスを取り合えば新しいほうが取り、乱数も新しいほうが
+    先に引く。
 
+    - 葱：葱は入力の輪で番号の順に積む（L4333 → L2288）。別々の外周のプレイヤーが
+      撃った葱が同じ tick に同じ相手に届くと、あとに撃った葱が先に当たり、その持ち主が
+      盤面へ戻る（同じ tick に撃った2本なら番号の大きいほう）。先に撃った葱は、相手が
+      もう外周にいる（L2321）のと、戻った撃ち手が無敵な（L2325）のとで通り抜けて
+      飛び続ける
     - 跳ねる爆弾：2つ以上が同じ tick に着地したり跳ねたりすると、間隔（L2958・L2979）と
       跳ぶ先（L2970）の乱数を新しいものから引く。同じ tick に2つ以上が爆発すると、
       生やす爆弾の並び（導火線の尽きた爆弾の番に爆発する順）も新しいものから
@@ -146,7 +201,7 @@ def newest_first(actor: Actor) -> bool:
     ごとに決めればよい）。TypeScript 版の `WorldActor.newestFirst` と同じ値。
     """
     match actor:
-        case SlimeBomb() | Scatter():
+        case SlimeBomb() | Scatter() | Leek():
             return True
         case Pit() | Foxfire() | BurntTongue():
             return False
@@ -170,6 +225,8 @@ def actor_name(actor: Actor) -> str:
             return "scatter"
         case BurntTongue():
             return "burntTongue"
+        case Leek():
+            return "leek"
         case _:
             assert_never(actor)
 
@@ -181,6 +238,9 @@ def encode_actor(actor: Actor) -> str:
     文字列ごと突き合わせる）。⚠️ 跳ねる爆弾の持ち主は、TypeScript 版と同じく並べない。
     持ち主は `state/world.py` の `hash_world` が、どの盤面の物にも混ぜる。跳ねる爆弾の
     `interval` は結果を左右しないので、どちらにも入れない。
+
+    小数（葱の位置と飛んだ距離）は、JavaScript の数を文字列にしたときと同じ書き方にする
+    （`_number_text`）。
     """
     match actor:
         case Pit(cell=cell, owner=owner):
@@ -193,5 +253,38 @@ def encode_actor(actor: Actor) -> str:
             return f"{center.col},{center.row},{owner},{elapsed},{ring}"
         case BurntTongue(owner=owner, limit=limit, until_regen=until_regen):
             return f"{owner},{limit},{until_regen}"
+        case Leek():
+            return (
+                f"{_number_text(actor.position.x)},{_number_text(actor.position.y)},"
+                f"{actor.facing.name.lower()},{actor.owner},"
+                f"{_number_text(actor.travelled)},{actor.remaining}"
+            )
         case _:
             assert_never(actor)
+
+
+def _number_text(value: float) -> str:
+    """小数を、JavaScript の数を文字列にしたとき（`${value}`）と同じ書き方にする。
+
+    桁は同じ（どちらも、元の値に戻せるいちばん短い桁）。違うのは書き方の3つで、そこを
+    JavaScript に合わせる。
+
+    - 整数の値に `.0` を付けない（Python の `repr` は `5.0`、JavaScript は `5`）。負の 0
+      も `0`
+    - 指数で書くのは 1e-7 未満と 1e21 以上（Python は 1e-4 未満と 1e16 以上）
+    - 指数の桁を 0 で埋めない（Python は `1e-07`、JavaScript は `1e-7`）
+    """
+    if value == 0:
+        return "0"
+    text = repr(value)
+    if "e" not in text:
+        return text.removesuffix(".0")
+    mantissa, exponent = text.split("e")
+    power = int(exponent)
+    if not -7 < power < 21:
+        return f"{mantissa}e{'+' if power > 0 else '-'}{abs(power)}"
+    sign = "-" if mantissa.startswith("-") else ""
+    digits = mantissa.removeprefix("-").replace(".", "")
+    if power < 0:
+        return f"{sign}0.{'0' * (-power - 1)}{digits}"
+    return f"{sign}{digits}{'0' * (power + 1 - len(digits))}"

@@ -9,19 +9,16 @@
 ## 期待する値の出どころ
 
 期待する値は `ts_simulation_values.json`。このファイルと同じコミットの TypeScript 版
-（`ts/`）の `domain/` と `app/GameSession.ts` を写し、この版にまだ無いものを
-止めて、同じ台本を流して出したもの（TypeScript 版を直したら、その形を写して出し
-直す）。止めたのは2つ。
+（`ts/`）の `domain/` と `app/GameSession.ts` を写し、同じ台本を流して出したもの
+（TypeScript 版を直したら、その形を写して出し直す）。写しに当てる文字列の置き換えは2つ。
 
-- 倒れたプレイヤーが外周へ回る（葱ボン。段階 8 で足す）のを、退場にした
-  （`mutations/damage.ts` の1か所）
 - 下の隅から始まるプレイヤーが上を向いて始まるのを、全員が下を向いて始まる形にした
   （この版は原型と同じく全員が下を向く。`state/world.py` の `create_world`）
+- 振る舞いの中身を文字列にする関数を足した（比べるため。`tests/ts_rows.py` の説明）
 
-写しに当てる文字列の置き換えは、そのほかに、振る舞いの中身を文字列にする関数を足す
-（比べるため。`tests/ts_rows.py` の説明）だけ。延長戦は段階 8 で入れたので止めない
-（この台本は盤面を直に作って進めるので、延長戦は通らない。延長戦は
-`tests/app/test_session_ts.py` の台本が通る）。
+段階 7 まで止めていた葱ボン（倒れたプレイヤーが外周へ回る）は、段階 8 で入れたので
+止めない。延長戦も止めない（この台本は盤面を直に作って進めるので、延長戦は通らない。
+延長戦は `tests/app/test_session_ts.py` の台本が通る）。
 
 段階 4 までは、段階 3 のコミット（8f097e9）に、あとから TypeScript 版を原型に合わせた
 直し（9bbbde7・2ce8030・f20c8e1・爆風を伸ばす向き・勝手に設置を動く前に）を当てて出して
@@ -55,12 +52,14 @@ from typing import Final
 
 import pytest
 
+from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
+from animal_bomber.domain.rules.tuning import NEGIBON_CUTOFF
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import PlayerId
+from animal_bomber.domain.state.player import Negibon, PlayerId
 from animal_bomber.domain.state.world import WorldState, create_world
 from animal_bomber.domain.systems import simulation
 from tests.ts_rows import event_row, world_rows
@@ -246,6 +245,11 @@ def test_同じ台本を流すと_TypeScript版と同じ結果になる(
     items: bool,
 ) -> None:
     world = set_up(seed, shoes, max_bombs, powers, sparse, items)
+    _compare(name, run_script(world, script))
+
+
+def run_script(world: WorldState, script: Script) -> list[dict[str, object]]:
+    """台本を 600 tick 流し、区切りごとの盤面とその間のイベントを返す。"""
     got: list[dict[str, object]] = []
     pending: list[list[object]] = []
     for tick in range(600):
@@ -256,6 +260,56 @@ def test_同じ台本を流すと_TypeScript版と同じ結果になる(
         if (tick + 1) % INTERVAL == 0:
             got.append({"tick": world.now, **world_rows(world), "events": pending})
             pending = []
-    # 区切りごとに比べ、どこで初めてずれたかが分かるようにする。
+    return got
+
+
+def _compare(name: str, got: list[dict[str, object]]) -> None:
+    """区切りごとに比べ、どこで初めてずれたかが分かるようにする。"""
     for expected, actual in zip(EXPECTED[name], got, strict=True):
         assert actual == expected, f"{expected['tick']} tick 目でずれた"
+
+
+def standing(player_id: PlayerId, tick: int) -> PlayerInput:
+    """`periodic` と同じに押すが、97 tick のうち 60 tick は向きを全部離して立ち止まる。
+
+    立ち止まっている盤面のプレイヤーに、外周の葱が当たるようにするため。
+    """
+    player_input = periodic(player_id, tick)
+    if (tick + 17 * player_id) % 97 < 60:
+        player_input &= ~_DIRECTIONS
+    return player_input
+
+
+LANE_STARTS: Final = ((2, 21.0), (3, 69.0))
+"""外周から撃ち合う台本で、外周から始めるプレイヤーと外周の上の位置（すぐ撃てる）。"""
+
+LANE_ENDS_AT: Final = Tick(NEGIBON_CUTOFF + 501)
+"""外周から撃ち合う台本の時間切れの時刻。500 tick 目の最後に外周が閉じる。"""
+
+
+def test_外周から撃ち合う台本も_TypeScript版と同じ結果になる() -> None:
+    """2人を外周から始め、立ち止まりながら撃ち合う台本（葱ボン）。
+
+    外周を動いて撃つ・葱が柱と爆弾と爆風で止まる・射程を越えて落ちる・盤面のプレイヤーに
+    当たって入れ替わる・爆風で倒れたプレイヤーが外周へ回る・外周が閉じて外周の全員が
+    退場する、を通る（`test_台本は外周の場面を通る` が確かめる）。
+
+    外周から始める位置と立ち止まり方は、TypeScript の写しで、外周の 14 か所から2つを
+    選ぶ組（91 通り）と立ち止まり方の3通りを総当たりで回し、この8つの場面（止まり方は
+    4つに分けて数える）をすべて通ったただ1つの組にした。ほかの盤面の設定は1つ目の
+    台本と同じ種・まばらな盤面で、靴・爆弾の数・火力は全員 2。
+    """
+    world = set_up(4649, (2, 2, 2, 2), (2, 2, 2, 2), (2, 2, 2, 2), True, False)
+    for player_id, along in LANE_STARTS:
+        world.players[player_id].life = Negibon(along=along, ready_at=Tick(0))
+    world.ends_at = LANE_ENDS_AT
+    _compare("lanes", run_script(world, standing))
+
+
+def test_台本は外周の場面を通る() -> None:
+    """固定値を出し直したときに、外周の台本が葱ボンの場面を通らなくなっていないか。"""
+    rows = [event for cp in EXPECTED["lanes"] for event in cp["events"]]
+    kinds = {row[0] for row in rows}
+    assert {"leekThrown", "revived", "playerDown", "lanesClosed"} <= kinds
+    stops = sorted({row[3] for row in rows if row[0] == "leekStopped"})
+    assert stops == ["blast", "bomb", "range", "wall"]

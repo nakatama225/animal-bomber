@@ -46,7 +46,13 @@ from animal_bomber.domain.state.actions import Charge, Dig, Tongue
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import OUT, PlayerState, power_of, speed_of
+from animal_bomber.domain.state.player import (
+    OUT,
+    PlayerState,
+    is_alive,
+    power_of,
+    speed_of,
+)
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.blast import add_blast, detonate
@@ -784,7 +790,8 @@ class Test被弾:
         player.hp = 2
         player.position = Point(3.25, 1.5)
         events = hurt(world, player, 0, BLAST_DAMAGE)
-        assert player.life == OUT
+        # 盤面を離れる（残り時間があれば外周へ回る。`test_negibon.py`）。
+        assert not is_alive(player)
         assert player.hp == 0
         # 倒れた位置も運ぶ（同じ tick に延長戦へ入ると、受け取る頃には位置が変わる）。
         assert events[-1] == PlayerDown(target=0, by=0, at=Point(3.25, 1.5))

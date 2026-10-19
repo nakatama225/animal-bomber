@@ -16,6 +16,7 @@ from animal_bomber.domain.state.actors import (
     Actor,
     BurntTongue,
     Foxfire,
+    Leek,
     Pit,
     Scatter,
     SlimeBomb,
@@ -115,9 +116,10 @@ def _actor_snapshot(actor: Actor) -> ActorSnapshot:
             return ActorSnapshot(
                 actor, actor.cell, flown=actor.flown, timer=actor.timer
             )
-        case Pit() | Scatter() | BurntTongue():
+        case Pit() | Scatter() | BurntTongue() | Leek():
             # 前の tick と比べて数える値が無いので、実体だけを控える（数えるのは、粘膜
             # 爆弾を投げた位置と跳ねたか・炎の通った跡と消えたことだけ。`actors.py`）。
+            # 葱は、原型の絵を写す次の段で、数える値があるかを決め直す。
             return ActorSnapshot(actor, None)
         case _:
             assert_never(actor)

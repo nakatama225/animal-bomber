@@ -19,7 +19,7 @@ from animal_bomber.domain.events import PlayerDown, SimEvent
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.state.actors import Actor, Foxfire, SlimeBomb
 from animal_bomber.domain.state.board import Tile
-from animal_bomber.domain.state.player import OUT
+from animal_bomber.domain.state.player import is_alive
 from animal_bomber.presentation.render.scene.actors import ActorTracker
 from animal_bomber.presentation.render.scene.snapshot import (
     ActorSnapshot,
@@ -71,7 +71,7 @@ class Test炎の通った跡:
         while fire.steps == 0:
             events = step(world, tracker, idle(world))
         assert any(isinstance(e, PlayerDown) for e in events)
-        assert rabbit.life == OUT
+        assert not is_alive(rabbit)
         assert [m.cell for m in tracker.trail(fire, world.now)] == [FIRE_AT]
 
     def test_道が無くて動けなかった回は_足さない(self) -> None:

@@ -280,6 +280,66 @@ class BurntOff:
     """焼けたマス（いちばん手前の爆風のマス）。"""
 
 
+@dataclass(frozen=True, slots=True)
+class LeekThrown:
+    """外周のプレイヤーが葱を撃った。"""
+
+    player: PlayerId
+    """撃ったプレイヤー。"""
+    origin: Point
+    """撃った位置。外周の帯の上なので、盤面の外にある（TypeScript 版の `from`）。"""
+    facing: Direction
+
+
+class LeekStop(Enum):
+    """葱が止まったわけ（`LeekStopped.by`）。"""
+
+    WALL = "wall"
+    """柱か壊せるブロックで砕けた（外壁はすり抜ける）。"""
+    BLAST = "blast"
+    """爆風で焼けた。"""
+    BOMB = "bomb"
+    """爆弾に弾かれた（爆弾を盾にして防げる）。"""
+    RANGE = "range"
+    """射程を越えて落ちた。"""
+
+
+@dataclass(frozen=True, slots=True)
+class LeekStopped:
+    """葱が、プレイヤーに当たらずに止まった（射程を越えたときも）。
+
+    盤面の外へ飛んで消えたときと、寿命が尽きたときと、撃った側がもう外周にいなかった
+    ときは返さない（TypeScript 版と同じ）。
+    """
+
+    cell: Cell
+    """止まったマス。"""
+    by: LeekStop
+
+
+@dataclass(frozen=True, slots=True)
+class Revived:
+    """葱が当たって入れ替わった。撃った側が盤面へ戻り、当たった側が外周へ回る。"""
+
+    player: PlayerId
+    """葱を当てて盤面へ戻ったプレイヤー。"""
+    replaced: PlayerId
+    """葱が当たって外周へ回ったプレイヤー。"""
+    at: Point
+    """入れ替わった位置。戻ったプレイヤーはここに立つ。"""
+
+
+@dataclass(frozen=True, slots=True)
+class LanesClosed:
+    """残り時間が短くなり、外周が閉じた。外周にいたプレイヤーは退場した。
+
+    外周にだれもいなければ、閉じても返さない（原型の negibonCutoff も知らせない）。
+    """
+
+    players: tuple[PlayerId, ...]
+    """外周から退場したプレイヤー（プレイヤー番号の順）。"""
+
+
 class SuddenDeathReason(Enum):
     """延長戦に入ったわけ（`SuddenDeath.reason`）。"""
 
@@ -342,6 +402,10 @@ SimEvent: TypeAlias = (
     | TechniqueUsed
     | TechniqueMoment
     | BurntOff
+    | LeekThrown
+    | LeekStopped
+    | Revived
+    | LanesClosed
     | SuddenDeath
     | RoundEnded
     | MatchEnded

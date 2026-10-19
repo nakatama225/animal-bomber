@@ -25,9 +25,13 @@ from animal_bomber.domain.events import (
     ItemExpired,
     ItemTaken,
     ItemWashed,
+    LanesClosed,
+    LeekStopped,
+    LeekThrown,
     MatchEnded,
     PlayerDown,
     PlayerHurt,
+    Revived,
     RoundEnded,
     SimEvent,
     Sprayed,
@@ -81,6 +85,14 @@ def event_row(event: SimEvent) -> list[object]:
             return ["techniqueMoment", player, moment.value]
         case BurntOff(player=player, cell=cell):
             return ["burntOff", player, cell.col, cell.row]
+        case LeekThrown(player=player, origin=origin, facing=facing):
+            return ["leekThrown", player, origin.x, origin.y, facing.name.lower()]
+        case LeekStopped(cell=cell, by=by):
+            return ["leekStopped", cell.col, cell.row, by.value]
+        case Revived(player=player, replaced=replaced, at=at):
+            return ["revived", player, replaced, at.x, at.y]
+        case LanesClosed(players=players):
+            return ["lanesClosed", list(players)]
         case SuddenDeath(reason=reason, players=players):
             return ["suddenDeath", reason.value, list(players)]
         case RoundEnded(round=number, winner=winner):

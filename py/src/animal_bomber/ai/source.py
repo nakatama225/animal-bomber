@@ -137,6 +137,8 @@ class CpuInputSource:
             self._world = world
             self._memory = fresh_memory(self._rng)
         me = player_by_id(world, self._player_id)
+        # 外周にいる間（と退場したあと）は何もしない入力を返し、考え直すまでの間隔なども
+        # 数えない（原型も cpuUpdate を呼ばない。L4335-4339）。⚠️ 外周の操縦はまだ無い。
         if me is None or not is_alive(me):
             return PlayerInput.IDLE
         _count_down(self._memory)

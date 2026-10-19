@@ -39,6 +39,7 @@ from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.state.actors import (
     BurntTongue,
     Foxfire,
+    Leek,
     Pit,
     Scatter,
     SlimeBomb,
@@ -158,6 +159,10 @@ class Renderer:
                     # 原型の draw も描かない（落とし穴は見えないのが技の要点。撒く本体と
                     # 焼けた舌は、盤面に姿を持たない）。
                     pass
+                case Leek():
+                    # いまは描かない。飛んでいる葱は、原型では外周のプレイヤーと一緒に
+                    # 描く（drawNegibons）。原型の絵を写す次の段で足す。
+                    pass
                 case _:
                     assert_never(actor)
         for actor in world.actors:
@@ -170,6 +175,8 @@ class Renderer:
                     pass  # 前の輪で描いた
                 case Pit() | Scatter() | BurntTongue():
                     pass  # 原型も描かない（前の輪の説明）
+                case Leek():
+                    pass  # いまは描かない（前の輪の説明）
                 case _:
                     assert_never(actor)
         for particle in visuals.particles:

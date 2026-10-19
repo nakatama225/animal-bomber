@@ -209,9 +209,9 @@ set の反復は、import でも構文木でも止められません。`tests/de
 - TypeScript 版と比べる固定値（`tests/systems/test_simulation_ts.py`・
   `test_techniques_ts.py`・`tests/app/test_session_ts.py`）は、同じコミットの TypeScript 版
   （`ts/`）の `domain/` と `app/GameSession.ts` を写し、この版にまだ無いものを止めて、同じ
-  台本を流して出したものです。TypeScript 版を直したら、その形を写して出し直します。いま止めて
-  いるのは、倒れたプレイヤーが外周へ回ること（葱ボン。写しの `mutations/damage.ts` で退場に
-  する）だけです。延長戦は段階 8 で入れたので、写しも試合の設定の既定どおり入れます。
+  台本を流して出したものです。TypeScript 版を直したら、その形を写して出し直します。ルールの
+  層で止めているものは、いまはありません（段階 7 まで止めていた葱ボンと延長戦は、段階 8 で
+  入れたので、写しも試合の設定の既定どおり入れます）。
   もう1つ、写しでは全員が下を向いて始まる形にします（この版は原型と同じく全員が下を向く。
   TypeScript 版は下の隅のプレイヤーが上を向く）。写しには、振る舞いの中身を文字列にする関数
   （`debugEncode`）も足します（TypeScript 版の振る舞いは中身を外へ見せないため）。
@@ -225,7 +225,9 @@ set の反復は、import でも構文木でも止められません。`tests/de
   のをやめ、止めたものと理由をテストの説明に書いてください
 - CPU の固定値（`tests/ai/test_cpu_ts.py` が読む `tests/ai/ts_cpu_values.json`）も同じ形で
   出します。写すものに `ai/` を足し、CPU だけの試合を流して、tick ごとの入力と 100 tick ごとの
-  盤面を出します。CPU の判断の規則・順・乱数を引く順のどれかを変えると失敗します
+  盤面を出します。CPU の判断の規則・順・乱数を引く順のどれかを変えると失敗します。いま写しの
+  CPU で止めているのは、外周の操縦（何もしない入力にする）と、飛んでくる葱をよける規則です
+  （この版の CPU にまだ無い。止め方は `test_cpu_ts.py` の説明）
 - `tests/boundary/test_closed_kinds.py` は、試合を進める処理（`domain/systems/`）・盤面への
   問い合わせ（`domain/query/`）・イベント（`domain/events.py`）・CPU の共通の判断（`ai/` の
   うち戦い方の `tactics.py` 以外）に、動物の名前と振る舞い・
@@ -233,7 +235,11 @@ set の反復は、import でも構文木でも止められません。`tests/de
   見分ける書き方（`action_name`・`actor_name`・`encode_action`・`encode_actor`・
   `isinstance`・`hasattr`・`getattr`）も失敗にします。共通の処理は種類を
   見ず、性質（`state/actions.py` の `traits_of`・`rules/animals.py` の数値）だけを見ます。
-  逸話を書くときも、動物の名前を出さず能力で書いてください（「ブロックを通り抜ける動物」）
+  逸話を書くときも、動物の名前を出さず能力で書いてください（「ブロックを通り抜ける動物」）。
+  外周の処理（`systems/negibon.py`）も、葱（盤面の物）の種類を書きません。葱を作るのは
+  `state/actors.py` の `shot_from_lane`、外周を閉じるときに消すかは同じファイルの
+  `ends_with_lanes`（性質）です（`domain/abilities/` を import せずに済ませるため。
+  `docs/09-葱ボンと延長戦.md`）
 - `tests/systems/test_match_invariants.py` は、試合を通して崩れない約束（同じマスにアイテムが
   2つ並ばない）を毎 tick 確かめます。約束を崩す仕組みを足すときは、約束のほうから決め直して
   ください

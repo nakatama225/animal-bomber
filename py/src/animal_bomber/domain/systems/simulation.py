@@ -31,18 +31,24 @@ TypeScript 版の `Simulation` と同じ）。
    （`effects.py` の説明）。焼けた舌が戻るのは振る舞いを進める前なので、戻る tick に
    伸びる舌は、戻った長さまで伸びる。拍の tick にマスの境目をまたいでも、今までいた
    マスに置く（`autobomb.py`）
-2. プレイヤーごとに：動く（`movement.py`）→ ボタンの爆弾を置く（`bomb.py`）→ 技の
+2. プレイヤーごとに：外周のプレイヤーは外周を動いて葱を撃つ（`negibon.py` の
+   `lane_step_for`）→ 動く（`movement.py`）→ ボタンの爆弾を置く（`bomb.py`）→ 技の
    ボタンを見る（`actions.py` の `watch_for`）→ 足元のアイテムを拾う（`items.py`）。
-   原型の「入力 / AI」の輪。動いてから置くので、押した tick にマスの境目をまたいだら、
-   動いたあとのマスに置く。動いてから技を出すので、技が出る tick に向きを押せば、
-   押した向きへ出る。振る舞いの最中もボタンを見るので、振る舞いが終わった tick（1.）の
-   うちに押せば、次の技が出る。1人ずつ済ませるので、番号の小さいプレイヤーが置いた
-   爆弾は、同じ tick にあとから動くプレイヤーの壁になる
+   原型の「入力 / AI」の輪（外周のプレイヤーも、この輪の中で番号の順に動く）。外周の
+   プレイヤーと盤面のプレイヤーは互いに影響しない（盤面の処理は盤面にいるプレイヤー
+   だけを扱う）。撃つのは葱が進む 3. より前なので、撃った tick に葱は1歩進む。動いて
+   から置くので、押した tick にマスの境目をまたいだら、動いたあとのマスに置く。動いて
+   から技を出すので、技が出る tick に向きを押せば、押した向きへ出る。振る舞いの最中も
+   ボタンを見るので、振る舞いが終わった tick（1.）のうちに押せば、次の技が出る。1人
+   ずつ済ませるので、番号の小さいプレイヤーが置いた爆弾は、同じ tick にあとから動く
+   プレイヤーの壁になる
 3. 爆弾のマスから出たプレイヤーを通り抜けの対象から外し（`bomb.py`）、盤面の物（落とし
-   穴・炎・撒く本体・跳ねる爆弾）を `actor_turn` の順に進める（`actors.py`。同じ番の
+   穴・葱・炎・撒く本体・跳ねる爆弾）を `actor_turn` の順に進める（`actors.py`。同じ番の
    ものを全員進めてから、当たりなどの番を出た順に呼ぶ。原型の炎も、全部を動かして
    から別の輪で当たりを見る）。拾ったあとに落とし穴に落ちる（穴が滑りを消すので、
-   穴の上のバナナを踏んでも、穴を抜けたあと滑らない）。跳ねる爆弾は、跳ね終わるか
+   穴の上のバナナを踏んでも、穴を抜けたあと滑らない）。葱は落とし穴のあと、炎の前
+   （原型の L4345-4347）。葱が当たって入れ替わるのもこの番で、戻ったプレイヤーは
+   この tick にはもう動かない（2. は済んでいる）。跳ねる爆弾は、跳ね終わるか
    爆風に触れると、導火線 0 の爆弾を生やすだけで、爆発するのは 5.（原型も同じ update
    の爆弾の輪で起こす）
 4. 溶けきったもの・残る長さを過ぎたアイテムを消す（`items.py` の `remove_expired`）
@@ -55,8 +61,14 @@ TypeScript 版の `Simulation` と同じ）。
 7. 爆風に触れたプレイヤーの体力を減らし（`damage.py`）、そのあと、爆風に触れた振る舞い
    （伸びている舌）を終える（`actions.py` の `after_damage`）。この tick に出た爆風
    にも当たり、舌もこの tick のうちに焼き切れる。被弾して足元へ吐き出したアイテムを
-   拾うのは、次の tick（2.）
-8. この tick の入力を、次の tick の「押した瞬間」の判定のために、前の入力として残す。
+   拾うのは、次の tick（2.）。倒れたプレイヤーは、残り時間があれば外周へ回る
+   （`damage.py` の `hurt`）
+8. 残り時間が短くなっていれば、外周を閉じる（`negibon.py` の `close_lanes_if_due`。
+   原型の update の最後の checkEnd の頭。L4405 → L4411）。閉じる tick の中でも、外周の
+   プレイヤーは 2. で動いて撃ち、葱は 3. で当たる。閉じたあとに、試合を進める側
+   （`app/session.py`）がラウンドの決着を見る（原型の checkEnd も、外周を閉じてから
+   盤面に残ったプレイヤーを数える）
+9. この tick の入力を、次の tick の「押した瞬間」の判定のために、前の入力として残す。
    すべての処理が終わったあとに残す。途中で残すと、そのあとの処理から見て「押した
    瞬間」が消える（いま押した瞬間を見るのは 2. の爆弾と技のボタンだけだが、押した瞬間を
    見る処理を足すときに崩れないよう最後に置く）
@@ -92,6 +104,7 @@ from animal_bomber.domain.systems.damage import step_damage
 from animal_bomber.domain.systems.effects import advance_effects_for
 from animal_bomber.domain.systems.items import pick_up_for, remove_expired
 from animal_bomber.domain.systems.movement import move_player
+from animal_bomber.domain.systems.negibon import close_lanes_if_due, lane_step_for
 
 
 def step(world: WorldState, inputs: Mapping[PlayerId, PlayerInput]) -> list[SimEvent]:
@@ -113,6 +126,7 @@ def step(world: WorldState, inputs: Mapping[PlayerId, PlayerInput]) -> list[SimE
     # 2.
     for player in world.players:
         player_input = inputs[player.id]
+        events.extend(lane_step_for(world, player, player_input))
         move_player(world, player, player_input)
         events.extend(place_for(world, player, player_input))
         events.extend(watch_for(world, player, player_input))
@@ -129,6 +143,8 @@ def step(world: WorldState, inputs: Mapping[PlayerId, PlayerInput]) -> list[SimE
     events.extend(step_damage(world))
     events.extend(after_damage(world))
     # 8.
+    events.extend(close_lanes_if_due(world))
+    # 9.
     _remember_inputs(world, inputs)
     world.now = Tick(world.now + 1)
     return events

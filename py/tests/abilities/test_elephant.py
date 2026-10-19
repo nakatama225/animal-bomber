@@ -32,12 +32,19 @@ from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.bomb import Blast
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import OUT, PlayerState, is_blast_proof
+from animal_bomber.domain.state.player import (
+    Negibon,
+    PlayerState,
+    is_alive,
+    is_blast_proof,
+    is_untouchable,
+)
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.bomb import place_bomb, place_bomb_at
 from animal_bomber.domain.systems.damage import hurt
 from animal_bomber.domain.systems.items import step_items
+from animal_bomber.domain.systems.negibon import swap_places
 from tests.helpers import (
     advance,
     clear_board,
@@ -243,6 +250,17 @@ class Test突進中の被弾:
         assert not is_blast_proof(elephant)
         assert elephant.action is not None
         assert traits_of(elephant.action).damage_cap == CHARGE_DAMAGE_CAP
+
+    def test_葱は当たらない(self) -> None:
+        """原型の isUntouchable は突進を見る（isBlastProof は見ない。上の確かめの対）。
+
+        跳び上がっている間も葱は当たらない（`tests/systems/test_negibon.py`）。
+        """
+        world = elephant_world()
+        elephant = world.players[0]
+        assert not is_untouchable(elephant)
+        trigger_charge(world)
+        assert is_untouchable(elephant)
 
     def test_突進中は爆弾を置けない(self) -> None:
         world = elephant_world()
@@ -551,7 +569,7 @@ class Test突進中に倒れたとき:
         drops: list[SimEvent] = []
         for tick in range(120):
             events = simulation.step(world, idle(world))
-            if down_at is None and elephant.life == OUT:
+            if down_at is None and not is_alive(elephant):
                 down_at = tick
             drops.extend(
                 event
@@ -573,7 +591,7 @@ class Test突進中に倒れたとき:
         assert world.items == []
         elephant.hp = 1
         hurt(world, elephant, rabbit.id, 2)
-        assert elephant.life == OUT
+        assert not is_alive(elephant)
         events: list[SimEvent] = []
         for _ in range(5):
             events.extend(simulation.step(world, idle(world)))
@@ -718,6 +736,22 @@ ORDERS = [
 ]
 """プレイヤーの並びと、体当たり → 爆風・爆風 → 体当たりで、次に当たるまでの tick。"""
 
+REVIVE_ORDERS = [
+    pytest.param(
+        (Animal.ELEPHANT, Animal.RABBIT, Animal.MOLE), 145, id="受ける側の番号が大きい"
+    ),
+    pytest.param(
+        (Animal.RABBIT, Animal.ELEPHANT, Animal.MOLE), 144, id="受ける側の番号が小さい"
+    ),
+]
+"""プレイヤーの並びと、葱で戻ってから体当たりが当たるまでの tick。
+
+戻った無敵（`REVIVE_INVULNERABLE`）は 144 tick。原型は 2.4 秒から 1/60 を引き続けて
+145 回目に 0 になるので、受ける側の番号が小さい並びでは1つ短い（実数で数えた tick の
+ままにした差）。番号が大きい並びは、体当たりの確かめの番にまだ無敵が減っていないので、
+1 tick 長く守られる。
+"""
+
 
 class Test体当たりと無敵の切れ目:
     """原型は効果の輪（L4296）で、プレイヤーごとに無敵を減らしてから（L4297）突進を進める（L4323）。
@@ -821,3 +855,23 @@ class Test体当たりと無敵の切れ目:
             world, target, charger, lambda: self.ram_this_tick(charger, target)
         )
         assert ram - blasted_at == blast_then_ram
+
+    @pytest.mark.parametrize(("animals", "revive_then_ram"), REVIVE_ORDERS)
+    def test_葱で戻った側に体当たりが当たるまで(
+        self, animals: tuple[Animal, ...], revive_then_ram: int
+    ) -> None:
+        """戻った tick を1つ進めてから、毎 tick 体当たりさせる。
+
+        葱が当たるのは盤面の物の番（1 tick の 3.）なので、戻った tick の効果の輪では、
+        まだ体当たりできない。
+        """
+        world, charger, target, third = self.duel(animals)
+        target.life = Negibon(along=0.0, ready_at=Tick(0))
+        third.position = Cell(9, 7).center()
+        revived_at = world.now
+        swap_places(world, target, third)
+        simulation.step(world, idle(world))
+        ram = self.first_hurt(
+            world, target, charger, lambda: self.ram_this_tick(charger, target)
+        )
+        assert ram - revived_at == revive_then_ram

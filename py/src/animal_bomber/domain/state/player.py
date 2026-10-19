@@ -313,8 +313,8 @@ def can_place_bomb(player: PlayerState) -> bool:
 def is_invulnerable(player: PlayerState, now: Tick) -> bool:
     """盤面の時刻 `now` に、被弾のあとの無敵（点滅している間）の最中か。
 
-    爆風・追いかける炎・体当たりのどれも当たらない。技による「当たらない」は別にある
-    （`is_blast_proof`。原型も分けていた）。
+    爆風・追いかける炎・体当たり・葱のどれも当たらない。技による「当たらない」は別に2つ
+    ある（`is_blast_proof`・`is_untouchable`。原型も分けていた）。
     """
     return now < player.invulnerable_until
 
@@ -327,3 +327,15 @@ def is_blast_proof(player: PlayerState) -> bool:
     傷は入る」で、爆風にも追いかける炎にも、ほかの突進の体当たりにも当たる。
     """
     return player.effects.has(EffectKind.LEAP)
+
+
+def is_untouchable(player: PlayerState) -> bool:
+    """外周から撃った葱が当たらないか（原型の isUntouchable）。
+
+    跳び上がっている間（`EffectKind.LEAP`）と、葱が当たらない振る舞いの最中
+    （`ActionTraits.untouchable`。突進）。被弾のあとの無敵（`is_invulnerable`）とは別に
+    見る。原型も3つを分けていた（TypeScript 版と同じ）。
+    """
+    if player.effects.has(EffectKind.LEAP):
+        return True
+    return player.action is not None and traits_of(player.action).untouchable

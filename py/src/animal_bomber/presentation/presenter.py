@@ -53,9 +53,13 @@ from animal_bomber.domain.events import (
     ItemExpired,
     ItemTaken,
     ItemWashed,
+    LanesClosed,
+    LeekStopped,
+    LeekThrown,
     MatchEnded,
     PlayerDown,
     PlayerHurt,
+    Revived,
     RoundEnded,
     SimEvent,
     Sprayed,
@@ -290,6 +294,12 @@ class Presenter:
                 play(moment_sound(moment))
             case BurntOff():
                 # 音は泣く状態（`EffectApplied`）で鳴らす。煙は絵の側が出す。
+                pass
+            case LeekThrown() | LeekStopped() | Revived() | LanesClosed():
+                # いまは何もしない。原型は葱を撃つと SE.negi（fireNegi）、爆弾に
+                # 弾かれると SE.negiBlock（updateNegis）、入れ替わると SE.negiHit と
+                # 知らせ（negiHit）、外周が閉じると SE.negiOut と知らせ（negibonCutoff）
+                # を出す。音と知らせは、原型の音と絵を写す次の段で足す。
                 pass
             case SuddenDeath():
                 # いまは何もしない。原型は延長戦に入ると専用の音（SE.sudden）を鳴らし、

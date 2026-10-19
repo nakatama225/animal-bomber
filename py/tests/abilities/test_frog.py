@@ -48,12 +48,19 @@ from animal_bomber.domain.state.actors import BurntTongue, SlimeBomb
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import OUT, PlayerState, is_frozen
+from animal_bomber.domain.state.player import (
+    OUT,
+    Negibon,
+    PlayerState,
+    is_alive,
+    is_frozen,
+)
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.blast import add_blast, detonate_expired
 from animal_bomber.domain.systems.bomb import place_bomb_at
 from animal_bomber.domain.systems.damage import hurt
+from animal_bomber.domain.systems.negibon import swap_places
 from tests.helpers import advance, clear_board, idle, make_world, only_for
 
 ACTION = PlayerInput.ACTION
@@ -657,47 +664,49 @@ class Test舌の長さと時間:
 
 
 class Test倒れたかえるの舌:
-    """原型の toNegibon L2255・退場 L1700・update L4320-4322・tongueBurnCheck L4395。
+    """原型の toNegibon L2255・退場 L1700・update L4320-4322・L4395・negiHit L2347。
 
     原型は倒れても舌を消さず、舌を進めるのは盤面にいるプレイヤーだけ、焼けたかの確かめは
-    状態を問わず全員を見る（TypeScript 版の `tests/abilities/frog.test.ts` の「倒れた
-    かえるの舌」と同じ場面。この版にはまだ外周が無いので、倒れたら退場する）。
+    状態を問わず全員を見る。葱で盤面へ戻るときは、かかった状態と舌を消す（L2347-2348。
+    TypeScript 版の `tests/abilities/frog.test.ts` の「倒れたかえるの舌」と同じ場面）。
     """
 
-    def frog_with_tongue(self) -> tuple[WorldState, PlayerState, Tongue]:
-        """(3, 5) から右へ舌を5マス伸ばした最中のかえる（40 tick 進めた）。"""
-        world, frog = frog_at()
+    def frog_with_tongue(self) -> tuple[WorldState, PlayerState, PlayerState, Tongue]:
+        """(3, 5) から右へ舌を5マス伸ばした最中のかえる（40 tick 進めた）とうさぎ。"""
+        world, frog, rabbit = arena()
+        frog.position = Cell(3, 5).center()
+        frog.facing = Direction.RIGHT
         tongue = tongue_of(frog)
         for _ in range(40):
             advance_tongue(world, frog, tongue)
         frog.action = tongue
-        return world, frog, tongue
+        return world, frog, rabbit, tongue
 
     def knock_out(self, world: WorldState, frog: PlayerState) -> None:
-        """体力1個ぶんのかえるを倒す。"""
+        """体力1個ぶんのかえるを倒す（残り時間があれば外周へ回る）。"""
         frog.hp = 2
         hurt(world, frog, 1, 2)
 
-    def test_倒れて退場しても_舌は外さずに伸びたまま止まる(self) -> None:
-        world, frog, tongue = self.frog_with_tongue()
+    def test_倒れて外周へ回っても_舌は外さずに伸びたまま止まる(self) -> None:
+        world, frog, _, tongue = self.frog_with_tongue()
         extent = (tongue.elapsed, tongue.steps, tongue.length)
         self.knock_out(world, frog)
-        assert frog.life == OUT
+        assert isinstance(frog.life, Negibon)
         advance(world, idle(world), 120)
         assert frog.action is tongue
         assert (tongue.elapsed, tongue.steps, tongue.length) == extent
 
-    def test_退場したあとに止まった舌の上へ爆風が来ると焼ける_短くなり_泣き_舌は外れる(
+    def test_外周にいる間に止まった舌の上へ爆風が来ると焼ける_短くなり_泣き_舌は外れる(
         self,
     ) -> None:
-        world, frog, _ = self.frog_with_tongue()
+        world, frog, _, _ = self.frog_with_tongue()
         self.knock_out(world, frog)
         simulation.step(world, idle(world))
         add_blast(world, Cell(5, 5), 1, is_center=False)
         events = simulation.step(world, idle(world))
         assert BurntOff(player=frog.id, cell=Cell(5, 5)) in events
         assert EffectApplied(target=frog.id, effect=EffectKind.STUN) in events
-        assert frog.life == OUT
+        assert isinstance(frog.life, Negibon)
         assert frog.action is None
         assert tongue_reach_of(world, frog) == 1
         assert frog.effects.has(EffectKind.STUN)
@@ -706,15 +715,47 @@ class Test倒れたかえるの舌:
         self,
     ) -> None:
         """原型は被弾（L4393）のすぐあとに焼けたかを見る（L4395）。"""
-        world, frog, _ = self.frog_with_tongue()
+        world, frog, _, _ = self.frog_with_tongue()
         frog.hp = 2
         add_blast(world, Cell(3, 5), 1, is_center=True)
         add_blast(world, Cell(4, 5), 1, is_center=False)
         events = simulation.step(world, idle(world))
         assert any(isinstance(e, PlayerDown) and e.target == frog.id for e in events)
         assert BurntOff(player=frog.id, cell=Cell(4, 5)) in events
-        assert frog.life == OUT
+        assert isinstance(frog.life, Negibon)
         assert tongue_reach_of(world, frog) == 0
+
+    def test_退場したかえるの舌も残り_爆風が来れば焼ける(self) -> None:
+        """原型の退場（L1700）でも舌は残る。時間切れを今にして外周を閉じておく。"""
+        world, frog, _, _ = self.frog_with_tongue()
+        world.ends_at = world.now
+        self.knock_out(world, frog)
+        assert frog.life == OUT
+        simulation.step(world, idle(world))
+        assert frog.action is not None
+        add_blast(world, Cell(6, 5), 1, is_center=False)
+        events = simulation.step(world, idle(world))
+        assert BurntOff(player=frog.id, cell=Cell(6, 5)) in events
+        assert tongue_reach_of(world, frog) == 2
+
+    def test_葱で戻ると_止まっていた舌は消える(self) -> None:
+        """原型の negiHit（L2348）は tongue=null。後始末はしない。"""
+        world, frog, rabbit, _ = self.frog_with_tongue()
+        self.knock_out(world, frog)
+        swap_places(world, frog, rabbit)
+        assert is_alive(frog)
+        assert frog.action is None
+
+    def test_葱で戻ると_外周で付いた泣く状態は消え_短くなった長さは残る(self) -> None:
+        """原型の negiHit（L2347）は状態を空にし、舌の長さ（tongueLimit）は残す。"""
+        world, frog, rabbit, _ = self.frog_with_tongue()
+        self.knock_out(world, frog)
+        add_blast(world, Cell(5, 5), 1, is_center=False)
+        simulation.step(world, idle(world))
+        assert frog.effects.has(EffectKind.STUN)
+        swap_places(world, frog, rabbit)
+        assert frog.effects.active() == []
+        assert tongue_reach_of(world, frog) == 1
 
     def test_対照_盤面を離れて残さない振る舞いは_倒れた次のtickに外れる(self) -> None:
         """性質（`ActionTraits.stays_off_board`）が False の穴掘りは、残さず外す。"""
