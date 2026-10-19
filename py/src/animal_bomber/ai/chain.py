@@ -28,6 +28,7 @@ from animal_bomber.ai.behaviors import (
     attack_in_line,
     break_blocks,
     collect_item,
+    dodge_leek,
     flee,
     hunt,
     wander,
@@ -37,6 +38,7 @@ from animal_bomber.ai.plan import STAY, CpuPlan
 
 DEFAULT_CHAIN: Final[tuple[Behavior, ...]] = (
     flee,
+    dodge_leek,
     attack_in_line,
     collect_item,
     hunt,
@@ -45,12 +47,10 @@ DEFAULT_CHAIN: Final[tuple[Behavior, ...]] = (
 )
 """標準の判断の並び。上にあるものほど優先する。
 
-身の安全がいちばん上、うろつくのがいちばん下。相手を狙う規則がアイテムより上にあるのは、
-射線に入った相手は次の瞬間には外れているから。アイテムは逃げない。
-
-⚠️ TypeScript 版は、逃げるの次に「外周から飛んでくる葱をよける」を置く。この版には、
-その規則がまだ無い。TypeScript 版と比べる CPU の固定値（`tests/ai/test_cpu_ts.py`）は、
-写しの並びからもこの規則を外して出してある。
+身の安全がいちばん上、うろつくのがいちばん下。爆風から逃げるのが先で、外周から飛んでくる
+葱をよけるのがその次（葱に当たっても外周から戻ってこられる）。相手を狙う規則がアイテムより
+上にあるのは、射線に入った相手は次の瞬間には外れているから。アイテムは逃げない。
+TypeScript 版の `DEFAULT_CHAIN` と同じ並び。
 """
 
 

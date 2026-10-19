@@ -3,8 +3,20 @@
 from typing import Final
 
 from animal_bomber.domain.core.coord import Cell, Direction
+from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.player import PlayerState
+
+BUTTON_FOR: Final = {
+    Direction.UP: PlayerInput.UP,
+    Direction.DOWN: PlayerInput.DOWN,
+    Direction.LEFT: PlayerInput.LEFT,
+    Direction.RIGHT: PlayerInput.RIGHT,
+}
+"""向きごとの、押すボタン。
+
+盤面の CPU（`source.py`）も外周の CPU（`pilot.py`）も使う。
+"""
 
 ARRIVED: Final = 0.15
 """経路の次のマスの中央からこの距離まで近づいたら、着いたとみなして並びから消す。

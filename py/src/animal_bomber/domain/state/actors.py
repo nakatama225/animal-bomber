@@ -9,7 +9,8 @@
 外周のプレイヤーが撃つ葱も、ここに盤面の物の1つとして持つ。撃つのは外周の処理
 （`systems/negibon.py`）だが、試合を進める処理は盤面の物の種類を書かない決まりなので、
 作るのはここの `shot_from_lane`、外周を閉じるときに消すかはここの `ends_with_lanes` で
-決める（`docs/09-葱ボンと延長戦.md`）。
+決める。盤面の CPU が飛んでくる葱を見つけるのも、ここの `lane_shot` を通す（CPU の共通の
+判断も種類を書かない決まり。`docs/09-葱ボンと延長戦.md`）。
 
 どれも `eq=False` にして、同じものかを実体で比べる（`state/bomb.py` と同じ理由）。
 """
@@ -138,6 +139,23 @@ def ends_with_lanes(actor: Actor) -> bool:
             return True
         case Pit() | Foxfire() | SlimeBomb() | Scatter() | BurntTongue():
             return False
+        case _:
+            assert_never(actor)
+
+
+def lane_shot(actor: Actor) -> Leek | None:
+    """外周から撃って飛んでいる葱なら、その葱を返す。ほかの盤面の物なら None。
+
+    盤面の CPU が飛んでくる葱をよける規則（`ai/behaviors.py` の `dodge_leek`）が呼ぶ。
+    CPU の共通の判断は盤面の物の種類の名前を書かず、型でも見分けない決まり
+    （`tests/boundary/test_closed_kinds.py`）なので、見分けるのはここに置く
+    （`shot_from_lane` と同じ理由。`docs/09-葱ボンと延長戦.md`）。返した葱は読むだけ。
+    """
+    match actor:
+        case Leek():
+            return actor
+        case Pit() | Foxfire() | SlimeBomb() | Scatter() | BurntTongue():
+            return None
         case _:
             assert_never(actor)
 

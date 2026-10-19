@@ -20,6 +20,8 @@ class CpuMode(Enum):
     """まだ何も決めていない。"""
     FLEE = "flee"
     """爆風の届くマスから離れる。"""
+    DODGE = "dodge"
+    """飛んでくる葱の射線から外れる。"""
     ATTACK = "attack"
     """射線に入った相手を狙う。"""
     ITEM = "item"

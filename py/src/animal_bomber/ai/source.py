@@ -23,6 +23,14 @@
 効かせるので、原型の CPU が1フレームの中で 歩く → 置く → とくぎ と呼んでいたのと同じ順に
 なる。
 
+## 外周にいる間と、記憶を作り直すとき
+
+外周にいる間は、上の流れを通らず、外周の操縦（`pilot.py` の `NegibonPilot`）が入力を
+決める。考え直すまでの間隔などは数えない（原型も外周にいる間は cpuUpdate を呼ばない）。
+記憶（`memory.py`）と外周の操縦を作り直すのは、ラウンドの盤面が替わったときだけ。延長戦に
+入ったとき・外周から戻ったときは作り直さず、外周へ回ったときは構えの溜めだけを戻す
+（原型と同じ。TypeScript 版の `CpuInputSource` も同じ）。
+
 ## ⚠️ 乱数は CPU 専用のものを持つ
 
 試合の乱数（`world.rng`）を引かない。引くと、CPU が何回考えたかでアイテムの抽選が
@@ -38,12 +46,13 @@
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import assert_never
 
 from animal_bomber.ai.behaviors import Behavior
 from animal_bomber.ai.bombs import decide_bomb
 from animal_bomber.ai.chain import DEFAULT_CHAIN, decide
 from animal_bomber.ai.context import CpuContext
-from animal_bomber.ai.follow import compensate_reverse, direction_along
+from animal_bomber.ai.follow import BUTTON_FOR, compensate_reverse, direction_along
 from animal_bomber.ai.levels import CpuLevel
 from animal_bomber.ai.margins import (
     BLIND_MIN_SECONDS,
@@ -52,6 +61,7 @@ from animal_bomber.ai.margins import (
     SHARP_THINK_SECONDS,
 )
 from animal_bomber.ai.memory import CpuMemory, fresh_memory
+from animal_bomber.ai.pilot import NegibonPilot
 from animal_bomber.ai.plan import CpuMode
 from animal_bomber.ai.tactics import tactic_of
 from animal_bomber.domain.core.coord import Direction
@@ -62,7 +72,14 @@ from animal_bomber.domain.query.board import player_by_id
 from animal_bomber.domain.query.danger import DangerMap
 from animal_bomber.domain.state.actions import traits_of
 from animal_bomber.domain.state.effects import EffectKind
-from animal_bomber.domain.state.player import PlayerId, PlayerState, is_alive, is_frozen
+from animal_bomber.domain.state.player import (
+    Alive,
+    Negibon,
+    Out,
+    PlayerId,
+    PlayerState,
+    is_frozen,
+)
 from animal_bomber.domain.state.world import WorldState
 
 
@@ -91,7 +108,16 @@ def cpu_seed(match_seed: int, player_id: PlayerId) -> int:
 class CpuInputSource:
     """CPU 1体の窓口。"""
 
-    __slots__ = ("_chain", "_level", "_memory", "_player_id", "_rng", "_world")
+    __slots__ = (
+        "_chain",
+        "_level",
+        "_memory",
+        "_on_lane",
+        "_pilot",
+        "_player_id",
+        "_rng",
+        "_world",
+    )
 
     def __init__(
         self,
@@ -113,6 +139,11 @@ class CpuInputSource:
         self._rng = Rng(seed)
         self._chain = tuple(chain)
         self._world: WorldState | None = None
+        # 最後に見たとき、自分が外周にいたか。外周へ回ったことを知るのに使う。
+        self._on_lane = False
+        # 外周にいる間の操縦。盤面が作り直されるまで持ち続け、外周へ回るたびには作り
+        # 直さない（`pilot.py` の説明）。
+        self._pilot = NegibonPilot()
         self._memory = fresh_memory(self._rng)
 
     @property
@@ -132,15 +163,46 @@ class CpuInputSource:
 
     def next_input(self, world: WorldState, tick: MatchTick) -> PlayerInput:
         """この tick の入力を返す。`world` は読むだけ。"""
-        # ラウンドが変わると盤面が作り直される。前のラウンドの経路を捨てる。
+        # ラウンドが変わると盤面が作り直される。前のラウンドの記憶（経路・外周の操縦）を
+        # 捨てる。原型が CPU の記憶（p.ai）を作り直すのは、ラウンドの始まり
+        # （resetPlayersForRound の L4191-4192）と作るとき（makePlayer の L1210）だけ
+        # なので、ここもラウンドの盤面が替わったときだけにする。
+        #
+        # ⚠️ 延長戦に入ったとき・外周から戻ったときは捨てない（延長戦は盤面を作り直さずに
+        # 片付けて使うので、ここは通らない）。原型の enterSuddenDeath（L4435-4465）も
+        # negiHit（L2337-2356）も p.ai に触らない。開始位置や当てた相手の位置へ移った
+        # あとも、次に考え直すまでは前の経路の先のマスへ歩き、置き直さない記憶・爆弾を
+        # 控える残り・判断の間隔の揺らぎ（jitter）も続けて使う。捨てると CPU の乱数を
+        # 1つ余計に引く（jitter の引き直し）ので、その後の判断がすべてずれる。
         if world is not self._world:
             self._world = world
             self._memory = fresh_memory(self._rng)
+            self._on_lane = False
+            self._pilot = NegibonPilot()
+
         me = player_by_id(world, self._player_id)
-        # 外周にいる間（と退場したあと）は何もしない入力を返し、考え直すまでの間隔なども
-        # 数えない（原型も cpuUpdate を呼ばない。L4335-4339）。⚠️ 外周の操縦はまだ無い。
-        if me is None or not is_alive(me):
+        if me is None:
             return PlayerInput.IDLE
+        life = me.life
+        match life:
+            case Negibon():
+                # 外周へ回った最初の tick に、構えの溜めだけを戻す（原型の toNegibon
+                # L2268 は negiLock だけを 0 にする）。外周の入力は反転を打ち消さない
+                # （外周へ回るとき、かかっている状態は消える）。
+                if not self._on_lane:
+                    self._pilot.enter_lane()
+                self._on_lane = True
+                return self._pilot.next_input(world, life)
+            case Out():
+                self._on_lane = False
+                return PlayerInput.IDLE
+            case Alive():
+                self._on_lane = False
+            case _:
+                assert_never(life)
+
+        # 外周にいる間（と退場したあと）は数えない。原型も cpuUpdate を呼ばない
+        # （L4335-4339）ので、考え直すまでの間隔などは倒れた瞬間の値のまま止まっている。
         _count_down(self._memory)
         return _compose(me, self._decide(world, me))
 
@@ -260,12 +322,4 @@ def _compose(me: PlayerState, intent: _Intent) -> PlayerInput:
     if intent.direction is None:
         return intent.buttons
     pressed = compensate_reverse(me, intent.direction)
-    return intent.buttons | _DIRECTION_BUTTONS[pressed]
-
-
-_DIRECTION_BUTTONS = {
-    Direction.UP: PlayerInput.UP,
-    Direction.DOWN: PlayerInput.DOWN,
-    Direction.LEFT: PlayerInput.LEFT,
-    Direction.RIGHT: PlayerInput.RIGHT,
-}
+    return intent.buttons | BUTTON_FOR[pressed]

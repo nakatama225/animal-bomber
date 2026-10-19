@@ -10,6 +10,7 @@
 """
 
 from collections.abc import Callable
+from typing import Final
 
 from animal_bomber.ai.context import CpuContext
 from animal_bomber.ai.margins import FALLBACK_MARGIN, FLEE_AVOID, ROUTE_AVOID
@@ -18,11 +19,33 @@ from animal_bomber.ai.tactics import tactic_of
 from animal_bomber.domain.core.coord import SCAN_ORDER, Cell, Direction
 from animal_bomber.domain.query.board import is_solid_for, item_at
 from animal_bomber.domain.rules.items import HARMFUL_KINDS, POWER_UP_KINDS
+from animal_bomber.domain.state.actors import lane_shot
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.player import power_of
 
 Behavior = Callable[[CpuContext], CpuPlan | None]
 """判断の規則1つ。"""
+
+DODGE_LINE_WIDTH: Final = 0.6
+"""葱の射線に乗っているとみなす、飛ぶ向きと直角のずれ（マス）。当たり判定より広く見る。"""
+
+DODGE_LOOK_AHEAD: Final = 9
+"""葱がこの距離より近づいてきたら避ける（マス）。"""
+
+DODGE_SIDES: Final = {
+    Direction.LEFT: (Direction.DOWN, Direction.UP),
+    Direction.RIGHT: (Direction.DOWN, Direction.UP),
+    Direction.UP: (Direction.RIGHT, Direction.LEFT),
+    Direction.DOWN: (Direction.RIGHT, Direction.LEFT),
+}
+"""葱をよける先を試す順。横に飛ぶ葱なら下→上、縦に飛ぶ葱なら右→左。
+
+原型の planCPU の L2090 と同じ固定の順（TypeScript 版の `DodgeLeek.ts` の `SIDES`）。
+
+⚠️ 自分が射線のどちら側に立っているかは見ない（原型も見ない）。射線の左（横に飛ぶ葱なら
+上）に立っていると、右（下）へよけて射線を横切り、そのままなら外れた葱へ自分から寄って
+いくことがある。
+"""
 
 
 def flee(ctx: CpuContext) -> CpuPlan | None:
@@ -80,6 +103,52 @@ def _best_neighbour(ctx: CpuContext) -> list[Cell]:
             best_value = value
             best = cell
     return [] if best is None else [best]
+
+
+def dodge_leek(ctx: CpuContext) -> CpuPlan | None:
+    """外周から飛んでくる葱の射線から、直角に1マス外れる（原型の planCPU L2086-2098）。
+
+    爆風から逃げる規則（`flee`）の次に置く。葱に当たっても、外周から撃ち返して入れ替わ
+    れば戻ってこられる。爆風のほうが致命的なので先に逃げる（原型と同じ優先順）。
+
+    よける先は、直角の2マスを固定の順（`DODGE_SIDES`）に試し、通れて爆風の届かない最初の
+    マス。いまの位置で当たるかどうか（ずれが葱の当たり判定より大きいか）は見ずに、両側を
+    試す（原型の L2091-2095 と同じ）。どちらも無ければ次の規則に譲る。
+    """
+    facing = _incoming_facing(ctx)
+    if facing is None:
+        return None
+    for side in DODGE_SIDES[facing]:
+        cell = ctx.here.step(side)
+        if is_solid_for(ctx.world, cell, ctx.me):
+            continue
+        if not ctx.danger.is_safe(cell):
+            continue
+        return CpuPlan(CpuMode.DODGE, (cell,), want_bomb=False)
+    return None
+
+
+def _incoming_facing(ctx: CpuContext) -> Direction | None:
+    """自分に向かって飛んでくる、ほかのプレイヤーの葱の向き（原型の negiThreat）。
+
+    原型の L2066-2075。盤面の物を出た順に見て、最初に見つかった葱の向き。無ければ None。
+    葱かどうかは状態の側（`state/actors.py` の `lane_shot`）に聞く。
+    """
+    x, y = ctx.me.position.x, ctx.me.position.y
+    for actor in ctx.world.actors:
+        shot = lane_shot(actor)
+        if shot is None or shot.owner == ctx.me.id:
+            continue
+        d_col, d_row = shot.facing.delta
+        if d_col != 0:
+            offset = abs(y - shot.position.y)
+            ahead = (x - shot.position.x) * d_col
+        else:
+            offset = abs(x - shot.position.x)
+            ahead = (y - shot.position.y) * d_row
+        if offset < DODGE_LINE_WIDTH and 0 < ahead < DODGE_LOOK_AHEAD:
+            return shot.facing
+    return None
 
 
 def attack_in_line(ctx: CpuContext) -> CpuPlan | None:
