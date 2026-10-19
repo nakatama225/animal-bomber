@@ -3,7 +3,8 @@
 ## 束ねるだけで、ルールを持たない
 
 ラウンドが決まったかを見るのは `domain/systems/round.py`、盤面を作るのは
-`create_world`、1 tick 進めるのは `simulation.step`。`GameSession` はそれを呼ぶ順を
+`create_world`、延長戦の準備は `domain/systems/sudden_death.py`、1 tick 進めるのは
+`simulation.step`。`GameSession` はそれを呼ぶ順を
 知っているだけで、ゲームのルールを持たない。束ねる場所を1つにしておくと、遊ぶとき・
 記録を流し直すとき・試合をたくさん回して測るときで、同じ形の呼び出しになる。
 
@@ -17,6 +18,7 @@
 """
 
 from collections.abc import Iterable
+from typing import assert_never
 
 from animal_bomber.domain.core.tick import MatchClock
 from animal_bomber.domain.events import SimEvent
@@ -26,7 +28,14 @@ from animal_bomber.domain.rules.tuning import ROUND_INTERMISSION
 from animal_bomber.domain.state.match import MatchState
 from animal_bomber.domain.state.world import WorldState, create_world
 from animal_bomber.domain.systems import simulation
-from animal_bomber.domain.systems.round import apply_outcome, check_round
+from animal_bomber.domain.systems.round import (
+    Continue,
+    GoToSuddenDeath,
+    RoundOver,
+    apply_outcome,
+    judge_round,
+)
+from animal_bomber.domain.systems.sudden_death import enter_sudden_death
 
 
 class GameSession:
@@ -99,13 +108,21 @@ class GameSession:
             return []
         inputs = self._gatherer.gather(self._world, self._clock.now)
         events = simulation.step(self._world, inputs)
-        outcome = check_round(self._world, self._config)
-        if outcome is None:
-            return events
-        events.extend(apply_outcome(self._match, self._config, outcome))
-        if not self._match.finished:
-            self._intermission = ROUND_INTERMISSION
-        return events
+        verdict = judge_round(self._world, self._config, events)
+        match verdict:
+            case Continue():
+                return events
+            case GoToSuddenDeath(reason=reason, players=players):
+                # 延長戦は決着ではないので、待ちを挟まず、同じ tick のうちに入る。
+                events.extend(enter_sudden_death(self._world, players, reason))
+                return events
+            case RoundOver(outcome=outcome):
+                events.extend(apply_outcome(self._match, self._config, outcome))
+                if not self._match.finished:
+                    self._intermission = ROUND_INTERMISSION
+                return events
+            case _:
+                assert_never(verdict)
 
     def _new_world(self) -> WorldState:
         """いまのラウンドの盤面を作る。
@@ -119,4 +136,5 @@ class GameSession:
             config.animals,
             config.spawn_order,
             config.starting_hp,
+            config.round_limit,
         )

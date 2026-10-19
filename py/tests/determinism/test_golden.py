@@ -61,7 +61,10 @@ from .scenario import play_and_record, play_match, replay
 # そのあと、とくぎを持っているか（印）を回数と分けて要約に混ぜたので、0526e2ee から
 # 変わった。台本はチキンを持たせて始めるので、印と回数を両方持たせる形にした。要約から
 # 印を抜くと前の値に戻る（試合の進み方は変わらない）ことを確かめた。
-GOLDEN = "2dbea9fd"
+# そのあと、延長戦を足し、盤面の要約に時間切れの時刻（ends_at）と延長戦に入ったか
+# （sudden_death）を混ぜたので、2dbea9fd から変わった。要約からこの2つを抜くと前の値に
+# 戻る（試合の進み方は変わらない）ことを確かめた。3.12 と 3.11 で同じ値。
+GOLDEN = "880ece03"
 
 # ラウンドをまたぐ台本（`play_match`）を 1500 tick 進めたあとの盤面の要約。段階 4 で
 # 足した。1ラウンド目は時間切れ、2ラウンド目は 1P の勝ちで試合が決まり、決まった盤面の
@@ -76,7 +79,16 @@ GOLDEN = "2dbea9fd"
 # 名前が変わる）、e10d6fc8 から変わった。試合の決まり方は変わらない。
 # そのあと、とくぎを持っているか（印）を要約に混ぜたので、79a42b43 から変わった（上の
 # 台本と同じ。要約から印を抜くと前の値に戻る）。
-GOLDEN_MATCH = "382e9983"
+# そのあと、延長戦を足したとき（上の台本と同じ理由。要約に時間切れの時刻と延長戦に
+# 入ったかを混ぜる）、382e9983 から変わった。この台本は延長戦を切って流す（`play_match`
+# の説明）ので、試合の決まり方は変わらない。
+GOLDEN_MATCH = "c185f411"
+
+# 同じ台本を、延長戦を入れて流したあとの盤面の要約（`play_match(sudden_death=True)`）。
+# 段階 8 で足した。600 tick 目に4人の延長戦に入り、延長戦の中で 1P が倒れたあと、
+# 2P〜4P が同じ tick に倒れて引き分け。2ラウンド目は 1P の勝ちで試合が決まる。
+# 2026-10-19 に 3.12 と 3.11 で出し、同じ値になることを確かめた。
+GOLDEN_SUDDEN = "79471a58"
 
 
 def test_ラウンドをまたぐ台本は_決めておいた要約に行き着く() -> None:
@@ -89,6 +101,18 @@ def test_ラウンドをまたぐ台本は_決めておいた要約に行き着�
         True,
     )
     assert f"{hash_world(session.world):08x}" == GOLDEN_MATCH
+
+
+def test_延長戦を入れたラウンドをまたぐ台本は_決めておいた要約に行き着く() -> None:
+    session = play_match(sudden_death=True)
+    match = session.match
+    assert (match.round, match.wins, match.champion, match.finished) == (
+        2,
+        {0: 1},
+        0,
+        True,
+    )
+    assert f"{hash_world(session.world):08x}" == GOLDEN_SUDDEN
 
 
 def test_台本どおりの試合は_決めておいた要約に行き着く() -> None:

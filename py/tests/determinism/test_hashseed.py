@@ -27,9 +27,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 # 突き合わせる処理。台本どおりの試合（`scenario.py`）を遊んで記録し、流し直す。
 # 遊んだあとと流し直したあとの状態の要約、記録の文字列を出す。ラウンドをまたぐ台本
-# （`play_match`）の盤面の要約と勝ち数も出す。動物の技を通す3つの台本
-# （`tests/systems/technique_scenarios.py`。粘膜爆弾・焼けた舌・体当たり・落とし穴に
-# 落ちる、など `scenario.py` が通らない技も通る）の盤面の要約も出す。CPU だけの試合
+# （`play_match`）の盤面の要約と勝ち数も、延長戦を切った形と入れた形の両方で出す。
+# 動物の技を通す3つの台本（`tests/systems/technique_scenarios.py`。粘膜爆弾・焼けた舌・
+# 体当たり・落とし穴に落ちる、など `scenario.py` が通らない技も通る）の盤面の要約も
+# 出す。CPU だけの試合
 # （`play_cpu_match`）の盤面の要約と勝ち数も出す（CPU の判断の set の反復を見る）。
 # ルールの層や CPU の判断を足したら、台本がそれを通るようにする（通らない処理の
 # set の反復は、ここでは見つからない）。
@@ -44,6 +45,8 @@ played, log = play_and_record()
 print(f"{hash_world(played):08x}", f"{hash_world(replay(log)):08x}", log.encode())
 session = play_match()
 print(f"{hash_world(session.world):08x}", session.match)
+sudden = play_match(sudden_death=True)
+print(f"{hash_world(sudden.world):08x}", sudden.match)
 for scenario in SCENARIOS:
     print(scenario.name, f"{hash_world(play(scenario)):08x}")
 cpu = play_cpu_match()

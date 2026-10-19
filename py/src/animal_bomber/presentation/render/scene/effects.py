@@ -46,6 +46,7 @@ from animal_bomber.domain.events import (
     RoundEnded,
     SimEvent,
     Sprayed,
+    SuddenDeath,
     TechniqueMoment,
     TechniqueUsed,
 )
@@ -223,6 +224,10 @@ class EffectField:
                 case BurntOff(cell=cell):
                     self._puff(cell, TONGUE_SMOKE, "\N{TONGUE}")
                 case BombPlaced() | RoundEnded() | MatchEnded():
+                    pass
+                case SuddenDeath():
+                    # いまは何もしない。延長戦に入ったときの見た目（原型の絵と知らせ）
+                    # は、原型の音と絵を写す次の段で足す。
                     pass
                 case _:
                     assert_never(event)

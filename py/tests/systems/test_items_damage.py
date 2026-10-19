@@ -782,10 +782,12 @@ class Test被弾:
         world = make_world()
         player = world.players[0]
         player.hp = 2
+        player.position = Point(3.25, 1.5)
         events = hurt(world, player, 0, BLAST_DAMAGE)
         assert player.life == OUT
         assert player.hp == 0
-        assert events[-1] == PlayerDown(target=0, by=0)
+        # 倒れた位置も運ぶ（同じ tick に延長戦へ入ると、受け取る頃には位置が変わる）。
+        assert events[-1] == PlayerDown(target=0, by=0, at=Point(3.25, 1.5))
 
     def test_体力が減る量より少なくても_0で止まる(self) -> None:
         world = make_world()

@@ -249,7 +249,7 @@ class Test破片と揺れ:
         case = CASES[f"kill {animal.value}"]
         world = world_with(animal)
         world.players[0].position = Cell(7, 9).center()
-        run(case, [PlayerDown(0, 1)], world)
+        run(case, [PlayerDown(0, 1, Cell(7, 9).center())], world)
 
 
 class Test技:

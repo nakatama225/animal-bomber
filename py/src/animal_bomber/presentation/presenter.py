@@ -59,6 +59,7 @@ from animal_bomber.domain.events import (
     RoundEnded,
     SimEvent,
     Sprayed,
+    SuddenDeath,
     TechniqueMoment,
     TechniqueUsed,
 )
@@ -289,6 +290,11 @@ class Presenter:
                 play(moment_sound(moment))
             case BurntOff():
                 # 音は泣く状態（`EffectApplied`）で鳴らす。煙は絵の側が出す。
+                pass
+            case SuddenDeath():
+                # いまは何もしない。原型は延長戦に入ると専用の音（SE.sudden）を鳴らし、
+                # 知らせ（「サドンデス！」と、そのわけ・上限にした装備・60 秒）を出す
+                # （enterSuddenDeath）。音と知らせは、原型の音と絵を写す次の段で足す。
                 pass
             case RoundEnded(round=number, winner=winner):
                 # 優勝が決まった tick は、優勝の音だけ（`MatchEnded`。原型の endGame）。

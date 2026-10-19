@@ -222,7 +222,9 @@ class SittingSource:
         return PlayerInput.IDLE
 
 
-def play_match(ticks: int = MATCH_TICKS, seed: int = SEED) -> GameSession:
+def play_match(
+    ticks: int = MATCH_TICKS, seed: int = SEED, *, sudden_death: bool = False
+) -> GameSession:
     """ラウンドをまたぐ台本。手を入れない盤面で、試合の進行（`GameSession`）を通す。
 
     1ラウンドの台本（`new_world`）は盤面に手を入れるので、ラウンドの始まりの扱い・
@@ -232,6 +234,12 @@ def play_match(ticks: int = MATCH_TICKS, seed: int = SEED) -> GameSession:
     しない）。
     2ラウンド目の始まりは、2P〜4P が爆弾のボタンを押す tick で、ラウンドの始まりの扱いを
     通る。
+
+    延長戦は既定で切る（1ラウンド目を時間切れの引き分けにして、2ラウンド目の始まりを
+    爆弾を押す tick に合わせるため）。`sudden_death=True` で同じ台本を流すと、延長戦を
+    通る。600 tick 目に時間切れで4人の延長戦に入り、延長戦の中で 1P が倒れたあと、
+    2P〜4P が同じ tick に倒れて引き分けになる（延長戦は1ラウンドに1回だけ）。2ラウンド
+    目は 1463 tick 目に 1P の勝ちで決まる。
     """
     config = MatchConfig(
         seed=seed,
@@ -239,6 +247,7 @@ def play_match(ticks: int = MATCH_TICKS, seed: int = SEED) -> GameSession:
         round_limit=MATCH_ROUND_LIMIT,
         wins_to_take=1,
         starting_hp=SCRIPT_HP,
+        sudden_death=sudden_death,
     )
     sources: list[InputSource] = [ScriptedSource(PLAYER_IDS[0])]
     sources.extend(

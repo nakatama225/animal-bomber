@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TypeAlias
 
-from animal_bomber.domain.core.coord import Cell, Direction
+from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.player import PlayerId
@@ -204,6 +204,12 @@ class PlayerDown:
 
     target: PlayerId
     by: PlayerId | None
+    at: Point
+    """倒れた位置。
+
+    ⚠️ 受け取った側は、プレイヤーのいまの位置を読まずにこちらを使う。同じ tick のうちに
+    延長戦へ入ると、受け取る頃には開始位置へ移っている（TypeScript 版と同じ）。
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -274,6 +280,28 @@ class BurntOff:
     """焼けたマス（いちばん手前の爆風のマス）。"""
 
 
+class SuddenDeathReason(Enum):
+    """延長戦に入ったわけ（`SuddenDeath.reason`）。"""
+
+    ALL_DOWN = "allDown"
+    """残っていた全員が同じ tick に倒れた（2人以上）。"""
+    TIME_UP = "timeUp"
+    """時間切れの時点で2人以上残っていた。"""
+
+
+@dataclass(frozen=True, slots=True)
+class SuddenDeath:
+    """延長戦（サドンデス）に入った。
+
+    `step()` は返さない。ラウンドの終わりを見て延長戦に入れるのは、試合を進める側
+    （`app/session.py` の `GameSession`。`systems/sudden_death.py` を呼ぶ）。
+    """
+
+    reason: SuddenDeathReason
+    players: tuple[PlayerId, ...]
+    """延長戦に加わるプレイヤー（プレイヤー番号の順）。"""
+
+
 @dataclass(frozen=True, slots=True)
 class RoundEnded:
     """ラウンドが決まった。
@@ -314,6 +342,7 @@ SimEvent: TypeAlias = (
     | TechniqueUsed
     | TechniqueMoment
     | BurntOff
+    | SuddenDeath
     | RoundEnded
     | MatchEnded
 )

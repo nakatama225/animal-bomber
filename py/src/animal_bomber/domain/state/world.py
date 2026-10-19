@@ -8,11 +8,12 @@ from animal_bomber.domain.core.coord import Direction
 from animal_bomber.domain.core.entity_id import IdSource
 from animal_bomber.domain.core.rng import Rng
 from animal_bomber.domain.core.statehash import StateHasher
-from animal_bomber.domain.core.tick import Tick
+from animal_bomber.domain.core.tick import Tick, seconds_to_ticks
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import Animal, stats_of
 from animal_bomber.domain.rules.tuning import (
     BASE_POWER,
+    ROUND_SECONDS,
     SPAWN_CELLS,
     START_BOMBS,
     STARTING_HP,
@@ -47,7 +48,8 @@ class WorldState:
     足すと、通信対戦で突き合わせるものが無駄に増える。左右するものを足したら、
     `hash_world` にも足す（足さないと、その値がずれても気づけない）。
 
-    いまは段階 5 までで使うものだけを持つ。
+    いまは延長戦（段階 8）までで使うものを持つ。外周（葱ボン）の状態はプレイヤーの
+    状態（`state/player.py` の `Negibon`）にある。
     """
 
     now: Tick
@@ -60,6 +62,20 @@ class WorldState:
     """プレイヤー番号の順に並ぶ。"""
     rng: Rng
     """結果に影響する乱数。見た目の乱数はここに入れない。"""
+    ends_at: Tick
+    """時間切れになる盤面の時刻。
+
+    試合の設定の制限時間（`MatchConfig.round_limit`）から始まり、延長戦に入るとその時点
+    から延長戦の長さぶん先に置き直す（`systems/sudden_death.py`）。全員が同じ tick に
+    倒れて延長戦に入ったときは、早まることもある。⚠️ 残り時間の判定は、設定ではなく
+    こちらを見る。設定の値は延長を知らない。
+    """
+    sudden_death: bool = False
+    """このラウンドが延長戦に入ったか。
+
+    盤面はラウンドごとに作り直すので、「このラウンドで延長戦を使ったか」と同じ意味に
+    なる。延長戦は1ラウンドに1回だけ。
+    """
     bombs: list[Bomb] = field(default_factory=list)
     """盤面に置かれている爆弾。置かれた順に並ぶ。
 
@@ -108,6 +124,7 @@ def create_world(
     animals: Sequence[Animal],
     spawn_order: Sequence[int] | None = None,
     starting_hp: Sequence[int] | None = None,
+    round_limit: Tick | None = None,
 ) -> WorldState:
     """ラウンドの始まりの状態を作る。ラウンドごとに作り直す（`app/session.py`）。
 
@@ -128,6 +145,8 @@ def create_world(
         starting_hp: 体力の始めの値（半分の単位。動物ごとの上乗せの前）を、プレイヤー
             番号の順に並べたもの。省くと全員 `STARTING_HP`（TypeScript 版の
             `startingHp` と同じ）。
+        round_limit: 時間切れになる盤面の時刻（`WorldState.ends_at` の始めの値）。省くと
+            `ROUND_SECONDS` ぶん（TypeScript 版の `roundLimit` と同じ）。
 
     Raises:
         ValueError: 動物の数が 1 から開始位置の数（4）までに入らないとき。始める隅の
@@ -156,7 +175,10 @@ def create_world(
         )
         for index, animal in enumerate(animals)
     ]
-    return WorldState(now=Tick(0), board=board, players=players, rng=rng)
+    ends_at = seconds_to_ticks(ROUND_SECONDS) if round_limit is None else round_limit
+    return WorldState(
+        now=Tick(0), board=board, players=players, rng=rng, ends_at=ends_at
+    )
 
 
 def _spawn_corners(count: int, spawn_order: Sequence[int] | None) -> tuple[int, ...]:
@@ -185,6 +207,7 @@ def hash_world(world: WorldState) -> int:
     """
     hasher = StateHasher()
     hasher.add_int(world.now)
+    hasher.add_int(world.ends_at).add_bool(world.sudden_death)
     hasher.add_text(world.board.encode())
     hasher.add_int(world.rng.state).add_int(world.rng.calls)
     hasher.add_int(world.ids.issued)

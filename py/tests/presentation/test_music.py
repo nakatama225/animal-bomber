@@ -145,10 +145,14 @@ class Test鳴らす場面:
         """制限時間 2 秒（120 tick）の引き分けを2回。決着のあとの待ちの間は止めたまま。
 
         遊ぶときと同じく、1 tick 進めるたびに進めたあとの盤面を渡す（`app/main.py`）。
-        表の数は、試合を始めてから進めた tick の数。
+        表の数は、試合を始めてから進めた tick の数。時間切れを引き分けにするため、延長戦
+        は切る。
         """
         config = MatchConfig(
-            seed=5, animals=(Animal.RABBIT, Animal.ELEPHANT), round_limit=Tick(120)
+            seed=5,
+            animals=(Animal.RABBIT, Animal.ELEPHANT),
+            round_limit=Tick(120),
+            sudden_death=False,
         )
         session = GameSession(config, [IdleSource(0), IdleSource(1)])
         music = _Recording()

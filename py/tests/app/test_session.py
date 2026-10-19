@@ -89,9 +89,13 @@ class Testラウンドの進行:
         assert RoundEnded(round=1, winner=None) in events
         assert session.match.wins == {}
 
-    def test_時間切れは引き分けにする(self) -> None:
-        """体力の多いほうを勝ちにすると、始まってから隅で待つのがいちばん強くなる。"""
-        session = _session(round_limit=Tick(3))
+    def test_延長戦を切ってあれば_時間切れは引き分けにする(self) -> None:
+        """体力の多いほうを勝ちにすると、始まってから隅で待つのがいちばん強くなる。
+
+        延長戦を入れてあれば、時間切れで延長戦に入る
+        （`tests/systems/test_sudden_death.py`）。
+        """
+        session = _session(round_limit=Tick(3), sudden_death=False)
         events = [event for _ in range(3) for event in session.tick()]
         assert events == [RoundEnded(round=1, winner=None)]
         assert session.match.wins_of(0) == 0

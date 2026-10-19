@@ -113,5 +113,5 @@ def hurt(
     if player.hp <= 0:
         player.hp = 0
         player.life = OUT
-        events.append(PlayerDown(target=player.id, by=by))
+        events.append(PlayerDown(target=player.id, by=by, at=player.position))
     return events

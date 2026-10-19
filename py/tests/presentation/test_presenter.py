@@ -33,6 +33,8 @@ from animal_bomber.domain.events import (
     RoundEnded,
     SimEvent,
     Sprayed,
+    SuddenDeath,
+    SuddenDeathReason,
     TechniqueMoment,
     TechniqueUsed,
 )
@@ -300,12 +302,12 @@ class Test被弾:
         events: list[SimEvent] = [
             PlayerHurt(target=0, by=1, amount=2),
             ItemDropped(cell=Cell(2, 1), kind=ItemKind.FIRE),
-            PlayerDown(target=0, by=1),
+            PlayerDown(target=0, by=1, at=Point(1.5, 1.5)),
         ]
         assert sounds_of(events) == [SoundName.SPIT, SoundName.DIE]
         no_spit: list[SimEvent] = [
             PlayerHurt(target=0, by=1, amount=2),
-            PlayerDown(target=0, by=1),
+            PlayerDown(target=0, by=1, at=Point(1.5, 1.5)),
         ]
         assert sounds_of(no_spit) == [SoundName.DIE]
 
@@ -313,7 +315,7 @@ class Test被弾:
         events: list[SimEvent] = [
             PlayerHurt(target=0, by=1, amount=2),
             PlayerHurt(target=1, by=1, amount=2),
-            PlayerDown(target=1, by=1),
+            PlayerDown(target=1, by=1, at=Point(21.5, 1.5)),
         ]
         assert sounds_of(events) == [SoundName.HURT, SoundName.DIE]
 
@@ -547,10 +549,11 @@ ALL_EVENTS: list[SimEvent] = [
     Sprayed(player=1, cells=(Cell(4, 1),), facing=Direction.RIGHT),
     EffectApplied(target=1, effect=EffectKind.SLOW),
     PlayerHurt(target=0, by=1, amount=2),
-    PlayerDown(target=0, by=1),
+    PlayerDown(target=0, by=1, at=Point(1.5, 1.5)),
     TechniqueUsed(player=1, special=False),
     TechniqueMoment(player=1, moment=Moment.RAMMED),
     BurntOff(player=0, cell=Cell(2, 1)),
+    SuddenDeath(reason=SuddenDeathReason.TIME_UP, players=(0, 1)),
     RoundEnded(round=1, winner=None),
     MatchEnded(champion=1),
 ]

@@ -31,6 +31,7 @@ from animal_bomber.domain.events import (
     RoundEnded,
     SimEvent,
     Sprayed,
+    SuddenDeath,
     TechniqueMoment,
     TechniqueUsed,
 )
@@ -72,14 +73,16 @@ def event_row(event: SimEvent) -> list[object]:
             return ["effectApplied", target, effect.value]
         case PlayerHurt(target=target, by=by, amount=amount):
             return ["playerHurt", target, by, amount]
-        case PlayerDown(target=target, by=by):
-            return ["playerDown", target, by]
+        case PlayerDown(target=target, by=by, at=at):
+            return ["playerDown", target, by, at.x, at.y]
         case TechniqueUsed(player=player, special=special):
             return ["techniqueUsed", player, special]
         case TechniqueMoment(player=player, moment=moment):
             return ["techniqueMoment", player, moment.value]
         case BurntOff(player=player, cell=cell):
             return ["burntOff", player, cell.col, cell.row]
+        case SuddenDeath(reason=reason, players=players):
+            return ["suddenDeath", reason.value, list(players)]
         case RoundEnded(round=number, winner=winner):
             return ["roundEnded", number, winner]
         case MatchEnded(champion=champion):

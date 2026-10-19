@@ -269,3 +269,34 @@ ROUND_INTERMISSION_SECONDS: Final = 2
 
 ROUND_INTERMISSION: Final = seconds_to_ticks(ROUND_INTERMISSION_SECONDS)
 """ラウンドが決まってから、次の盤面を作るまでの間（tick）。120。"""
+
+# ------------------------------------------------------------------ 延長戦
+
+SUDDEN_DEATH_SECONDS: Final = 60
+"""延長戦（サドンデス）の長さ（秒）。これでも決まらなければ引き分けにする。
+
+延長戦に入るのは、時間切れの時点で2人以上残っているときと、残っていた全員が同じ tick に
+倒れたとき。1ラウンドに1回だけ（原型の checkEnd・enterSuddenDeath。TypeScript 版と
+同じ）。引き分けで終わるラウンドを減らすためのもの。
+"""
+
+SUDDEN_DEATH_LENGTH: Final = seconds_to_ticks(SUDDEN_DEATH_SECONDS)
+"""延長戦の長さ（tick）。3600。"""
+
+SUDDEN_DEATH_HP: Final = 2
+"""延長戦の体力（半分の単位。2 で爆風1回ぶん。原型の enterSuddenDeath の hp=1）。
+
+1発で決まるようにする。体力を持ち越すと、延長戦に入る前に逃げ回って体力を残した側が
+有利になる（TypeScript 版の注記）。
+"""
+
+SUDDEN_DEATH_INVULNERABLE: Final = seconds_to_ticks(2.2)
+"""延長戦が始まった直後の無敵（tick。原型の invuln=2.2 秒）。132。
+
+全員を開始位置へ移し、爆弾・火力・靴を上限にする。移った直後は盤面の様子が一変して
+いるので、つかむまでの間は被弾しないようにする（TypeScript 版の注記）。
+
+爆弾・火力・靴を上限にするのは、決着を急がせるため。原型は 2026-08-04 まで初期値に
+戻していて、延長戦に入ったラウンドの半分が引き分けで、ラウンドを空転させていた
+（`legacy/animal-bomber-notes.md` の「サドンデスで火力/爆弾MAXにした効果」）。
+"""

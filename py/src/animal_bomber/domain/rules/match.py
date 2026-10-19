@@ -21,9 +21,20 @@ class MatchConfig:
     None なら番号の順。1台で2人が遊ぶときは `DUEL_SPAWN_ORDER`（対角）を渡す。
     """
     round_limit: Tick = seconds_to_ticks(ROUND_SECONDS)
-    """1ラウンドの制限時間（tick）。過ぎたら引き分け（`systems/round.py`）。"""
+    """1ラウンドの制限時間（tick）。
+
+    過ぎたときに2人以上残っていれば延長戦、延長戦を切ってあれば引き分け
+    （`systems/round.py`）。⚠️ 残り時間の判定は、これではなく盤面の `WorldState.ends_at`
+    を見る（延長戦に入ると置き直すので、この値は延長を知らない）。
+    """
     wins_to_take: int = WINS_TO_TAKE_MATCH
     """何勝で試合を取るか。"""
+    sudden_death: bool = True
+    """決着がつかないとき、1ラウンドに1回だけ延長戦（サドンデス）に入るか。
+
+    切ると、時間切れも全員が同じ tick に倒れたのも引き分けにする（原型の「ルールを
+    きめる」のサドンデス ON/OFF。TypeScript 版の既定と同じく入れる）。
+    """
     starting_hp: tuple[int, ...] | None = None
     """体力の始めの値（半分の単位。動物ごとの上乗せの前）を、プレイヤー番号の順に。
 
