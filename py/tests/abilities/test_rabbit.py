@@ -350,6 +350,42 @@ class Test撒く範囲:
         assert Cell(4, 5) not in cells
         assert len(cells) == 19
 
+    def test_2つが同じtickに同じマスへ撒くと_新しいほうのうんこになる(self) -> None:
+        """原型の updatePoroporos は配列を後ろから回す（L2756）。
+
+        原型の答え：中心 (5, 7) の古い撒く本体と (7, 7) の新しい撒く本体を同じ update
+        から撒くと、新しいほうが先に撒き、古いほうはアイテムのあるマスを飛ばす（L2768）。
+        40 フレーム目の 1周目どうしの (6, 7) と、80 フレーム目の 2周目どうしの (5, 5)・
+        (6, 5)・(7, 5)・(5, 9)・(6, 9)・(7, 9) は新しいほうのもの。持ち主ごとのマスの
+        並びは、原型を画面なしで動かして見たもの（TypeScript 版と同じ場面）。
+        """
+        world, older, newer = arena((Animal.RABBIT, Animal.RABBIT))
+        place(older, Cell(1, 1))
+        world.actors.extend(
+            [
+                Scatter(center=Cell(5, 7), owner=older.id),
+                Scatter(center=Cell(7, 7), owner=newer.id),
+            ]
+        )
+        advance(world, idle(world), 130)
+
+        def owned_by(owner: PlayerState) -> list[tuple[int, int]]:
+            return [
+                (item.cell.col, item.cell.row)
+                for item in world.items
+                if item.scattered_by == owner.id
+            ]
+
+        assert owned_by(older) == [
+            (5, 7), (5, 6), (4, 7), (5, 8),
+            (3, 5), (4, 5), (3, 6), (3, 7), (3, 8), (3, 9), (4, 9),
+        ]  # fmt: skip
+        assert owned_by(newer) == [
+            (7, 7), (7, 6), (6, 7), (8, 7), (7, 8),
+            (5, 5), (6, 5), (7, 5), (8, 5), (9, 5), (9, 6), (9, 7), (9, 8),
+            (5, 9), (6, 9), (7, 9), (8, 9), (9, 9),
+        ]  # fmt: skip
+
 
 class Test撒いている間の爆弾:
     """原型の canPlaceBomb は撒いている状態を見ない。"""

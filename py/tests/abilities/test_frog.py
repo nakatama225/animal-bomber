@@ -8,6 +8,9 @@ slimeBurst・updateSlimes・startTongue・updateTongue・tongueBurnCheck）を�
 実行環境しだい）。跳ぶ先は「どのマスに着地しうるか」の集まりで比べる。
 """
 
+import pytest
+
+from animal_bomber.domain.abilities import frog as frog_module
 from animal_bomber.domain.abilities.frog import (
     REGEN_TIME,
     SLIME_FLY_TICKS,
@@ -22,6 +25,7 @@ from animal_bomber.domain.abilities.frog import (
 from animal_bomber.domain.abilities.results import Progress
 from animal_bomber.domain.abilities.techniques import hold_technique
 from animal_bomber.domain.core.coord import Cell, Direction
+from animal_bomber.domain.core.rng import Rng
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import (
     BurntOff,
@@ -833,7 +837,9 @@ class Test粘膜爆弾が爆発する番:
         """
         world, frog, _ = self.about_to_burst()
         second = SlimeBomb(cell=Cell(11, 7), owner=frog.id, hops_left=5)
-        world.actors.append(second)
+        # 粘膜爆弾は新しいものから進める（L2949）ので、別の粘膜爆弾は古いほう（盤面の
+        # 物の並びの前）に置き、爆発するほうのあとに進める。
+        world.actors.insert(0, second)
         first = simulation.step(world, idle(world))
         assert self.exploded_at(first) == [Cell(9, 7)]
         assert (11, 7, False) in blast_cells(world)
@@ -841,3 +847,53 @@ class Test粘膜爆弾が爆発する番:
         following = simulation.step(world, idle(world))
         assert self.exploded_at(following) == [Cell(11, 7)]
         assert second not in world.actors
+
+
+class Test同じtickに跳ねる粘膜爆弾の順:
+    """原型の updateSlimes は配列を後ろから回す（L2949）。"""
+
+    def test_新しく投げたほうが先に_跳ぶ先と次の間隔の乱数を引く(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """原型：古い A と新しい B が同じ update に跳ねると、B が先に乱数を引く。
+
+        B の番に跳ぶ先（L2970）と間隔（L2979）を引き終えてから、A の番に引く（種 7・11・
+        300 で、どれも B → A）。原型の乱数は列が違うので、どちらの番に引いたかで比べる
+        （TypeScript 版と同じ場面）。
+        """
+        world, _, _ = arena()
+        older = SlimeBomb(cell=Cell(5, 5), owner=0, hops_left=5)
+        newer = SlimeBomb(cell=Cell(13, 9), owner=0, hops_left=5)
+        world.actors.extend([older, newer])
+        turn: list[str] = []
+        real = frog_module.advance_slime
+
+        def spied(world: WorldState, slime: SlimeBomb) -> Progress:
+            turn.append("古い" if slime is older else "新しい")
+            try:
+                return real(world, slime)
+            finally:
+                turn.pop()
+
+        monkeypatch.setattr(frog_module, "advance_slime", spied)
+        draws: list[str] = []
+
+        class Recording(Rng):
+            """どちらの番に引いたかを書き留めて、いつも 0 を返す試合の乱数。
+
+            2つの間隔がそろうので、同じ tick に着地して、同じ tick に跳ねる。
+            """
+
+            def random(self) -> float:
+                draws.append(turn[-1] if turn else "ほか")
+                return 0.0
+
+        world.rng = Recording(0)
+        for _ in range(100):
+            if newer.hops_left != 5:
+                break
+            draws.clear()
+            simulation.step(world, idle(world))
+        assert (older.hops_left, newer.hops_left) == (4, 4)
+        # 1つの番に8回（跳ぶ先の8つの向きを混ぜるのに7回、次の間隔に1回）。
+        assert draws == ["新しい"] * 8 + ["古い"] * 8

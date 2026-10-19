@@ -12,7 +12,12 @@ from collections.abc import Callable
 
 from animal_bomber.domain.abilities.techniques import advance_actor
 from animal_bomber.domain.events import SimEvent
-from animal_bomber.domain.state.actors import OWNER_TURN, Actor, actor_turn
+from animal_bomber.domain.state.actors import (
+    OWNER_TURN,
+    Actor,
+    actor_turn,
+    newest_first,
+)
 from animal_bomber.domain.state.player import PlayerState
 from animal_bomber.domain.state.world import WorldState
 
@@ -20,7 +25,8 @@ from animal_bomber.domain.state.world import WorldState
 def step_actors(world: WorldState) -> list[SimEvent]:
     """プレイヤーが動き終わったあとに進めるものを、`actor_turn` の小さい順に進める。
 
-    同じ数どうしは出た順。持ち主の番に進めるもの（`OWNER_TURN`）は飛ばす。
+    同じ数どうしは出た順。`newest_first` のものは新しく出たものから。持ち主の番に進める
+    もの（`OWNER_TURN`）は飛ばす。
     """
     return _advance(world, lambda actor: actor_turn(actor) != OWNER_TURN)
 
@@ -40,10 +46,25 @@ def _advance(world: WorldState, picks: Callable[[Actor], bool]) -> list[SimEvent
     進めている間に増えることがある（爆発して別のものを出す・舌が焼けて焼けた舌を出す、
     など）ので、この tick に進めるものを先に決めておく。この tick に増えたものは、次の
     tick から進め、並びの後ろに付ける。盤面の物は実体で比べる（`state/actors.py`）ので、
-    `in` は同じ実体かを見る。並べ替えは安定（同じ数どうしは出た順のまま）。
+    `in` は同じ実体かを見る。
+
+    進める順は、番（`actor_turn`）の小さい順で、同じ番どうしは出た順（`newest_first` の
+    ものは新しく出たものから。TypeScript 版の `ActorSystem` と同じ）。種類は見ず、この
+    2つの性質だけで並べる。
     """
     current = list(world.actors)
-    due = sorted((actor for actor in current if picks(actor)), key=actor_turn)
+
+    def order(entry: tuple[int, Actor]) -> tuple[int, int]:
+        age, actor = entry
+        return actor_turn(actor), -age if newest_first(actor) else age
+
+    due = [
+        actor
+        for _, actor in sorted(
+            ((age, actor) for age, actor in enumerate(current) if picks(actor)),
+            key=order,
+        )
+    ]
     events: list[SimEvent] = []
     finished: list[Actor] = []
     for actor in due:
