@@ -29,9 +29,10 @@ def first_draw_times(tile: int) -> dict[str, dict[str, float]]:
     """マス `tile` の、種類ごとの初めて描く時間（ms）。
 
     種類は、爆弾の部品・爆風（炎と白い芯）・ふだんのアイテム・うさぎの体（歩く姿と
-    止まった姿。ふだんと点滅の薄さ）・技の部品（掘る身ぶり・舌・粘膜爆弾・炎）と、出たときに
-    描く姿の例（撒いている身ぶり・跳び上がり・状態の印）。最後に、試合の前に描いておく
-    時間の合計（`prebuild`）。
+    止まった姿。ふだんと点滅の薄さ）・技の部品（掘る身ぶり・舌・粘膜爆弾・炎）・外周の鍋と
+    葱（5匹ぶんの鍋・帯の長さの全部・🌿・点線と葱の4向き）と、出たときに描く姿の例
+    （撒いている身ぶり・跳び上がり・状態の印）。最後に、試合の前に描いておく時間の合計
+    （`prebuild`）。
     """
     layout = Layout(tile)
     pygame.display.set_mode(layout.surface_size)
@@ -61,6 +62,7 @@ def first_draw_times(tile: int) -> dict[str, dict[str, float]]:
     timed("tongue", art.tongues.prebuild)
     timed("slimes", art.slimes.prebuild)
     timed("foxfires", art.foxfires.prebuild)
+    timed("negibons", lambda: art.negibons.prebuild(list(Animal)))
     worst = 0.0
     for facing in Direction:
         started = time.perf_counter()

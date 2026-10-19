@@ -297,7 +297,7 @@ class Presenter:
                 # 音は泣く状態（`EffectApplied`）で鳴らす。煙は絵の側が出す。
                 pass
             case LeekThrown():
-                # 原型の fireNegi。同じ tick に2人が撃てば2回鳴らす（まとめない。
+                # 原型の fireNegi。同じ tick に2体が撃てば2回鳴らす（まとめない。
                 # モジュールの説明）。
                 play(SoundName.NEGI)
             case LeekStopped(by=by):

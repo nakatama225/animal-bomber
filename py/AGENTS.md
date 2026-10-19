@@ -68,8 +68,8 @@ uv run tools/verify.sh   # ruff → ruff format --check → mypy --strict → li
 - 薄れる絵は、原型の `globalAlpha` と同じく塗る命令ごとに薄めます。命令が重なる絵をまとめて
   薄めると、重なった所の色が原型と違います（命令1つずつの絵を薄めて重ねるか、canvas の不透明度を
   下げてから描き直して取っておく）。落とし穴にはまったプレイヤーの不透明度の戻し忘れ（原型の
-  不具合）も写してあります。`PlayerSprites.draw` が返す不透明度を、次のプレイヤーと炎へ渡して
-  ください
+  不具合）も写してあります。`PlayerSprites.draw` が返す不透明度を、次のプレイヤーと炎と葱へ
+  渡してください（外周の鍋は不透明度を自分で決めるので渡さない）
 - 取っておく絵の段の数（`PULSE_LEVELS` など）を変えるときは、ずれの上限のテスト
   （`tests/presentation/test_quantization_bounds.py`）と、取っておいた絵の検査（`test_baked*.py`）も
   直します。段の数は、先にずれの上限を決めてから出します（定数の docstring に上限を書く）

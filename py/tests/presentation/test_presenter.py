@@ -544,7 +544,7 @@ class Testラウンドの終わり:
 
 class Test葱ボンと延長戦:
     def test_葱を撃つと_撃った数だけ鳴らす(self) -> None:
-        """原型の fireNegi（L2289）。同じ tick に2人が撃てば2回（まとめない）。"""
+        """原型の fireNegi（L2289）。同じ tick に2体が撃てば2回（まとめない）。"""
         one = LeekThrown(player=0, origin=Point(1.5, -0.31), facing=Direction.DOWN)
         two = LeekThrown(player=1, origin=Point(23.31, 4.5), facing=Direction.LEFT)
         assert sounds_of([one]) == [SoundName.NEGI]
