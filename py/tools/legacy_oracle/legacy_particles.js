@@ -34,6 +34,8 @@ const cases = [];
 function run(name, inputs, call, setup) {
   X.grid = emptyGrid();
   X.particles = []; X.items = []; X.bombs = []; X.blasts = [];
+  // 爆風のマスの集合は原型の const なので、中身を空にする（前のケースの爆風を残さない）。
+  X.blastSet.clear();
   X.shakeAmt = 0;
   if (setup) setup();
   const used = [];
@@ -94,8 +96,79 @@ for (const n of [1, 2, 5]) {
     for (let i = 0; i < n; i++) { const b = X.spawnBomb(p, 3 + i * 2, 7); b.power = 3; }
   });
 }
+/* ---------- 葱ボンと延長戦（段階 8 で足した） ---------- */
+const DT = 1 / 60;
+// 止まった葱の煙（updateNegis を 1 update ぶん）。射程を越えた・柱で砕けた・爆風で焼けた・爆弾に弾かれた。
+for (const [why, negi, setup] of [
+  ['range', { x: 5.5, y: 3.5, vx: 1, vy: 0, owner: 1, life: 2, dist: 5.95 }, null],
+  ['wall', { x: 2.5, y: 1.95, vx: 0, vy: 1, owner: 1, life: 2, dist: 1 }, null],
+  ['blast', { x: 5.5, y: 3.95, vx: 0, vy: 1, owner: 1, life: 2, dist: 1 }, () => X.addBlast(5, 4, true, 0)],
+  ['bomb', { x: 5.5, y: 3.95, vx: 0, vy: 1, owner: 1, life: 2, dist: 1 }, () => { X.bombs = [{ x: 5, y: 4, timer: 2 }]; }],
+]) {
+  run(`updateNegis ${why}`, { fn: 'updateNegis', why, negi: { ...negi } }, () => {
+    X.updateNegis(DT);
+    if (X.negis.length !== 0) throw new Error(`葱が止まらなかった: ${why}`);
+  }, () => {
+    X.players = [];
+    X.negis = [{ ...negi }];
+    if (setup) setup();
+  });
+}
+// 葱が当たって入れ替わった（揺れ 9 と、当たったプレイヤーのいたマスの煙）。
+{
+  const shooter = playerOf('fox', { id: 1, state: 'NEGIBON', negiT: 10, negiCool: 0 });
+  const victim = playerOf('rabbit', { id: 0, cx: 7.3, cy: 9.6 });
+  run('negiHit', { fn: 'negiHit', at: [7.3, 9.6] }, () => {
+    X.negiHit(shooter, victim);
+    if (shooter.state !== 'ALIVE' || victim.state !== 'NEGIBON') throw new Error('入れ替わらなかった');
+  }, () => { X.players = [victim, shooter]; X.G.time = 100; });
+}
+// 外周を閉じた（外周のプレイヤーは退場し、飛んでいる葱は消える。煙も揺れも出さない）。
+{
+  const lane = playerOf('frog', { id: 1, state: 'NEGIBON', negiT: 20, negiCool: 1 });
+  run('negibonCutoff', { fn: 'negibonCutoff' }, () => {
+    X.negibonCutoff();
+    if (lane.state !== 'OUT' || X.negis.length !== 0) throw new Error('外周が閉じなかった');
+  }, () => {
+    X.players = [playerOf('rabbit', { id: 0 }), lane];
+    X.negis = [{ x: 6.3, y: 4.6, vx: 1, vy: 0, owner: 1, life: 2, dist: 1 }];
+    X.G.time = 59.9;
+  });
+}
+// 倒れて外周へ回る（残り時間が 60 秒より長い）。粒は倒れた位置に出る（toNegibon は位置を動かさない）。
+{
+  const p = playerOf('mole', { cx: 7.5, cy: 9.5 });
+  run('kill to negibon', { fn: 'kill', animal: 'mole', cx: 7.5, cy: 9.5, time: 100 }, () => {
+    X.kill(p);
+    if (p.state !== 'NEGIBON') throw new Error('外周へ回らなかった');
+  }, () => { X.players = [p]; X.G.time = 100; });
+}
+// 同じ update に寿命で消える狐火が2つ。原型は後ろから（新しいものから）回すので、煙もその順。
+run('updateFoxfires two expire', { fn: 'updateFoxfires', expire: [[3, 5], [9, 7]] }, () => {
+  X.updateFoxfires(DT);
+  if (X.foxfires.length !== 0) throw new Error('狐火が消えなかった');
+}, () => {
+  X.players = [];
+  X.foxfires = [{ x: 3, y: 5, owner: 0, t: 0, life: 0.01, trail: [] },
+    { x: 9, y: 7, owner: 0, t: 0, life: 0.01, trail: [] }];
+});
+// 延長戦に入る update。寿命で消えた狐火には煙を出し、延長戦の片付けで消えた狐火には出さない。
+// 前からあった粒子と揺れは捨てない。
+run('updateFoxfires then enterSuddenDeath', { fn: 'enterSuddenDeath', expire: [3, 5], cleared: [9, 7],
+  kept: { x: 4.5, y: 6.5, txt: '💣' }, shake: 6 }, () => {
+  X.updateFoxfires(DT);
+  X.enterSuddenDeath(X.players.filter(p => p.state === 'ALIVE'), '時間切れ');
+  if (X.foxfires.length !== 0 || !X.G.sudden) throw new Error('延長戦に入らなかった');
+}, () => {
+  X.players = [playerOf('rabbit', { id: 0 }), playerOf('fox', { id: 1, cx: 9.5, cy: 3.5 })];
+  X.foxfires = [{ x: 3, y: 5, owner: 1, t: 0, life: 0.01, trail: [] },
+    { x: 9, y: 7, owner: 1, t: 0, life: 1.0, trail: [] }];
+  X.particles = [{ x: 4.5, y: 6.5, vx: 0, vy: -1.2, life: 0.5, col: '#ffd23f', sz: 20, txt: '💣' }];
+  X.shakeAmt = 6;
+});
+
 require('fs').writeFileSync(out, JSON.stringify({
-  source: 'legacy/animal-bomber.html の puff・destroySoft・kill・hurt・hop・elephantSnot・chargeSweep・explodeChain',
+  source: 'legacy/animal-bomber.html の puff・destroySoft・kill・hurt・hop・elephantSnot・chargeSweep・explodeChain・updateNegis・negiHit・negibonCutoff・updateFoxfires・enterSuddenDeath',
   randomValues: RANDOM,
   cases,
 }, null, 1));

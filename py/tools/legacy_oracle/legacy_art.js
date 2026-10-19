@@ -341,8 +341,47 @@ for (const [dir, leapTicks] of [['right', 42], ['left', 18], ['down', 30]]) {
 bodyCase('walk-edge-694', 44, 700, { dir: 'right', walk: 0.8, lastMoveTicks: 694 });
 bodyCase('walk-stopped-693', 44, 700, { dir: 'right', walk: 0.8, lastMoveTicks: 693 });
 
+/* ---------- drawNegibons（外周の鍋と、飛んでいる葱。段階 8 で足した） ----------
+   鍋は外周の4辺 × 撃つ間隔の残り（0 なら 🌿、1.5 秒は帯が半分、3.5 秒は外周へ回った直後で
+   帯が鍋より長い）× マス 44・60。動物は辺ごとにずらして、5匹の絵文字がどれも出るようにする。
+   negiT は辺の途中の小数（鍋は外周を続けて動くので、マスの中央に限らない）。
+   入力には原型の negiPos の答えも書き出す（Python 版は自分の外周の式で位置を出して比べる）。 */
+const SIDE_T = [['top', 3.25], ['right', X.IN_W + 5.6], ['bottom', X.IN_W + X.IN_H + 7.1],
+  ['left', 2 * X.IN_W + X.IN_H + 4.3]];
+function negibonOf(key, id, negiT, negiCool) {
+  return playerOf(key, { id, state: 'NEGIBON', negiT, negiCool });
+}
+function negibonInputs(p) {
+  return { id: p.id, animal: p.animal.key, negiT: p.negiT, negiCool: p.negiCool, pos: X.negiPos(p.negiT) };
+}
+function negiCase(name, tile, negibons, negis, others) {
+  X.players = [...negibons, ...(others || [])];
+  X.negis = negis.map(n => ({ ...n }));
+  run('drawNegibons', `${name}@${tile}`,
+    { tile, elapsedTicks: 0, negibons: negibons.map(negibonInputs), negis: negis.map(n => ({ ...n })) },
+    () => X.drawNegibons());
+}
+for (const tile of TILES) {
+  for (const [s, [side, negiT]] of SIDE_T.entries()) {
+    for (const [c, negiCool] of [0, 1.5, 3.5].entries()) {
+      const key = ANIMAL_KEYS[(s + c) % ANIMAL_KEYS.length];
+      negiCase(`${side}-cool-${negiCool}-${key}`, tile, [negibonOf(key, 0, negiT, negiCool)], []);
+    }
+  }
+  // 飛んでいる葱（4向き。原型は atan2(vy, vx) だけ回して、右向きの絵を描く）
+  for (const [dir, [vx, vy]] of Object.entries(X.DIRV)) {
+    negiCase(`negi-${dir}`, tile, [], [{ x: 6.3, y: 4.6, vx, vy, owner: 0, life: 2, dist: 1 }]);
+  }
+}
+// 鍋は全員ぶんを番号の順に描いてから、葱を全部描く。盤面にいるプレイヤーは描かない。
+negiCase('order', 44,
+  [negibonOf('fox', 1, 30.4, 0.8), negibonOf('frog', 3, 50.2, 0)],
+  [{ x: 21.7, y: 9.5, vx: -1, vy: 0, owner: 1, life: 2, dist: 1.1 },
+    { x: 4.5, y: 16.2, vx: 0, vy: -1, owner: 3, life: 2.5, dist: 0.6 }],
+  [playerOf('rabbit', { id: 0, cx: 7.5, cy: 7.5 })]);
+
 require('fs').writeFileSync(out, JSON.stringify({
-  source: 'legacy/animal-bomber.html の描く関数（draw・drawTile・drawItem・drawBomb・drawBlast・drawPlayer・drawSlimes・drawFoxfires・drawParticle）と、drawPlayer の中の部品（roundRect・drawEye・drawTail・headRabbit・drawAnimalBody）',
+  source: 'legacy/animal-bomber.html の描く関数（draw・drawTile・drawItem・drawBomb・drawBlast・drawPlayer・drawSlimes・drawFoxfires・drawParticle・drawNegibons）と、drawPlayer の中の部品（roundRect・drawEye・drawTail・headRabbit・drawAnimalBody）',
   randomValues: RANDOM,
   cases,
 }, null, 0));

@@ -169,11 +169,15 @@ global.__X = {
   drawSlimes, drawFoxfires, drawParticle, drawNegibons, roundRect, drawEye, triEar, inkLine,
   headRabbit, headMole, headFox, headFrog, drawTail, drawElephantHead,
   puff, shake, kill, hurt, destroySoft, blowPoop, spitPowerup, makePlayer, startGame, startRound, update,
-  hop, elephantSnot, chargeSweep, chargeDrop, explodeChain, spawnBomb,
+  hop, elephantSnot, chargeSweep, chargeDrop, explodeChain, spawnBomb, addBlast,
+  negiPos, fireNegi, updateNegis, negiHit, toNegibon, negibonCutoff, negibonAvailable, enterSuddenDeath,
+  updateFoxfires,
+  get blastSet(){return blastSet},
   A, SE, BGM, tone, noiseBurst, CFG, ANIMALS, ITEM_DEF, POOPS, POOP_KEYS, SPECIALS, specialOf, specialHoldOf,
   COLS, ROWS, LANE, EMPTY, HARD, SOFT, BOMB_FUSE, BLAST_DUR, INVULN, FOX_LEAP, PORO_TIME, PORO_LIFE, POOP_LIFE,
   SNOT_MELT, PIT_DIG, PIT_HOLD, TONGUE_STEP, SLIME_FLY, IT_POOP, IT_BANANA, IT_ONION, IT_CHICKEN,
   IT_BOMB, IT_FIRE, IT_SHOE,
+  NEGI_COOL, NEGI_ENTER_COOL, NEGI_CUTOFF, NEGI_RANGE, DIRV, IN_W, IN_H, PERIM,
 };`;
 const realRandom = Math.random;
 Math.random = seededRandom;

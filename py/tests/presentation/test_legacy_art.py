@@ -20,9 +20,9 @@
 原型の項目の名前で書き出してあるので、描く関数の入力の形に直してから渡す
 （`legacy_inputs.py`）。
 
-まだ写していない描く関数のケースは、名前を挙げて飛ばす（`NEXT_STAGE`）。いまは全部
-写してあるので空。固定値に描く関数を足したら（葱ボンの段階 8 など）、写すまでここに
-挙げる。
+まだ写していない描く関数のケースは、名前を挙げて飛ばす（`NEXT_STAGE`）。固定値に
+描く関数を足したら、写すまでここに挙げる。いまは段階 8 で足した外周の鍋と葱
+（drawNegibons）を挙げてある。
 """
 
 from collections.abc import Callable
@@ -69,7 +69,7 @@ from .legacy_inputs import (
 )
 from .legacy_ops import FIXTURE, mismatch
 
-NEXT_STAGE: frozenset[str] = frozenset()
+NEXT_STAGE: frozenset[str] = frozenset({"drawNegibons"})
 """まだ写していない描く関数（次の段で写す）。ここに挙げたケースは飛ばす。"""
 
 _TILES = {"hard": Tile.HARD, "soft": Tile.SOFT, "empty": Tile.EMPTY}
@@ -263,7 +263,7 @@ def test_固定値の描く関数は_写したものか次の段のものだけ(
     assert not set(DRAWERS) & NEXT_STAGE
     checked = sum(1 for name in names if name in DRAWERS)
     skipped = sum(1 for name in names if name in NEXT_STAGE)
-    assert (checked, skipped) == (242, 0)
+    assert (checked, skipped) == (242, 33)
 
 
 def test_無敵の点滅の両方の向きを確かめている() -> None:
