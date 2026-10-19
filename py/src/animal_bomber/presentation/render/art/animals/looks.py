@@ -92,3 +92,24 @@ def look_of(animal: Animal) -> AnimalLook:
             return _FROG
         case _:
             assert_never(animal)
+
+
+def animal_emoji(animal: Animal) -> str:
+    """動物の顔の絵文字（原型の ANIMALS の emoji）。
+
+    倒れたときに浮かぶ顔（`scene/particles.py`）と、外周の鍋に乗る顔（`art/negibons.py`）。
+    """
+    match animal:
+        case Animal.RABBIT:
+            return "\N{RABBIT FACE}"
+        case Animal.ELEPHANT:
+            return "\N{ELEPHANT}"
+        case Animal.MOLE:
+            # 原型はもぐらにビーバーの絵文字を当てている（もぐらの絵文字が無いため）。
+            return "\N{BEAVER}"
+        case Animal.FOX:
+            return "\N{FOX FACE}"
+        case Animal.FROG:
+            return "\N{FROG FACE}"
+        case _:
+            assert_never(animal)

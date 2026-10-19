@@ -1,18 +1,16 @@
 """1枚の絵（原型の draw）。盤面と、その上のもの全部を、原型と同じ順に描く。
 
 並べる順は、背景（塗りと縦のグラデーション）→ 画面の揺れ → 床と壁 → 落とし穴（描かない）
-→ アイテム → 爆弾 → 爆風 → プレイヤー（上にいる順）→ 追いかける炎 → 粘膜爆弾 → 粒子。
+→ アイテム → 爆弾 → 爆風 → プレイヤー（上にいる順）→ 追いかける炎 → 粘膜爆弾 → 外周の鍋
+（プレイヤーの番号の順）→ 飛んでいる葱 → 粒子。
 
 これは描く関数を直接呼んで1枚を描く手本で、毎フレームの描画には使わない（pygame の面に
 描く canvas で1枚を描くと、間に合わないうえ、マス 60 で 100MB の配列を使う。
 `canvas/surface.py`）。毎フレームは、取っておいた絵（`render/baked/`）を同じ順に貼って
 描き、その絵をこの手本と比べる。
 
-原型の draw のうち、ここで描かないもの：
-
-- 外周を回るプレイヤー（葱ボン）と飛んでいる葱（原型の drawNegibons）。葱ボンの仕組みを
-  足す段階 8 で写す
-- 一時停止の幕（原型の draw の最後）。盤面の上に重ねる画面の文字なので、画面の層で描く
+原型の draw のうち、ここで描かないもの：一時停止の幕（原型の draw の最後）。盤面の上に
+重ねる画面の文字なので、画面の層で描く。
 """
 
 from collections.abc import Sequence
@@ -29,6 +27,12 @@ from animal_bomber.presentation.render.art.board import draw_tile
 from animal_bomber.presentation.render.art.bombs import draw_bomb
 from animal_bomber.presentation.render.art.foxfires import FoxfireLook, draw_foxfire
 from animal_bomber.presentation.render.art.items import draw_item
+from animal_bomber.presentation.render.art.negibons import (
+    LeekLook,
+    NegibonLook,
+    draw_leek,
+    draw_negibon,
+)
 from animal_bomber.presentation.render.art.particles import ParticleLook, draw_particle
 from animal_bomber.presentation.render.art.player import PlayerLook, draw_player
 from animal_bomber.presentation.render.art.slimes import SlimeLook, draw_slime
@@ -44,8 +48,8 @@ class FrameScene:
     """1枚の絵に描くもの。
 
     盤面・アイテム・爆弾・爆風は試合の状態をそのまま渡す。プレイヤー・追いかける炎・
-    粘膜爆弾は見た目の値の形（試合の状態に無い値を含む）、粒子と画面の揺れは描く側が
-    持つもの。プレイヤーは盤面にいる者だけを渡す。
+    粘膜爆弾・外周の鍋・葱は見た目の値の形（試合の状態に無い値を含む）、粒子と画面の
+    揺れは描く側が持つもの。プレイヤーは盤面にいる者だけを、鍋は外周にいる者だけを渡す。
     """
 
     board: Board
@@ -56,6 +60,10 @@ class FrameScene:
     now: Tick
     foxfires: Sequence[FoxfireLook] = ()
     slimes: Sequence[SlimeLook] = ()
+    negibons: Sequence[NegibonLook] = ()
+    """外周の鍋（プレイヤーの番号の順。原型も players の並びで描く）。"""
+    leeks: Sequence[LeekLook] = ()
+    """飛んでいる葱（盤面の物の並びの順）。"""
     particles: Sequence[ParticleLook] = ()
     shake: float = 0.0
     """画面の揺れの幅（px。原型の shakeAmt）。"""
@@ -103,6 +111,11 @@ def draw_frame(
         draw_foxfire(canvas, layout, foxfire, scene.now)
     for slime in scene.slimes:
         draw_slime(canvas, layout, slime, scene.now)
+    # 外周の鍋を全員ぶん描いてから、飛んでいる葱を全部描く（原型の drawNegibons）。
+    for negibon in scene.negibons:
+        draw_negibon(canvas, layout, negibon)
+    for leek in scene.leeks:
+        draw_leek(canvas, layout, leek)
     for particle in scene.particles:
         draw_particle(canvas, layout, particle)
     canvas.restore()

@@ -12,6 +12,7 @@ from animal_bomber.domain.core.entity_id import EntityId
 from animal_bomber.domain.core.tick import TICKS_PER_SECOND, Tick
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import POOP_LIFETIME, ItemKind
+from animal_bomber.domain.rules.lane import lane_spot
 from animal_bomber.domain.rules.tuning import COLS, ROWS
 from animal_bomber.domain.state.board import Board, Tile
 from animal_bomber.domain.state.bomb import Blast, Bomb
@@ -21,6 +22,7 @@ from animal_bomber.presentation.render.art.animals.body import BodyPose
 from animal_bomber.presentation.render.art.animals.frog import TongueLook
 from animal_bomber.presentation.render.art.foxfires import FoxfireLook, TrailMark
 from animal_bomber.presentation.render.art.frame import FrameScene
+from animal_bomber.presentation.render.art.negibons import LeekLook, NegibonLook
 from animal_bomber.presentation.render.art.particles import ParticleLook
 from animal_bomber.presentation.render.art.player import PlayerLook
 from animal_bomber.presentation.render.art.slimes import SlimeLook
@@ -168,6 +170,30 @@ def particle_look_from(raw: dict[str, Any]) -> ParticleLook:
     )
 
 
+def negibon_look_from(raw: dict[str, Any]) -> NegibonLook:
+    """固定値の外周のプレイヤーの項目（原型の名前と秒の値）から、鍋の入力を作る。
+
+    位置と撃つ向きは、この版の外周の式（`lane_spot`）で外周の位置（negiT）から出す。
+    原型の negiPos の答え（`pos`）とは、向きが同じことをここで、位置が同じことを命令の
+    列の比べで確かめる。
+    """
+    spot = lane_spot(raw["negiT"])
+    assert spot.facing is DIRECTIONS[raw["pos"]["dir"]]
+    return NegibonLook(
+        animal=Animal(raw["animal"]),
+        x=spot.position.x,
+        y=spot.position.y,
+        facing=spot.facing,
+        cooldown=ticks_of(raw["negiCool"]),
+    )
+
+
+def leek_look_from(raw: dict[str, Any]) -> LeekLook:
+    """固定値の葱の項目（原型の x・y・vx・vy）から、葱の入力を作る。"""
+    [facing] = [d for d in Direction if d.delta == (raw["vx"], raw["vy"])]
+    return LeekLook(x=raw["x"], y=raw["y"], facing=facing)
+
+
 def oracle_board() -> Board:
     """1枚の絵のケースの盤面（`legacy_art.js` の emptyGrid に、壊せるブロックを足す）。
 
@@ -188,15 +214,19 @@ def oracle_board() -> Board:
 def frame_scene_from(inputs: dict[str, Any]) -> FrameScene:
     """1枚の絵のケースの入力から、1枚の絵に描くものを作る。
 
-    盤面・アイテム・爆弾・爆風・粒子は、固定値の入力に書き出していないので、
-    `legacy_art.js` の draw のケースに書いた値を写す（アイテムは火力・爆弾は導火線の
-    残り 1 秒・爆風は残り 18 tick の真ん中の1マス・四角い粒1つ）。プレイヤーは盤面に
-    いる者（state が ALIVE）だけを渡す（原型の drawPlayer は、退場したプレイヤーでは
-    最初に帰る）。
+    盤面・アイテム・爆弾・爆風は、固定値の入力に書き出していないので、`legacy_art.js`
+    の draw のケースに書いた値を写す（アイテムは火力・爆弾は導火線の残り 1 秒・爆風は
+    残り 18 tick の真ん中の1マス）。粒子は、書き出してあればそれを、無ければ同じく
+    写す（四角い粒1つ）。炎・粘膜爆弾・外周の鍋・葱は、書き出してあるケースだけにある。
+    プレイヤーは盤面にいる者（state が ALIVE）だけを渡す（原型の drawPlayer は、盤面に
+    いないプレイヤーでは最初に帰る）。
     """
     players = [
         player_look_from(raw) for raw in inputs["players"] if raw["state"] == "ALIVE"
     ]
+    particles = [ParticleLook(4.3, 6.1, 0.4, "#ffd23f", 5)]
+    if "particles" in inputs:
+        particles = [particle_look_from(raw) for raw in inputs["particles"]]
     return FrameScene(
         board=oracle_board(),
         items=[Item(EntityId(1), Cell(4, 3), ItemKind.FIRE)],
@@ -204,6 +234,10 @@ def frame_scene_from(inputs: dict[str, Any]) -> FrameScene:
         blasts=[Blast(EntityId(3), Cell(6, 5), 0, True, Tick(18))],
         players=players,
         now=Tick(inputs["elapsedTicks"]),
-        particles=[ParticleLook(4.3, 6.1, 0.4, "#ffd23f", 5)],
+        foxfires=[foxfire_look_from(raw) for raw in inputs.get("foxfires", [])],
+        slimes=[slime_look_from(raw) for raw in inputs.get("slimes", [])],
+        negibons=[negibon_look_from(raw) for raw in inputs.get("negibons", [])],
+        leeks=[leek_look_from(raw) for raw in inputs.get("negis", [])],
+        particles=particles,
         shake=inputs["shake"],
     )

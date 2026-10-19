@@ -11,13 +11,13 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Final, assert_never
+from typing import Final
 
 from animal_bomber.domain.core.coord import Cell, Direction
 from animal_bomber.domain.core.tick import TICKS_PER_SECOND
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng
-from animal_bomber.presentation.render.art.animals.looks import look_of
+from animal_bomber.presentation.render.art.animals.looks import animal_emoji, look_of
 from animal_bomber.presentation.render.art.particles import ParticleLook
 
 DT: Final = 1 / TICKS_PER_SECOND
@@ -220,21 +220,3 @@ def hop_dust(x: float, y: float, rng: CosmeticRng) -> list[Particle]:
         size = 3 + rng.random() * 3
         out.append(Particle(x, y + 0.3, vx, vy, 0.35, DUST_COLOR, size))
     return out
-
-
-def animal_emoji(animal: Animal) -> str:
-    """動物の顔の絵文字（原型の ANIMALS の emoji）。倒れたときに浮かぶ。"""
-    match animal:
-        case Animal.RABBIT:
-            return "\N{RABBIT FACE}"
-        case Animal.ELEPHANT:
-            return "\N{ELEPHANT}"
-        case Animal.MOLE:
-            # 原型はもぐらにビーバーの絵文字を当てている（もぐらの絵文字が無いため）。
-            return "\N{BEAVER}"
-        case Animal.FOX:
-            return "\N{FOX FACE}"
-        case Animal.FROG:
-            return "\N{FROG FACE}"
-        case _:
-            assert_never(animal)

@@ -20,9 +20,11 @@
 原型の項目の名前で書き出してあるので、描く関数の入力の形に直してから渡す
 （`legacy_inputs.py`）。
 
-まだ写していない描く関数のケースは、名前を挙げて飛ばす（`NEXT_STAGE`）。固定値に
-描く関数を足したら、写すまでここに挙げる。いまは段階 8 で足した外周の鍋と葱
-（drawNegibons）を挙げてある。
+原型の drawNegibons は外周の鍋を全員ぶん描いてから葱を全部描く1つの関数で、この版は
+鍋1つ・葱1本を描く関数に分けてある。固定値の入力の並び（鍋・葱）のとおりに呼んで比べる。
+
+まだ写していない描く関数のケースは、名前を挙げて飛ばす（`NEXT_STAGE`）。いまは全部
+写してあるので空。固定値に描く関数を足したら、写すまでここに挙げる。
 """
 
 from collections.abc import Callable
@@ -51,6 +53,7 @@ from animal_bomber.presentation.render.art.bombs import draw_bomb
 from animal_bomber.presentation.render.art.foxfires import draw_foxfire
 from animal_bomber.presentation.render.art.frame import draw_frame
 from animal_bomber.presentation.render.art.items import draw_item
+from animal_bomber.presentation.render.art.negibons import draw_leek, draw_negibon
 from animal_bomber.presentation.render.art.particles import draw_particle
 from animal_bomber.presentation.render.art.player import draw_player
 from animal_bomber.presentation.render.art.shapes import ink_line, round_rect
@@ -63,13 +66,15 @@ from .legacy_inputs import (
     foxfire_look_from,
     frame_scene_from,
     item_from,
+    leek_look_from,
+    negibon_look_from,
     particle_look_from,
     player_look_from,
     slime_look_from,
 )
 from .legacy_ops import FIXTURE, mismatch
 
-NEXT_STAGE: frozenset[str] = frozenset({"drawNegibons"})
+NEXT_STAGE: frozenset[str] = frozenset()
 """まだ写していない描く関数（次の段で写す）。ここに挙げたケースは飛ばす。"""
 
 _TILES = {"hard": Tile.HARD, "soft": Tile.SOFT, "empty": Tile.EMPTY}
@@ -211,6 +216,16 @@ def _draw_particle(
     draw_particle(canvas, Layout(inputs["tile"]), look)
 
 
+def _draw_negibons(
+    canvas: RecordingCanvas, inputs: dict[str, Any], _: CosmeticRng
+) -> None:
+    layout = Layout(inputs["tile"])
+    for raw in inputs["negibons"]:
+        draw_negibon(canvas, layout, negibon_look_from(raw))
+    for raw in inputs["negis"]:
+        draw_leek(canvas, layout, leek_look_from(raw))
+
+
 def _draw(canvas: RecordingCanvas, inputs: dict[str, Any], rng: CosmeticRng) -> None:
     draw_frame(canvas, Layout(inputs["tile"]), frame_scene_from(inputs), rng)
 
@@ -229,6 +244,7 @@ DRAWERS: dict[str, Drawer] = {
     "drawSlimes": _draw_slime,
     "drawFoxfires": _draw_foxfire,
     "drawParticle": _draw_particle,
+    "drawNegibons": _draw_negibons,
     "draw": _draw,
 }
 """写した描く関数と、固定値の入力からそれを呼ぶ関数。"""
@@ -263,7 +279,7 @@ def test_固定値の描く関数は_写したものか次の段のものだけ(
     assert not set(DRAWERS) & NEXT_STAGE
     checked = sum(1 for name in names if name in DRAWERS)
     skipped = sum(1 for name in names if name in NEXT_STAGE)
-    assert (checked, skipped) == (242, 33)
+    assert (checked, skipped) == (276, 0)
 
 
 def test_無敵の点滅の両方の向きを確かめている() -> None:

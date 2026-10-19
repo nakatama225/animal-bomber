@@ -380,6 +380,42 @@ negiCase('order', 44,
     { x: 4.5, y: 16.2, vx: 0, vy: -1, owner: 3, life: 2.5, dist: 0.6 }],
   [playerOf('rabbit', { id: 0, cx: 7.5, cy: 7.5 })]);
 
+/* ---------- draw（1枚まるごと：外周の鍋と葱の並べる順と、落とし穴の不透明度の戻し忘れ） ----------
+   炎 → 粘膜爆弾 → 鍋（全員）→ 葱（全部）→ 粒子 の順に描く。いちばん上のプレイヤーは落とし穴に
+   はまって無敵の点滅で薄い（原型はその不透明度を戻し忘れる）。鍋は不透明度を自分で 0.95 に
+   するので受けず、葱は受ける。 */
+{
+  const tile = 44;
+  const g = emptyGrid();
+  g[1][3] = X.SOFT; g[5][7] = X.SOFT;
+  X.grid = g;
+  const pit = playerOf('elephant', { id: 0, cx: 5.5, cy: 2.5, dir: 'down', invuln: 0.75, effects: { pitfall: 1.8 } });
+  const p1 = playerOf('frog', { id: 1, cx: 9.5, cy: 3.5, dir: 'down' });
+  const lanes = [negibonOf('rabbit', 2, 8.4, 2.2), negibonOf('mole', 3, 40.6, 0)];
+  X.players = [pit, p1, ...lanes];
+  X.items = [{ x: 4, y: 3, kind: 'fire', born: 0 }];
+  X.bombs = [{ x: 5, y: 5, timer: 1.0 }];
+  X.blasts = [{ x: 6, y: 5, t: X.BLAST_DUR - (BLAST_TICKS - 18) / 60, center: true }];
+  const fire = { x: 11, y: 5, owner: 1, t: 0.05, life: 1.0, trail: [{ x: 10, y: 5, a: 0.6 }] };
+  const slime = { x: 9, y: 7, sx: 5.5, sy: 5.5, owner: 1, phase: 'hop', t: 0, hopT: 0.2, wob: 0.1, hopsLeft: 2, squash: 0.6 };
+  const negis = [{ x: 9.9, y: 1.2, vx: 0, vy: 1, owner: 2, life: 2.8, dist: 1.5 },
+    { x: 15.3, y: 9.5, vx: -1, vy: 0, owner: 3, life: 2.2, dist: 3.1 }];
+  const particles = [{ x: 4.3, y: 6.1, vx: 1, vy: -2, life: 0.4, col: '#ffd23f', sz: 5 },
+    { x: 9.5, y: 1.5, vx: 0, vy: -1.2, life: 0.6, col: '#a6e06a', sz: 20, txt: '🌿' }];
+  X.foxfires = [JSON.parse(JSON.stringify(fire))];
+  X.slimes = [{ ...slime }];
+  X.negis = negis.map(n => ({ ...n }));
+  X.particles = particles.map(q => ({ ...q }));
+  X.G.paused = false;
+  X.shakeAmt = 0;
+  run('draw', `frame-negibon@${tile}`, {
+    tile, elapsedTicks: 500, shake: 0,
+    players: [pit, p1].map(p => playerInputs(p, { id: p.id, state: p.state })),
+    negibons: lanes.map(negibonInputs),
+    negis, foxfires: [fire], slimes: [slime], particles,
+  }, () => X.draw());
+}
+
 require('fs').writeFileSync(out, JSON.stringify({
   source: 'legacy/animal-bomber.html の描く関数（draw・drawTile・drawItem・drawBomb・drawBlast・drawPlayer・drawSlimes・drawFoxfires・drawParticle・drawNegibons）と、drawPlayer の中の部品（roundRect・drawEye・drawTail・headRabbit・drawAnimalBody）',
   randomValues: RANDOM,
