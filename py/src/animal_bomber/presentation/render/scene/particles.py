@@ -56,6 +56,12 @@ POOP_SMOKE: Final = "#8a6a3a"
 WATER_SMOKE: Final = "#9fd8ff"
 """鼻水で消した爆弾・溶けきったうんこの煙の色（原型の値）。"""
 
+LEEK_SMOKE: Final = "#a6e06a"
+"""止まった葱（射程・柱・爆弾）と、葱が当たって入れ替わったときの煙の色（原型の値）。"""
+
+LEEK_BURNED_SMOKE: Final = "#ffd23f"
+"""爆風で焼けた葱の煙の色（原型の値）。"""
+
 BURNED_SMOKE: Final = "#6b5443"
 """爆風で焼けたアイテムの煙の色（原型の値）。"""
 

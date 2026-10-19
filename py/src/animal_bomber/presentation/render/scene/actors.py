@@ -15,13 +15,16 @@
   足す）
 
 炎が寿命で消えたときの煙（原型の updateFoxfires の puff）も、前の tick にあった炎が
-いなくなったことで見つける（ルールの層はイベントを出さない）。
+いなくなったことで見つける（ルールの層はイベントを出さない）。延長戦の片付けで消えた炎
+（原型は煙を出さない）とは、前の tick の終わりの寿命で見分ける。同じ tick に2つ以上
+消えたら、原型と同じく新しい炎から煙を出す。
 """
 
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final, assert_never
 
+from animal_bomber.domain.abilities.fox import FOXFIRE_LIFETIME
 from animal_bomber.domain.abilities.frog import SLIME_FLY_TICKS
 from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.core.tick import Tick
@@ -147,22 +150,28 @@ class ActorTracker:
         if before is None:
             return []
         burned_out: list[Cell] = []
-        for seen in before.actors:
+        # 新しく出たものから見る。原型の updateFoxfires は炎の並びを後ろから回すので、
+        # 同じ tick に2つ以上の炎が消えると、新しい炎の煙から出る（見た目の乱数を引く
+        # 順）。
+        for seen in reversed(before.actors):
             if any(seen.actor is actor for actor in world.actors):
                 continue
             match seen.actor:
                 case Foxfire():
                     # 寿命で消えた炎には煙を出す（原型の updateFoxfires の puff）。
-                    if seen.cell is not None:
+                    # 延長戦の片付けで消えた炎には出さない（原型の enterSuddenDeath は
+                    # 煙なしで消す）。同じ tick に寿命が尽きた炎は、片付けの前に煙を
+                    # 出しているので出す。どちらかは、前の tick の終わりの寿命で見る。
+                    if seen.cell is not None and burns_out(seen.elapsed):
                         burned_out.append(seen.cell)
                 case SlimeBomb() | Pit() | Scatter() | BurntTongue():
                     # 原型も、消えたことでは煙を出さない（粘膜爆弾は爆発のイベントで
                     # 揺らし、落とし穴は落ちた状態のイベントで煙を出す。`effects.py`）。
                     pass
                 case Leek():
-                    # いまは何もしない。原型は止まった葱のマスに煙を出す
-                    # （updateNegis）。止まった葱はイベント（`LeekStopped`）で知らせる
-                    # ので、原型の絵を写す次の段では `effects.py` で出す。
+                    # 止まった葱の煙は、止まったことのイベント（`LeekStopped`）で出す
+                    # （`effects.py`）。外周を閉じたとき・延長戦の片付け・寿命・盤面の
+                    # 外へ飛んだときは、原型も煙を出さない。
                     pass
                 case _:
                     assert_never(seen.actor)
@@ -187,6 +196,15 @@ class ActorTracker:
             if trail.actor is actor:
                 return trail.marks
         return []
+
+
+def burns_out(elapsed: Tick) -> bool:
+    """前の tick の終わりに放ってから `elapsed` tick の炎が、次の tick に消えるか。
+
+    炎は tick の頭で数えた tick を増やし、寿命を超えたら消える（`abilities/fox.py` の
+    `advance_foxfire`）。
+    """
+    return elapsed + 1 > FOXFIRE_LIFETIME
 
 
 def _foe_on(world: WorldState, fire: Foxfire, downed: Sequence[int]) -> bool:

@@ -2,7 +2,8 @@
 
 固定値（`legacy_particles.json`）は、原型（`legacy/animal-bomber.html`）を node で
 読み込み、粒子と揺れを出す関数（puff・destroySoft・kill・hurt・hop・elephantSnot・chargeSweep・
-explodeChain）を決めた乱数の列で呼んで、使った乱数・出た粒子・揺れを書き出したもの。
+explodeChain・updateNegis・negiHit・negibonCutoff・updateFoxfires・enterSuddenDeath）を決めた
+乱数の列で呼んで、使った乱数・出た粒子・揺れを書き出したもの。
 リポジトリのいちばん上で次を走らせると作り直せる（何度作っても同じものになる）。
 
     cd py/tools/legacy_oracle
@@ -22,7 +23,8 @@ from typing import Any
 
 import pytest
 
-from animal_bomber.domain.core.coord import Cell, Direction
+from animal_bomber.domain.abilities.fox import FOXFIRE_LIFETIME
+from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.core.entity_id import EntityId
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import (
@@ -37,22 +39,30 @@ from animal_bomber.domain.events import (
     ItemExpired,
     ItemTaken,
     ItemWashed,
+    LanesClosed,
+    LeekStop,
+    LeekStopped,
     Moment,
     PlayerDown,
     PlayerHurt,
+    Revived,
     SimEvent,
     Sprayed,
+    SuddenDeath,
+    SuddenDeathReason,
     TechniqueMoment,
     TechniqueUsed,
 )
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.state.actions import Charge
+from animal_bomber.domain.state.actors import Foxfire
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
 from animal_bomber.domain.state.world import WorldState, create_world
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng, ScriptedRandom
-from animal_bomber.presentation.render.scene.effects import EffectField
+from animal_bomber.presentation.render.art.particles import ParticleLook
+from animal_bomber.presentation.render.scene.effects import SHAKE_DECAY, EffectField
 from animal_bomber.presentation.render.scene.particles import (
     DT,
     GRAVITY,
@@ -60,6 +70,7 @@ from animal_bomber.presentation.render.scene.particles import (
     advanced,
 )
 from animal_bomber.presentation.render.scene.snapshot import Snapshot, snapshot_of
+from animal_bomber.presentation.render.scene.tracker import SceneTracker
 
 FIXTURE: dict[str, Any] = json.loads(
     (Path(__file__).parent / "legacy_particles.json").read_text(encoding="utf-8")
@@ -306,6 +317,134 @@ class Test技:
         before = snapshot_of(world)
         world.items.remove(banana)
         run(CASES["chargeSweep banana"], [], world, before)
+
+
+def particle_of(raw: dict[str, Any]) -> Particle:
+    """固定値の粒子1つ（原型の項目の名前）から、この版の粒子を作る。"""
+    return Particle(
+        raw["x"],
+        raw["y"],
+        raw["vx"],
+        raw["vy"],
+        raw["life"],
+        raw["col"],
+        raw["sz"],
+        raw["txt"],
+        bool(raw.get("spin", False)),
+    )
+
+
+def assert_same_looks(got: list[ParticleLook], wanted: list[Particle]) -> None:
+    """描く側が読む粒子（`SceneTracker.particles`）が、粒子 `wanted` と同じ。"""
+    assert len(got) == len(wanted)
+    for look, particle in zip(got, wanted, strict=True):
+        expected = particle.look()
+        for a, e in (
+            (look.x, expected.x),
+            (look.y, expected.y),
+            (look.life, expected.life),
+        ):
+            assert math.isclose(a, e, rel_tol=TOLERANCE, abs_tol=TOLERANCE), (
+                look,
+                expected,
+            )
+        assert (look.color, look.size, look.text, look.spin) == (
+            expected.color,
+            expected.size,
+            expected.text,
+            expected.spin,
+        )
+
+
+class Test葱ボンと延長戦:
+    @pytest.mark.parametrize(
+        ("why", "cell", "by"),
+        [
+            ("range", Cell(5, 3), LeekStop.RANGE),
+            ("wall", Cell(2, 2), LeekStop.WALL),
+            ("blast", Cell(5, 4), LeekStop.BLAST),
+            ("bomb", Cell(5, 4), LeekStop.BOMB),
+        ],
+    )
+    def test_止まった葱の煙は_止まったわけで色と絵文字が違う(
+        self, why: str, cell: Cell, by: LeekStop
+    ) -> None:
+        """原型の updateNegis：射程と柱は緑の 🌿、爆風は黄色の 🌿、爆弾は緑の 🛡️。
+
+        固定値は、原型の葱を 1 update 進めて止めたもの。マスは原型が煙を出したマス
+        （止まったマス）で、ルールの層の `LeekStopped.cell` にあたる。
+        """
+        run(CASES[f"updateNegis {why}"], [LeekStopped(cell, by)])
+
+    def test_葱が当たって入れ替わると_揺れ9と_当たった位置のマスの煙(self) -> None:
+        """原型の negiHit：当たったプレイヤーのいた位置を切り捨てたマスに煙を出す。"""
+        run(CASES["negiHit"], [Revived(player=1, replaced=0, at=Point(7.3, 9.6))])
+
+    def test_外周を閉じても_粒も揺れも出さない(self) -> None:
+        """原型の negibonCutoff は、外周のプレイヤーを退場させ、葱を煙なしで消す。"""
+        run(CASES["negibonCutoff"], [LanesClosed(players=(1,))])
+
+    def test_倒れて外周へ回ると_イベントの倒れた位置に粒を出す(self) -> None:
+        """原型の kill は、外周へ回しても位置を動かさず、倒れた位置に粒を出す。
+
+        この版は、倒れた位置をイベント（`PlayerDown.at`）から取る。盤面のプレイヤーは
+        別の位置にいる（同じ tick のうちに延長戦へ入ると、開始位置へ移っている）。
+        """
+        world = world_with(Animal.MOLE)
+        world.players[0].position = Cell(1, 1).center()
+        run(CASES["kill to negibon"], [PlayerDown(0, None, Point(7.5, 9.5))], world)
+
+    def test_同じtickに寿命で消える炎が2つあると_新しい炎の煙から出す(self) -> None:
+        """原型の updateFoxfires は炎の並びを後ろから回す（見た目の乱数を引く順）。
+
+        描く側は、前の tick にあって消えた炎から煙を出す（`scene/actors.py`）。煙を
+        出した tick の最後に、粒子を 1 tick 進める（原型の update の最後と同じ）。
+        """
+        case = CASES["updateFoxfires two expire"]
+        world = world_with(Animal.FOX)
+        world.actors = [
+            Foxfire(Cell(3, 5), owner=1, elapsed=FOXFIRE_LIFETIME),
+            Foxfire(Cell(9, 7), owner=1, elapsed=FOXFIRE_LIFETIME),
+        ]
+        tracker = SceneTracker(CosmeticRng(ScriptedRandom(case["random"])))
+        world.now = Tick(0)
+        tracker.observe(world, [])
+        world.actors = []
+        world.now = Tick(1)
+        tracker.observe(world, [])
+        wanted = advanced([particle_of(raw) for raw in case["particles"]])
+        assert_same_looks(tracker.particles, wanted)
+
+    def test_延長戦に入るtickは_寿命で消えた炎だけに煙を出し_前の粒子と揺れを残す(
+        self,
+    ) -> None:
+        """原型は、寿命で消えた炎の煙を出してから、延長戦の片付けで残りの炎を煙なしで消す。
+
+        前からあった粒子と揺れも捨てない（原型の enterSuddenDeath は particles に
+        触らない）。1 tick 目に焼けたアイテムの煙と被弾の揺れを出しておき、2 tick 目に
+        延長戦に入る。
+        """
+        case = CASES["updateFoxfires then enterSuddenDeath"]
+        burned = CASES["puff #6b5443 🌑"]
+        world = world_with(Animal.FOX)
+        expiring = Foxfire(Cell(3, 5), owner=1, elapsed=Tick(FOXFIRE_LIFETIME - 1))
+        cleared = Foxfire(Cell(9, 7), owner=1, elapsed=Tick(29))
+        world.actors = [expiring, cleared]
+        randoms = burned["random"] + case["random"]
+        tracker = SceneTracker(CosmeticRng(ScriptedRandom(randoms)))
+        world.now = Tick(0)
+        tracker.observe(world, [])
+        expiring.elapsed = FOXFIRE_LIFETIME
+        cleared.elapsed = Tick(30)
+        world.now = Tick(1)
+        tracker.observe(world, [PlayerHurt(0, 1, 2), ItemBurned(AT, ItemKind.FIRE)])
+        world.actors = []
+        world.now = Tick(2)
+        tracker.observe(world, [SuddenDeath(SuddenDeathReason.TIME_UP, (0, 1))])
+        assert tracker.shake == pytest.approx(case["shake"] - 2 * SHAKE_DECAY * DT)
+        before = advanced(advanced([particle_of(raw) for raw in burned["particles"]]))
+        smoke = advanced([particle_of(raw) for raw in case["particles"][1:]])
+        assert_same_looks(tracker.particles, before + smoke)
 
 
 class Test粒子の動き:

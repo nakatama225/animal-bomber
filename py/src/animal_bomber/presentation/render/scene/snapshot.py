@@ -52,6 +52,8 @@ class ActorSnapshot:
     """いたマス（炎）。"""
     steps: int = 0
     """進もうとした回数（炎）。"""
+    elapsed: Tick = Tick(0)
+    """放ってから数えた tick（炎。寿命で消えたか、延長戦の片付けで消えたかを見る）。"""
     flown: Tick = Tick(0)
     """投げてからの tick（粘膜爆弾）。"""
     timer: Tick = Tick(0)
@@ -111,7 +113,9 @@ def _actor_snapshot(actor: Actor) -> ActorSnapshot:
     """
     match actor:
         case Foxfire():
-            return ActorSnapshot(actor, actor.cell, steps=actor.steps)
+            return ActorSnapshot(
+                actor, actor.cell, steps=actor.steps, elapsed=actor.elapsed
+            )
         case SlimeBomb():
             return ActorSnapshot(
                 actor, actor.cell, flown=actor.flown, timer=actor.timer

@@ -41,6 +41,7 @@ from animal_bomber.domain.events import (
     ItemTaken,
     ItemWashed,
     LanesClosed,
+    LeekStop,
     LeekStopped,
     LeekThrown,
     MatchEnded,
@@ -72,6 +73,8 @@ from animal_bomber.presentation.render.scene.particles import (
     CARRIED_SMOKE,
     DT,
     GOOD_SMOKE,
+    LEEK_BURNED_SMOKE,
+    LEEK_SMOKE,
     PIT_SMOKE,
     POOP_SMOKE,
     SCATTERED_SMOKE,
@@ -100,11 +103,31 @@ PIT_SHAKE: Final = 5.0
 BLOCK_SHAKE: Final = 4.0
 """突進でブロックを壊したときの画面の揺れ（px。原型の updateCharge）。"""
 
+SWAP_SHAKE: Final = 9.0
+"""葱が当たって入れ替わったときの画面の揺れ（px。原型の negiHit）。"""
+
 RAM_BOMB_SHAKE: Final = 7.0
 """突進が爆弾に当たって起こしたときの揺れ（px。原型の updateCharge）。
 
 連鎖の揺れとの大きいほうを取る（`exploded_shake`）。
 """
+
+
+def leek_smoke(by: LeekStop) -> tuple[str, str]:
+    """止まった葱の煙の色と絵文字（原型の updateNegis の puff）。
+
+    射程を越えた・柱で砕けたら緑の 🌿、爆風で焼けたら黄色の 🌿、爆弾に弾かれたら緑の
+    🛡️（爆弾を盾にして防いだ印）。
+    """
+    match by:
+        case LeekStop.RANGE | LeekStop.WALL:
+            return LEEK_SMOKE, "\N{HERB}"
+        case LeekStop.BLAST:
+            return LEEK_BURNED_SMOKE, "\N{HERB}"
+        case LeekStop.BOMB:
+            return LEEK_SMOKE, "\N{SHIELD}\N{VARIATION SELECTOR-16}"
+        case _:
+            assert_never(by)
 
 
 def explosion_shake(count: int) -> float:
@@ -213,11 +236,14 @@ class EffectField:
                     pass
                 case PlayerHurt():
                     self._shake(HURT_SHAKE)
-                case PlayerDown(target=target):
+                case PlayerDown(target=target, at=at):
+                    # 倒れた位置はイベントから取る。同じ tick のうちに延長戦へ入ると、
+                    # 盤面のプレイヤーはもう開始位置へ移っている（`PlayerDown.at`）。
                     down = player_by_id(world, target)
                     if down is not None:
-                        x, y = down.position.x, down.position.y
-                        self.particles += knocked_out(x, y, down.animal, self._rng)
+                        self.particles += knocked_out(
+                            at.x, at.y, down.animal, self._rng
+                        )
                 case TechniqueUsed(player=player, special=False):
                     user = player_by_id(world, player)
                     if user is not None and raises_dust(user.animal):
@@ -229,14 +255,18 @@ class EffectField:
                     self._puff(cell, TONGUE_SMOKE, "\N{TONGUE}")
                 case BombPlaced() | RoundEnded() | MatchEnded():
                     pass
-                case LeekThrown() | LeekStopped() | Revived() | LanesClosed():
-                    # いまは何もしない。原型は葱が止まったマスに煙（updateNegis の
-                    # puff）を、入れ替わると画面の揺れ 9 と煙（negiHit）を出す。原型の
-                    # 音と絵を写す次の段で足す。
-                    pass
-                case SuddenDeath():
-                    # いまは何もしない。延長戦に入ったときの見た目（原型の絵と知らせ）
-                    # は、原型の音と絵を写す次の段で足す。
+                case LeekStopped(cell=cell, by=by):
+                    self._puff(cell, *leek_smoke(by))
+                case Revived(at=at):
+                    # 原型の negiHit：揺れ 9 と、当たったプレイヤーのいたマスの煙。
+                    self._shake(SWAP_SHAKE)
+                    self._puff(at.cell(), LEEK_SMOKE, "\N{HERB}")
+                case LeekThrown() | LanesClosed() | SuddenDeath():
+                    # 原型も粒を出さない（fireNegi・negibonCutoff・enterSuddenDeath）。
+                    # 外周を閉じて消した葱と、延長戦の片付けで消したものにも煙を出さ
+                    # ない。延長戦に入っても、出ている粒子と揺れは捨てない（原型の
+                    # enterSuddenDeath も particles に触らない。盤面は同じ実体のまま
+                    # なので、`tracker.py` も忘れない）。
                     pass
                 case _:
                     assert_never(event)
