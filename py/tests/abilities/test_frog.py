@@ -28,8 +28,11 @@ from animal_bomber.domain.events import (
     EffectApplied,
     Exploded,
     ExplosionCause,
+    ItemBlown,
+    ItemExpired,
     ItemTaken,
     PlayerDown,
+    PlayerHurt,
     SimEvent,
     TechniqueMoment,
 )
@@ -44,7 +47,7 @@ from animal_bomber.domain.state.item import Item
 from animal_bomber.domain.state.player import OUT, PlayerState, is_frozen
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems import simulation
-from animal_bomber.domain.systems.blast import add_blast
+from animal_bomber.domain.systems.blast import add_blast, detonate_expired
 from animal_bomber.domain.systems.bomb import place_bomb_at
 from animal_bomber.domain.systems.damage import hurt
 from tests.helpers import advance, clear_board, idle, make_world, only_for
@@ -65,12 +68,17 @@ def arena(seed: int = 2468) -> tuple[WorldState, PlayerState, PlayerState]:
 
 
 def run_until_done(world: WorldState, slime: SlimeBomb) -> list[SimEvent]:
-    """粘膜爆弾だけを、終わるまで進める（ほかの処理を通さない。上限 200 tick）。"""
+    """粘膜爆弾だけを、終わるまで進める（上限 200 tick）。
+
+    終わったら、導火線の尽きた爆弾を1回だけ起こす（1 tick の 5. と同じ処理）。粘膜爆弾は
+    導火線 0 の爆弾を生やすだけで、爆発はその番に起きるため。ほかの処理は通さない。
+    """
     events: list[SimEvent] = []
     for _ in range(200):
         progress = advance_slime(world, slime)
         events.extend(progress.events)
         if progress.done:
+            events.extend(detonate_expired(world))
             return events
     raise AssertionError("粘膜爆弾が 200 tick たっても終わらない")
 
@@ -305,8 +313,14 @@ class Test粘膜爆弾の時間:
             counts.add(slime.hops_left)
         assert counts == {6, 7, 8}
 
-    def test_爆風に触れたら_飛んでいる間でもすぐ爆発する(self) -> None:
-        """原型の答え：投げて1フレーム後に着地するマスへ爆風を置くと、次のフレームで爆発する。"""
+    def test_爆風に触れたら_飛んでいても導火線0の爆弾になり_爆弾の番に爆発する(
+        self,
+    ) -> None:
+        """原型の答え：投げて1フレーム後に着地するマスへ爆風を置く。
+
+        次のフレームの updateSlimes で slimeBurst が導火線 0 の爆弾を生やして消え
+        （L2942-2945）、同じフレームの爆弾の輪（L4374-4377）で爆発する。
+        """
         world, frog, _ = arena()
         frog.position = Cell(9, 7).center()
         frog.facing = Direction.RIGHT
@@ -319,7 +333,10 @@ class Test粘膜爆弾の時間:
         add_blast(world, Cell(12, 7), 1, is_center=False)
         progress = advance_slime(world, slime)
         assert progress.done
-        assert any(isinstance(e, Exploded) and e.owner == 0 for e in progress.events)
+        assert [(b.cell, b.owner, b.fuse) for b in world.bombs] == [(Cell(12, 7), 0, 0)]
+        events = detonate_expired(world)
+        assert any(isinstance(e, Exploded) and e.owner == 0 for e in events)
+        assert world.bombs == []
 
     def test_落ちる先は_正面3マス先から手前へ探した最初の空きマス(self) -> None:
         world, frog, _ = arena()
@@ -702,3 +719,125 @@ class Test倒れたかえるの舌:
         self.knock_out(world, frog)
         simulation.step(world, idle(world))
         assert frog.action is None
+
+
+class Test粘膜爆弾が爆発する番:
+    """原型の slimeBurst（L2942-2945）と update の爆弾の輪（L4374-4377）。
+
+    原型の slimeBurst は爆弾を生やして導火線を 0 にするだけで、爆発させるのは同じ
+    update の爆弾の輪（bombs.slice() の並び。生やした爆弾は配列の後ろ）。そのため、
+    うんこの寿命の処理（L4353-4369）よりあとで、同じ update に導火線が尽きるほかの
+    爆弾よりもあとに爆発し、ほかの爆弾の連鎖にも入りうる。期待値は、どれも原型を画面
+    なしで 1/60 秒ずつ動かして見た結果（TypeScript 版の `tests/abilities/frog.test.ts`
+    と同じ場面）。
+    """
+
+    def about_to_burst(self) -> tuple[WorldState, PlayerState, PlayerState]:
+        """粘膜爆弾を、次の tick に爆発する所まで進める。
+
+        かえるの粘膜爆弾（区切り1、火力3）を (9, 7) に置く。うさぎの火力は 2。
+        """
+        world, frog, rabbit = arena(7)
+        frog.power = 3
+        rabbit.power = 2
+        rabbit.hp = 10
+        slime = SlimeBomb(cell=Cell(9, 7), owner=frog.id, hops_left=1)
+        world.actors.append(slime)
+        for _ in range(100):
+            if landed(slime) and slime.hops_left == 1 and slime.timer == 1:
+                return world, frog, rabbit
+            simulation.step(world, idle(world))
+        raise AssertionError("粘膜爆弾が爆発する前の tick に届かない")
+
+    def exploded_at(self, events: list[SimEvent]) -> list[Cell]:
+        return [e.cell for e in events if isinstance(e, Exploded)]
+
+    def hurts(self, events: list[SimEvent]) -> list[tuple[int, int | None]]:
+        return [(e.target, e.by) for e in events if isinstance(e, PlayerHurt)]
+
+    def test_ほかの爆弾よりあとに爆発し_先の連鎖が壊したブロックの先へ腕が伸びる(
+        self,
+    ) -> None:
+        """原型：ブロック (7, 7)、うさぎの爆弾 (7, 5)、うさぎは (6, 7)。
+
+        うさぎの爆弾が先に爆発して、連鎖の最後に (7, 7) を壊す（L1543）。あとから
+        爆発する粘膜爆弾の左の腕は (8, 7)・(7, 7)・(6, 7) まで伸び、うさぎが傷を受ける
+        （当てたのはかえる）。粘膜爆弾が先に爆発すると、左の腕は (7, 7) で止まり、
+        うさぎの腕も火力2で (7, 7) までなので、(6, 7) にはどちらの爆風も届かない。
+        """
+        world, frog, rabbit = self.about_to_burst()
+        world.board.put(Cell(7, 7), Tile.SOFT)
+        rabbit.position = Cell(6, 7).center()
+        bomb = place_bomb_at(world, rabbit, Cell(7, 5))
+        assert bomb is not None
+        bomb.fuse = Tick(1)
+        events = simulation.step(world, idle(world))
+        assert self.exploded_at(events) == [Cell(7, 5), Cell(9, 7)]
+        assert world.board.at(Cell(7, 7)) is Tile.EMPTY
+        assert (6, 7, False) in blast_cells(world)
+        assert self.hurts(events) == [(rabbit.id, frog.id)]
+        assert rabbit.last_hit_by == frog.id
+
+    def test_ふつうの爆弾の腕が届けば_その連鎖に入り_重なるマスの持ち主は粘膜爆弾(
+        self,
+    ) -> None:
+        """原型：うさぎの爆弾 (7, 7)（この update に導火線が尽きる）の右の腕が届く。
+
+        生えたばかりの粘膜爆弾 (9, 7) に届き、1つの連鎖で うさぎの爆弾 → 粘膜爆弾 の順に
+        爆発する。重なる (8, 7) に立つうさぎは、かえるの爆風で傷を受ける。粘膜爆弾が先に
+        爆発すると、うさぎの爆弾のほうが粘膜爆弾の連鎖に入ってあとに爆発し、うさぎの自爆に
+        なる。
+        """
+        world, frog, rabbit = self.about_to_burst()
+        rabbit.position = Cell(8, 7).center()
+        bomb = place_bomb_at(world, rabbit, Cell(7, 7))
+        assert bomb is not None
+        bomb.fuse = Tick(1)
+        events = simulation.step(world, idle(world))
+        assert [e for e in events if isinstance(e, Exploded)] == [
+            Exploded(cell=Cell(7, 7), owner=rabbit.id, count=2, blocks=0)
+        ]
+        assert self.hurts(events) == [(rabbit.id, frog.id)]
+        assert world.bombs == []
+
+    def test_そのtickに寿命が尽きるうんこは_爆風が届いても吹き飛ばずに消える(
+        self,
+    ) -> None:
+        """原型：粘膜爆弾の右の腕 (10, 7) の、寿命の尽きたうんこは先に消える（L4365）。
+
+        粘膜爆弾が先に爆発すると、うんこは吹き飛んで残る長さを数え直し、さらに 15 秒
+        残る。
+        """
+        world, _, _ = self.about_to_burst()
+        world.items.append(
+            Item(
+                id=world.ids.take(),
+                cell=Cell(10, 7),
+                kind=ItemKind.POOP,
+                expires_at=Tick(world.now - 1),
+            )
+        )
+        events = simulation.step(world, idle(world))
+        assert (10, 7, False) in blast_cells(world)
+        assert not any(isinstance(e, ItemBlown) for e in events)
+        assert any(
+            isinstance(e, ItemExpired) and e.kind is ItemKind.POOP for e in events
+        )
+        assert world.items == []
+
+    def test_同じtickにあとから進める粘膜爆弾は_次のtickに爆発する(self) -> None:
+        """原型：爆発する粘膜爆弾 (9, 7) の右の腕 (11, 7) に、別の粘膜爆弾が飛んでいる。
+
+        その update の updateSlimes にはまだ爆風が無いので、別の粘膜爆弾は次の update に
+        爆風に触れて爆発する。
+        """
+        world, frog, _ = self.about_to_burst()
+        second = SlimeBomb(cell=Cell(11, 7), owner=frog.id, hops_left=5)
+        world.actors.append(second)
+        first = simulation.step(world, idle(world))
+        assert self.exploded_at(first) == [Cell(9, 7)]
+        assert (11, 7, False) in blast_cells(world)
+        assert second in world.actors
+        following = simulation.step(world, idle(world))
+        assert self.exploded_at(following) == [Cell(11, 7)]
+        assert second not in world.actors

@@ -28,7 +28,7 @@ from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.player import PlayerId, PlayerState
 from animal_bomber.domain.state.world import WorldState
-from animal_bomber.domain.systems.blast import add_blast, detonate
+from animal_bomber.domain.systems.blast import add_blast
 from animal_bomber.domain.systems.bomb import spawn_bomb
 from animal_bomber.domain.systems.items import apply_item
 
@@ -269,10 +269,12 @@ def throw_slime(world: WorldState, player: PlayerState) -> Started:
 def advance_slime(world: WorldState, slime: SlimeBomb) -> Progress:
     """粘膜爆弾を 1 tick 進める（原型の updateSlimes）。
 
-    爆風に触れたら、飛んでいる間でもすぐに爆発する。着地したら区切りごとに跳ね、区切りの
-    数が尽きた区切りで爆発する。⚠️ 跳ぶ先は乱数で選ぶ。狙って当てられると、置く位置を
-    読み合う遊びの前提が崩れる。投げたプレイヤー自身にも当たりうる。柱の上にも乗る
-    （通れない場所を越えて飛んでいくのがこの技の面白さ。TypeScript 版の注記）。
+    爆風に触れたら、飛んでいる間でも、その tick のうちに爆発する。着地したら区切りごとに
+    跳ね、区切りの数が尽きた区切りで爆発する。どちらも、導火線 0 の爆弾を生やして消え、
+    爆発はその tick の導火線の尽きた爆弾の番に起きる（`_burst`）。⚠️ 跳ぶ先は乱数で
+    選ぶ。狙って当てられると、置く位置を読み合う遊びの前提が崩れる。投げたプレイヤー
+    自身にも当たりうる。柱の上にも乗る（通れない場所を越えて飛んでいくのがこの技の
+    面白さ。TypeScript 版の注記）。
     """
     if blast_at(world, slime.cell) is not None:
         return Progress(events=tuple(_burst(world, slime)), done=True)
@@ -326,13 +328,13 @@ def _is_inner(world: WorldState, cell: Cell) -> bool:
 
 
 def _burst(world: WorldState, slime: SlimeBomb) -> list[SimEvent]:
-    """いまのマスで爆発する。投げたプレイヤーの爆弾として1つ生やして、すぐ起こす。
+    """いまのマスに、導火線 0 の爆弾を1つ生やす。爆発は導火線の尽きた爆弾の番に任せる。
 
     空きでないマス（柱・壊せるブロック）や爆弾のマスで爆発するときは、まわりの8マスを
     決まった順に見て、最初の降りられるマスへずれてから爆発する（柱の上のまま爆発すると、
     四方が塞がれて中心の1マスしか燃えない）。どこにも降りられなければ、その場に中心の
-    爆風だけを出す。手持ちの数は見ない。とくぎの爆発なので、手持ちを出し切っていても
-    起こる（`spawn_bomb`）。
+    爆風だけを出す（原型 L2937 もその場ですぐ出す）。手持ちの数は見ない。とくぎの爆発
+    なので、手持ちを出し切っていても起こる（`spawn_bomb`）。
 
     置いている爆弾の数（`active_bombs`）は、原型の slimeBurst と同じく、生やした直後に
     1つ戻し（L2943。0 で止める）、爆発でもう1つ戻す（removeBomb の L1494。0 で止める）。
@@ -340,6 +342,23 @@ def _burst(world: WorldState, slime: SlimeBomb) -> list[SimEvent]:
     投げたプレイヤーが自分の爆弾を盤面に置いていれば1つ少なく数えられ、そのぶん上限より
     1つ多く置ける（自分の爆弾が盤面から無くなると、0 で止まって数がそろう）。原型と
     同じにしてある（TypeScript 版と同じ）。
+
+    ⚠️ ここで起こさない。原型も導火線 0 の爆弾として生やすだけで（L2942-2945）、爆発する
+    のは同じ update の爆弾の輪（L4374-4377。bombs.slice() の並びで、生やした爆弾は配列の
+    後ろ）。この版も `world.bombs` の後ろに足し、1 tick の 5.（`systems/blast.py` の
+    `detonate_expired`）が並びの順に起こすので、原型と同じ時点になる。ここで起こすと、
+    次の4つが原型と変わる（TypeScript 版と同じ。`tests/abilities/test_frog.py` の
+    「粘膜爆弾が爆発する番」で確かめている）。
+
+    - 同じ tick に導火線が尽きるほかの爆弾より先に爆発する。ブロックを壊すのは連鎖の
+      最後なので、同じ壊せるブロックに別々の連鎖が届くと、その先まで腕が伸びるのが
+      粘膜爆弾のほうでなくなり、傷を受けるプレイヤーが変わる
+    - ふつうの爆弾の腕がこのマスに届いても、その連鎖に入らない（別の連鎖になり、重なる
+      マスの爆風の持ち主が変わる）
+    - その tick に寿命の尽きるうんこ（1 tick の 4.）が爆風に触れると、消える前に吹き
+      飛び、残る長さを数え直す
+    - 同じ tick にあとから進める粘膜爆弾が、その爆風に触れてすぐ爆発する（原型では
+      まだ爆風が無い）
     """
     cell = slime.cell
     if _blocked(world, cell):
@@ -366,14 +385,8 @@ def _burst(world: WorldState, slime: SlimeBomb) -> list[SimEvent]:
         raise ValueError(f"投げたプレイヤーが盤面の一覧にいない: {slime.owner}")
     bomb = spawn_bomb(world, owner, cell)
     owner.active_bombs = max(0, owner.active_bombs - 1)
-    result = detonate(world, bomb)
-    exploded = Exploded(
-        cell=cell,
-        owner=slime.owner,
-        count=result.exploded,
-        blocks=len(result.destroyed),
-    )
-    return [exploded, *result.events]
+    bomb.fuse = Tick(0)
+    return []
 
 
 def _blocked(world: WorldState, cell: Cell) -> bool:
