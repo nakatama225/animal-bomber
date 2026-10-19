@@ -274,6 +274,36 @@ class Test手本と同じ絵:
         without, _ = direct_image(LAYOUT, world, hidden, [])
         assert frame_mismatches(got, without, FADED) != (0, 0)
 
+    def test_同じ外周の位置に重なった鍋は_プレイヤーの番号の順に重ねる(self) -> None:
+        """原型の drawNegibons は、鍋を players の並び（L5414）で描く。
+
+        違う動物の鍋2つ（かえるともぐら）を、同じ外周の位置 8.4 に置く。あとに描く鍋の
+        顔が上に見える。逆の順に貼ると、上に見える顔が入れ替わって見分けられる。
+        """
+        world, _ = lanes_and_leeks(pit=False)
+        _, _, frog, mole = world.players
+        frog.life = Negibon(along=8.4, ready_at=Tick(world.now + 89))
+        mole.life = Negibon(along=8.4, ready_at=Tick(world.now - 5))
+        world.actors = []
+        got, _ = renderer_image(BakedArt(LAYOUT), world, FixedVisuals(), [])
+        wanted, _ = direct_image(LAYOUT, world, FixedVisuals(), [])
+        assert_same_frame(got, wanted, FADED)
+
+    def test_同じマスで交わる葱は_盤面の物の並びの順に重ねる(self) -> None:
+        """原型の drawNegibons は、葱を negis の並び（L5445。古いものから）で描く。
+
+        縦に飛ぶ葱と横に飛ぶ葱を、同じ (9.5, 3.5) に置く。あとの葱が上に見える。
+        """
+        world, _ = lanes_and_leeks(pit=False)
+        _, _, frog, mole = world.players
+        world.actors = [
+            Leek(Point(9.5, 3.5), Direction.DOWN, frog.id),
+            Leek(Point(9.5, 3.5), Direction.RIGHT, mole.id),
+        ]
+        got, _ = renderer_image(BakedArt(LAYOUT), world, FixedVisuals(), [])
+        wanted, _ = direct_image(LAYOUT, world, FixedVisuals(), [])
+        assert_same_frame(got, wanted, FADED)
+
     def test_葱に戻し忘れの不透明度を渡さないと_比べ方が見分ける(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

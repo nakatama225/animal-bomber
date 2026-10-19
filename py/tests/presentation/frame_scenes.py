@@ -19,12 +19,13 @@
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 
 import numpy as np
 import pygame
 
 from animal_bomber.domain.core.tick import Tick
+from animal_bomber.domain.rules.lane import lane_spot
 from animal_bomber.domain.state.actors import Foxfire, Leek, SlimeBomb
 from animal_bomber.domain.state.match import MatchState
 from animal_bomber.domain.state.player import Negibon, PlayerId, is_alive
@@ -32,13 +33,14 @@ from animal_bomber.domain.state.world import WorldState
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng, ScriptedRandom
 from animal_bomber.presentation.render.art.foxfires import FoxfireLook, TrailMark
 from animal_bomber.presentation.render.art.frame import FrameScene, draw_frame
+from animal_bomber.presentation.render.art.negibons import LeekLook, NegibonLook
 from animal_bomber.presentation.render.art.particles import ParticleLook
 from animal_bomber.presentation.render.baked.art import BakedArt
 from animal_bomber.presentation.render.canvas.surface import SurfaceCanvas
 from animal_bomber.presentation.render.layout import Layout
 from animal_bomber.presentation.render.renderer import Renderer
-from animal_bomber.presentation.render.views.actors import leek_look, slime_look
-from animal_bomber.presentation.render.views.lane import negibon_look
+from animal_bomber.presentation.render.views.actors import slime_look
+from animal_bomber.presentation.render.views.lane import lane_cooldown_left
 from animal_bomber.presentation.render.views.player import TrackedMotion, player_look
 
 from .baked_helpers import ROUNDING, SUBPIXEL, Image
@@ -123,6 +125,15 @@ def frame_scene(layout: Layout, world: WorldState, visuals: FixedVisuals) -> Fra
     """盤面と見た目だけの値から、手本の `draw_frame` に渡す1枚の絵の中身を作る。
 
     外周の鍋と飛んでいる葱の位置は、整数の px に丸める（`snapped`）。
+
+    鍋と葱の絵の入力は、`Renderer` が使う `views/` の関数（`negibon_look`・
+    `leek_look`）を通さずに、外周の位置の式（`lane_spot`）と葱の状態の項目から直に作る。
+    同じ関数を両方で使うと、状態から絵の入力に変える所が崩れても、画素の比べは両方が
+    同じく崩れて通る。
+    `lane_spot` は、原型の negiPos と同じ位置と向きを出すことを `test_legacy_art.py` が
+    確かめている（`legacy_inputs.py` の `negibon_look_from`）。原型の drawNegibons も、
+    外周の位置を negiPos に通した位置と向き（L5416-5417・L5437）、葱の位置と飛ぶ向き
+    （L5446）で描く。撃つ間隔の残り（`lane_cooldown_left`）は `test_views.py` が見る。
     """
     players = [
         player_look(world, player, visuals.motion(player.id))
@@ -132,15 +143,15 @@ def frame_scene(layout: Layout, world: WorldState, visuals: FixedVisuals) -> Fra
     negibons = []
     for player in world.players:
         if isinstance(player.life, Negibon):
-            look = negibon_look(player, player.life, world.now)
-            x, y = snapped(layout, look.x, look.y)
-            negibons.append(replace(look, x=x, y=y))
+            spot = lane_spot(player.life.along)
+            x, y = snapped(layout, spot.position.x, spot.position.y)
+            cooldown = lane_cooldown_left(player.life, world.now)
+            negibons.append(NegibonLook(player.animal, x, y, spot.facing, cooldown))
     leeks = []
     for actor in world.actors:
         if isinstance(actor, Leek):
-            leek = leek_look(actor)
-            x, y = snapped(layout, leek.x, leek.y)
-            leeks.append(replace(leek, x=x, y=y))
+            x, y = snapped(layout, actor.position.x, actor.position.y)
+            leeks.append(LeekLook(x, y, actor.facing))
     foxfires = [
         FoxfireLook(actor.cell, visuals.trail(actor, world.now))
         for actor in world.actors

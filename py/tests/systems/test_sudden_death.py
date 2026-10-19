@@ -244,6 +244,7 @@ class Test延長戦の準備:
         grant_special(player, 2)
         player.effects.add(EffectKind.SLOW, Tick(300), Tick(300))
         player.action = Dig(cell=Cell(9, 9), remaining=Tick(60))
+        player.ability_cooldown = Tick(100)
         enter_sudden_death(world, (0, 2), SuddenDeathReason.ALL_DOWN)
         # 開始位置は加わるプレイヤーに番号の順で割り当てる。プレイヤー2は2番目。
         assert player.position == SPAWN_CELLS[1].center()
@@ -257,6 +258,9 @@ class Test延長戦の準備:
         assert player.invulnerable_until == 500 + SUDDEN_DEATH_INVULNERABLE
         # とくぎは印も回数も戻す（原型の enterSuddenDeath L4448）。
         assert (player.has_special, player.special_charges) == (False, 0)
+        # 通常技の間隔も戻す（原型 L4452 の hopCool=0・snotCool=0）。時間切れの直前に
+        # 跳んだり鼻水を出したりしても、延長戦の始めから通常技を使える。
+        assert player.ability_cooldown == 0
         assert player.effects.active() == []
         # 技の途中でも外す。外さないと、技の続きが開始位置で走る。
         assert player.action is None

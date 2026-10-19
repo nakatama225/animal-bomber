@@ -153,6 +153,24 @@ class Test外周にいるCPU:
         assert seconds_to_ticks(0.5) < thrown_at[0] < seconds_to_ticks(1)
         assert revived(flat(events))
 
+    def test_撃てない間に構えて押すと_何も起きずに構え直し_もう一度溜めてから撃つ(
+        self,
+    ) -> None:
+        """原型 L2397 は押すと溜めを 0 に戻し、L2284 は撃てない間は何もしない。
+
+        原型の fireNegi（L2284）は、撃てない間は何もせずに戻る。撃てるのは 50 tick 目
+        から。37 tick 目に押しても撃てないので、そこから構え直し、もう 37 tick 溜めた
+        74 tick 目に撃つ。押しっぱなしにはしない（押したままだと押した瞬間にならず、
+        撃てるようになっても撃たない）。原型は 36 フレームずつで 72 フレーム目。37 tick
+        目に押す1フレームの差は残している。
+        """
+        world, cpu, foe = arena()
+        cpu.life = Negibon(along=top_along_for(5), ready_at=Tick(50))
+        foe.position = Cell(5, 3).center()
+        events = run(world, cpu_of(), 120)
+        thrown_at = [i + 1 for i, ticked in enumerate(events) if thrown(ticked)]
+        assert thrown_at[:1] == [74]
+
     def test_間に柱があれば撃たない(self) -> None:
         """原型 L2388。6 列目は2行目に柱がある。"""
         world, cpu, foe = arena()
@@ -170,6 +188,24 @@ class Test外周にいるCPU:
         assert bomb is not None
         bomb.fuse = Tick(1000)
         assert not thrown(flat(run(world, cpu_of(), 240)))
+
+    @pytest.mark.parametrize(("bomb", "shoots"), [(True, False), (False, True)])
+    def test_相手の足元に爆弾があっても撃たない_間を見るのは相手のマスまで(
+        self, bomb: bool, shoots: bool
+    ) -> None:
+        """原型 L2383-2391 は 0〜ceil(ahead) マス先を見る。
+
+        上辺の位置から (5,3) の中央までは 3.81 マス。原型は 0〜4 マス先を見るので、
+        4 マス先の (5,3) の爆弾で撃たない。対照に、爆弾が無ければ同じ場面で撃つ。
+        """
+        world, cpu, foe = arena()
+        on_lane(cpu, top_along_for(5))
+        foe.position = Cell(5, 3).center()
+        if bomb:
+            placed = place_bomb_at(world, foe, Cell(5, 3))
+            assert placed is not None
+            placed.fuse = Tick(1000)
+        assert thrown(flat(run(world, cpu_of(), 240))) is shoots
 
     def test_射程の外の相手には_射線に入っても撃たない(self) -> None:
         """原型 L2380 の ahead<=NEGI_RANGE-1。
@@ -301,6 +337,20 @@ class Test外周にいるCPU:
         alongs, events = Runner(world, [cpu_of(), *idles(world)]).trace(5)
         assert not thrown(events)
         assert alongs[4] == pytest.approx(9 + way * 5 * LANE_SPEED, abs=0.005)
+
+    def test_寄る辺が同じ近さなら_上_右_下_左の順に先の辺へ寄る(self) -> None:
+        """原型 L2413-2416 は d<bdist で、先に見た候補を残す。
+
+        外周の位置 20.5（上辺の右の端）から (20,2) の相手へ。向き合う位置は上辺 19・
+        右辺 22・下辺 37・左辺 70 で（原型 L2273-2281 の順）、上辺と右辺がどちらも 1.5
+        で同じ近さ。原型は上辺の 19 を選び、左へ進む。5 tick の間は射線に乗らない。
+        """
+        world, cpu, foe = arena()
+        on_lane(cpu, 20.5)
+        foe.position = Cell(20, 2).center()
+        alongs, events = Runner(world, [cpu_of(), *idles(world)]).trace(5)
+        assert not thrown(events)
+        assert alongs[4] == pytest.approx(20.5 - 5 * LANE_SPEED, abs=0.005)
 
     def test_外周の道のりは1周をまたいで測る(self) -> None:
         """原型 L2414-2420。
@@ -527,6 +577,22 @@ class Test盤面にいるCPUと葱:
         world.actors = [shot(-0.31, 5.5, Direction.RIGHT)]
         world.board.put(Cell(5, 6), Tile.SOFT)
         assert dodge_to(world) == Cell(5, 4)
+
+    def test_向きの違う2本の葱が同時に飛んでくれば_古いほうの葱でよける向きを決める(
+        self,
+    ) -> None:
+        """原型の negiThreat（L2068-2072）は negis を前から（古いものから）見る。
+
+        CPU は (5,5) の中央。縦に飛ぶ葱が古ければ右の (6,5) へ、横に飛ぶ葱が古ければ
+        下の (5,6) へよける（L2090）。
+        """
+        world, _ = leek_incoming()
+        falling = shot(5.5, -0.31, Direction.DOWN)
+        crossing = shot(-0.31, 5.5, Direction.RIGHT)
+        world.actors = [falling, crossing]
+        assert dodge_to(world) == Cell(6, 5)
+        world.actors = [crossing, falling]
+        assert dodge_to(world) == Cell(5, 6)
 
     def test_自分の葱と_遠い葱と_通り過ぎた葱はよけない(self) -> None:
         """原型の negiThreat（L2066-2075）。持ち主・9 マスより先・後ろを見て外す。"""

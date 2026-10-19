@@ -27,11 +27,18 @@ from animal_bomber.presentation.render.art.negibons import (
 )
 from animal_bomber.presentation.render.baked.art import BakedArt
 from animal_bomber.presentation.render.baked.negibons import BAND_STEP, band_level
+from animal_bomber.presentation.render.baked.techniques import snap
 from animal_bomber.presentation.render.canvas.protocol import Canvas
 from animal_bomber.presentation.render.layout import Layout
 from animal_bomber.presentation.render.sprites import opacity
 
-from .baked_helpers import assert_matches, baked, direct_groups, mismatched
+from .baked_helpers import (
+    ROUNDING,
+    assert_matches,
+    baked,
+    direct_groups,
+    mismatched,
+)
 
 LAYOUT = Layout(50)
 """盤面の左上が整数の px（31）になるマスの大きさ。"""
@@ -98,19 +105,24 @@ class Test鍋:
         assert_matches(got, wanted)
 
     def test_鍋の不透明度を写さないと_比べ方が見分ける(self) -> None:
-        """不透明度 1 で描いた絵とは、許す幅を超えて違う（比べ方が 0.95 を見る）。"""
+        """取っておいた影と鍋と顔の絵は、不透明度 1 で描いた絵と許す幅を超えて違う。
+
+        比べ方が 0.95 と 1 の違いを見分けることを確かめる。比べるのは影と鍋と顔の絵だけ
+        にする（帯と点線も貼ると、不透明度の違いが無くても、その画素だけで数を超える）。
+        """
         look = NegibonLook(Animal.RABBIT, 9.5, 6.5, Direction.DOWN, Tick(45))
         art = BakedArt(LAYOUT)
         box = box_around(look.x, look.y)
-        got = baked(LAYOUT, box, lambda t: art.negibons.draw(t, look))
         tile = LAYOUT.tile
         x, y = LAYOUT.px(look.x), LAYOUT.py(look.y)
+        pot = art.negibons.pot(look.animal)
+        got = baked(LAYOUT, box, lambda t: pot.blit(t, snap(x), snap(y)))
 
         def opaque(canvas: Canvas) -> None:
             draw_pot(canvas, tile, x, y, look.animal)
 
         wanted = direct_groups(LAYOUT, box, opaque, [4])
-        assert mismatched(got, wanted, 2) > 50
+        assert mismatched(got, wanted, ROUNDING) > 50
 
     def test_外周の位置は_いちばん近い整数のpxに丸めて貼る(self) -> None:
         """上の帯の真ん中は、マス 50 で縦 15.5px（どのマスでも整数の px に乗らない）。

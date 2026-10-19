@@ -423,19 +423,25 @@ class Test葱ボンと延長戦:
         前からあった粒子と揺れも捨てない（原型の enterSuddenDeath は particles に
         触らない）。1 tick 目に焼けたアイテムの煙と被弾の揺れを出しておき、2 tick 目に
         延長戦に入る。
+
+        片付けで消す炎は、寿命で消える炎のすぐ内側（1 tick 目の終わりの経過が寿命より
+        1 少ない）にする。この炎は次の tick にもまだ残る（原型も 91 回目の update で
+        尽きる。`abilities/fox.py` の `FOXFIRE_LIFETIME`）ので、2 tick 目に消えるのは
+        延長戦の片付けのときだけ（原型の L4442 の foxfires=[]。煙は出さない）。見分ける
+        境目を1つずらすと、この炎にも煙を出して失敗する。
         """
         case = CASES["updateFoxfires then enterSuddenDeath"]
         burned = CASES["puff #6b5443 🌑"]
         world = world_with(Animal.FOX)
         expiring = Foxfire(Cell(3, 5), owner=1, elapsed=Tick(FOXFIRE_LIFETIME - 1))
-        cleared = Foxfire(Cell(9, 7), owner=1, elapsed=Tick(29))
+        cleared = Foxfire(Cell(9, 7), owner=1, elapsed=Tick(FOXFIRE_LIFETIME - 2))
         world.actors = [expiring, cleared]
         randoms = burned["random"] + case["random"]
         tracker = SceneTracker(CosmeticRng(ScriptedRandom(randoms)))
         world.now = Tick(0)
         tracker.observe(world, [])
         expiring.elapsed = FOXFIRE_LIFETIME
-        cleared.elapsed = Tick(30)
+        cleared.elapsed = Tick(FOXFIRE_LIFETIME - 1)
         world.now = Tick(1)
         tracker.observe(world, [PlayerHurt(0, 1, 2), ItemBurned(AT, ItemKind.FIRE)])
         world.actors = []
