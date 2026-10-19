@@ -164,3 +164,19 @@ def advance_actor(world: WorldState, actor: Actor) -> Progress:
             return frog.advance_burnt_tongue(world, actor)
         case _:
             assert_never(actor)
+
+
+def settle_actor(world: WorldState, actor: Actor) -> list[SimEvent]:
+    """同じ番の盤面の物を全員進めたあとに呼ぶ番（当たりなど）。
+
+    動くのと当たるのを分ける種類だけが使う（TypeScript 版の `WorldActor.settle`）。原型
+    は追いかける炎を、配列の全部を動かしてから、別の輪で当たりを見る（L2667-2683 →
+    L2685-2694）。ほかの種類は何もしない。呼ぶ順は `systems/actors.py` が決める。
+    """
+    match actor:
+        case Foxfire():
+            return fox.settle_foxfire(world, actor)
+        case Pit() | SlimeBomb() | Scatter() | BurntTongue():
+            return []
+        case _:
+            assert_never(actor)

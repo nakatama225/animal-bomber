@@ -122,16 +122,20 @@ def steps_by(elapsed: int) -> int:
 
 
 def advance_foxfire(world: WorldState, fire: Foxfire) -> Progress:
-    """炎を 1 tick 進める（原型の castFoxfire・foxfireStep・updateFoxfires）。
+    """炎を 1 tick 進める（原型の foxfireStep と、updateFoxfires の動かす輪）。
 
-    マス単位で、いちばん近い相手への最短の道（ブロックは回り込む。爆弾は通り抜ける）を
-    1マスずつ進む。相手のいるマスに着いたら、そこに居続ける。道が無ければ、その回は
-    動かない（進む時間は使う。原型も同じ）。
+    寿命を進め、進む時間が来ていれば、マス単位で、いちばん近い相手への最短の道
+    （ブロックは回り込む。爆弾は通り抜ける）を1マスずつ進む。相手のいるマスに着いたら、
+    そこに居続ける。道が無ければ、その回は動かない（進む時間は使う。原型も同じ）。
 
-    乗っているマスにいる相手（放ったプレイヤー以外）に、毎 tick 当たる。当たっても消え
-    ない。当たった相手は被弾のあとの無敵に入るので、同じ相手に続けて当たることはない。
-    跳び上がっている相手（`is_blast_proof`）には当たらない。突進中のぞうには当たる
-    （傷は上限で減る）。
+    当たりはここでは見ない。同じ tick の炎が全部動いたあとに見る（`settle_foxfire`）。
+    寿命が尽きた tick は終わりを返すので、当たりも見ない（原型も動かす輪の中で外す
+    L2679-2682 ので、当たりの輪 L2685 に残らない）。
+
+    ⚠️ 原型は炎を後ろから（新しいものから）動かす（L2667）が、ここは出た順に動かす。
+    動きはほかの炎を読まずイベントも出さないので、順は結果に効かない。動く間にイベントを
+    出すか、ほかの炎を読むようにしたら、`state/actors.py` の `newest_first` で原型の順に
+    揃える。
     """
     fire.elapsed = Tick(fire.elapsed + 1)
     if fire.elapsed > FOXFIRE_LIFETIME:
@@ -142,6 +146,23 @@ def advance_foxfire(world: WorldState, fire: Foxfire) -> Progress:
         if following is None:
             break
         fire.cell = following
+    return Progress()
+
+
+def settle_foxfire(world: WorldState, fire: Foxfire) -> list[SimEvent]:
+    """乗っているマスの相手に当たる（原型の updateFoxfires の当たりの輪 L2685-2694）。
+
+    同じ tick の炎が全部動いたあとに、古い炎から呼ばれる（`systems/actors.py`）。原型も
+    全部の炎を動かしてから、別の輪で配列を前から回して当たりを見る。動いてすぐ当たる形に
+    すると、古い炎の当たりで相手が倒れたとき、同じ tick に動く新しい炎はその相手を
+    追わない（追う先は盤面にいる相手だけ）。原型では、当たりを見る前に、新しい炎はもう
+    その相手のほうへ進んでいる。
+
+    乗っているマスにいる相手（放ったプレイヤー以外）に、毎 tick 当たる。当たっても消え
+    ない。当たった相手は被弾のあとの無敵に入るので、同じ相手に続けて当たることはない。
+    跳び上がっている相手（`is_blast_proof`）には当たらない。突進中のぞうには当たる
+    （傷は上限で減る）。
+    """
     events: list[SimEvent] = []
     for player in world.players:
         if player.id == fire.owner or not is_alive(player):
@@ -152,7 +173,7 @@ def advance_foxfire(world: WorldState, fire: Foxfire) -> Progress:
             continue
         events.append(TechniqueMoment(player=fire.owner, moment=Moment.CHASER_HIT))
         events.extend(hurt(world, player, fire.owner, FOXFIRE_DAMAGE))
-    return Progress(events=tuple(events))
+    return events
 
 
 def _next_step(world: WorldState, fire: Foxfire) -> Cell | None:

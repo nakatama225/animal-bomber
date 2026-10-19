@@ -8,19 +8,19 @@ castFoxfire・foxfireStep・updateFoxfires・useSpecial のきつね・updateCha
 """
 
 from animal_bomber.domain.abilities.elephant import CHARGE_DURATION
-from animal_bomber.domain.abilities.fox import advance_foxfire
 from animal_bomber.domain.core.coord import Cell, Direction
 from animal_bomber.domain.core.tick import Tick
-from animal_bomber.domain.events import Moment, SimEvent, TechniqueMoment
+from animal_bomber.domain.events import Moment, PlayerHurt, SimEvent, TechniqueMoment
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import Animal, stats_of
 from animal_bomber.domain.state.actions import Charge
 from animal_bomber.domain.state.actors import Foxfire
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
-from animal_bomber.domain.state.player import OUT, PlayerState
+from animal_bomber.domain.state.player import OUT, PlayerState, is_alive
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems import simulation
+from animal_bomber.domain.systems.actors import step_actors
 from animal_bomber.domain.systems.blast import add_blast
 from tests.helpers import (
     advance,
@@ -58,17 +58,25 @@ def changes(log: list[str]) -> list[str]:
     ]
 
 
+def cell_text(fire: Foxfire) -> str:
+    """炎のいるマスを「列,行」で。"""
+    return f"{fire.cell.col},{fire.cell.row}"
+
+
 def run_fire(
     world: WorldState, fire: Foxfire, ticks: int = 120
 ) -> tuple[list[str], list[str]]:
-    """炎だけを進め、毎 tick の炎のマス（消えたら -）と、1番の体力を記録する。"""
+    """炎だけを盤面の物として進め、毎 tick の炎のマス（消えたら -）と1番の体力を出す。
+
+    盤面の物を進める処理（`step_actors`）で進める。炎は動いたあと、同じ番の全員が
+    動き終えてから当たりを見る（`settle_foxfire`）。
+    """
+    world.actors.append(fire)
     cells: list[str] = []
     hp: list[str] = []
-    done = False
     for _ in range(ticks):
-        if not done:
-            done = advance_foxfire(world, fire).done
-        cells.append("-" if done else f"{fire.cell.col},{fire.cell.row}")
+        step_actors(world)
+        cells.append(cell_text(fire) if fire in world.actors else "-")
         hp.append(str(world.players[1].hp))
     return cells, hp
 
@@ -157,10 +165,10 @@ class Test炎の進み方:
         place(fox, Cell(3, 7))
         place(rabbit, Cell(19, 7))
         before = fox.hp
-        fire = Foxfire(cell=Cell(3, 7), owner=0)
+        world.actors.append(Foxfire(cell=Cell(3, 7), owner=0))
         events: list[SimEvent] = []
         for _ in range(10):
-            events.extend(advance_foxfire(world, fire).events)
+            events.extend(step_actors(world))
         assert (fox.hp, events) == (before, [])
 
     def test_相手がいなければ動かない(self) -> None:
@@ -196,10 +204,10 @@ class Test炎の進み方:
         place(rabbit, Cell(5, 7))
         place(frog, Cell(5, 7))
         before = (rabbit.hp, frog.hp)
-        fire = Foxfire(cell=Cell(3, 7), owner=0)
+        world.actors.append(Foxfire(cell=Cell(3, 7), owner=0))
         hit: dict[str, int] = {}
         for tick in range(1, 41):
-            advance_foxfire(world, fire)
+            step_actors(world)
             if "rabbit" not in hit and rabbit.hp < before[0]:
                 hit["rabbit"] = tick
             if "frog" not in hit and frog.hp < before[1]:
@@ -224,6 +232,85 @@ class Test炎の進み方:
         hp = arena((Animal.FOX, Animal.FOX))[1][1].hp
         assert hit_by(leaping=True) == [f"1:{hp}"]
         assert hit_by(leaping=False) == [f"1:{hp}", f"21:{hp - 2}"]
+
+
+class Test同じtickの炎どうし:
+    """原型の updateFoxfires は、全部の炎を動かしてから、別の輪で当たりを見る。
+
+    動かす輪は L2667-2683、当たりの輪は L2685-2694（配列を前から回す）。期待値は、原型を
+    node で読み込み、炎を直に積んで 1/60 秒ずつ動かして測ったもの（TypeScript 版の
+    `tests/abilities/foxfire.test.ts` と同じ場面）。
+    """
+
+    def test_古い炎が相手を倒すtickに_新しい炎もその相手のほうへ一歩進む(self) -> None:
+        """原型：11 フレーム目に、古い炎が (5, 7) へ進んで当たり、相手は倒れる。
+
+        新しい炎も同じフレームに (8, 7) へ進む（当たりを見る前に、全部の炎が動き終わって
+        いる）。炎ごとに動いてすぐ当たる形だと、新しい炎が動くときには相手がもう盤面に
+        いないので、(9, 7) から動かない。
+        """
+        world, (fox, rabbit) = arena((Animal.FOX, Animal.RABBIT))
+        place(fox, Cell(3, 7))
+        place(rabbit, Cell(5, 7))
+        # 1回当たると倒れる体力（原型の体力 1）。
+        rabbit.hp = 2
+        older = Foxfire(cell=Cell(4, 7), owner=fox.id)
+        newer = Foxfire(cell=Cell(9, 7), owner=fox.id)
+        world.actors.extend([older, newer])
+        log = []
+        for _ in range(11):
+            simulation.step(world, idle(world))
+            where = "board" if is_alive(rabbit) else "down"
+            log.append(f"{cell_text(older)} {cell_text(newer)} {where}")
+        assert changes(log) == ["1:4,7 9,7 board", "11:5,7 8,7 down"]
+
+    def test_同じtickに2つの炎が当たると_古い炎の当たりが先(self) -> None:
+        """原型：11 フレーム目に、0番の古い炎が 1番に、1番の新しい炎が 0番に当たる。
+
+        被弾のたびに吐き出すアイテムは (9, 7) → (3, 7) の順に積まれた（当たりの輪は炎の
+        配列を前から回す。L2685）。
+        """
+        world, (p0, p1) = arena((Animal.FOX, Animal.FOX))
+        place(p0, Cell(3, 7))
+        place(p1, Cell(9, 7))
+        world.actors.extend(
+            [
+                Foxfire(cell=Cell(8, 7), owner=p0.id),
+                Foxfire(cell=Cell(4, 7), owner=p1.id),
+            ]
+        )
+        hits = []
+        for t in range(1, 12):
+            for event in simulation.step(world, idle(world)):
+                if isinstance(event, PlayerHurt):
+                    hits.append(f"{t}:{event.target}")
+        assert hits == ["11:1", "11:0"]
+        assert [(i.cell.col, i.cell.row) for i in world.items] == [(9, 7), (3, 7)]
+
+    def test_寿命が尽きるtickには_炎のマスにいる相手にも当たらない(self) -> None:
+        """原型は寿命が尽きた炎を動かす輪の中で外す（L2679-2682）。
+
+        その炎は当たりの輪（L2685）に残らない。原型：無敵が 91 フレーム目に切れると
+        当たらず、90 フレーム目に切れると 90 フレーム目に当たる。炎は 91 フレーム目に
+        消える。
+        """
+
+        def hit_at(vulnerable_from: int) -> int | None:
+            world, (fox, rabbit) = arena((Animal.FOX, Animal.RABBIT))
+            place(fox, Cell(3, 7))
+            place(rabbit, Cell(5, 7))
+            # t tick 目の間の時刻（world.now）は t - 1。
+            rabbit.invulnerable_until = Tick(vulnerable_from - 1)
+            world.actors.append(Foxfire(cell=Cell(5, 7), owner=fox.id))
+            before = rabbit.hp
+            for t in range(1, 101):
+                simulation.step(world, idle(world))
+                if rabbit.hp < before:
+                    return t
+            return None
+
+        assert hit_at(91) is None
+        assert hit_at(90) == 90
 
 
 def leap() -> tuple[WorldState, PlayerState, list[SimEvent]]:

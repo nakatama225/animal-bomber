@@ -6,15 +6,23 @@
 """
 
 from animal_bomber.domain.abilities.frog import REGEN_TIME, tongue_reach_of
+from animal_bomber.domain.abilities.results import Progress
 from animal_bomber.domain.abilities.techniques import hold_technique
 from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.core.tick import Tick
-from animal_bomber.domain.events import EffectApplied, Exploded, ItemDropped
+from animal_bomber.domain.events import EffectApplied, Exploded, ItemDropped, SimEvent
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import Animal, stats_of
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.state.actions import Charge, Tongue
-from animal_bomber.domain.state.actors import BurntTongue, Pit, Scatter
+from animal_bomber.domain.state.actors import (
+    Actor,
+    BurntTongue,
+    Foxfire,
+    Pit,
+    Scatter,
+    SlimeBomb,
+)
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
 from animal_bomber.domain.state.player import PlayerState
@@ -208,6 +216,49 @@ class Test盤面の物を進める順:
         assert fell and dropped
         assert max(fell) < min(dropped)
         assert world.actors == [scatter]
+
+    def test_同じ番を全員進めてから当たりの番を出た順に呼び_次の番へ移る(self) -> None:
+        """その tick に終わったもの・増えたものには、当たりの番（settle）を呼ばない。
+
+        新しいものから進めるもの（`newest_first`）でも、当たりの番は古いものから呼ぶ
+        （原型の追いかける炎は、動かす輪を後ろから回し、当たりの輪を前から回す。L2667・
+        L2685）。進め方と当たりの番を偽物に差し替え、種類を見ずに番と性質だけで並べて
+        いることを見る（TypeScript 版は偽の盤面の物で同じことを見る。この版の盤面の物は
+        閉じた種類なので、本物の盤面の物を並べ、進め方のほうを差し替える）。
+        """
+        world, _, _ = arena(Animal.RABBIT, Animal.FOX)
+        a, b, c = (Scatter(center=Cell(3, row), owner=0) for row in (3, 5, 7))
+        d = SlimeBomb(cell=Cell(9, 9), owner=0, hops_left=5)
+        e = Foxfire(cell=Cell(11, 9), owner=1)
+        f = Foxfire(cell=Cell(13, 9), owner=1)
+        names: dict[Actor, str] = {a: "a", b: "b", c: "c", d: "d", e: "e", f: "f"}
+        world.actors = [a, b, c, d, e]
+        log: list[str] = []
+
+        def advance(world: WorldState, actor: Actor) -> Progress:
+            log.append(names[actor])
+            if actor is e:
+                world.actors.append(f)
+            return Progress(done=actor is b)
+
+        def settle(_world: WorldState, actor: Actor) -> list[SimEvent]:
+            log.append(f"{names[actor]}:settle")
+            return []
+
+        step_actors(world, advance, settle)
+        # 炎（2）→ 撒く本体（3。新しいものから）→ 跳ねる爆弾（4）。
+        assert log == [
+            "e",
+            "e:settle",
+            "c",
+            "b",
+            "a",
+            "a:settle",
+            "c:settle",
+            "d",
+            "d:settle",
+        ]
+        assert world.actors == [a, c, d, e, f]
 
     def test_持ち主の番に進めるものは_そのプレイヤーの番にだけ進む(self) -> None:
         world, frog0, frog1 = arena(Animal.FROG, Animal.FROG)
