@@ -47,9 +47,10 @@ from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.input.sources import IdleSource
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
+from animal_bomber.domain.rules.lane import alongs_facing
 from animal_bomber.domain.rules.match import MatchConfig
 from animal_bomber.domain.state.effects import EffectKind
-from animal_bomber.domain.state.player import PlayerId, is_alive
+from animal_bomber.domain.state.player import Negibon, PlayerId, is_alive
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.blast import add_blast
 from animal_bomber.domain.systems.items import placed_item
@@ -539,6 +540,63 @@ class Testラウンドの終わり:
             "ラウンド 2 は 2P の勝ち",
             "2P の優勝",
         ]
+
+
+class Test葱ボンと延長戦:
+    def test_葱を撃つと_撃った数だけ鳴らす(self) -> None:
+        """原型の fireNegi（L2289）。同じ tick に2人が撃てば2回（まとめない）。"""
+        one = LeekThrown(player=0, origin=Point(1.5, -0.31), facing=Direction.DOWN)
+        two = LeekThrown(player=1, origin=Point(23.31, 4.5), facing=Direction.LEFT)
+        assert sounds_of([one]) == [SoundName.NEGI]
+        assert sounds_of([one, two]) == [SoundName.NEGI, SoundName.NEGI]
+
+    @pytest.mark.parametrize(
+        ("by", "expected"),
+        [
+            (LeekStop.BOMB, [SoundName.NEGI_BLOCK]),
+            (LeekStop.WALL, []),
+            (LeekStop.BLAST, []),
+            (LeekStop.RANGE, []),
+        ],
+    )
+    def test_葱が止まった音は_爆弾に弾かれたときだけ(
+        self, by: LeekStop, expected: list[SoundName]
+    ) -> None:
+        """原型の updateNegis は、爆弾のときだけ SE.negiBlock（L2318）。ほかは煙。"""
+        assert sounds_of([LeekStopped(cell=Cell(5, 4), by=by)]) == expected
+
+    def test_入れ替わり_外周を閉じた_延長戦に入った(self) -> None:
+        """原型の negiHit（L2351）・negibonCutoff（L2362）・延長戦（L4462）。"""
+        assert sounds_of([Revived(player=0, replaced=1, at=Point(5.5, 5.5))]) == [
+            SoundName.NEGI_HIT
+        ]
+        assert sounds_of([LanesClosed(players=(1,))]) == [SoundName.NEGI_OUT]
+        sudden = SuddenDeath(reason=SuddenDeathReason.ALL_DOWN, players=(0, 1))
+        assert sounds_of([sudden]) == [SoundName.SUDDEN]
+
+    def test_試合で葱が当たると_入れ替わりの音だけで_倒れる音は鳴らさない(self) -> None:
+        """当たった側は倒れたのではない（原型の negiHit は kill を通らない）。
+
+        外周の 1P が、まっすぐ下の 2P へ撃つ。撃った tick に撃つ音、当たった tick に
+        入れ替わりの音だけが鳴る。
+        """
+        world = make_world(animals=(Animal.RABBIT, Animal.ELEPHANT))
+        clear_board(world)
+        shooter, target = world.players
+        along = alongs_facing(Cell(5, 1))[0]
+        shooter.life = Negibon(along=along, ready_at=world.now)
+        target.position = Cell(5, 3).center()
+        played = [
+            sounds_of(simulation.step(world, only_for(world, 0, PlayerInput.BOMB)))
+        ]
+        for _ in range(60):
+            if is_alive(shooter):
+                break
+            played.append(sounds_of(simulation.step(world, idle(world))))
+        assert is_alive(shooter) and isinstance(target.life, Negibon)
+        assert played[0] == [SoundName.NEGI]
+        assert played[-1] == [SoundName.NEGI_HIT]
+        assert all(sounds == [] for sounds in played[1:-1])
 
 
 ALL_EVENTS: list[SimEvent] = [

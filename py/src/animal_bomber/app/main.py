@@ -222,7 +222,7 @@ def open_audio(session: GameSession) -> tuple[Presenter, tuple[TickObserver, ...
     sounds = open_sound_bank()
     presenter = Presenter(sounds, animal_of=lambda player: animal_of(session, player))
     observers = (
-        Countdown(sounds, session.config.round_limit),
+        Countdown(sounds),
         RoundMusic(open_music()),
     )
     return presenter, observers

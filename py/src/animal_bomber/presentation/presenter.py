@@ -54,6 +54,7 @@ from animal_bomber.domain.events import (
     ItemTaken,
     ItemWashed,
     LanesClosed,
+    LeekStop,
     LeekStopped,
     LeekThrown,
     MatchEnded,
@@ -295,17 +296,29 @@ class Presenter:
             case BurntOff():
                 # 音は泣く状態（`EffectApplied`）で鳴らす。煙は絵の側が出す。
                 pass
-            case LeekThrown() | LeekStopped() | Revived() | LanesClosed():
-                # いまは何もしない。原型は葱を撃つと SE.negi（fireNegi）、爆弾に
-                # 弾かれると SE.negiBlock（updateNegis）、入れ替わると SE.negiHit と
-                # 知らせ（negiHit）、外周が閉じると SE.negiOut と知らせ（negibonCutoff）
-                # を出す。音と知らせは、原型の音と絵を写す次の段で足す。
-                pass
+            case LeekThrown():
+                # 原型の fireNegi。同じ tick に2人が撃てば2回鳴らす（まとめない。
+                # モジュールの説明）。
+                play(SoundName.NEGI)
+            case LeekStopped(by=by):
+                # 爆弾に弾かれたときだけ鳴らす（原型の updateNegis）。射程を越えた・柱で
+                # 砕けた・爆風で焼けたときは、原型も煙だけ（煙は絵の側が出す）。
+                if by is LeekStop.BOMB:
+                    play(SoundName.NEGI_BLOCK)
+            case Revived():
+                # 入れ替わり（原型の negiHit）。当たった側は倒れたのではない（原型も
+                # kill を通らない）ので、倒れる音は鳴らさない（`PlayerDown` が来ない）。
+                play(SoundName.NEGI_HIT)
+                # 知らせ（「1P 復活！ ぞう が葱ボンへ」）はまだ出さない。知らせを出す
+                # 板がまだ無い（段階 10。docs/08 の「原型と違うまま残した所」）。
+            case LanesClosed():
+                # 外周を閉じた（原型の negibonCutoff）。外周にだれもいなければ、ルールの
+                # 層がこのイベントを出さない（原型も鳴らさない）。知らせは段階 10。
+                play(SoundName.NEGI_OUT)
             case SuddenDeath():
-                # いまは何もしない。原型は延長戦に入ると専用の音（SE.sudden）を鳴らし、
-                # 知らせ（「サドンデス！」と、そのわけ・上限にした装備・60 秒）を出す
-                # （enterSuddenDeath）。音と知らせは、原型の音と絵を写す次の段で足す。
-                pass
+                # 延長戦に入った（原型の enterSuddenDeath）。時間切れで入った tick
+                # には、0 秒の秒読みも鳴る（`audio/countdown.py`）。知らせは段階 10。
+                play(SoundName.SUDDEN)
             case RoundEnded(round=number, winner=winner):
                 # 優勝が決まった tick は、優勝の音だけ（`MatchEnded`。原型の endGame）。
                 if not tick.match_ended:
