@@ -226,7 +226,9 @@ set の反復は、import でも構文木でも止められません。`tests/de
 - CPU の固定値（`tests/ai/test_cpu_ts.py` が読む `tests/ai/ts_cpu_values.json`）も同じ形で
   出します。写すものに `ai/` を足し、CPU だけの試合を流して、tick ごとの入力と 100 tick ごとの
   盤面を出します。CPU の判断の規則・順・乱数を引く順のどれかを変えると失敗します。写しの
-  CPU で止めているものはありません（外周の操縦と、飛んでくる葱をよける規則も写しのまま動かす）
+  CPU で止めているものはありません（外周の操縦と、飛んでくる葱をよける規則も写しのまま動かす）。
+  4つ目の試合（葱ボンと延長戦）は決定性の台本の `play_cpu_negibon_match` と同じ試合で、
+  種と長さは `scenario.py` の定数を両方が読みます
 - `tests/boundary/test_closed_kinds.py` は、試合を進める処理（`domain/systems/`）・盤面への
   問い合わせ（`domain/query/`）・イベント（`domain/events.py`）・CPU の共通の判断（`ai/` の
   うち戦い方の `tactics.py` 以外）に、動物の名前と振る舞い・

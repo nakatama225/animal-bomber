@@ -20,6 +20,7 @@ from animal_bomber.ai.source import CpuInputSource, cpu_seed
 from animal_bomber.app.session import GameSession
 from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.core.tick import MatchTick, Tick
+from animal_bomber.domain.events import SimEvent
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.input.sources import InputGatherer, InputSource
 from animal_bomber.domain.rules.animals import Animal
@@ -283,11 +284,76 @@ def play_cpu_match(ticks: int = CPU_TICKS, seed: int = SEED) -> GameSession:
     config = MatchConfig(
         seed=seed, animals=CPU_ANIMALS, wins_to_take=99, starting_hp=SCRIPT_HP
     )
+    return _play_cpus(config, ticks)
+
+
+NEGIBON_SEED = 237
+"""葱ボンと延長戦を通す CPU だけの試合（`play_cpu_negibon_match`）の種。
+
+TypeScript 版の写しで種を 1 から 300 まで回し、9000 tick のうちに葱を撃つ・葱で入れ
+替わる・延長戦に入る 25 の種から選んだ。通るだけでは足りないので、写しの CPU を1か所ずつ
+変えて同じ試合を流し、次の2つで入力が変わる7つの種に絞った。
+
+- 葱をよける先を試す順を逆にする（両側とも通れるときによける場面がある。試す順を文字列の
+  set から取り出すように書き違えると、hash の種を変えた突き合わせで見つかる）
+- ラウンドが替わっても外周の操縦を作り直さない（前のラウンドで外周にいた CPU が、次の
+  ラウンドでも外周へ回る）
+
+7つのうち、葱を撃つ本数と入れ替わる回数がいちばん多く（3本・2回）、同じラウンドで2度目
+の外周も通る2つ（10 と 237）から、葱をよける判断が多いほう（3回）を選んだ。外周へ回った
+ときに選び直しの残りも戻す書き違いと、葱のよけを狙う規則より後ろに置く書き違いは、25 の
+種のどれでも入力が変わらなかった（`tests/ai/test_negibon_cpu.py` の場面で見つける）。
+"""
+NEGIBON_ROUND_LIMIT = Tick(60 * 90)
+"""葱ボンと延長戦を通す試合の制限時間（90 秒）。
+
+外周が開いているのは残りが 60 秒より多い間なので、始めの 30 秒だけ倒れたプレイヤーが
+外周へ回る。90 秒で2人以上残っていれば延長戦に入る。
+"""
+NEGIBON_TICKS = 9000
+"""葱ボンと延長戦を通す試合を進める長さ。
+
+1ラウンド目は、849 tick 目に倒れた 1P が外周から葱を撃ち（3P が両側の通れる所でよけ、
+葱は壊せるブロックで砕ける）、外周が閉じて退場する。5400 tick 目の時間切れで 2P・3P・
+4P の延長戦に入り、2P の勝ちで決まる。2ラウンド目は、また外周へ回った 1P が葱で 2P と
+入れ替わり、外周へ回った 2P が撃ち返して入れ替わる（1P は同じラウンドで2度目の外周）。
+9000 tick 目は2ラウンド目の途中。
+"""
+
+
+def play_cpu_negibon_match(
+    ticks: int = NEGIBON_TICKS,
+    seed: int = NEGIBON_SEED,
+    *,
+    events: list[SimEvent] | None = None,
+) -> GameSession:
+    """葱ボンと延長戦を通す CPU だけの試合。外周の操縦と葱のよけの set の反復も見る。
+
+    `play_cpu_match` と同じ顔ぶれと強さで、体力は既定（爆風1回）、延長戦は既定どおり
+    入れる。`tests/ai/test_cpu_ts.py` の「葱ボンと延長戦」の試合と同じで、TypeScript 版
+    とは tick ごとに入力が一致する。`events` を渡すと、起きたイベントをそこに足して
+    いく。
+    """
+    config = MatchConfig(
+        seed=seed,
+        animals=CPU_ANIMALS,
+        round_limit=NEGIBON_ROUND_LIMIT,
+        wins_to_take=99,
+    )
+    return _play_cpus(config, ticks, events)
+
+
+def _play_cpus(
+    config: MatchConfig, ticks: int, events: list[SimEvent] | None = None
+) -> GameSession:
+    """強さ（`CPU_LEVEL_KEYS`）の CPU だけで、試合を `ticks` 回進める。"""
     sources: list[InputSource] = [
-        CpuInputSource(player, CPU_LEVELS[level], cpu_seed(seed, player))
+        CpuInputSource(player, CPU_LEVELS[level], cpu_seed(config.seed, player))
         for player, level in zip(PLAYER_IDS, CPU_LEVEL_KEYS, strict=True)
     ]
     session = GameSession(config, sources)
     for _ in range(ticks):
-        session.tick()
+        happened = session.tick()
+        if events is not None:
+            events.extend(happened)
     return session

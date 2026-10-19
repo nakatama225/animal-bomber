@@ -15,9 +15,17 @@ pytest` の行）ので、版で結果が変わればどちらかで失敗する
 値を書き換えずに原因を探す。
 """
 
+from animal_bomber.domain.events import (
+    LanesClosed,
+    LeekThrown,
+    Revived,
+    RoundEnded,
+    SimEvent,
+    SuddenDeath,
+)
 from animal_bomber.domain.state.world import hash_world
 
-from .scenario import play_and_record, play_match, replay
+from .scenario import play_and_record, play_cpu_negibon_match, play_match, replay
 
 # 台本どおりに 600 tick 進めたあとの要約（`StateHasher.hex` と同じ 8 桁）。
 # 2026-10-04 に Python 3.12 で出し、3.11 でも同じ値になることを確かめた。段階 3 で、
@@ -94,6 +102,29 @@ GOLDEN_MATCH = "c185f411"
 # 2P〜4P が同じ tick に倒れて引き分け。2ラウンド目は 1P の勝ちで試合が決まる。
 # 2026-10-19 に 3.12 と 3.11 で出し、同じ値になることを確かめた。
 GOLDEN_SUDDEN = "79471a58"
+
+# 葱ボンと延長戦を通す CPU だけの試合（`play_cpu_negibon_match`）を 9000 tick 進めた
+# あとの盤面の要約。段階 8 で、外周の CPU と葱のよけを足したあとに足した。同じ試合は
+# TypeScript 版と tick ごとに入力が一致する（`tests/ai/test_cpu_ts.py` の「葱ボンと
+# 延長戦」）ことを確かめてから出した。2026-10-19 に 3.12 と 3.11 で出し、同じ値に
+# なることを確かめた。
+GOLDEN_CPU_NEGIBON = "fef97ec5"
+
+
+def test_葱ボンと延長戦を通すCPUの試合は_決めておいた要約に行き着く() -> None:
+    events: list[SimEvent] = []
+    session = play_cpu_negibon_match(events=events)
+    match = session.match
+    assert (match.round, match.wins, match.finished) == (2, {1: 1}, False)
+    assert f"{hash_world(session.world):08x}" == GOLDEN_CPU_NEGIBON
+    # 台本が、葱を撃つ・入れ替わる・外周が閉じる・延長戦に入る・ラウンドが替わる、を
+    # 通っているかの見張り（通らなくなると、hash の種を変えた突き合わせでも見えない）。
+    kinds = [type(event) for event in events]
+    assert kinds.count(LeekThrown) == 3
+    assert kinds.count(Revived) == 2
+    assert kinds.count(LanesClosed) == 1
+    assert kinds.count(SuddenDeath) == 1
+    assert kinds.count(RoundEnded) == 1
 
 
 def test_ラウンドをまたぐ台本は_決めておいた要約に行き着く() -> None:

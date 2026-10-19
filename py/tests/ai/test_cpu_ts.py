@@ -10,8 +10,8 @@ CPU だけの試合を `GameSession` で流し、tick ごとの CPU の入力（
 期待する値は `ts_cpu_values.json`。同じコミットの TypeScript 版の `domain/`・
 `app/GameSession.ts`・`ai/` を写し、全員が下を向いて始まる形にして
 （`tests/systems/test_simulation_ts.py` の説明と同じ）、同じ試合を流して出したもの。
-葱ボンと延長戦は TypeScript 版の既定どおり入れる（3試合とも、4000 tick のうちに延長戦
-には入らない。倒れたプレイヤーは外周へ回る）。写しの CPU で止めているものは無い
+葱ボンと延長戦は TypeScript 版の既定どおり入れる（はじめの3試合は 4000 tick のうちに
+延長戦には入らない。倒れたプレイヤーは外周へ回る）。写しの CPU で止めているものは無い
 （外周の操縦と、盤面で飛んでくる葱をよける規則も、写しのまま動かす）。
 
 ## 試合
@@ -24,9 +24,14 @@ CPU だけの試合を `GameSession` で流し、tick ごとの CPU の入力（
   外周を動き続ける、も通る
 - 2人の試合：うさぎ（おに）とかえる（よわい）。体力の既定（爆風1回）・ラウンドの
   区切り（8回）で記憶を捨てる、を通る
+- 葱ボンと延長戦：4段階と同じ顔ぶれと強さで、体力の既定・制限時間 90 秒・9000 tick。
+  決定性の台本（`tests/determinism/scenario.py` の `play_cpu_negibon_match`）と同じ
+  試合。葱を撃つ・葱で入れ替わる・葱をよける・同じラウンドで2度目の外周・2ラウンド目の
+  外周（外周の操縦を作り直したあと）・延長戦に入る、を通る
 
-種と長さは、CPU がとくぎを直に出す場面を通るように選んだ（TypeScript の写しで種を順に
-回して数えた）。4体の試合は体力を爆風3回ぶんにして、長く続くようにしてある。
+はじめの3試合の種と長さは、CPU がとくぎを直に出す場面を通るように選んだ（TypeScript の
+写しで種を順に回して数えた）。4体の試合は体力を爆風3回ぶんにして、長く続くようにして
+ある。葱ボンと延長戦の試合の種の選び方は `scenario.py` の `NEGIBON_SEED`。
 """
 
 import json
@@ -44,6 +49,13 @@ from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.match import MatchConfig
 from animal_bomber.domain.state.player import PLAYER_IDS, PlayerId
 from animal_bomber.domain.state.world import WorldState
+from tests.determinism.scenario import (
+    CPU_ANIMALS,
+    CPU_LEVEL_KEYS,
+    NEGIBON_ROUND_LIMIT,
+    NEGIBON_SEED,
+    NEGIBON_TICKS,
+)
 from tests.ts_rows import event_row, world_rows
 
 EXPECTED = json.loads(
@@ -51,6 +63,11 @@ EXPECTED = json.loads(
 )
 INTERVAL = 100
 """盤面を比べる区切りの間（tick）。入力は毎 tick 比べるので、盤面は間を空ける。"""
+
+TICKS = 4000
+"""はじめの3試合を進める長さ。"""
+LONG_ROUND = Tick(60 * 180)
+"""はじめの3試合の制限時間（3 分）。"""
 
 EASY, NORMAL = CpuLevelKey.EASY, CpuLevelKey.NORMAL
 HARD, ONI = CpuLevelKey.HARD, CpuLevelKey.ONI
@@ -80,13 +97,14 @@ def play(
     starting_hp: tuple[int, ...] | None,
     spawn_order: tuple[int, ...] | None,
     ticks: int,
+    round_limit: Tick = LONG_ROUND,
 ) -> tuple[str, list[dict[str, object]]]:
     """CPU だけの試合を流し、詰めた入力の列と区切りごとの値を返す。"""
     config = MatchConfig(
         seed=seed,
         animals=animals,
         spawn_order=spawn_order,
-        round_limit=Tick(60 * 180),
+        round_limit=round_limit,
         wins_to_take=99,
         starting_hp=starting_hp,
     )
@@ -145,7 +163,16 @@ def _first_difference(expected: str, actual: str) -> str:
 
 
 @pytest.mark.parametrize(
-    ("name", "seed", "animals", "levels", "starting_hp", "spawn_order"),
+    (
+        "name",
+        "seed",
+        "animals",
+        "levels",
+        "starting_hp",
+        "spawn_order",
+        "ticks",
+        "round_limit",
+    ),
     [
         pytest.param(
             "hard-four",
@@ -154,6 +181,8 @@ def _first_difference(expected: str, actual: str) -> str:
             (HARD, HARD, HARD, HARD),
             (6, 6, 6, 6),
             None,
+            TICKS,
+            LONG_ROUND,
             id="つよい4体",
         ),
         pytest.param(
@@ -163,6 +192,8 @@ def _first_difference(expected: str, actual: str) -> str:
             (EASY, NORMAL, HARD, ONI),
             (6, 6, 6, 6),
             None,
+            TICKS,
+            LONG_ROUND,
             id="4段階",
         ),
         pytest.param(
@@ -172,7 +203,20 @@ def _first_difference(expected: str, actual: str) -> str:
             (ONI, EASY),
             None,
             (0, 3),
+            TICKS,
+            LONG_ROUND,
             id="2人の試合",
+        ),
+        pytest.param(
+            "negibon",
+            NEGIBON_SEED,
+            CPU_ANIMALS,
+            CPU_LEVEL_KEYS,
+            None,
+            None,
+            NEGIBON_TICKS,
+            NEGIBON_ROUND_LIMIT,
+            id="葱ボンと延長戦",
         ),
     ],
 )
@@ -183,9 +227,13 @@ def test_同じ試合を流すと_TypeScript版のCPUと同じ手になる(
     levels: tuple[CpuLevelKey, ...],
     starting_hp: tuple[int, ...] | None,
     spawn_order: tuple[int, ...] | None,
+    ticks: int,
+    round_limit: Tick,
 ) -> None:
     expected = EXPECTED[name]
-    inputs, checkpoints = play(seed, animals, levels, starting_hp, spawn_order, 4000)
+    inputs, checkpoints = play(
+        seed, animals, levels, starting_hp, spawn_order, ticks, round_limit
+    )
     assert inputs == expected["inputs"], _first_difference(expected["inputs"], inputs)
     for want, got in zip(expected["checkpoints"], checkpoints, strict=True):
         assert got == want, f"{want['tick']} tick 目でずれた"
