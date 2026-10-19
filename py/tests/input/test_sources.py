@@ -81,14 +81,14 @@ class Test入力を集める:
         with pytest.raises(ValueError, match=r"窓口の無いプレイヤー \[1\]"):
             gatherer.gather(world, MatchTick(0))
 
-    def test_盤面にいないプレイヤーの窓口があれば_どの窓口にも聞かずに止まる(
+    def test_試合にいないプレイヤーの窓口があれば_どの窓口にも聞かずに止まる(
         self,
     ) -> None:
         world = make_world()
         log = InputLog()
         recording = RecordingInputSource(Fixed(0, PlayerInput.RIGHT), log)
         gatherer = InputGatherer([recording, IdleSource(1), IdleSource(3)])
-        with pytest.raises(ValueError, match=r"盤面にいないプレイヤーの窓口 \[3\]"):
+        with pytest.raises(ValueError, match=r"試合にいないプレイヤーの窓口 \[3\]"):
             gatherer.gather(world, MatchTick(0))
         # 途中まで聞いていたら、記録する窓口が記録を残すはず。記録が空であることを見る。
         assert log.encode() == ""

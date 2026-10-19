@@ -126,7 +126,7 @@ class InputGatherer:
         順を固定しておけば、そこを疑わずに済む）。
 
         Raises:
-            ValueError: 窓口の無いプレイヤーがいるとき、または盤面にいないプレイヤーの
+            ValueError: 窓口の無いプレイヤーがいるとき、または試合にいないプレイヤーの
                 窓口があるとき。何も押していない入力で埋めると、繋ぎ忘れが黙って通る
                 （誰も操作していないプレイヤーには `IdleSource` を渡す）。どの窓口にも
                 聞く前に止める（記録する窓口が、途中まで記録してしまわないように）。
@@ -137,7 +137,7 @@ class InputGatherer:
         if missing or extra:
             raise ValueError(
                 f"窓口とプレイヤーが合わない: 窓口の無いプレイヤー {missing}、"
-                f"盤面にいないプレイヤーの窓口 {extra}"
+                f"試合にいないプレイヤーの窓口 {extra}"
             )
         return {
             player: self._sources[player].next_input(world, tick) for player in players

@@ -50,7 +50,8 @@ TypeScript 版の `Simulation` と同じ）。
    （原型の L4345-4347）。葱が当たって入れ替わるのもこの番で、戻ったプレイヤーは
    この tick にはもう動かない（2. は済んでいる）。跳ねる爆弾は、跳ね終わるか
    爆風に触れると、導火線 0 の爆弾を生やすだけで、爆発するのは 5.（原型も同じ update
-   の爆弾の輪で起こす）
+   の爆弾の輪で起こす）。ただし降りられるマスが無いときは、爆弾を生やさずに、この番に
+   中心の爆風だけを出す（原型 L2935-2939 も同じ）
 4. 溶けきったもの・残る長さを過ぎたアイテムを消す（`items.py` の `remove_expired`）
 5. 導火線を進め（`bomb.py`）、尽きた爆弾を連鎖ごと爆発させる（`blast.py`）。置いた
    tick にも導火線を進めるので、置いた tick を1つ目と数えて `BOMB_FUSE` 個目の tick
@@ -113,8 +114,8 @@ def step(world: WorldState, inputs: Mapping[PlayerId, PlayerInput]) -> list[SimE
     Args:
         world: 進める状態。この関数が書き換える。
         inputs: この tick の、プレイヤーごとの入力。出どころ（キーボード・CPU・通信・
-            流し直す記録）は問わない。盤面にいる全員の分が要る（`InputGatherer.gather`
-            が返すもの）。
+            流し直す記録）は問わない。試合に加わっている全員（外周にいるプレイヤーと
+            退場したプレイヤーも）の分が要る（`InputGatherer.gather` が返すもの）。
     """
     events: list[SimEvent] = []
     # 1.
