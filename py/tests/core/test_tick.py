@@ -2,7 +2,12 @@
 
 import pytest
 
-from animal_bomber.domain.core.tick import Tick, seconds_to_ticks, ticks_to_seconds
+from animal_bomber.domain.core.tick import (
+    MatchClock,
+    Tick,
+    seconds_to_ticks,
+    ticks_to_seconds,
+)
 from animal_bomber.domain.rules.tuning import BLAST_DURATION, BOMB_FUSE
 
 
@@ -34,6 +39,21 @@ class TestTick:
         いる（多くなるのは 1 だけ）。
         """
         assert seconds_to_ticks(seconds) == ticks
+
+
+class Test試合通算の時刻:
+    def test_先の時刻は_進めずに足した値を返す(self) -> None:
+        """通信対戦で、何 tick か先に効く入力を送るときに使う（段階 9）。"""
+        clock = MatchClock()
+        clock.advance()
+        clock.advance()
+        assert (clock.after(0), clock.after(3)) == (2, 5)
+        assert clock.now == 2
+
+    def test_先の時刻の数が負なら止める(self) -> None:
+        """過ぎた時刻の入力は送れない。"""
+        with pytest.raises(ValueError, match="負"):
+            MatchClock().after(-1)
 
 
 class Test秒で書いた定数:

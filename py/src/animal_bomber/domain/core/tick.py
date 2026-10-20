@@ -78,6 +78,20 @@ class MatchClock:
         """1 tick 進め終えたことを数える。"""
         self._elapsed += 1
 
+    def after(self, ticks: int) -> MatchTick:
+        """いまから `ticks` tick 先の時刻（進めずに、時刻だけを返す）。
+
+        通信対戦で、何 tick か先に効く入力を送るときに使う（`net/lockstep.py` の
+        `INPUT_DELAY`）。足し算をここに置くのは、`MatchTick` の値を作る場所を増やさない
+        ため（上の `MatchTick` の説明）。
+
+        Raises:
+            ValueError: `ticks` が負のとき（過ぎた時刻の入力は送れない）。
+        """
+        if ticks < 0:
+            raise ValueError(f"先の tick の数が負: {ticks}")
+        return MatchTick(self._elapsed + ticks)
+
 
 def seconds_to_ticks(seconds: float) -> Tick:
     """秒を tick 数へ直す。端数は切り上げる（指定した秒数より早く終わらせない）。"""

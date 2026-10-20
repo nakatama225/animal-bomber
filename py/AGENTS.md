@@ -190,6 +190,22 @@ set の反復は、import でも構文木でも止められません。`tests/de
   書き換え、なぜ変わったかをコミットに書いてください。意図していなければ、値を書き換えずに
   原因を探してください。3.12 と 3.11 で値が違ったら、ルールの層の誤り（版で値が変わる計算）です
 
+## 通信対戦（`src/animal_bomber/net/`）
+
+- メッセージの約束の表（種類と項目の名前）は、中継サーバ（`server/`）の
+  `animal_bomber_server.protocol` を import して使います。この版に写さないでください。
+  種類や項目を足すときは、中継の表と TypeScript 版の `ts/src/net/protocol.ts` を同じく変え、
+  この版の型（`net/protocol.py`）にも足します。食い違いは `tests/net/test_protocol.py`
+  （この版と表）と `server/tests/test_protocol_sync.py`（TypeScript 版と表）が見つけます
+- 人間のプレイヤーの窓口（`NetworkInputSource`）は `LockstepDriver` が作って試合に繋ぎます
+  （試合は `create_session` で作らせる）。⛔ 自分のプレイヤーにキーボードを直に繋がないで
+  ください。自分の手元でだけ操作が早く効いて、試合がずれます
+- 抜けたプレイヤーを CPU に替える tick は、記録の `InputLog.replaced_at` だけで決めます
+  （本物の端末と記録の流し直しが、同じ tick で替わるため）。替わる判定をほかに足さないで
+  ください
+- この層はソケットを持ちません（中継とつなぐ実物は `shell/`）。テストは中継の代わり
+  （`tests/net/fake_relay.py`）で何台ぶんでも同じプロセスの中で動かします
+
 ## docstring と docs
 
 - docstring は PEP 257 の例と同じ形にします。要約は開きの引用符と同じ行に1行で書き、

@@ -9,6 +9,8 @@
 呼んでよい場所（下の `ALLOWED`）：
 
 - `domain/core/tick.py` の `MatchClock.now` … 試合通算の時刻を数える所
+- `domain/core/tick.py` の `MatchClock.after` … いまから何 tick か先の時刻（通信対戦で、
+  先に効く入力を送るとき。段階 9）
 - `net/input_log.py` の `_decode_entry` … 保存した記録の文字列から時刻を読み戻す所
 - `net/protocol.py` の `_Fields.tick` … 通信で届いた文字列から時刻を読み戻す所
   （`_decode_entry` と同じ役。段階 9）
@@ -45,6 +47,7 @@ NAME = "MatchTick"
 
 ALLOWED = {
     ("domain/core/tick.py", "MatchClock.now"),
+    ("domain/core/tick.py", "MatchClock.after"),
     ("net/input_log.py", "_decode_entry"),
     ("net/protocol.py", "_Fields.tick"),
 }

@@ -1,10 +1,15 @@
-"""操作の記録の検査（記録・引き方・文字列との行き来・記録を流す窓口と記録する窓口）。"""
+"""操作の記録の検査。
+
+記録・引き方・文字列との行き来・記録を流す窓口と記録する窓口・途中で抜けたプレイヤー。
+"""
 
 import pytest
 
 from animal_bomber.domain.core.tick import MatchTick
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.input.sources import IdleSource
+from animal_bomber.domain.state.player import PlayerId
+from animal_bomber.domain.state.world import WorldState
 from animal_bomber.net.input_log import (
     InputLog,
     RecordingInputSource,
@@ -180,3 +185,138 @@ class Test文字列との行き来:
     ) -> None:
         with pytest.raises(ValueError, match=message):
             InputLog.decode(text)
+
+
+class Test途中で抜けたプレイヤー:
+    """通信対戦で途中で抜けたプレイヤー（段階 9）。
+
+    TypeScript 版の記録と同じ形で書く（`|departed:プレイヤー番号,tick;…`）。
+    """
+
+    def test_抜けたプレイヤーは_最後に使うtickの次から替わる(self) -> None:
+        log = InputLog()
+        log.depart(10, 2)
+        assert log.departed_after(2) == 10
+        assert log.departed_after(1) is None
+        assert not log.replaced_at(MatchTick(10), 2)
+        assert log.replaced_at(MatchTick(11), 2)
+        assert not log.replaced_at(MatchTick(11), 1)
+
+    def test_入力が1つも配られないうちに抜けたプレイヤーは_tick0から替わる(
+        self,
+    ) -> None:
+        log = InputLog()
+        log.depart(-1, 3)
+        assert log.replaced_at(MatchTick(0), 3)
+
+    def test_同じプレイヤーを2度記録しようとしたら止まる(self) -> None:
+        """あとの値で上書きすると、替わる tick が端末ごとに食い違いうる。"""
+        log = InputLog()
+        log.depart(10, 1)
+        with pytest.raises(ValueError, match="2度"):
+            log.depart(20, 1)
+        assert log.departed_after(1) == 10
+
+    def test_最後に使うtickはマイナス1まで(self) -> None:
+        with pytest.raises(ValueError, match="-1 より小さい"):
+            InputLog().depart(-2, 1)
+
+    def test_抜けたプレイヤーの区画は最後に_番号の順に書き_戻せる(self) -> None:
+        """抜けたプレイヤーの区画は、変わった時点の区画と別に書く。
+
+        入力が1つも配られないうちに抜けたプレイヤー（3番）は、変わった時点の区画を
+        持たないため。
+        """
+        log = InputLog()
+        log.record(MatchTick(0), 0, PlayerInput.RIGHT)
+        log.record(MatchTick(4), 1, PlayerInput.UP)
+        log.depart(-1, 3)
+        log.depart(40, 1)
+        text = log.encode()
+        assert text == "0:0,8|1:4,1|departed:1,40;3,-1"
+        restored = InputLog.decode(text)
+        assert restored.encode() == text
+        assert restored.departed_after(1) == 40
+        assert restored.departed_after(3) == -1
+        assert restored.departed_after(0) is None
+
+    def test_抜けたプレイヤーだけの記録も書ける(self) -> None:
+        log = InputLog()
+        log.depart(-1, 2)
+        assert log.encode() == "departed:2,-1"
+        assert InputLog.decode("departed:2,-1").departed_after(2) == -1
+
+    @pytest.mark.parametrize(
+        ("text", "message"),
+        [
+            ("departed:1,40|0:0,8", "最後でない"),
+            ("departed:1,40|departed:2,5", "最後でない"),
+            ("0:0,8|departed:", "項目が読めない"),
+            ("0:0,8|departed:4,1", "項目が読めない"),
+            ("0:0,8|departed:1,-2", "項目が読めない"),
+            ("0:0,8|departed:1,05", "項目が読めない"),
+            ("0:0,8|departed:1,１", "項目が読めない"),
+            ("0:0,8|departed:2,5;1,40", "番号の順でない"),
+            ("0:0,8|departed:1,5;1,40", "番号の順でない"),
+            ("0:0,8|departed", "区画が読めない"),
+        ],
+    )
+    def test_抜けたプレイヤーの区画が書く形から外れたら_読まずに止まる(
+        self, text: str, message: str
+    ) -> None:
+        with pytest.raises(ValueError, match=message):
+            InputLog.decode(text)
+
+
+class _CountingSource:
+    """読まれた tick を控え、いつも技のボタンを押す窓口。"""
+
+    def __init__(self, player_id: PlayerId) -> None:
+        self._player_id = player_id
+        self.read: list[MatchTick] = []
+
+    @property
+    def player_id(self) -> PlayerId:
+        return self._player_id
+
+    def next_input(self, world: WorldState, tick: MatchTick) -> PlayerInput:
+        self.read.append(tick)
+        return PlayerInput.ACTION
+
+
+class Test記録を流す窓口と抜けたプレイヤー:
+    def test_抜けたプレイヤーは_最後に使うtickの次から代わりの窓口に任せる(
+        self,
+    ) -> None:
+        world = make_world()
+        log = InputLog.decode("1:0,8|departed:1,5")
+        made: list[_CountingSource] = []
+
+        def replacement(player: PlayerId) -> _CountingSource:
+            made.append(_CountingSource(player))
+            return made[-1]
+
+        source = ReplayInputSource(1, log, replacement)
+        assert source.next_input(world, MatchTick(5)) is PlayerInput.RIGHT
+        assert made == []
+        assert source.next_input(world, MatchTick(6)) is PlayerInput.ACTION
+        assert source.next_input(world, MatchTick(7)) is PlayerInput.ACTION
+        # 作るのは初めて任せるときの1度だけ（CPU は考えた内容を覚えている）。
+        assert len(made) == 1
+        assert made[0].read == [6, 7]
+
+    def test_抜けたプレイヤーに代わりの作り方を渡さないと_始める前に止まる(
+        self,
+    ) -> None:
+        """記録がその最後の操作を返し続けると、例外も出ずに別の試合になるため。"""
+        log = InputLog.decode("1:0,8|departed:1,5")
+        with pytest.raises(ValueError, match="代わりの窓口"):
+            ReplayInputSource(1, log)
+        # 抜けていないプレイヤーには要らない。
+        ReplayInputSource(0, log)
+
+    def test_別のプレイヤーの代わりの窓口が作られたら止まる(self) -> None:
+        log = InputLog.decode("departed:1,-1")
+        source = ReplayInputSource(1, log, lambda player: IdleSource(2))
+        with pytest.raises(ValueError, match="プレイヤー 2 の窓口"):
+            source.next_input(make_world(), MatchTick(0))
