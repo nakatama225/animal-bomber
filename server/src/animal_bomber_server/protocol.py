@@ -8,6 +8,10 @@ TypeScript 版の `ts/src/net/protocol.ts` と**同じ約束を、もう一方�
 食い違いは `tests/test_protocol_sync.py` が見つける。TypeScript 側の表を読み出して、
 下の表と種類名・項目名を突き合わせる。
 
+Python 版（`py/`）は、下の表を写さずに import する
+（`py/src/animal_bomber/net/protocol.py`）。表の種類や項目を変えたら、Python 版の型も
+直す（食い違いは `py/tests/net/test_protocol.py` が見つける）。
+
 ## 中継が読む項目
 
 中継は `input` の `tick` `match` と、`hash` の `tick` `hash` `rngCalls` `match` を読む。

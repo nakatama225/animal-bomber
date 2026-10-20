@@ -81,7 +81,7 @@ class MatchClock:
     def after(self, ticks: int) -> MatchTick:
         """いまから `ticks` tick 先の時刻（進めずに、時刻だけを返す）。
 
-        通信対戦で、何 tick か先に効く入力を送るときに使う（`net/lockstep.py` の
+        通信対戦で、何 tick か先に使う入力を送るときに使う（`net/lockstep.py` の
         `INPUT_DELAY`）。足し算をここに置くのは、`MatchTick` の値を作る場所を増やさない
         ため（上の `MatchTick` の説明）。
 

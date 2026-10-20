@@ -43,7 +43,7 @@ class TestTick:
 
 class Test試合通算の時刻:
     def test_先の時刻は_進めずに足した値を返す(self) -> None:
-        """通信対戦で、何 tick か先に効く入力を送るときに使う（段階 9）。"""
+        """通信対戦で、何 tick か先に使う入力を送るときに使う（段階 9）。"""
         clock = MatchClock()
         clock.advance()
         clock.advance()

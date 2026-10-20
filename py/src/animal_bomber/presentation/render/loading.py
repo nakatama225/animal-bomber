@@ -29,12 +29,25 @@ JAPANESE_FONTS: Final = (
 """日本語の字形を持つ書体の名前（`pygame.font.match_font` に渡す。上から順に探す）。"""
 
 
-def loading_message() -> tuple[str, str | None]:
-    """出す文字と、その書体のファイル。日本語の書体が無ければ英字と既定の書体（None）。"""
+def japanese_font_path() -> str | None:
+    """日本語の字形を持つ書体のファイル。無ければ None。
+
+    `JAPANESE_FONTS` を上から探す。通信対戦の文（`render/lan_screen.py`）も、この書体で
+    描く。⚠️ 見つからない環境では、日本語は四角に化ける（pygame の既定の書体は日本語の
+    字形を持たない）。
+    """
     for name in JAPANESE_FONTS:
         path = pygame.font.match_font(name)
         if path is not None:
-            return "じゅんびちゅう", path
+            return path
+    return None
+
+
+def loading_message() -> tuple[str, str | None]:
+    """出す文字と、その書体のファイル。日本語の書体が無ければ英字と既定の書体（None）。"""
+    path = japanese_font_path()
+    if path is not None:
+        return "じゅんびちゅう", path
     return "loading...", None
 
 

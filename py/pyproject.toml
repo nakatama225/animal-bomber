@@ -13,11 +13,13 @@ requires-python = ">=3.11"
 # animal-bomber-server は LAN 対戦の中継サーバ（リポジトリの server/）。通信の層（net/）が、
 # メッセージの約束の表を写さずにそのまま import する（約束を1つに保つため。
 # net/protocol.py の説明）。下の [tool.uv.sources] で server/ を直に指すので、server/ を
-# 直せば、入れ直さずにこちらにも効く。
+# 直せば、入れ直さずにこちらにも入る。websockets は中継とつなぐ所（shell/relay_link.py）が
+# 使う（中継と同じ下限）。
 dependencies = [
     "animal-bomber-server",
     "numpy>=2.4.6,<2.5",
     "pygame-ce>=2.5",
+    "websockets>=13.0",
 ]
 
 [dependency-groups]

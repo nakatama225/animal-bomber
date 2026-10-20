@@ -16,13 +16,13 @@
 
 試合の側（`app/session.py` の `GameSession` とルールの層）には、通信のための分岐が
 1つも無い。人間のプレイヤーに繋ぐ窓口を、キーボードから `NetworkInputSource` に替えた
-だけ。段階 1 で操作の出どころを窓口1つ（`InputSource`）に絞っておいたことが、ここで
-効く。
+だけ。段階 1 で操作の出どころを窓口1つ（`InputSource`）に絞っておいたので、ここで
+これだけで済む。
 
 試合（`GameSession`）を作るのもこのクラスの中にする（作り方は `create_session` で
 受け取る）。人間のプレイヤーに `NetworkInputSource` を繋ぐのを、作る側の書き忘れに
 任せないため（自分のプレイヤーにキーボードを直に繋ぐと、自分の手元でだけ操作が早く
-効いて試合がずれる）。
+試合に入り、試合がずれる）。
 
 ## 抜けたプレイヤー
 
@@ -80,10 +80,10 @@ from animal_bomber.net.protocol import (
 INPUT_DELAY: Final = 3
 """自分の入力を何 tick 遅らせて使うか。
 
-tick T に押した操作は、全員の手元で tick T+3 に効く。3 tick（50 ms）あれば、同じ LAN の
-往復（1〜3 ms）に中継での転送を足しても、相手の入力は使う前に届き、届くのを待って止まる
-ことがほぼ無い。これより短いと相手の入力が間に合わずに止まり、長いと押してから動くまでが
-遅れて感じられる。値は TypeScript 版と同じ。
+tick T に押した操作は、全員の手元で tick T+3 の入力になる。3 tick（50 ms）あれば、
+同じ LAN の往復（1〜3 ms）に中継での転送を足しても、相手の入力は使う前に届き、届くのを
+待って止まることがほぼ無い。これより短いと相手の入力が間に合わずに止まり、長いと押して
+から動くまでが遅れて感じられる。値は TypeScript 版と同じ。
 """
 
 HASH_INTERVAL: Final = 20
@@ -295,7 +295,7 @@ class LockstepDriver:
         tick = self._clock.now
         finished = self._session.match.finished
         self._note_replaced(tick)
-        # 試合が終わったあとの操作は何にも効かないので、何も押していない入力を送る。
+        # 試合が終わったあとの操作は試合に使われないので、何も押していない入力を送る。
         player_input = (
             PlayerInput.IDLE
             if finished

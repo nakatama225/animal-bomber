@@ -15,6 +15,7 @@ dependencies = [
     { name = "animal-bomber-server" },
     { name = "numpy" },
     { name = "pygame-ce" },
+    { name = "websockets" },
 ]
 
 [package.dev-dependencies]
@@ -30,6 +31,7 @@ requires-dist = [
     { name = "animal-bomber-server", editable = "../server" },
     { name = "numpy", specifier = ">=2.4.6,<2.5" },
     { name = "pygame-ce", specifier = ">=2.5" },
+    { name = "websockets", specifier = ">=13.0" },
 ]
 
 [package.metadata.requires-dev]

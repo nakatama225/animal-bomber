@@ -12,8 +12,12 @@ import json
 import os
 import subprocess
 import sys
+from typing import Any
 
 import pytest
+
+from animal_bomber.app.main import parse_args
+from animal_bomber.presentation.lan_status import WAIT_NOTICE_FRAMES
 
 DUMMY_ENV = {**os.environ, "SDL_VIDEODRIVER": "dummy", "SDL_AUDIODRIVER": "dummy"}
 
@@ -27,6 +31,7 @@ from animal_bomber.app.main import (
     ANIMALS, new_session, open_audio, prepare_renderer, preset_mixer, run,
     window_layout,
 )
+from animal_bomber.app.runner import LocalMatch
 from animal_bomber.presentation.presenter import Presenter
 from animal_bomber.presentation.render.baked.art import BakedArt
 from animal_bomber.presentation.render.loading import BACKGROUND, TEXT_COLOR
@@ -76,6 +81,7 @@ EVENTS = {
 plan = json.loads(sys.argv[1])
 keyboard = KeyboardWatcher()
 session = new_session(1, keyboard)
+runner = LocalMatch(session)
 current = []
 def channel_states():
     if not pygame.mixer.get_init():
@@ -90,7 +96,10 @@ def ticks():
             probes.append(channel_states())
         current[:] = EVENTS[name]
         yield ticks_
-presenter, observers = open_audio(session) if "audio" in options else (Presenter(), ())
+if "audio" in options:
+    presenter, observers, music = open_audio(runner)
+else:
+    presenter, observers, music = Presenter(), (), None
 # "order" があれば、1 tick ごとにイベントと盤面を渡した先を、渡した順に控える。
 order = []
 if "order" in options:
@@ -109,8 +118,8 @@ if "order" in options:
     observers = tuple(watched(observer) for observer in observers)
 scene = SceneTracker()
 run(
-    screen, session, keyboard, presenter, ticks(), renderer, scene,
-    events=lambda: list(current), observers=observers,
+    screen, runner, keyboard, presenter, ticks(), renderer, scene,
+    events=lambda: list(current), observers=observers, music=music,
 )
 first = session.world.players[0]
 x, y = layout.px(first.position.x), layout.py(first.position.y)
@@ -138,6 +147,119 @@ print(json.dumps({
 }))
 pygame.quit()
 """
+
+
+# 通信対戦の試合（LanMatch）を、中継との接続の代わりで回す。ホストの Enter で送った
+# start を中継と同じく配り返す（人間の一覧は1つ目の引数）。2つ目の引数の手順の "probe"
+# で、そのフレームの始め（前のフレームを描き終えた直後）の様子を控える。"desync" は
+# 中継からずれの知らせを届ける。
+LAN_SMOKE = """
+import json, sys
+import pygame
+from animal_bomber.app.lan import LanMatch
+from animal_bomber.app.main import lan_local_source, run, window_layout
+from animal_bomber.net.protocol import RequestStart, encode_lan_settings
+from animal_bomber.presentation.presenter import Presenter
+from animal_bomber.presentation.render.baked.art import BakedArt
+from animal_bomber.presentation.render.loading import TEXT_COLOR
+from animal_bomber.presentation.render.renderer import Renderer
+from animal_bomber.presentation.render.scene.tracker import SceneTracker
+from animal_bomber.shell.keyboard import KeyboardWatcher
+
+humans = json.loads(sys.argv[1])
+plan = json.loads(sys.argv[2])
+pygame.init()
+assert pygame.display.get_driver() == "dummy", pygame.display.get_driver()
+layout = window_layout(pygame.display.get_desktop_sizes()[0])
+screen = pygame.display.set_mode(layout.surface_size)
+renderer = Renderer(BakedArt(layout))
+
+class Connection:
+    def __init__(self):
+        self.inbox = []
+        self.closed_code = None
+        self.match = 0
+    def push(self, kind, **fields):
+        self.inbox.append(json.dumps({"t": kind, **fields}))
+    def send(self, message):
+        if isinstance(message, RequestStart):
+            self.match += 1
+            config = encode_lan_settings(message.config)
+            self.push("start", seats=humans, config=config, match=self.match)
+    def drain(self):
+        received, self.inbox = self.inbox, []
+        return received
+    def close(self):
+        pass
+
+class Music:
+    stops = 0
+    def start(self):
+        pass
+    def stop(self):
+        Music.stops += 1
+
+connection = Connection()
+keyboard = KeyboardWatcher()
+match = LanMatch(
+    address="localhost:8777", connect=lambda address: connection,
+    local_source=lan_local_source(keyboard), new_seed=lambda: 7,
+)
+connection.push("welcome", seat=0, role="host", seats=[])
+def key(scancode, code, kind=pygame.KEYDOWN):
+    return pygame.event.Event(kind, scancode=scancode, key=code)
+EVENTS = {
+    "none": [], "probe": [], "desync": [],
+    "enter": [key(pygame.KSCAN_RETURN, pygame.K_RETURN)],
+    "tap_bomb": [
+        key(pygame.KSCAN_SPACE, pygame.K_SPACE),
+        key(pygame.KSCAN_SPACE, pygame.K_SPACE, pygame.KEYUP),
+    ],
+}
+def text_pixels(top):
+    width, height = screen.get_size()
+    return sum(
+        1 for y in range(top, height) for x in range(width)
+        if tuple(screen.get_at((x, y))[:3]) == TEXT_COLOR
+    )
+current = []
+probes = []
+def ticks():
+    for ticks_, name in plan:
+        if name == "probe":
+            height = screen.get_height()
+            session = match.phase.session if hasattr(match.phase, "session") else None
+            probes.append({
+                "elapsed": None if session is None else session.clock.now,
+                "text": text_pixels(0),
+                "bottom": text_pixels(height - 40),
+                "tapped": keyboard.tapped((pygame.KSCAN_SPACE,)),
+                "stops": Music.stops,
+            })
+        if name == "desync":
+            connection.push("desync", tick=19, reports=[])
+        current[:] = EVENTS[name]
+        yield ticks_
+run(
+    screen, match, keyboard, Presenter(), ticks(), renderer, SceneTracker(),
+    events=lambda: list(current), music=Music(),
+)
+print(json.dumps(probes))
+pygame.quit()
+"""
+
+
+def _run_lan(humans: list[int], plan: list[tuple[int, str]]) -> list[dict[str, Any]]:
+    completed = subprocess.run(
+        [sys.executable, "-c", LAN_SMOKE, json.dumps(humans), json.dumps(plan)],
+        env=DUMMY_ENV,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert completed.returncode == 0, completed.stderr
+    probes: list[dict[str, Any]] = json.loads(completed.stdout.splitlines()[-1])
+    return probes
 
 
 def _run(plan: list[tuple[int, str]], *options: str) -> dict[str, object]:
@@ -263,3 +385,66 @@ def test_音を開かなければ_何も鳴らさない() -> None:
     ]
     assert isinstance(channels, list)
     assert not any(channels)
+
+
+class Test通信対戦の起動:
+    def test_relayの値は_ホスト名とポートに直してから使う(self) -> None:
+        """値なしは、この Mac の中継（ホストになる）。ポートを省けば中継の既定。"""
+        assert parse_args([]).relay is None
+        assert parse_args(["--relay"]).relay == "localhost:8777"
+        assert parse_args(["--relay", "mac.local"]).relay == "mac.local:8777"
+        assert parse_args(["--relay", "mac.local:9000"]).relay == "mac.local:9000"
+
+    def test_relayの値が読めなければ_理由を出して終わる(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with pytest.raises(SystemExit):
+            parse_args(["--relay", "mac.local/lockstep"])
+        assert "ホスト名[:ポート]" in capsys.readouterr().err
+
+
+class Test通信対戦のフレームの輪:
+    def test_始まる前は盤面の代わりに文を出し_ホストのEnterで始めて進める(
+        self,
+    ) -> None:
+        plan = [(0, "none"), (0, "probe"), (0, "enter"), (3, "none"), (0, "probe")]
+        lobby, playing = _run_lan([0], plan)
+        assert lobby["elapsed"] is None
+        assert lobby["text"] > 0
+        assert playing["elapsed"] == 3
+
+    def test_入力が揃わなければ進めず_押した瞬間を残し_しばらくして待ちを出す(
+        self,
+    ) -> None:
+        """2P の入力が1つも届かないので、tick 0 も進まない。
+
+        中継の代わりは、2P の入力を配らない。押してすぐ離した爆弾のキーは、進めなかった
+        フレームでは忘れない（読まれないまま消えると、届いたあとの tick で押したことに
+        ならない）。
+        """
+        waiting = [(1, "none")] * WAIT_NOTICE_FRAMES
+        plan = [(0, "none"), (0, "enter"), (5, "none"), (1, "tap_bomb"), (0, "probe")]
+        first, later = _run_lan([0, 1], [*plan, *waiting, (0, "probe")])
+        assert first["elapsed"] == 0
+        assert first["tapped"] is True
+        assert first["bottom"] == 0
+        assert later["elapsed"] == 0
+        assert later["bottom"] > 0
+
+    def test_ずれが知らされたら_進めずに曲を止める(self) -> None:
+        """曲を止めるのは、試合の最中でなくなったとき（始まる前とずれたあと）だけ。"""
+        plan = [
+            (0, "none"),
+            (0, "enter"),
+            (2, "none"),
+            (0, "probe"),
+            (0, "desync"),
+            (2, "none"),
+            (0, "probe"),
+        ]
+        before, after = _run_lan([0], plan)
+        assert before["elapsed"] == 2
+        # 始まる前の1フレームだけ止めた（試合の最中は止めない）。
+        assert before["stops"] == 1
+        assert after["elapsed"] == 2
+        assert after["stops"] > before["stops"]

@@ -350,7 +350,7 @@ class Test止めるとき:
         phase = client.phase
         assert isinstance(phase, Failed)
         assert "順が乱れた" in phase.reason
-        # 原因を調べられるように、元の例外も残す。盤面と名札を残すため、止まる直前の
+        # 原因を探せるように、元の例外も残す。盤面と名札を残すため、止まる直前の
         # 段階も持つ。
         assert isinstance(phase.cause, LockstepError)
         assert phase.played is before

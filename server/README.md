@@ -4,13 +4,16 @@
 書かれており、ゲームの HTML を配る役と、参加者の間でメッセージを転送する役を
 兼ねます。両方を**同じポート**で扱います。
 
-[`legacy/`](../legacy/) の HTML 版と、[`ts/`](../ts/) の TypeScript 版が使います。
-2つは中継のやり方が違うので、つなぐパスで部屋を分けています。
+[`legacy/`](../legacy/) の HTML 版と、[`ts/`](../ts/) の TypeScript 版、[`py/`](../py/) の
+Python 版が使います。中継のやり方が違うので、つなぐパスで部屋を分けています。
 
 | パス | 部屋 | 使う版 | 中継のやり方 |
 |---|---|---|---|
 | `/` | `relay.Room` | HTML 版 | ホスト権威。ホストだけが試合を進め、盤面を全員へ配る |
-| `/lockstep` | `lockstep.LockstepRoom` | TypeScript 版 | ロックステップ。全員が試合を進め、1 tick ぶんの入力だけを全員へ配る |
+| `/lockstep` | `lockstep.LockstepRoom` | TypeScript 版・Python 版 | ロックステップ。全員が試合を進め、1 tick ぶんの入力だけを全員へ配る |
+
+⚠️ 1つの試合に、TypeScript 版と Python 版を混ぜないでください。2つは試合の始まりから盤面が
+違うので、最初の突き合わせで中継がずれを知らせて止めます（`py/docs/10-通信対戦.md`）。
 
 ページも同じポートで配ります。`/ts/` の下では TypeScript 版のビルドの出力（`ts/dist`）を、それ以外の道では
 HTML 版を返します（`http.py`）。
@@ -82,7 +85,9 @@ SEND_TIMEOUT = 0.1  # 1つの接続への送信をあきらめるまでの秒数
 知らせます。全員がその次の tick から CPU に替えるので、替わる瞬間が端末ごとに揃います。
 
 メッセージの約束は `protocol.py` と TypeScript 版の `ts/src/net/protocol.ts` に1つずつ
-書いてあり、`tests/test_protocol_sync.py` が突き合わせます。
+書いてあり、`tests/test_protocol_sync.py` が突き合わせます。Python 版は `protocol.py` の表を
+そのまま import します（写さない。食い違いは `py/tests/net/test_protocol.py` が見る）。
+そのため、このパッケージには型の印（`py.typed`）を置いてあります。
 
 ---
 
@@ -94,7 +99,7 @@ SEND_TIMEOUT = 0.1  # 1つの接続への送信をあきらめるまでの秒数
 | `http.py` | HTML の静的配信。WebSocket へ昇格しないリクエストを受け持つ |
 | `relay.py` | プレイヤー番号の割り当てとメッセージ転送。ゲームのルールを持たない中核 |
 | `lockstep.py` | ロックステップの部屋。入力を全員へ配り、状態の要約を突き合わせる |
-| `protocol.py` | ロックステップのメッセージの約束（TypeScript 版と同じもの） |
+| `protocol.py` | ロックステップのメッセージの約束（TypeScript 版と同じもの。Python 版は import して使う） |
 | `netinfo.py` | この端末を LAN 上でどう指せばよいか（`.local` 名と IP アドレス）を調べる |
 | `ui.py` | 起動中であることを示す小さな窓。接続用の URL と終了ボタンを出す |
 

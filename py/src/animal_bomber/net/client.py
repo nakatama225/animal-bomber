@@ -130,7 +130,7 @@ class Failed:
 
     reason: str
     cause: BaseException | None = field(default=None, compare=False)
-    """止めるきっかけになった例外。原因を調べるときのために残す。"""
+    """止めるきっかけになった例外。原因を探すときのために残す。"""
     played: Playing | None = None
     """試合の最中に止まったときの、止まる直前の段階。始まる前に止まったときは None。
 

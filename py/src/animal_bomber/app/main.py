@@ -5,28 +5,37 @@
 
 下の並びが、この実装の全体像になっている。
 
-1. 試合の設定を作る（1台で2人。対角から始める）
-2. 操作の出どころを、プレイヤーごとに割り当てる（キーボードの左右と、パッド）
+1. 試合を作る。1台で2人（対角から始める）か、`--relay` を付けたら通信対戦
+   （`app/lan.py` の `LanMatch`。中継サーバにつなぐ）
+2. 操作の出どころを、プレイヤーごとに割り当てる（キーボードと、パッド）
 3. 画面の大きさから描く面の寸法を決めて窓を開き（`window_layout`）、「じゅんびちゅう」を
    出してから、試合で使う絵を描いておく（`prepare_renderer`）
-4. 実時間を tick の数に換えて試合を進める（`shell/loop.py` の `frames`）
+4. 実時間を tick の数に換えて試合を進める（`shell/loop.py` の `frames`）。通信対戦は、
+   全員の入力が揃った tick だけ進める（`MatchRunner.ready`）
 5. 残り時間の秒読みと曲を鳴らし（`Countdown`・`RoundMusic`）、起きたイベントを音と
    通知に変え（`Presenter`）、見た目だけの値を数え（`SceneTracker`）、盤面を描く
-   （`Renderer`）
+   （`Renderer`）。通信対戦の様子は、始まる前は盤面の代わりに、始まったあとは盤面の
+   下に出す（`LanScreen`）
 
-起動は `uv run python -m animal_bomber.app.main`。窓を閉じるか Esc で終わる。
+起動は `uv run python -m animal_bomber.app.main`。通信対戦は、中継サーバ
+（`uv --directory server run python -m animal_bomber_server`）を立ててから、
+`--relay`（中継を立てた Mac）か `--relay <中継を立てた Mac の名前>.local`（ほかの
+Mac）を付けて起動する（docs/10-通信対戦.md）。窓を閉じるか Esc で終わる。
 
 ⚠️ 窓を開いて遊んで確かめていない（段階 4 の遊んでの確かめは、Mac の前で行う）。
-絵を窓に出して見たことも、音を鳴らして聞いたことも無い。テストは SDL の dummy
-ドライバで、窓を開かず、音も出さずに数フレーム回す。
+絵を窓に出して見たことも、音を鳴らして聞いたことも、2台の Mac で通信対戦をしたことも
+無い。テストは SDL の dummy ドライバで、窓を開かず、音も出さずに数フレーム回す。
 """
 
+import argparse
 import time
 from collections.abc import Callable, Iterable, Sequence
 from typing import Final, Protocol
 
 import pygame
 
+from animal_bomber.app.lan import LanMatch
+from animal_bomber.app.runner import LocalMatch, MatchRunner
 from animal_bomber.app.session import GameSession
 from animal_bomber.domain.events import SimEvent
 from animal_bomber.domain.input.sources import EitherSource, InputSource
@@ -37,10 +46,11 @@ from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.presentation.audio.bank import open_sound_bank
 from animal_bomber.presentation.audio.countdown import Countdown
-from animal_bomber.presentation.audio.music import RoundMusic, open_music
+from animal_bomber.presentation.audio.music import Music, RoundMusic, open_music
 from animal_bomber.presentation.presenter import Presenter
 from animal_bomber.presentation.render.baked.art import BakedArt
 from animal_bomber.presentation.render.band import BAND_HEIGHT
+from animal_bomber.presentation.render.lan_screen import LanScreen
 from animal_bomber.presentation.render.layout import Layout, fit_layout
 from animal_bomber.presentation.render.loading import draw_loading
 from animal_bomber.presentation.render.renderer import Renderer
@@ -49,13 +59,15 @@ from animal_bomber.shell.gamepad import ControllerReader, GamepadSource, PadClai
 from animal_bomber.shell.keyboard import (
     PLAYER1_KEYS,
     PLAYER2_KEYS,
+    SOLO_KEYS,
     KeyboardSource,
     KeyboardWatcher,
 )
 from animal_bomber.shell.loop import frames
+from animal_bomber.shell.relay_link import RelayLink, parse_relay_address
 
 ANIMALS = (Animal.RABBIT, Animal.ELEPHANT)
-"""2人の動物。動物を選ぶ画面は段階 10 で作る。"""
+"""1台で遊ぶ2人の動物。動物を選ぶ画面は段階 10 で作る。"""
 
 MIXER_FREQUENCY: Final = 48000
 """音の出口の標本化の周波数（Hz）。音はこの周波数で焼く（`presentation/audio/bank.py`）。"""
@@ -70,6 +82,13 @@ MIXER_BUFFER: Final = 512
 
 WINDOW_SHARE: Final = 0.9
 """画面の大きさのうち、窓に使う割合（窓の枠と、画面の端の帯の分を残す）。"""
+
+HOST_RELAY: Final = "localhost"
+"""`--relay` を値なしで付けたときにつなぐ中継（この Mac で立てた中継。ホストになる）。
+
+中継は、自分と同じ Mac からつないだ端末をホスト（0番）にする（`server/` の
+`from_same_machine`）。
+"""
 
 
 class TickObserver(Protocol):
@@ -106,10 +125,35 @@ def new_session(seed: int, keyboard: KeyboardWatcher) -> GameSession:
     return GameSession(config, sources)
 
 
-def animal_of(session: GameSession, player: PlayerId) -> Animal | None:
-    """その試合のそのプレイヤーの動物（技の音を選ぶのに使う）。いなければ None。"""
-    animals = session.config.animals
-    return animals[player] if player < len(animals) else None
+def lan_local_source(
+    keyboard: KeyboardWatcher,
+) -> Callable[[PlayerId], InputSource]:
+    """通信対戦で、この端末のプレイヤーの操作を作る関数。
+
+    1台に1人なので、キーボード全体（WASD と矢印の両方）とパッドを1人が使う
+    （TypeScript 版と同じ）。
+    """
+    pads = ControllerReader()
+    claims = PadClaims()
+
+    def make(player_id: PlayerId) -> InputSource:
+        keys = KeyboardSource(player_id, keyboard, SOLO_KEYS)
+        return EitherSource(player_id, (keys, GamepadSource(player_id, pads, claims)))
+
+    return make
+
+
+def new_seed() -> int:
+    """試合の種。起動のたび・試合のたびに変える（実時間を読むのは、この層の役目）。"""
+    return time.time_ns() & 0xFFFFFFFF
+
+
+def animal_of(runner: MatchRunner, player: PlayerId) -> Animal | None:
+    """いまの試合のそのプレイヤーの動物（技の音を選ぶのに使う）。いなければ None。"""
+    config = runner.config
+    if config is None or player >= len(config.animals):
+        return None
+    return config.animals[player]
 
 
 def window_layout(desktop: tuple[int, int]) -> Layout:
@@ -149,7 +193,7 @@ def prepare_renderer(
 
 def run(
     screen: pygame.Surface,
-    session: GameSession,
+    runner: MatchRunner,
     keyboard: KeyboardWatcher,
     presenter: Presenter,
     ticks_per_frame: Iterable[int],
@@ -157,29 +201,30 @@ def run(
     scene: SceneTracker,
     events: Callable[[], list[pygame.event.Event]] = pygame.event.get,
     observers: Sequence[TickObserver] = (),
+    music: Music | None = None,
 ) -> None:
     """フレームを回す。窓を閉じるか Esc を押すと戻る。
 
     Args:
         screen: 窓の面（`pygame.display.set_mode` が返したもの）。
-        session: 進める試合。
+        runner: 進める試合（1台の試合か、通信対戦）。
         keyboard: キーボードのイベントを渡す先。
         presenter: 起きたイベントを渡す先。
         ticks_per_frame: フレームごとに進める tick の数（`frames()`）。
         renderer: 盤面を描くもの。
-        scene: 見た目だけの値を数えるもの。回し始める前に進める前の盤面を1回渡し、
-            1 tick ごとに盤面とイベントを渡し、描くときに読ませる。
+        scene: 見た目だけの値を数えるもの。試合が始まったら（次の試合も）進める前の
+            盤面を1回渡し、1 tick ごとに盤面とイベントを渡し、描くときに読ませる。
         events: そのフレームに届いたイベントを返す関数。テストで差し替える。
         observers: 1 tick 進めるたびに、盤面とイベントを渡す先（秒読みと曲）。
             `presenter` より先に渡す。
+        music: 曲。試合の最中でなくなったら（通信対戦がずれや切断で止まった、など）
+            止める。鳴らし始めるのは `observers` の `RoundMusic`。
     """
     # 描く面はアルファの桁の無い面にし、窓の面へは 1 フレームに 1 回だけ貼る
     # （py/AGENTS.md「描画の重さ」。合否はこの形で測って決めた）。
     canvas = pygame.Surface(renderer.layout.surface_size).convert()
-    # 進める前の盤面の控えを取らせる。取らないと、1ラウンド目の最初の tick に歩いた
-    # 距離を数えない（原型は最初の update から数える。2ラウンド目からは、作り直した
-    # 盤面が進める前に渡る）。
-    scene.observe(session.world, [])
+    texts: LanScreen | None = None
+    seen_generation: int | None = None
     for ticks in ticks_per_frame:
         for event in events():
             if event.type == pygame.QUIT:
@@ -187,8 +232,24 @@ def run(
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 return
             keyboard.handle(event)
+            runner.handle(event)
+        runner.poll()
+        world = runner.world
+        if world is not None and runner.generation != seen_generation:
+            # 試合が始まった（通信対戦では、次の試合も）。進める前の盤面の控えを
+            # 取らせる。取らないと、1ラウンド目の最初の tick に歩いた距離を数えない
+            # （原型は最初の update から数える。2ラウンド目からは、作り直した盤面が
+            # 進める前に渡る）。
+            seen_generation = runner.generation
+            scene.observe(world, [])
         for _ in range(ticks):
-            tick_events = session.tick()
+            # 通信対戦で入力が揃っていなければ、このフレームはここまで（時間は捨てる。
+            # 相手の入力が届いたあとのフレームから、また 1 tick ずつ進む）。
+            if not runner.ready:
+                break
+            tick_events = runner.step()
+            world = runner.world
+            assert world is not None, "進めたのに盤面が無い"
             # 秒読みと曲を、イベントの音より先に回す（原型と同じ順）。原型は
             # update の頭で秒読みを鳴らし（L4292-4293）、曲はラウンドの最初の
             # update より前に鳴らし始める（startRound の L4159。1ラウンド目も、
@@ -196,11 +257,24 @@ def run(
             # のは `presenter`（倒れる音などのあと、勝ち・引き分け・優勝の音の
             # 直前。原型の endGame の L4469）。
             for observer in observers:
-                observer.observe(session.world, tick_events)
+                observer.observe(world, tick_events)
             presenter.consume(tick_events)
-            scene.observe(session.world, tick_events)
+            scene.observe(world, tick_events)
+            # 押してすぐ離したキーは、読んだ tick のあとで忘れる。進めなかった
+            # tick で忘れると、読まれないまま消える。
             keyboard.end_tick()
-        renderer.draw(canvas, session.world, session.match, scene)
+        if music is not None and not runner.in_progress:
+            music.stop()
+        world, match = runner.world, runner.match
+        if world is None or match is None:
+            texts = texts or LanScreen(canvas.get_height())
+            texts.draw_lobby(canvas, runner.lobby_lines())
+        else:
+            renderer.draw(canvas, world, match, scene)
+            notice = runner.notice()
+            if notice:
+                texts = texts or LanScreen(canvas.get_height())
+                texts.draw_notice(canvas, notice)
         screen.blit(canvas, (0, 0))
         pygame.display.flip()
 
@@ -221,29 +295,55 @@ def preset_mixer() -> None:
     )
 
 
-def open_audio(session: GameSession) -> tuple[Presenter, tuple[TickObserver, ...]]:
-    """音を焼き、イベントを渡す先と、1 tick ごとに盤面を渡す先（秒読みと曲）を作る。
+def open_audio(
+    runner: MatchRunner,
+) -> tuple[Presenter, tuple[TickObserver, ...], Music]:
+    """音を焼き、イベントを渡す先・1 tick ごとに盤面を渡す先（秒読みと曲）・曲を作る。
 
     曲は、鳴らし始めるのが `RoundMusic`、決着の tick に止めるのが `Presenter`（勝ち・
-    引き分け・優勝の音の直前に止めるため）。mixer が開いていなければ、どれも何も
-    鳴らさない。
+    引き分け・優勝の音の直前に止めるため）、試合の最中でなくなったら止めるのが `run`。
+    mixer が開いていなければ、どれも何も鳴らさない。
     """
     sounds = open_sound_bank()
     music = open_music()
     presenter = Presenter(
         sounds,
-        animal_of=lambda player: animal_of(session, player),
+        animal_of=lambda player: animal_of(runner, player),
         stop_music=music.stop,
     )
     observers = (
         Countdown(sounds),
         RoundMusic(music),
     )
-    return presenter, observers
+    return presenter, observers, music
 
 
-def main() -> None:
-    """窓を開いて、1台で2人の試合を始める。"""
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """起動の引数を読む。`--relay` の値が読めなければ、理由を出して終わる。"""
+    parser = argparse.ArgumentParser(
+        prog="python -m animal_bomber.app.main", description="どうぶつボンバー"
+    )
+    parser.add_argument(
+        "--relay",
+        nargs="?",
+        const=HOST_RELAY,
+        metavar="HOST[:PORT]",
+        help=(
+            "通信対戦で、中継サーバにつなぐ（値なしは、この Mac の中継。ホストになる）"
+        ),
+    )
+    args = parser.parse_args(argv)
+    if args.relay is not None:
+        address = parse_relay_address(args.relay)
+        if address is None:
+            parser.error(f"--relay の値が「ホスト名[:ポート]」でない: {args.relay!r}")
+        args.relay = address
+    return args
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    """窓を開いて、1台で2人の試合か、通信対戦を始める。"""
+    args = parse_args(argv)
     preset_mixer()
     pygame.init()
     layout = window_layout(pygame.display.get_desktop_sizes()[0])
@@ -252,24 +352,37 @@ def main() -> None:
     # 文字の入力（日本語の変換）を止める。止めないと、変換中の文字キーが KEYDOWN として
     # 届かないことがある。⚠️ 実機で確かめていない。
     pygame.key.stop_text_input()
-    renderer = prepare_renderer(screen, layout, ANIMALS)
-    # 種は起動のたびに変える。実時間を読むのは、ルールの層ではなくこの層の役目。
-    seed = time.time_ns() & 0xFFFFFFFF
     keyboard = KeyboardWatcher()
-    session = new_session(seed, keyboard)
-    presenter, observers = open_audio(session)
+    runner: MatchRunner
+    if args.relay is None:
+        renderer = prepare_renderer(screen, layout, ANIMALS)
+        runner = LocalMatch(new_session(new_seed(), keyboard))
+    else:
+        # どの動物が出るかはホストが決めるので、5匹とも描いておく（4.6 秒ほど）。
+        # つなぐ前に済ませる。つないだあとに描くと、その間ほかの端末がこの端末の
+        # 入力を待って止まる。
+        renderer = prepare_renderer(screen, layout, tuple(Animal))
+        runner = LanMatch(
+            address=args.relay,
+            connect=RelayLink.open,
+            local_source=lan_local_source(keyboard),
+            new_seed=new_seed,
+        )
+    presenter, observers, music = open_audio(runner)
     try:
         run(
             screen,
-            session,
+            runner,
             keyboard,
             presenter,
             frames(),
             renderer,
             SceneTracker(),
             observers=observers,
+            music=music,
         )
     finally:
+        runner.close()
         pygame.quit()
 
 

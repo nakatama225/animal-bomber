@@ -1,6 +1,6 @@
 """ロックステップの検査。
 
-同じ試合になる・遅らせて効く・待つ・ずれを見つける・抜けたプレイヤー・同じ接続での
+同じ試合になる・遅らせて使う・待つ・ずれを見つける・抜けたプレイヤー・同じ接続での
 次の試合。TypeScript 版の `tests/net/lockstep.test.ts` と同じ場面を、この版で
 確かめる。中継は同じプロセスの中の代わり（`fake_relay.py`）で、本物の中継とつなぐのは
 `test_relay_peers.py`。
@@ -226,7 +226,7 @@ class Testロックステップ:
         for peer in peers:
             assert [p.position for p in peer.session.world.players] == corners
 
-    def test_押した操作は_3tick遅れて効く(self) -> None:
+    def test_押した操作は_3tick遅れて使われる(self) -> None:
         # 21 回目に読まれた（= tick 20 を進めたときの）操作だけ爆弾を押す。0 回目は
         # 始まったときに読まれる。
         def script(player: PlayerId, call: int) -> PlayerInput:
@@ -243,7 +243,7 @@ class Testロックステップ:
         assert log.at(MatchTick(at), 0) is PlayerInput.BOMB
         assert log.at(MatchTick(at + 1), 0) is PlayerInput.IDLE
 
-    def test_押したまま始まった爆弾と技のボタンは_1ラウンド目でも離すまで効かない(
+    def test_押したまま始まった爆弾と技のボタンは_1ラウンド目でも離すまで何も出さない(
         self,
     ) -> None:
         """最初の INPUT_DELAY tick を何も押していない入力で埋めると、爆弾を置く。
@@ -323,7 +323,7 @@ class Testロックステップ:
         """2ラウンド目以降も、試合が使った入力と届いた入力の記録を tick ごとに比べる。
 
         全端末が同じく時刻を取り違えると（ラウンドごとに 0 へ戻る `world.now` で引く、
-        など）、要約は一致したまま、押したキーが効かなくなる。要約の比較では見つからない
+        など）、要約は一致したまま、押したキーが試合に入らなくなる。要約の比較では見つからない
         ので、試合が実際に使った入力（`previous_input`）を比べる。
         """
         config = settings(round_limit=Tick(240), sudden_death=False)
@@ -510,7 +510,7 @@ class Test抜けたプレイヤー:
         host, guest, _ = peers
         run_together(relay, peers, 100)
         # 前提：抜ける時点で、抜けるプレイヤーは盤面にいて、その押し方をしている
-        # （倒れていると入力が効かない）。
+        # （倒れていると入力が使われない）。
         leaver = host.session.world.players[2]
         assert isinstance(leaver.life, Alive)
         assert leaver.previous_input is every
@@ -664,7 +664,7 @@ class Test届いた入力:
             )
 
     def test_人間のプレイヤーには_通信の窓口を繋ぐ(self) -> None:
-        """自分のプレイヤーにも。キーボードを直に繋ぐと、自分の手元でだけ早く効く。"""
+        """自分のプレイヤーにも。キーボードを直に繋ぐと、自分の手元でだけ早く入る。"""
         given: list[Sequence[InputSource]] = []
 
         def create(sources: Sequence[InputSource]) -> LockstepSession:

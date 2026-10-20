@@ -195,9 +195,9 @@ class ScriptedLocal:
     """台本どおりに操作する、この端末の入力。人間がキーボードを押す代わり。
 
     台本には「何回目に読まれたか」を渡す。0 回目は試合が始まったとき
-    （`LockstepDriver.start`）に読まれ、tick 0〜2 に効く。そのあとは tick を進めるとき
-    だけ読まれるので、n 回目（n ≥ 1）に読まれた入力は、tick n − 1 を進めるときに
-    送られ、tick n + 2 に効く。
+    （`LockstepDriver.start`）に読まれ、tick 0〜2 の入力になる。そのあとは tick を
+    進めるときだけ読まれるので、n 回目（n ≥ 1）に読まれた入力は、tick n − 1 を進める
+    ときに送られ、tick n + 2 の入力になる。
     """
 
     def __init__(self, player_id: PlayerId, script: Script) -> None:

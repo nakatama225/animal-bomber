@@ -199,12 +199,17 @@ set の反復は、import でも構文木でも止められません。`tests/de
   （この版と表）と `server/tests/test_protocol_sync.py`（TypeScript 版と表）が見つけます
 - 人間のプレイヤーの窓口（`NetworkInputSource`）は `LockstepDriver` が作って試合に繋ぎます
   （試合は `create_session` で作らせる）。⛔ 自分のプレイヤーにキーボードを直に繋がないで
-  ください。自分の手元でだけ操作が早く効いて、試合がずれます
+  ください。自分の手元でだけ操作が早く試合に入り、試合がずれます
 - 抜けたプレイヤーを CPU に替える tick は、記録の `InputLog.replaced_at` だけで決めます
   （本物の端末と記録の流し直しが、同じ tick で替わるため）。替わる判定をほかに足さないで
   ください
-- この層はソケットを持ちません（中継とつなぐ実物は `shell/`）。テストは中継の代わり
-  （`tests/net/fake_relay.py`）で何台ぶんでも同じプロセスの中で動かします
+- この層はソケットを持ちません（中継とつなぐ実物は `shell/relay_link.py`）。テストは中継の
+  代わり（`tests/net/fake_relay.py`）で何台ぶんでも同じプロセスの中で動かします。本物の中継を
+  立てるテストは `tests/relay_server.py` を使い、待つ所には必ず制限時間を置きます
+- 画面のループ（`app/main.py` の `run`）は、1台の試合も通信対戦も `app/runner.py` の
+  `MatchRunner` の形で回します。⛔ 入力が揃っていない tick を進めないでください
+  （`ready` を見る）。押してすぐ離したキーを忘れる `keyboard.end_tick()` は、進めた tick の
+  あとにだけ呼びます（進めなかったフレームで呼ぶと、押したことが読まれないまま消えます）
 
 ## docstring と docs
 
