@@ -10,7 +10,12 @@ requires-python = ">=3.11"
 # numpy はルールの層では禁じてある（下の banned-api）。
 # numpy を 2.5 未満にしているのは、2.5 の型の定義が Python 3.12 からの書き方（type 文）を
 # 使っていて、3.11 の文法で読む mypy（下の python_version）が読めずに止まるため。
+# animal-bomber-server は LAN 対戦の中継サーバ（リポジトリの server/）。通信の層（net/）が、
+# メッセージの約束の表を写さずにそのまま import する（約束を1つに保つため。
+# net/protocol.py の説明）。下の [tool.uv.sources] で server/ を直に指すので、server/ を
+# 直せば、入れ直さずにこちらにも効く。
 dependencies = [
+    "animal-bomber-server",
     "numpy>=2.4.6,<2.5",
     "pygame-ce>=2.5",
 ]
@@ -153,3 +158,6 @@ forbidden_modules = [
     "numpy",
     "cmath",
 ]
+
+[tool.uv.sources]
+animal-bomber-server = { path = "../server", editable = true }

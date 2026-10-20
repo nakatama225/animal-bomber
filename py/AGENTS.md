@@ -179,8 +179,9 @@ set の反復は、import でも構文木でも止められません。`tests/de
   失敗します（理由は `domain/core/tick.py` の `MatchTick`）
 - ⛔ `MatchTick(world.now)` と書かないでください（包むと mypy は通ります。段階 1 では2つの時刻が
   いつも同じ値なので、テストの値でも見つかりません）。`src/` の中で `MatchTick(...)` を呼んでよいのは、
-  試合通算の時刻を数える `MatchClock`（`domain/core/tick.py`）と、記録を文字列から戻す所
-  （`net/input_log.py` の `_decode_entry`）だけです。ほかで呼んだり、`MatchTick` を値として使ったり
+  試合通算の時刻を数える `MatchClock`（`domain/core/tick.py`）と、文字列から時刻を読み戻す所
+  （記録の `net/input_log.py` の `_decode_entry` と、通信で届いたメッセージの `net/protocol.py` の
+  `_Fields.tick`）だけです。ほかで呼んだり、`MatchTick` を値として使ったり
   すると `tests/boundary/test_match_tick.py` が失敗します。試合を進める側は `MatchClock` を持ち、1 tick 進め終えたら `advance()` を呼びます
   （フレームを回す輪は数えません。理由は `shell/loop.py`）。呼んでよい場所を足すときは、そのテストの
   `ALLOWED` に足し、理由を書いてください

@@ -1,4 +1,4 @@
-"""`src/` の中で `MatchTick(...)` を呼んでよい場所を、2か所に限る。
+"""`src/` の中で `MatchTick(...)` を呼んでよい場所を、決めた所に限る。
 
 試合通算の時刻（`MatchTick`）と盤面の時刻（`Tick`）は別の型にしてあるが、
 `MatchTick(world.now)` と包むと mypy は通る。段階 1 では2つの時刻がいつも同じ値
@@ -10,6 +10,8 @@
 
 - `domain/core/tick.py` の `MatchClock.now` … 試合通算の時刻を数える所
 - `net/input_log.py` の `_decode_entry` … 保存した記録の文字列から時刻を読み戻す所
+- `net/protocol.py` の `_Fields.tick` … 通信で届いた文字列から時刻を読み戻す所
+  （`_decode_entry` と同じ役。段階 9）
 
 テストと docs の例は見ない（試合を進める側の役を、その場で書くため）。
 
@@ -44,6 +46,7 @@ NAME = "MatchTick"
 ALLOWED = {
     ("domain/core/tick.py", "MatchClock.now"),
     ("net/input_log.py", "_decode_entry"),
+    ("net/protocol.py", "_Fields.tick"),
 }
 """`MatchTick(...)` を呼んでよい場所。
 

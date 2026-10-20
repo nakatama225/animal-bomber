@@ -37,9 +37,9 @@ MatchTick = NewType("MatchTick", int)
 失敗する（`tests/boundary/test_guards.py` で確かめている）。どちらも実行時はただの
 `int`。⚠️ `MatchTick(world.now)` と包んで渡すと mypy は通る。段階 1 では2つの時刻が
 いつも同じ値なので、型でもテストの値でも見つからない。そこで `src/` の中で
-`MatchTick(...)` を呼んでよい場所を、下の `MatchClock` と、記録を文字列から戻す所
-（`net/input_log.py`）の2つに限り、ほかで呼ぶと `tests/boundary/test_match_tick.py` が
-失敗するようにしてある。
+`MatchTick(...)` を呼んでよい場所を、下の `MatchClock` と、文字列から時刻を読み戻す所
+（記録の `net/input_log.py` と、通信で届いたメッセージの `net/protocol.py`）に限り、
+ほかで呼ぶと `tests/boundary/test_match_tick.py` が失敗するようにしてある。
 """
 
 TICKS_PER_SECOND = 60
@@ -57,7 +57,7 @@ SECONDS_PER_TICK = 1 / TICKS_PER_SECOND
 class MatchClock:
     """試合通算の時刻を数える。
 
-    `src/` の中で `MatchTick` の値を作るのは、ここと、記録を文字列から戻す所だけ
+    `src/` の中で `MatchTick` の値を作るのは、ここと、文字列から時刻を読み戻す所だけ
     （上の `MatchTick` の説明）。試合を 1 tick 進めた側が、進め終えたら
     `advance()` を呼ぶ。フレームを回す輪（`shell/loop.py`）は数えない。輪は試合の
     無い画面でも回るうえ、進めるかどうかは試合の側が決める（一時停止など）。
