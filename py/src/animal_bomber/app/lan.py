@@ -111,7 +111,7 @@ class LanMatch:
         new_seed: Callable[[], int],
         settings: LanSettings = DEFAULT_LAN_SETTINGS,
     ) -> None:
-        """中継につなぐ。つなげなければ、止まった段階（理由つき）から始まる。
+        """中継につなぐ。つなげなければ、止まった局面（理由つき）から始まる。
 
         Args:
             address: 中継の「ホスト名:ポート」（`parse_relay_address` で確かめたもの）。
@@ -137,7 +137,7 @@ class LanMatch:
 
     @property
     def phase(self) -> LanPhase:
-        """いまの段階。"""
+        """いまの局面（`net/client.py` の `LanPhase`）。"""
         return self._client.phase
 
     @property
@@ -173,7 +173,11 @@ class LanMatch:
         return self._generation
 
     def poll(self) -> None:
-        """届いたものを受け取る。切れていれば、止まった段階にする。"""
+        """届いたものを受け取る。切れていれば、止まった局面にする。
+
+        ⚠️ 切れたかを見るのは、届いていたものを全部受け取ってから。試合を始める start の
+        直後に切れたとき、その1通を読まずに、盤面の無い画面で止まらないため。
+        """
         link = self._outbox.link
         if link is None:
             return
@@ -210,7 +214,7 @@ class LanMatch:
         return lobby_lines(self._client.phase, self._address)
 
     def notice(self) -> str:
-        """盤面の下に出す1行。
+        """試合が始まったあと（決まったあと・止まったあとも）、盤面の下の端に重ねる1行。
 
         ⚠️ 1フレームに1回だけ呼ぶ（待ちが続いたフレームを数える）。
         """
@@ -228,7 +232,8 @@ class LanMatch:
     def _started(self) -> GameSession | None:
         """始まった試合。試合の最中に止まった（ずれ・切断）ときも、止まる直前の試合。
 
-        盤面と名札を残したまま、理由を出すため。まだ始まっていなければ None。
+        盤面と上の帯（ラウンド・勝ち数・体力）を残したまま、理由を出すため。まだ
+        始まっていなければ None。
         """
         phase = self._client.phase
         played = phase if isinstance(phase, Playing) else None
@@ -270,8 +275,8 @@ class _Hooks:
     def create_session(
         self, settings: LanSettings, sources: Sequence[InputSource]
     ) -> LockstepSession:
-        # 始まった試合を `LanMatch` が控える（段階は試合を窓口の形でしか持たないので、
-        # 盤面の設定や勝ち数を読むために、作ったときに控える）。
+        # 始まった試合を `LanMatch` が控える（局面は試合を `LockstepSession` の形でしか
+        # 持たないので、試合の設定を読むために、作ったときに控える）。
         session = GameSession(settings.match, sources)
         self._created(session)
         return session

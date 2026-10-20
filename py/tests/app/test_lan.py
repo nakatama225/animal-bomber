@@ -4,6 +4,7 @@
 `start` を中継と同じく配り返す（`echo_start`）。
 """
 
+import itertools
 import json
 from dataclasses import replace
 
@@ -58,6 +59,11 @@ class _Connection:
 
 
 def lan_match(connection: _Connection) -> LanMatch:
+    """種は SEED から、作るたびに1つずつ増える。
+
+    次の試合で種を新しくするかを見るため。
+    """
+
     def local(player: PlayerId) -> ScriptedLocal:
         return ScriptedLocal(player, lambda p, call: PlayerInput.IDLE)
 
@@ -65,7 +71,7 @@ def lan_match(connection: _Connection) -> LanMatch:
         address=ADDRESS,
         connect=lambda address: connection,
         local_source=local,
-        new_seed=lambda: SEED,
+        new_seed=itertools.count(SEED).__next__,
     )
 
 
@@ -97,7 +103,7 @@ def started(humans: list[int]) -> tuple[LanMatch, _Connection]:
 
 
 class Testつなぐ:
-    def test_つなげなかったら_止まった段階から始まり_理由を出す(self) -> None:
+    def test_つなげなかったら_止まった局面から始まり_理由を出す(self) -> None:
         def refuse(address: str) -> _Connection:
             raise RelayUnavailable("Connection refused")
 
@@ -136,14 +142,20 @@ class Testつなぐ:
         assert match.phase.reason == "中継との接続が切れた"
 
     def test_切れる前に届いていたものは受け取ってから止める(self) -> None:
+        """試合を始める start の直後に切れても、その1通を読んでから止まる。
+
+        先に切れたかを見て読まずに止まると、盤面の無い画面になる。
+        """
         connection = _Connection()
         match = lan_match(connection)
-        connection.push("welcome", seat=1, role="guest", seats=[0])
+        connection.push("welcome", seat=0, role="host", seats=[])
+        config = encode_lan_settings(DEFAULT_LAN_SETTINGS)
+        connection.push("start", seats=[0], config=config, match=1)
         connection.closed_code = 1006
         match.poll()
         assert isinstance(match.phase, Failed)
-        # 止まる前に、ロビーまで進んでいた（届いていた welcome を読んだ）。
-        assert match.phase.played is None
+        assert isinstance(match.phase.played, Playing)
+        assert match.world is not None
 
     def test_閉じると_中継との接続を閉じる(self) -> None:
         match, connection = host_in_lobby()
@@ -221,7 +233,10 @@ class Test始める:
         assert isinstance(phase, Playing)
         assert phase.match == 2
         assert match.generation == 2
-        assert phase.settings == first
+        # 種だけを新しくする（同じ種だと、前の試合と同じ盤面の並びで始まる）。
+        assert phase.settings.match.seed != first.match.seed
+        assert replace(phase.settings.match, seed=first.match.seed) == first.match
+        assert phase.settings.cpu == first.cpu
         assert match.in_progress
 
 
@@ -253,4 +268,6 @@ class Test案内:
         match.poll()
         assert isinstance(match.phase, Failed)
         assert match.world is world
+        # 盤面は残すが、試合の最中ではない（曲を止める）。
+        assert not match.in_progress
         assert match.notice().startswith("中継との接続が切れた。")

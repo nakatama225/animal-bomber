@@ -179,7 +179,7 @@ class Test始まる前の設定:
             ShareSettings(OTHER),
         ]
 
-    def test_ゲストは設定を配らず_届いたホストの設定を待っている間の段階に持つ(
+    def test_ゲストは設定を配らず_届いたホストの設定を待っている間の局面に持つ(
         self,
     ) -> None:
         client, sent = new_client()
@@ -334,10 +334,31 @@ class Test止めるとき:
         client.receive(welcome(0))
 
         client.receive(relay("peer_joined", seat=9))
+        failed = client.phase
+        # 止まったあとに届いたものは、読めても読めなくても受け取らない（理由も、
+        # 原因に近い最初のもののまま）。
         client.receive(relay("peer_joined", seat=1))
+        client.receive(relay("peer_joined", seat=8))
 
-        assert isinstance(client.phase, Failed)
-        assert "約束に合わない" in client.phase.reason
+        assert isinstance(failed, Failed)
+        assert "約束に合わない" in failed.reason
+        assert client.phase is failed
+
+    def test_試合の最中に止まったあとも_理由と止まる直前の試合を替えない(
+        self,
+    ) -> None:
+        client, _ = new_client()
+        client.receive(welcome(0))
+        client.receive(start(0, 1))
+        client.receive(relay("input", seat=1, tick=5, bits=0, match=1))
+        failed = client.phase
+
+        client.receive(relay("peer_joined", seat=8))
+
+        assert client.phase is failed
+        assert isinstance(failed, Failed)
+        assert "順が乱れた" in failed.reason
+        assert isinstance(failed.played, Playing)
 
     def test_試合中に入力の順が乱れても_例外を外へ出さずに止める(self) -> None:
         client, _ = new_client()
@@ -350,8 +371,8 @@ class Test止めるとき:
         phase = client.phase
         assert isinstance(phase, Failed)
         assert "順が乱れた" in phase.reason
-        # 原因を探せるように、元の例外も残す。盤面と名札を残すため、止まる直前の
-        # 段階も持つ。
+        # 原因を探せるように、元の例外も残す。盤面と上の帯を残すため、止まる直前の
+        # 局面も持つ。
         assert isinstance(phase.cause, LockstepError)
         assert phase.played is before
         assert client.step() is None

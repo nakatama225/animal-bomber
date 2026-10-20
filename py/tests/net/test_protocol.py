@@ -25,11 +25,13 @@ from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.match import MatchConfig
 from animal_bomber.domain.rules.tuning import STARTING_HP
+from animal_bomber.domain.state.world import create_world, hash_world
 from animal_bomber.net import protocol
 from animal_bomber.net.protocol import (
     FROM_PEER,
     FROM_RELAY,
     REPORT_FIELDS,
+    WIRE_INT_MAX,
     Desync,
     HashReport,
     HostSettings,
@@ -260,6 +262,8 @@ class Test試合の設定:
         [
             ("roundLimit", 0),
             ("roundLimit", -60),
+            ("roundLimit", WIRE_INT_MAX + 1),
+            ("startingHp", [2, WIRE_INT_MAX + 1, 2, 2]),
             ("winsToTake", 0),
             ("seed", -1),
             ("suddenDeath", 1),
@@ -275,6 +279,23 @@ class Test試合の設定:
         """制限時間の 0 と負の値も断る（秒から直すときに負の秒数を渡した、など）。"""
         with pytest.raises(ProtocolError):
             decode_lan_settings(config_with(**{name: value}))
+
+    def test_上限ちょうどの制限時間と体力は読め_その試合の状態を要約に混ぜられる(
+        self,
+    ) -> None:
+        """上限ちょうどなら、上乗せを足しても要約に混ぜられる。
+
+        要約は 32 ビットに収まらない整数を混ぜられず、混ぜると最初の要約を送る tick で、
+        全員の端末が例外で止まる。体力には動物ごとの上乗せが足されるので、上乗せの
+        ある動物（ぞう）で盤面を作る。
+        """
+        config = config_with(roundLimit=WIRE_INT_MAX, startingHp=[WIRE_INT_MAX] * 4)
+        read = decode_lan_settings(config).match
+        assert read.round_limit == WIRE_INT_MAX
+        assert read.animals[3] is Animal.ELEPHANT
+        world = create_world(1, read.animals, None, read.starting_hp, read.round_limit)
+        assert world.players[3].hp > WIRE_INT_MAX
+        hash_world(world)
 
     @pytest.mark.parametrize("count", [0, 5])
     def test_動物が1から4匹の外(self, count: int) -> None:

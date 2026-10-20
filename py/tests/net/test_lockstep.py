@@ -599,7 +599,7 @@ class Test抜けたプレイヤー:
         driver.receive(RelayedInput(1, MatchTick(0), PlayerInput.RIGHT, 1))
         assert driver.log.at(MatchTick(0), 1) is PlayerInput.IDLE
 
-    def test_名札が替わるのは_CPUに任せるtickを進めてから(self) -> None:
+    def test_人間と数えなくなるのは_CPUに任せるtickを進めてから(self) -> None:
         """抜けた知らせが届いた時点では、まだ届いていた入力で進めている。"""
         driver, _ = lone_driver()
         driver.start()
@@ -715,9 +715,11 @@ class Test同じ接続での次の試合:
             assert peer.session.config.seed == 5
             assert peer.playing.match == 2
             peer.hashes.clear()
+        # 前の試合の突き合わせ（tick 19・39・…）は数えない。
+        agreed_before = len(relay.agreed)
         run_together(relay, peers, 200)
         mismatched, compared = compare_hashes(host, guest)
         assert compared == 200
         assert mismatched == []
         # 次の試合でも、中継は要約を突き合わせている。
-        assert [tick for tick in relay.agreed if tick < 200]
+        assert relay.agreed[agreed_before:] == list(range(19, 200, HASH_INTERVAL))

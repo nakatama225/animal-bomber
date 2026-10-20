@@ -15,12 +15,13 @@
 5. 残り時間の秒読みと曲を鳴らし（`Countdown`・`RoundMusic`）、起きたイベントを音と
    通知に変え（`Presenter`）、見た目だけの値を数え（`SceneTracker`）、盤面を描く
    （`Renderer`）。通信対戦の様子は、始まる前は盤面の代わりに、始まったあとは盤面の
-   下に出す（`LanScreen`）
+   下の端に重ねて出す（`LanScreen`）
 
-起動は `uv run python -m animal_bomber.app.main`。通信対戦は、中継サーバ
-（`uv --directory server run python -m animal_bomber_server`）を立ててから、
-`--relay`（中継を立てた Mac）か `--relay <中継を立てた Mac の名前>.local`（ほかの
-Mac）を付けて起動する（docs/10-通信対戦.md）。窓を閉じるか Esc で終わる。
+起動は、py/ で `uv run python -m animal_bomber.app.main`。通信対戦は、中継サーバ
+（py/ で `uv --directory ../server run python -m animal_bomber_server`。動き続けるので
+別のターミナルで）を立ててから、`--relay`（中継を立てた Mac）か
+`--relay <中継を立てた Mac の名前>.local`（ほかの Mac）を付けて起動する
+（docs/10-通信対戦.md）。窓を閉じるか Esc で終わる。
 
 ⚠️ 窓を開いて遊んで確かめていない（段階 4 の遊んでの確かめは、Mac の前で行う）。
 絵を窓に出して見たことも、音を鳴らして聞いたことも、2台の Mac で通信対戦をしたことも
@@ -44,9 +45,11 @@ from animal_bomber.domain.rules.match import MatchConfig
 from animal_bomber.domain.rules.tuning import DUEL_SPAWN_ORDER
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState
+from animal_bomber.net.client import Connecting
 from animal_bomber.presentation.audio.bank import open_sound_bank
 from animal_bomber.presentation.audio.countdown import Countdown
 from animal_bomber.presentation.audio.music import Music, RoundMusic, open_music
+from animal_bomber.presentation.lan_status import lobby_lines
 from animal_bomber.presentation.presenter import Presenter
 from animal_bomber.presentation.render.baked.art import BakedArt
 from animal_bomber.presentation.render.band import BAND_HEIGHT
@@ -358,10 +361,16 @@ def main(argv: Sequence[str] | None = None) -> None:
         renderer = prepare_renderer(screen, layout, ANIMALS)
         runner = LocalMatch(new_session(new_seed(), keyboard))
     else:
-        # どの動物が出るかはホストが決めるので、5匹とも描いておく（4.6 秒ほど）。
-        # つなぐ前に済ませる。つないだあとに描くと、その間ほかの端末がこの端末の
-        # 入力を待って止まる。
+        # どの動物が出るかはホストが決めるので、5匹とも描いておく（5 秒ほど。README の
+        # Design Choice 1.）。つなぐ前に済ませる。つないだあとに描くと、その間ほかの
+        # 端末がこの端末の入力を待って止まる。
         renderer = prepare_renderer(screen, layout, tuple(Animal))
+        # つなぐ間（名前を引く・つなぐのを待つ）は窓が止まるので、先に何をしているかを
+        # 出しておく（`shell/relay_link.py` の説明）。
+        texts = LanScreen(screen.get_height())
+        texts.draw_lobby(screen, lobby_lines(Connecting(), args.relay))
+        pygame.display.flip()
+        pygame.event.pump()
         runner = LanMatch(
             address=args.relay,
             connect=RelayLink.open,

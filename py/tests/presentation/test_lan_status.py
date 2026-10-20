@@ -5,7 +5,6 @@ TypeScript 版の `tests/presentation/lan-status.test.ts` と同じ場面に、�
 """
 
 import json
-from dataclasses import replace
 
 from animal_bomber.ai.levels import CpuLevelKey
 from animal_bomber.domain.input.player_input import PlayerInput
@@ -96,7 +95,7 @@ class Test始まる前の数行:
             "前の試合が続いているか、定員いっぱいで入れなかった。",
             START_OVER,
         )
-        # 始まる前は、盤面の下の1行は出さない（盤面が無い）。
+        # 始まる前は、盤面に重ねる1行は出さない（盤面が無い）。
         assert describe(client) == ""
 
     def test_始まったあとは_数行を出さない(self) -> None:
@@ -105,7 +104,7 @@ class Test始まる前の数行:
         assert lobby_lines(client.phase, "localhost:8777") == ()
 
 
-class Test盤面の下の1行:
+class Test盤面に重ねる1行:
     def test_始まる前は出さない(self) -> None:
         client = new_client()
         assert describe(client) == ""
@@ -201,8 +200,3 @@ class Test待ちの案内のちらつきを抑える:
             notice.observe([1])
         assert notice.observe([]) == ()
         assert notice.observe([1]) == ()
-
-
-def test_設定は既定のままでも読める() -> None:
-    """テストの設定が、通信で配る形を通っても同じ（体力の始めの値を持たないもの）。"""
-    assert replace(SETTINGS.match, starting_hp=None).starting_hp is None

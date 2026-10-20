@@ -9,13 +9,16 @@ import time
 from collections.abc import Callable
 
 import pytest
+from websockets.protocol import State
 
 from animal_bomber.app.lan import DEFAULT_LAN_SETTINGS
 from animal_bomber.net.protocol import (
     REFUSED_CLOSE_CODE,
+    HostSettings,
     PeerLeft,
     RelayMessage,
     RequestStart,
+    ShareSettings,
     Welcome,
     parse_relay_message,
 )
@@ -111,21 +114,57 @@ class Test本物の中継とつなぐ:
                 link.close()
         assert received[0] == Welcome(0, "host", ())
 
-    def test_受け取りを読まない間も_生存確認に返事をして_切られない(self) -> None:
+    def test_たくさん溜まったまま受け取りを読まなくても_生存確認に返事をして_切られない(
+        self,
+    ) -> None:
         """中継は1秒ごとに生存確認を送り、2秒返事が無ければ切る（`server/` の main）。
 
-        返事は、ライブラリが裏で立てるスレッドが返す。こちらがフレームを描いていて
-        受け取りを読まない間も切られない（`relay_link.py` の説明）。
+        返事は、ライブラリが裏で立てるスレッドが返す。受け取って溜める数に上限がある
+        と（`websockets` の既定は 16 通）、上限を超えた所で裏のスレッドが読むのをやめ、
+        返事も止まる（`relay_link.py` の説明）。上限を超えるだけ溜めてから、4秒読まずに
+        置く。
+
+        そのあとにもう1通送り、その1通まで届くかを見る。切られていれば、中継はその
+        1通を流せない（溜めてあった 20 通は、切られていても読めてしまう）。
         """
         with running_relay() as port:
-            link = RelayLink.open(f"127.0.0.1:{port}")
+            host = RelayLink.open(f"127.0.0.1:{port}")
+            guest = RelayLink.open(f"127.0.0.1:{port}")
             try:
+                wait_for(host, welcomed)
+                for _ in range(20):
+                    host.send(ShareSettings(DEFAULT_LAN_SETTINGS))
                 time.sleep(4.0)
-                received = wait_for(link, welcomed)
-                assert link.closed_code is None
+                host.send(ShareSettings(DEFAULT_LAN_SETTINGS))
+                received = wait_for(
+                    guest,
+                    lambda got: sum(isinstance(m, HostSettings) for m in got) == 21,
+                )
+                assert guest.closed_code is None
             finally:
-                link.close()
+                host.close()
+                guest.close()
         assert isinstance(received[0], Welcome)
+
+    def test_1回の吸い出しで_届いているものを全部取り出す(self) -> None:
+        """1通ずつ返すと、画面のループが1フレームに1通しか受け取れず、試合が遅れる。"""
+        with running_relay() as port:
+            host = RelayLink.open(f"127.0.0.1:{port}")
+            guest = RelayLink.open(f"127.0.0.1:{port}")
+            try:
+                wait_for(host, welcomed)
+                for _ in range(5):
+                    host.send(ShareSettings(DEFAULT_LAN_SETTINGS))
+                # welcome と設定5通が届くのを待つ。⚠️ 待つ所は websockets の中の名前
+                # （受け取って溜めている数）を読む。版を上げると変わりうる。
+                frames = guest._connection.recv_messages.frames
+                deadline = time.monotonic() + WAIT_SECONDS
+                while frames.qsize() < 6 and time.monotonic() < deadline:
+                    time.sleep(0.005)
+                assert len(guest.drain()) == 6
+            finally:
+                host.close()
+                guest.close()
 
     def test_試合が始まったあとにつなぐと_断られた番号で閉じる(self) -> None:
         """ただ切れたときと見分けて、「前の試合が続いている」と案内するため。"""
@@ -156,7 +195,12 @@ class Test本物の中継とつなぐ:
                 wait_for(host, lambda received: len(received) > 0)
                 late = RelayLink.open(f"127.0.0.1:{port}")
                 # 中継が閉じる知らせを、裏のスレッドが受け取るまで待つ（吸い出さない）。
-                time.sleep(0.5)
+                # ⚠️ 待つ所は websockets の中の名前（接続の状態）を読む。
+                deadline = time.monotonic() + WAIT_SECONDS
+                while late._connection.protocol.state is State.OPEN:
+                    assert time.monotonic() < deadline, "中継が閉じなかった"
+                    time.sleep(0.005)
+                # 吸い出しも送りもしていない間は、閉じた番号をまだ残さない。
                 assert late.closed_code is None
                 late.send(RequestStart(DEFAULT_LAN_SETTINGS))
                 assert late.closed_code == REFUSED_CLOSE_CODE

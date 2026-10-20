@@ -197,7 +197,8 @@ class LockstepDriver:
         self._link = link
         self._match = match
         self._clock = MatchClock()
-        # CPU に替わったと数える人間のプレイヤー（画面の名札のため。替えるのは窓口）。
+        # CPU に替わったと数える人間のプレイヤー（段階 10 の名札のため。替えるのは
+        # 窓口）。
         self._replaced: list[PlayerId] = []
         self._desync: Desync | None = None
         self._started = False
@@ -322,7 +323,8 @@ class LockstepDriver:
         """いま人間が操作しているプレイヤー。抜けて CPU に替わったプレイヤーは含めない。
 
         替わったと数えるのは、CPU に任せる tick を進めてから。抜けた知らせが届いた
-        時点ではまだ届いていた入力で進めているので、画面の名札もそれに合わせる。
+        時点ではまだ届いていた入力で進めているので、名札もそれに合わせる。名札は段階 10
+        で作るので、いまは src から読まない（テストだけが読む）。
         """
         return [player for player in self._humans if player not in self._replaced]
 
@@ -366,7 +368,11 @@ class LockstepDriver:
             log.depart(last_tick, player_id)
 
     def _note_replaced(self, tick: MatchTick) -> None:
-        """この tick から CPU に任せるプレイヤーを、替わったと数える（名札のため）。"""
+        """この tick から CPU に任せるプレイヤーを、替わったと数える。
+
+        段階 10 の名札のため。数えた結果は、いまは src から読まない（読む
+        `human_players` を、テストだけが呼ぶ）。
+        """
         log = self._inputs.log
         for player in self._humans:
             if player not in self._replaced and log.replaced_at(tick, player):

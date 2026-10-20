@@ -21,13 +21,24 @@ TypeScript 版は同じ表を `ts/src/net/protocol.ts` にもう一度書き、�
 見える。試合の設定を既定値で埋めると、その端末だけ別の試合になる（全員が同じ設定から
 試合を作ることが、ロックステップの前提そのもの）。
 
-TypeScript 版の読み方に加えて、次のものも断る。どれも Python が黙って読んでしまうもの。
+次のものは、TypeScript 版も断る（JavaScript の型と `JSON.parse`、それに整数と下限の
+確かめ。`ts/src/net/protocol.ts` の `FieldReader.int`）が、Python ではそのまま通るので、
+明示して断る。
 
 - `true`・`false` を整数の項目に置いたもの（Python では `bool` が `int` の仲間）
-- 小数（`1.0`）を整数の項目に置いたもの（JSON の小数は Python では `float` になる）
-- `NaN`・`Infinity`・桁あふれ（`1e400`）（Python の `json` は無限大として読む）
+- `NaN`・`Infinity`（Python の `json` は数として読む）と桁あふれ（`1e400`。無限大に
+  なる）
 - 負の数の入力のビット（`PlayerInput` は負の数を補数として受け付ける）
+
+次のものは、TypeScript 版に無い確かめ。
+
+- 小数（`1.0`）を整数の項目に置いたもの（JavaScript では `1` と同じ値だが、Python では
+  `float` になる）
 - 動物が 1〜4 匹の外（盤面を作る所で止まる前に、読んだ時点で止める）
+- 制限時間と体力が `WIRE_INT_MAX` を超えるもの。この版の状態の要約は 32 ビットに収まる
+  整数しか混ぜられないので、上限を置かずに 2**32 近くまで受け付けると、最初の要約を送る
+  tick で全員の端末が例外で止まる（体力は動物の上乗せを足して数える。余裕を見て
+  `WIRE_INT_MAX` で断る）。TypeScript 版は要約の所で 32 ビットに切るので止まらない
 
 ## 項目名
 
@@ -39,7 +50,7 @@ TypeScript 版の読み方に加えて、次のものも断る。どれも Pytho
 import json
 import math
 from dataclasses import dataclass
-from typing import Literal, Protocol, assert_never
+from typing import Final, Literal, Protocol, assert_never
 
 # 中継の表と定数を、この版の約束としてそのまま出す（`as` で同じ名前を付けるのは、
 # ほかのモジュールがここから import してよい名前だと、mypy と ruff に示すため）。
@@ -56,6 +67,15 @@ from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.match import MatchConfig
 from animal_bomber.domain.rules.tuning import STARTING_HP
 from animal_bomber.domain.state.player import PLAYER_IDS, PlayerId
+
+WIRE_INT_MAX: Final = 2**31 - 1
+"""届いた設定の制限時間（tick）と体力の始めの値の上限。
+
+この版の状態の要約（`domain/core/statehash.py` の `StateHasher.add_int`）は、32 ビットに
+収まる整数（2**32 未満）しか混ぜられない。制限時間はそのまま盤面の時間切れの時刻に、
+体力は動物ごとの上乗せ（いまは多くて 2）を足して、要約に入る。上乗せを足しても収まる
+よう、符号つき 32 ビットの最大で切る。体力は試合の中で増えないので、始めの値で足りる。
+"""
 
 
 class ProtocolError(Exception):
@@ -362,14 +382,15 @@ def decode_lan_settings(raw: object) -> LanSettings:
     # 1人ぶんずつ持つ値は、動物と同じ数だけ無いと止める。足りないプレイヤーを既定値で
     # 埋めると、そのプレイヤーの体力や CPU の強さが端末ごとに違ってもおかしくない書き方
     # になる。
-    starting_hp = read.integers("startingHp", 1, len(animals))
+    # 上限は `WIRE_INT_MAX` の説明（状態の要約に混ぜられる大きさ）。
+    starting_hp = read.integers("startingHp", 1, WIRE_INT_MAX, len(animals))
     return LanSettings(
         match=MatchConfig(
             seed=read.integer("seed", 0),
             animals=animals,
             # 制限時間は 1 tick 以上。0 や負の値（秒から tick へ直すときに負の秒数を
             # 渡した、など）を受け付けると、始まった tick にラウンドが決まる。
-            round_limit=Tick(read.integer("roundLimit", 1)),
+            round_limit=Tick(read.integer("roundLimit", 1, WIRE_INT_MAX)),
             wins_to_take=read.integer("winsToTake", 1),
             sudden_death=sudden_death,
             starting_hp=starting_hp,
@@ -419,8 +440,9 @@ def _cpu_levels(raw: object, count: int) -> tuple[CpuLevelKey, ...]:
 def _load_object(text: str) -> dict[str, object]:
     """JSON の辞書として読む。
 
-    ⚠️ Python の `json` は、JSON に無い `NaN`・`Infinity` を読めてしまい、`1e400` の
-    ような桁あふれも無限大として読む（中継の `lockstep._load` と同じ理由で断る）。
+    ⚠️ Python の `json` は、JSON に無い `NaN`・`Infinity` を数として読めてしまい、
+    `1e400` のような桁あふれも無限大として読む（中継の `lockstep._load` と同じ理由で
+    断る）。
     """
     try:
         data = json.loads(text, parse_constant=_reject_constant, parse_float=_finite)
@@ -456,24 +478,34 @@ class _Fields:
             raise ProtocolError(f"{self._kind} に {name} が無い")
         return self._data[name]
 
-    def integer(self, name: str, minimum: int) -> int:
-        """`minimum` 以上の整数。`true`・`false` と小数は断る。"""
+    def integer(self, name: str, minimum: int, maximum: int | None = None) -> int:
+        """`minimum` 以上（`maximum` があればそれ以下）の整数。
+
+        `true`・`false` と小数は断る。
+        """
         value = self.raw(name)
         if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
             raise ProtocolError(
                 f"{self._kind} の {name} が {minimum} 以上の整数ではない: {value!r}"
             )
+        if maximum is not None and value > maximum:
+            raise ProtocolError(
+                f"{self._kind} の {name} が {maximum} より大きい: {value!r}"
+            )
         return value
 
-    def integers(self, name: str, minimum: int, length: int) -> tuple[int, ...]:
-        """`minimum` 以上の整数が、ちょうど `length` 個並んだ配列。"""
+    def integers(
+        self, name: str, minimum: int, maximum: int, length: int
+    ) -> tuple[int, ...]:
+        """`minimum` 以上 `maximum` 以下の整数が、ちょうど `length` 個並んだ配列。"""
         value = self.raw(name)
         if not isinstance(value, list) or len(value) != length:
             raise ProtocolError(
                 f"{self._kind} の {name} が {length} 個の配列ではない: {value!r}"
             )
         return tuple(
-            _Fields({name: item}, self._kind).integer(name, minimum) for item in value
+            _Fields({name: entry}, self._kind).integer(name, minimum, maximum)
+            for entry in value
         )
 
     def text(self, name: str) -> str:

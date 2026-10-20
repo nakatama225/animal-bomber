@@ -152,7 +152,8 @@ pygame.quit()
 # 通信対戦の試合（LanMatch）を、中継との接続の代わりで回す。ホストの Enter で送った
 # start を中継と同じく配り返す（人間の一覧は1つ目の引数）。2つ目の引数の手順の "probe"
 # で、そのフレームの始め（前のフレームを描き終えた直後）の様子を控える。"desync" は
-# 中継からずれの知らせを届ける。
+# 中継からずれの知らせを届ける。"lost" は中継との接続が切れたことにする（閉じた番号を
+# 1006 に）。"finish" は試合が決まったことにする。
 LAN_SMOKE = """
 import json, sys
 import pygame
@@ -203,14 +204,21 @@ connection = Connection()
 keyboard = KeyboardWatcher()
 match = LanMatch(
     address="localhost:8777", connect=lambda address: connection,
-    local_source=lan_local_source(keyboard), new_seed=lambda: 7,
+    local_source=lan_local_source(keyboard), new_seed=iter(range(7, 100)).__next__,
 )
 connection.push("welcome", seat=0, role="host", seats=[])
 def key(scancode, code, kind=pygame.KEYDOWN):
     return pygame.event.Event(kind, scancode=scancode, key=code)
 EVENTS = {
-    "none": [], "probe": [], "desync": [],
+    "none": [], "probe": [], "desync": [], "lost": [], "finish": [],
     "enter": [key(pygame.KSCAN_RETURN, pygame.K_RETURN)],
+    "down_enter": [
+        key(pygame.KSCAN_S, pygame.K_s), key(pygame.KSCAN_RETURN, pygame.K_RETURN),
+    ],
+    "release": [
+        key(pygame.KSCAN_S, pygame.K_s, pygame.KEYUP),
+        key(pygame.KSCAN_RETURN, pygame.K_RETURN, pygame.KEYUP),
+    ],
     "tap_bomb": [
         key(pygame.KSCAN_SPACE, pygame.K_SPACE),
         key(pygame.KSCAN_SPACE, pygame.K_SPACE, pygame.KEYUP),
@@ -224,24 +232,33 @@ def text_pixels(top):
     )
 current = []
 probes = []
+scene = SceneTracker()
 def ticks():
     for ticks_, name in plan:
         if name == "probe":
             height = screen.get_height()
             session = match.phase.session if hasattr(match.phase, "session") else None
+            first = None if session is None else session.world.players[0]
             probes.append({
                 "elapsed": None if session is None else session.clock.now,
                 "text": text_pixels(0),
                 "bottom": text_pixels(height - 40),
                 "tapped": keyboard.tapped((pygame.KSCAN_SPACE,)),
                 "stops": Music.stops,
+                "generation": match.generation,
+                "y": None if first is None else first.position.y,
+                "walked": None if first is None else scene.motion(first.id).walked,
             })
         if name == "desync":
             connection.push("desync", tick=19, reports=[])
+        if name == "lost":
+            connection.closed_code = 1006
+        if name == "finish":
+            match.phase.session.match.finished = True
         current[:] = EVENTS[name]
         yield ticks_
 run(
-    screen, match, keyboard, Presenter(), ticks(), renderer, SceneTracker(),
+    screen, match, keyboard, Presenter(), ticks(), renderer, scene,
     events=lambda: list(current), music=Music(),
 )
 print(json.dumps(probes))
@@ -312,7 +329,7 @@ def test_画面の大きさに収まる寸法で窓を作る() -> None:
 
 
 def test_じゅんびちゅうを出してから_出る動物の絵を描いておく() -> None:
-    """絵を描いておく間（5匹で 4.5 秒ほど）、窓が黒いままにならないこと。"""
+    """絵を描いておく間（5匹で 5 秒ほど）、窓が黒いままにならないこと。"""
     result = _run([(0, "none"), (1, "none")], "prepare")
     loading = result["loading"]
     assert isinstance(loading, dict)
@@ -448,3 +465,44 @@ class Test通信対戦のフレームの輪:
         assert before["stops"] == 1
         assert after["elapsed"] == 2
         assert after["stops"] > before["stops"]
+
+    def test_試合の最中に中継との接続が切れたら_曲を止める(self) -> None:
+        plan = [
+            (0, "none"),
+            (0, "enter"),
+            (2, "none"),
+            (0, "probe"),
+            (0, "lost"),
+            (2, "none"),
+            (0, "probe"),
+        ]
+        before, after = _run_lan([0], plan)
+        assert before["stops"] == 1
+        assert after["stops"] > before["stops"]
+
+    def test_次の試合でも_進める前の盤面を控え_最初のtickから歩いた距離を数える(
+        self,
+    ) -> None:
+        """同じ接続で始めた2試合目も、1台の試合と同じく最初の tick から数える。
+
+        下のキーを押したまま Enter で始め、3 tick 進める（押したまま始まっても、向きの
+        キーではそのまま歩く。押していた扱いになるのは爆弾と技のボタンだけ）。1つの
+        フレームの中では、届いたものを受け取るより前にキーを受け取るので、Enter の
+        前に、welcome を読むだけのフレームを置く。
+        """
+        plan = [
+            (0, "none"),
+            (0, "down_enter"),
+            (3, "none"),
+            (0, "probe"),
+            (1, "release"),
+            (0, "finish"),
+            (0, "down_enter"),
+            (3, "none"),
+            (0, "probe"),
+        ]
+        first, second = _run_lan([0], plan)
+        assert second["generation"] == first["generation"] + 1
+        for probe in (first, second):
+            assert probe["y"] > 1.5
+            assert probe["walked"] == pytest.approx(probe["y"] - 1.5)

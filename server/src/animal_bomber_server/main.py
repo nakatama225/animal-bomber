@@ -104,7 +104,7 @@ def make_handler(room: Room, lockstep: LockstepRoom | None = None):
     """WebSocket 接続1本ぶんの一生を扱う関数を作る。
 
     つないできたパスで、どちらの中継に入れるかを決める。
-    `LOCKSTEP_PATH` なら TypeScript 版のロックステップの中継（`lockstep`）、
+    `LOCKSTEP_PATH` なら TypeScript 版・Python 版のロックステップの中継（`lockstep`）、
     それ以外は原型（ホスト権威）の中継（`room`）。2つは別の部屋で、
     互いのメッセージは混ざらない。
 

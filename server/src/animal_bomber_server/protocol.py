@@ -23,7 +23,8 @@ Python 版（`py/`）は、下の表を写さずに import する
 ## 項目名の書き方
 
 メッセージの種類（`t` の値）は、原型の中継に合わせて小文字と `_` で書く。
-項目名は、受け取る側の TypeScript に合わせて `lastTick` のように書く。
+項目名は、TypeScript 版に合わせて `lastTick` のように書く（Python 版も、この表の名前で
+読み書きする）。
 """
 
 from __future__ import annotations

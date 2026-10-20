@@ -3,7 +3,9 @@
 文だけを作る所を、描く所と分けてある。文だけなら、窓を開かずに確かめられる。
 
 始まる前（つないでいる・待っている・始まる前に止まった）は、盤面の代わりに数行を出す
-（`lobby_lines`）。試合が始まったあとは、盤面の下に1行だけ出す（`describe_lan_phase`）。
+（`lobby_lines`）。試合が始まったあとは、盤面の下の端に1行だけ重ねる
+（`describe_lan_phase`）。⚠️ 重ねた帯は、下の外周と盤面の下の端を隠す。出すのは、入力を
+待って進めない間・試合が決まったあと・止まったあとだけ（盤面が止まっている間）。
 
 ⚠️ ロビーの画面（ホストが動物・CPU の強さ・体力・ルールを選ぶ画面）は段階 10 で作る。
 いまは、ホストが Enter で、既定の設定（`app/lan.py` の `DEFAULT_LAN_SETTINGS`）のまま
@@ -58,7 +60,7 @@ def lobby_lines(phase: LanPhase, address: str) -> tuple[str, ...]:
     """試合が始まる前に、盤面の代わりに出す数行。試合が始まったあとは空。
 
     Args:
-        phase: いまの段階。
+        phase: いまの局面（`net/client.py` の `LanPhase`）。
         address: つないでいる中継の「ホスト名:ポート」。
     """
     match phase:
@@ -85,10 +87,10 @@ def lobby_lines(phase: LanPhase, address: str) -> tuple[str, ...]:
 
 
 def describe_lan_phase(phase: LanPhase, waiting: Sequence[PlayerId]) -> str:
-    """試合が始まったあとの様子を1行の文にする。盤面の下に出す。
+    """試合が始まったあとの様子を1行の文にする。盤面の下の端に重ねて出す。
 
     Args:
-        phase: いまの段階。
+        phase: いまの局面。
         waiting: 「操作を待っている」と出すプレイヤー。一瞬の待ちまで出すと文が
             ちらつくので、`WaitingNotice` を通した値を渡す。
 
