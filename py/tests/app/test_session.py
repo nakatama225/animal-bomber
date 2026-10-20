@@ -195,6 +195,95 @@ class Test決着のあとの待ち:
         assert asked == [1 + ROUND_INTERMISSION] * 2
 
 
+class Test次のラウンドへ送る:
+    """1台の試合で、ラウンドの幕をボタンで送る（原型の `advanceBanner`）。"""
+
+    def test_待ちを切り上げて_待ち終えたときと同じ次の盤面を作る(self) -> None:
+        sent, waited = _session(starting_hp=(2, 10)), _session(starting_hp=(2, 10))
+        for session in (sent, waited):
+            _finish_round(session)
+        decided = sent.world
+        sent.tick()
+        sent.start_next_round()
+        _wait_intermission(waited)
+        assert not sent.between_rounds
+        assert sent.world is not decided
+        assert sent.match.round == 2
+        assert sent.world.now == 0
+        assert [p.hp for p in sent.world.players] == [2, 12]
+        assert all(is_alive(p) for p in sent.world.players)
+        assert hash_world(sent.world) == hash_world(waited.world)
+
+    def test_試合通算の時刻は進めず_次の_tick_は続きの時刻で入力を聞く(self) -> None:
+        """切り上げた待ちの tick は進めていないので数えない。"""
+        asked: list[int] = []
+
+        class Spy:
+            def __init__(self, player_id: PlayerId) -> None:
+                self.player_id: PlayerId = player_id
+
+            def next_input(self, world: WorldState, tick: MatchTick) -> PlayerInput:
+                asked.append(tick)
+                return PlayerInput.IDLE
+
+        session = GameSession(_config(), [Spy(0), Spy(1)])
+        _finish_round(session)
+        session.tick()
+        session.start_next_round()
+        assert session.clock.now == 2
+        asked.clear()
+        session.tick()
+        assert asked == [2, 2]
+        assert session.clock.now == 3
+
+    def test_送ったあとは_待ちの長さが過ぎても盤面を作り直さない(self) -> None:
+        session = _session()
+        _finish_round(session)
+        session.start_next_round()
+        started = session.world
+        for _ in range(ROUND_INTERMISSION + 1):
+            session.tick()
+        assert session.world is started
+        assert session.match.round == 2
+
+    def test_待ちの最中でなければ例外にし_盤面を替えない(self) -> None:
+        """ラウンドの最中に呼ぶと、決着のつかないまま盤面が替わる。"""
+        playing = _session()
+        before = playing.world
+        assert "待ちの最中でない" in _refusal(playing)
+        assert playing.world is before
+        assert playing.match.round == 1
+
+        twice = _session()
+        _finish_round(twice)
+        twice.start_next_round()
+        started = twice.world
+        assert "待ちの最中でない" in _refusal(twice)
+        assert twice.world is started
+
+    def test_試合が決まったあとは例外にし_盤面を替えない(self) -> None:
+        """決まった試合に、次のラウンドを作らない（「もういっかい」は新しい試合）。"""
+        session = _session(wins_to_take=1)
+        _finish_round(session)
+        assert session.match.finished
+        decided = session.world
+        assert "待ちの最中でない" in _refusal(session)
+        assert session.world is decided
+
+
+def _refusal(session: GameSession) -> str:
+    """`start_next_round` を呼び、断ったときの文を返す。断らなければ空の文字列。
+
+    断らなかったことを assert で失敗させ、そのあとの盤面も同じテストで見るため、
+    `pytest.raises` を使わない。
+    """
+    try:
+        session.start_next_round()
+    except RuntimeError as error:
+        return str(error)
+    return ""
+
+
 class Testラウンドの始まり:
     def test_押したまま始まっても置かず_離して押し直すと置く(self) -> None:
         """押したまま始まると、最初の tick が押した瞬間になり、開始位置に置いて詰む。"""

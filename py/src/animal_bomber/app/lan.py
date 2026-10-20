@@ -25,13 +25,10 @@ from typing import Final, Protocol
 
 import pygame
 
-from animal_bomber.ai.levels import CpuLevelKey
 from animal_bomber.app.session import GameSession
 from animal_bomber.domain.events import SimEvent
 from animal_bomber.domain.input.sources import InputSource
-from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.match import MatchConfig
-from animal_bomber.domain.rules.tuning import STARTING_HP
 from animal_bomber.domain.state.match import MatchState
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState
@@ -44,20 +41,18 @@ from animal_bomber.presentation.lan_status import (
     describe_lan_phase,
     lobby_lines,
 )
+from animal_bomber.presentation.menu.lan_setup import (
+    DEFAULT_LAN_SETUP,
+    lan_settings_from,
+)
 from animal_bomber.shell.relay_link import RelayUnavailable
 
-LAN_ANIMALS: Final = (Animal.RABBIT, Animal.FROG, Animal.FOX, Animal.ELEPHANT)
-"""通信対戦の4つの枠の動物（TypeScript 版のロビーの既定と同じ）。"""
-
-DEFAULT_LAN_SETTINGS: Final = LanSettings(
-    MatchConfig(seed=0, animals=LAN_ANIMALS, starting_hp=(STARTING_HP,) * 4),
-    (CpuLevelKey.NORMAL,) * 4,
-)
+DEFAULT_LAN_SETTINGS: Final = lan_settings_from(DEFAULT_LAN_SETUP, seed=0)
 """ホストが Enter で始めるときの設定（種は始めるときに入れる）。
 
-枠はいつも4つ（中継の定員と同じ）。人間がつながっていない枠は CPU が受け持ち、人間の
-枠でも、そのプレイヤーが抜けたらここで決めた強さの CPU に替わる。ほかの値は試合の設定の
-既定（3勝で優勝・延長戦あり・制限時間 180 秒）。
+ロビーの既定（`presentation/menu/lan_setup.py` の `DEFAULT_LAN_SETUP`）から作る。枠は
+いつも4つ（中継の定員と同じ）。人間がつながっていない枠は CPU が受け持ち、人間の枠でも、
+そのプレイヤーが抜けたらここで決めた強さの CPU に替わる。
 """
 
 START_KEYS: Final = (pygame.KSCAN_RETURN, pygame.KSCAN_KP_ENTER)

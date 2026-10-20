@@ -83,6 +83,7 @@ from animal_bomber.presentation.audio.cues import (
     technique_sounds,
 )
 from animal_bomber.presentation.audio.sounds import NullSoundBank, SoundBank, SoundName
+from animal_bomber.presentation.hud.roster import numbered_name
 
 
 class NoticeSink(Protocol):
@@ -120,11 +121,6 @@ def no_animal(player: PlayerId) -> Animal | None:
 
 def no_music() -> None:
     """止める曲が無い（何もしない）。"""
-
-
-def numbered_name(player: PlayerId) -> str:
-    """番号だけの呼び方（「1P」）。"""
-    return f"{player + 1}P"
 
 
 def effect_text(kind: EffectKind) -> str:

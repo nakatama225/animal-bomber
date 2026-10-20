@@ -99,6 +99,28 @@ class GameSession:
         self._clock.advance()
         return events
 
+    def start_next_round(self) -> None:
+        """決着のあとの待ちを切り上げ、次のラウンドの盤面を作る。
+
+        1台の試合で、ラウンドの幕をボタンで送るときに使う（原型の `advanceBanner` の
+        `startRound`。通信対戦は全員が同じ tick に次のラウンドへ進む必要があるので、
+        待ちが尽きるのを待つ）。
+
+        試合通算の時刻は進めない。切り上げた待ちの tick は進めていないので、数えると
+        記録の時刻と盤面の進みがずれる（`MatchClock` の説明）。
+
+        Raises:
+            RuntimeError: 決着のあとの待ちの最中でないとき。ラウンドの最中に呼ぶと
+                決着のつかないまま盤面が替わり、試合が決まったあとに呼ぶと、決まった
+                試合に次のラウンドができる。
+        """
+        if self._intermission <= 0:
+            raise RuntimeError(
+                "決着のあとの待ちの最中でないので、次のラウンドへ進めない"
+            )
+        self._intermission = 0
+        self._world = self._new_world()
+
     def _advance(self) -> list[SimEvent]:
         # 決着のあとは盤面を止めて待つ。入力は集めない（押しても何も起きない）。
         if self._intermission > 0:
