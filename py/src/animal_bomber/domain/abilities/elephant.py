@@ -102,6 +102,7 @@ def spray(world: WorldState, player: PlayerState) -> Started:
     player.ability_cooldown = SNOT_COOLDOWN
     events: list[SimEvent] = []
     sprayed: list[Cell] = []
+    washed = 0
     here = player.position.cell()
     for distance in range(1, SNOT_RANGE + 1):
         cell = here.step(player.facing, distance)
@@ -120,10 +121,19 @@ def spray(world: WorldState, player: PlayerState) -> Started:
             and item.scattered_by is None
         ):
             item.melting_until = Tick(world.now + MELT_TICKS)
+            washed += 1
         if tile is Tile.SOFT:
             break
-    # 水しぶきは届いたマスごとに出す（原型も、柱のマスとその先には出さない）。
-    events.append(Sprayed(player=player.id, cells=tuple(sprayed), facing=player.facing))
+    # 水しぶきは届いたマスごとに出す（原型も、柱のマスとその先には出さない）。流した
+    # うんこの数も載せる（画面の通知のため。原型の elephantSnot の `np`）。
+    events.append(
+        Sprayed(
+            player=player.id,
+            cells=tuple(sprayed),
+            facing=player.facing,
+            washed=washed,
+        )
+    )
     return Started(events=tuple(events))
 
 
@@ -301,8 +311,10 @@ def _push_players(
         )
         if not body_collides(world, other, other.position, pushed):
             other.position = pushed
+        # 押しつけた側を状態の知らせに載せる（画面の「n個 ぶつけた！」の通知のため。
+        # `EffectApplied.pushed_by`）。
         for kind in charge.carried:
-            events.extend(apply_item(world, other, kind))
+            events.extend(apply_item(world, other, kind, pushed_by=player.id))
         charge.carried.clear()
         turn_pending = other.id > player.id
         if _invulnerable_in_turn(other, turn_pending, world.now) or is_blast_proof(

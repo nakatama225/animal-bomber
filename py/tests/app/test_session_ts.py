@@ -49,7 +49,7 @@ from animal_bomber.domain.rules.match import MatchConfig
 from animal_bomber.domain.rules.tuning import DUEL_SPAWN_ORDER
 from animal_bomber.domain.state.player import PLAYER_IDS, PlayerId
 from animal_bomber.domain.state.world import WorldState
-from tests.ts_rows import event_row, world_rows
+from tests.ts_rows import ts_event_rows, world_rows
 
 EXPECTED = json.loads(
     (Path(__file__).parent / "ts_session_values.json").read_text(encoding="utf-8")
@@ -144,7 +144,7 @@ def test_同じ台本を流すと_TypeScript版と同じ試合になる(
     got: list[dict[str, object]] = []
     pending: list[list[object]] = []
     for tick in range(ticks):
-        pending.extend(event_row(event) for event in session.tick())
+        pending.extend(ts_event_rows(session.tick()))
         if (tick + 1) % INTERVAL == 0:
             match = session.match
             got.append(

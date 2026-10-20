@@ -25,7 +25,7 @@ from tests.systems.technique_scenarios import (
     TechniqueScenario,
     set_up,
 )
-from tests.ts_rows import event_row, world_rows
+from tests.ts_rows import ts_event_rows, world_rows
 
 EXPECTED = json.loads(
     (Path(__file__).parent / "ts_technique_values.json").read_text(encoding="utf-8")
@@ -45,7 +45,7 @@ def test_技を通す台本を流すと_TypeScript版と同じ結果になる(
         events = simulation.step(
             world, {p.id: scenario.script(p.id, tick) for p in world.players}
         )
-        pending.extend(event_row(event) for event in events)
+        pending.extend(ts_event_rows(events))
         if (tick + 1) % INTERVAL == 0:
             got.append({"tick": world.now, **world_rows(world), "events": pending})
             pending = []

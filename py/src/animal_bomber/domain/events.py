@@ -28,6 +28,7 @@ from enum import Enum
 from typing import TypeAlias
 
 from animal_bomber.domain.core.coord import Cell, Direction, Point
+from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.player import PlayerId
@@ -174,6 +175,13 @@ class Sprayed:
     player: PlayerId
     cells: tuple[Cell, ...]
     facing: Direction
+    washed: int = 0
+    """流したうんこの数（溶け始めたもの。溶けかけのものに吹き直したぶんも数える）。
+
+    画面の通知（「うんこ n個を流した」。原型 L3036）に使う。流したうんこには
+    イベントが出ない（溶けきって消えたときに `ItemWashed` が出る）ので、ここに数を
+    載せる。TypeScript 版には無い（比べる行にも入れない。`tests/ts_rows.py`）。
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,6 +190,14 @@ class EffectApplied:
 
     target: PlayerId
     effect: EffectKind
+    pushed_by: PlayerId | None = None
+    """抱えていた悪いアイテムを体当たりで押しつけて、この状態をかけたプレイヤー。
+
+    足元で拾った・舌で引き寄せた・穴にはまった、などで自分にかかったときは None。画面の
+    通知（「n個 ぶつけた！」。原型 L2880）に、誰が誰に何個押しつけたかが要る。
+    押しつけられた側に `TechniqueMoment` の `RAMMED` が出ない（無敵で傷が入らない）
+    ときもあるので、ここに載せる。TypeScript 版には無い（比べる行にも入れない）。
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,6 +294,34 @@ class BurntOff:
     """技を使っていたプレイヤー。"""
     cell: Cell
     """焼けたマス（いちばん手前の爆風のマス）。"""
+
+
+@dataclass(frozen=True, slots=True)
+class TechniqueRefused:
+    """技のボタンを押したが、技が出せない状態だった（根元まで焼けて伸ばせない舌）。
+
+    技は出ていないので `TechniqueUsed` は出さない。画面の通知と画面の操作の音のため
+    だけに知らせる（原型 L2497-2498 は、伸ばせる長さが 0 なら `SE.ui()` を鳴らして
+    「舌は焼け落ちてる」と出す）。TypeScript 版には無い（比べる行にも入れない。
+    `tests/ts_rows.py`）。
+    """
+
+    player: PlayerId
+    wait: Tick
+    """出せるようになるまでの残り（焼けた舌が1マス戻るまで）。"""
+
+
+@dataclass(frozen=True, slots=True)
+class ReachRestored:
+    """焼けて短くなっていた技の届く長さ（舌）が、1マス戻った。
+
+    画面の通知のためだけに知らせる（原型は 10 秒ごとに1マス戻すたびに「舌が1マス回復」と
+    出す）。TypeScript 版には無い（比べる行にも入れない）。
+    """
+
+    player: PlayerId
+    reach: int
+    """戻ったあとの、伸ばせるマス数。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -410,6 +454,8 @@ SimEvent: TypeAlias = (
     | TechniqueUsed
     | TechniqueMoment
     | BurntOff
+    | TechniqueRefused
+    | ReachRestored
     | LeekThrown
     | LeekStopped
     | Revived

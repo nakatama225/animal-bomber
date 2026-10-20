@@ -12,8 +12,10 @@ from animal_bomber.domain.events import (
     ExplosionCause,
     ItemTaken,
     Moment,
+    ReachRestored,
     SimEvent,
     TechniqueMoment,
+    TechniqueRefused,
 )
 from animal_bomber.domain.query.board import (
     blast_at,
@@ -110,12 +112,17 @@ def _burnt_tongue_of(world: WorldState, owner: PlayerId) -> BurntTongue | None:
 def stick_out_tongue(world: WorldState, player: PlayerState) -> Started:
     """通常技。舌を伸ばす。根元まで焼けていれば出せない（原型の startTongue）。
 
+    出せないときは、出せなかったことだけを知らせる（画面の通知と操作の音のため。原型
+    L2498）。技を出したことにはならず、間隔も始まらない。
+
     ⚠️ 良いものも悪いものも区別なく掴む。かえるは効果が2倍になるので、何を引くか分から
     ないまま伸ばすのは博打になる。選べるようにすると、2倍という長所だけが残って短所が
     消える（TypeScript 版の注記）。
     """
-    if tongue_reach_of(world, player) <= 0:
-        return NOTHING
+    scar = _burnt_tongue_of(world, player.id)
+    if scar is not None and scar.limit <= 0:
+        refused = TechniqueRefused(player=player.id, wait=scar.until_regen)
+        return Started(refusal=refused)
     return Started(
         action=Tongue(origin=player.position.cell(), direction=player.facing)
     )
@@ -238,12 +245,17 @@ def _burn(world: WorldState, player: PlayerState, at: int) -> list[SimEvent]:
 
 
 def advance_burnt_tongue(world: WorldState, scar: BurntTongue) -> Progress:
-    """焼けた舌を 1 tick 進める。10 秒ごとに1マス戻り、元の長さまで戻ったら消える。"""
+    """焼けた舌を 1 tick 進める。10 秒ごとに1マス戻り、元の長さまで戻ったら消える。
+
+    戻ったら知らせる（画面の通知のため。原型 L4307 は、元の長さまで戻った回にも出す）。
+    """
     scar.until_regen = Tick(scar.until_regen - 1)
+    events: tuple[SimEvent, ...] = ()
     if scar.until_regen <= 0:
         scar.limit = min(TONGUE_REACH, scar.limit + 1)
         scar.until_regen = REGEN_TIME
-    return Progress(done=scar.limit >= TONGUE_REACH)
+        events = (ReachRestored(player=scar.owner, reach=scar.limit),)
+    return Progress(events=events, done=scar.limit >= TONGUE_REACH)
 
 
 def throw_slime(world: WorldState, player: PlayerState) -> Started:

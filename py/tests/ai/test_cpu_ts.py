@@ -56,7 +56,7 @@ from tests.determinism.scenario import (
     NEGIBON_SEED,
     NEGIBON_TICKS,
 )
-from tests.ts_rows import event_row, world_rows
+from tests.ts_rows import ts_event_rows, world_rows
 
 EXPECTED = json.loads(
     (Path(__file__).parent / "ts_cpu_values.json").read_text(encoding="utf-8")
@@ -122,7 +122,7 @@ def play(
     for t in range(1, ticks + 1):
         for i in range(len(pressed)):
             pressed[i] = 0
-        pending.extend(event_row(event) for event in session.tick())
+        pending.extend(ts_event_rows(session.tick()))
         inputs.append(",".join(str(bits) for bits in pressed))
         if t % INTERVAL == 0:
             match = session.match

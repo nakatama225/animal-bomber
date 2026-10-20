@@ -8,8 +8,21 @@ ts_simulation_values.json`・`tests/systems/ts_technique_values.json`・
 振る舞いと盤面の物は、要約の文字列（`encode_action`・`encode_actor`）ごと比べる。
 TypeScript 版の写しには、振る舞いの中身を同じ形の文字列にする関数を足して出した
 （TypeScript 版の振る舞いは中身を外へ見せないため）。
+
+## TypeScript 版に無いもの（比べない）
+
+この版だけが画面の通知のために足したものは、行に入れない。足したのは段階 10b で、
+原型の通知（`presentation/notices.py`）を出すのに、TypeScript 版のイベントでは足りない
+所があったため（TypeScript 版は原型の通知の多くを出していない）。どれも試合の状態は
+変えないので、状態の行（`world_rows`）は TypeScript 版と同じまま比べられる。
+
+- イベントの種類：`TechniqueRefused`（根元まで焼けた舌を出そうとした）・`ReachRestored`
+  （焼けた舌が1マス戻った）。`event_row` は None を返し、`ts_event_rows` が外す
+- 項目：`Sprayed.washed`（流したうんこの数）・`EffectApplied.pushed_by`（押しつけた
+  プレイヤー）。`SuddenDeath.moved_from` と同じく行に入れない
 """
 
+from collections.abc import Iterable
 from typing import assert_never
 
 from animal_bomber.domain.events import (
@@ -31,12 +44,14 @@ from animal_bomber.domain.events import (
     MatchEnded,
     PlayerDown,
     PlayerHurt,
+    ReachRestored,
     Revived,
     RoundEnded,
     SimEvent,
     Sprayed,
     SuddenDeath,
     TechniqueMoment,
+    TechniqueRefused,
     TechniqueUsed,
 )
 from animal_bomber.domain.state.actions import encode_action
@@ -45,8 +60,21 @@ from animal_bomber.domain.state.player import Alive, Life, Negibon, Out, life_na
 from animal_bomber.domain.state.world import WorldState
 
 
-def event_row(event: SimEvent) -> list[object]:
-    """イベントを、TypeScript 版の出力と同じ形の1行にする（種類の名前と中身）。"""
+def ts_event_rows(events: Iterable[SimEvent]) -> list[list[object]]:
+    """イベントの並びを行にする。TypeScript 版に無い種類は外す（モジュールの説明）。"""
+    rows: list[list[object]] = []
+    for event in events:
+        row = event_row(event)
+        if row is not None:
+            rows.append(row)
+    return rows
+
+
+def event_row(event: SimEvent) -> list[object] | None:
+    """イベントを、TypeScript 版の出力と同じ形の1行にする（種類の名前と中身）。
+
+    TypeScript 版に無い種類は None（モジュールの説明）。
+    """
     match event:
         case BombPlaced(cell=cell, owner=owner):
             return ["bombPlaced", cell.col, cell.row, owner]
@@ -85,6 +113,9 @@ def event_row(event: SimEvent) -> list[object]:
             return ["techniqueMoment", player, moment.value]
         case BurntOff(player=player, cell=cell):
             return ["burntOff", player, cell.col, cell.row]
+        case TechniqueRefused() | ReachRestored():
+            # TypeScript 版に無い（画面の通知のためだけに、この版が足した）。
+            return None
         case LeekThrown(player=player, origin=origin, facing=facing):
             return ["leekThrown", player, origin.x, origin.y, facing.name.lower()]
         case LeekStopped(cell=cell, by=by):

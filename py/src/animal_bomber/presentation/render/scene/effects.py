@@ -47,12 +47,14 @@ from animal_bomber.domain.events import (
     MatchEnded,
     PlayerDown,
     PlayerHurt,
+    ReachRestored,
     Revived,
     RoundEnded,
     SimEvent,
     Sprayed,
     SuddenDeath,
     TechniqueMoment,
+    TechniqueRefused,
     TechniqueUsed,
 )
 from animal_bomber.domain.query.board import player_by_id
@@ -253,6 +255,9 @@ class EffectField:
                     pass
                 case BurntOff(cell=cell):
                     self._puff(cell, TONGUE_SMOKE, "\N{TONGUE}")
+                case TechniqueRefused() | ReachRestored():
+                    # 原型も粒を出さない（通知だけ。L2498・L4307）。
+                    pass
                 case BombPlaced() | RoundEnded() | MatchEnded():
                     pass
                 case LeekStopped(cell=cell, by=by):

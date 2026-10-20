@@ -62,7 +62,7 @@ from animal_bomber.domain.state.item import Item
 from animal_bomber.domain.state.player import Negibon, PlayerId
 from animal_bomber.domain.state.world import WorldState, create_world
 from animal_bomber.domain.systems import simulation
-from tests.ts_rows import event_row, world_rows
+from tests.ts_rows import ts_event_rows, world_rows
 
 EXPECTED = json.loads(
     (Path(__file__).parent / "ts_simulation_values.json").read_text(encoding="utf-8")
@@ -256,7 +256,7 @@ def run_script(world: WorldState, script: Script) -> list[dict[str, object]]:
         events = simulation.step(
             world, {p.id: script(p.id, tick) for p in world.players}
         )
-        pending.extend(event_row(event) for event in events)
+        pending.extend(ts_event_rows(events))
         if (tick + 1) % INTERVAL == 0:
             got.append({"tick": world.now, **world_rows(world), "events": pending})
             pending = []

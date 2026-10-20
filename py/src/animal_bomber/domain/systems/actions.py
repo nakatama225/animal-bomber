@@ -199,6 +199,10 @@ def _tap(world: WorldState, player: PlayerState) -> list[SimEvent]:
         return _special(world, player) if player.has_special else []
     cooldown_before = player.ability_cooldown
     started = tap(world, player)
+    if started.refusal is not None:
+        # 技が出せない状態だった。出せなかったことだけを知らせる（技を出したイベントは
+        # 付けない。`Started.refusal`）。
+        return [started.refusal]
     _take_over(player, started)
     # 技が実際に出たかは、振る舞いが始まった・何かが起きた・間隔が始まった、のどれかで
     # 見る。間隔中に押しただけなら何も起きないので知らせない。

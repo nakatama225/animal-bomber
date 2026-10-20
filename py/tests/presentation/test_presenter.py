@@ -13,6 +13,7 @@ import pytest
 
 from animal_bomber.app.session import GameSession
 from animal_bomber.domain.core.coord import Cell, Direction, Point
+from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import (
     BlockDestroyed,
     BombDoused,
@@ -34,6 +35,7 @@ from animal_bomber.domain.events import (
     Moment,
     PlayerDown,
     PlayerHurt,
+    ReachRestored,
     Revived,
     RoundEnded,
     SimEvent,
@@ -41,6 +43,7 @@ from animal_bomber.domain.events import (
     SuddenDeath,
     SuddenDeathReason,
     TechniqueMoment,
+    TechniqueRefused,
     TechniqueUsed,
 )
 from animal_bomber.domain.input.player_input import PlayerInput
@@ -61,7 +64,7 @@ from animal_bomber.presentation.audio.cues import (
     technique_sounds,
 )
 from animal_bomber.presentation.audio.sounds import SoundName
-from animal_bomber.presentation.presenter import Presenter, effect_text
+from animal_bomber.presentation.presenter import Presenter
 from tests.helpers import clear_board, idle, make_world, only_for
 
 
@@ -419,6 +422,15 @@ class Test被弾:
             SoundName.PIT_FALL
         ]
 
+    def test_根元まで焼けた舌を出そうとすると_画面の操作の音(self) -> None:
+        """原型の startTongue（L2498 の `SE.ui()`）。舌を出す音は鳴らさない。"""
+        refused = TechniqueRefused(player=0, wait=Tick(300))
+        assert sounds_of([refused], {0: Animal.FROG}) == [SoundName.UI]
+
+    def test_焼けた舌が戻っても_音は鳴らさない(self) -> None:
+        """原型の L4304-4307 は通知だけ。"""
+        assert sounds_of([ReachRestored(player=0, reach=4)], {0: Animal.FROG}) == []
+
 
 class Test技:
     def test_通常技の音は動物ごと(self) -> None:
@@ -529,17 +541,14 @@ class Testラウンドの終わり:
         assert not is_alive(loser)
         assert sounds_of(events) == expected
 
-    def test_通知はラウンドごとと優勝(self) -> None:
+    def test_ラウンドと試合の決着は通知に出さない(self) -> None:
+        """原型は決着を幕だけで知らせる（endGame に toast は無い）。"""
         notices = RecordingNotices()
-        Presenter(notices=notices).consume([RoundEnded(round=1, winner=None)])
-        Presenter(notices=notices).consume(
-            [RoundEnded(round=2, winner=1), MatchEnded(champion=1)]
-        )
-        assert notices.shown == [
-            "ラウンド 1 は引き分け",
-            "ラウンド 2 は 2P の勝ち",
-            "2P の優勝",
-        ]
+        presenter = Presenter(notices=notices)
+        presenter.consume([RoundEnded(round=1, winner=None)])
+        presenter.consume([RoundEnded(round=2, winner=1)])
+        presenter.consume([RoundEnded(round=3, winner=1), MatchEnded(champion=1)])
+        assert notices.shown == []
 
 
 class Test葱ボンと延長戦:
@@ -621,6 +630,8 @@ ALL_EVENTS: list[SimEvent] = [
     TechniqueUsed(player=1, special=False),
     TechniqueMoment(player=1, moment=Moment.RAMMED),
     BurntOff(player=0, cell=Cell(2, 1)),
+    TechniqueRefused(player=0, wait=Tick(60)),
+    ReachRestored(player=0, reach=1),
     LeekThrown(player=0, origin=Point(1.5, -0.31), facing=Direction.DOWN),
     LeekStopped(cell=Cell(1, 2), by=LeekStop.BOMB),
     Revived(player=0, replaced=1, at=Point(1.5, 1.5)),
@@ -639,23 +650,10 @@ ALL_EVENTS: list[SimEvent] = [
 def test_イベントの種類はすべて扱う() -> None:
     assert {type(event) for event in ALL_EVENTS} == set(get_args(SimEvent))
     Presenter().consume(ALL_EVENTS)
-
-
-def test_プレイヤーの呼び方は外から渡せる() -> None:
-    notices = RecordingNotices()
-    names = {0: "うさぎ", 1: "ぞう", 2: "もぐら", 3: "きつね"}
-    Presenter(notices=notices, name_of=names.__getitem__).consume(
-        [EffectApplied(target=1, effect=EffectKind.REVERSE)]
-    )
-    assert notices.shown == ["ぞう：🔄そうさ反転"]
+    Presenter().consume(ALL_EVENTS, make_world())
 
 
 def test_知らない種類が来たら止まる() -> None:
     """型検査をすり抜けたものが来ても、黙って捨てない（`assert_never` が止める）。"""
     with pytest.raises(AssertionError):
         Presenter().consume([cast(SimEvent, object())])
-
-
-def test_状態の呼び方は_種類ごとに別のもの() -> None:
-    texts = [effect_text(kind) for kind in EffectKind]
-    assert len(set(texts)) == len(EffectKind)

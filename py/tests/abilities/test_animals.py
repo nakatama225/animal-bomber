@@ -113,14 +113,14 @@ class Testアイテムの効き方:
         elephant.action = charge
         stunned_for = 0
         stuns: list[SimEvent] = []
-        # 壁で止まるまで進める。
+        # 壁で止まるまで進める。押しつけた状態の知らせには、押しつけたプレイヤーが載る
+        # （`EffectApplied.pushed_by`）。
+        pushed = EffectApplied(
+            target=frog.id, effect=EffectKind.STUN, pushed_by=elephant.id
+        )
         for _ in range(200):
             events = simulation.step(world, idle(world))
-            stuns.extend(
-                event
-                for event in events
-                if event == EffectApplied(target=frog.id, effect=EffectKind.STUN)
-            )
+            stuns.extend(event for event in events if event == pushed)
             if frog.effects.has(EffectKind.STUN) and stunned_for == 0:
                 stunned_for = frog.effects.remaining(EffectKind.STUN)
         # かかった tick の終わりに 1 tick 進むので、見えるのは 2倍の長さより1つ短い。

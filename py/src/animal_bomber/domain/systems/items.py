@@ -41,7 +41,7 @@ from animal_bomber.domain.state.actions import traits_of
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import PlayerState, is_alive
+from animal_bomber.domain.state.player import PlayerId, PlayerState, is_alive
 from animal_bomber.domain.state.world import WorldState
 
 SPIT_RING = (
@@ -158,11 +158,21 @@ def placed_item(world: WorldState, cell: Cell, kind: ItemKind) -> Item:
 
 
 def apply_item(
-    world: WorldState, player: PlayerState, kind: ItemKind
+    world: WorldState,
+    player: PlayerState,
+    kind: ItemKind,
+    pushed_by: PlayerId | None = None,
 ) -> list[SimEvent]:
     """アイテムの効果を、そのプレイヤーにかける。
 
     効く側の動物の倍率（`AnimalStats.item_multiplier`）を掛ける（モジュールの説明）。
+
+    Args:
+        world: 盤面の状態。
+        player: 効果がかかる側のプレイヤー。
+        kind: アイテムの種類。
+        pushed_by: 抱えていたアイテムを体当たりで押しつけたプレイヤー。かかった状態の
+            知らせ（`EffectApplied.pushed_by`）に載せる。自分で拾ったときは None。
     """
     times = stats_of(player.animal).item_multiplier
     match kind:
@@ -180,13 +190,13 @@ def apply_item(
             # 3 秒に戻る）。
             slide = seconds_to_ticks(SLIDE_SECONDS * times)
             player.effects.set(EffectKind.SLIDE, slide)
-            return [EffectApplied(target=player.id, effect=EffectKind.SLIDE)]
+            return [_applied(player, EffectKind.SLIDE, pushed_by)]
         case ItemKind.ONION:
             # 泣いている間は滑らない。同時にかかると、どちらの動きになるか読めない。
             player.effects.clear(EffectKind.SLIDE)
             # 足さずに置き換える（原型の applyItem）。
             player.effects.set(EffectKind.STUN, seconds_to_ticks(STUN_SECONDS * times))
-            return [EffectApplied(target=player.id, effect=EffectKind.STUN)]
+            return [_applied(player, EffectKind.STUN, pushed_by)]
         case ItemKind.CHICKEN:
             # 持っている印を立て、回数を足す（原型の L1616-1617）。印が外れて回数だけが
             # 残っていたとき（原型では外周から戻ったとき）は、残りの回数に足される。
@@ -196,9 +206,16 @@ def apply_item(
         case ItemKind.POOP:
             poop = world.rng.choice(POOP_EFFECTS)
             _add_effect(player, poop.kind, poop.seconds * times)
-            return [EffectApplied(target=player.id, effect=poop.kind)]
+            return [_applied(player, poop.kind, pushed_by)]
         case _:
             assert_never(kind)
+
+
+def _applied(
+    player: PlayerState, kind: EffectKind, pushed_by: PlayerId | None
+) -> EffectApplied:
+    """アイテムで状態がかかった知らせ。押しつけられたときは、押しつけたプレイヤーを載せる。"""
+    return EffectApplied(target=player.id, effect=kind, pushed_by=pushed_by)
 
 
 def _add_effect(player: PlayerState, kind: EffectKind, seconds: int) -> None:
