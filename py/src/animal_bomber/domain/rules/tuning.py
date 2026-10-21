@@ -198,7 +198,7 @@ BLAST_DAMAGE: Final = 2
 STARTING_HP: Final = 2
 """体力の始めの値（半分の単位）。爆風1回で倒れる。
 
-原型の既定（hpP1・hpP2・hpCPU = 1）と同じ。設定の画面（ルールの画面とロビー）で、
+原型の既定（hpP1・hpP2・hpCPU = 1）と同じ。ルールの画面とロビーで、
 プレイヤーごとに爆風 1〜6 回ぶんを選べる（`MatchConfig.starting_hp`）。動物ごとの
 上乗せは、この値に足す。
 """
@@ -254,7 +254,7 @@ AUTOBOMB_INTERVAL: Final = seconds_to_ticks(AUTOBOMB_INTERVAL_SECONDS)
 ROUND_SECONDS: Final = 180
 """1ラウンドの制限時間の既定値（秒）。原型・TypeScript 版と同じ。
 
-設定の画面（ルールの画面とロビー）で、1:00・3:00・5:00・7:00 から選べる
+ルールの画面とロビーで、1:00・3:00・5:00・7:00 から選べる
 （`MatchConfig.round_limit`）。
 """
 

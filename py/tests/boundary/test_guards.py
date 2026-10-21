@@ -17,6 +17,8 @@ D205・D209・D212）・import-linter・mypy の設定や型として書いて�
 - 設定から禁止を1つ消す・名前を変える（片方の検査からだけ消した場合も）
 - 一覧に足さずに、設定にだけ禁止を足す（書き出して確かめていない禁止ができる）
 - import-linter の禁止を掛ける範囲を、`domain/` より狭める
+- import-linter の「文と値を作る側は描く側を import しない」から、`presentation/hud/`
+  か `presentation/menu/` を外す
 - ruff の禁止を外す先に、`domain/` か `domain/core/` を足す
 - import-linter の層の検査から `exhaustive` を外す
 - mypy の設定から `exhaustive-match` を外す
@@ -46,6 +48,7 @@ LAYERS_CONTRACT = "層の依存は上から下へだけ流れる"
 FORBIDDEN_CONTRACT = (
     "ルールの層は乱数・実時間・描画・環境で結果が違いうる計算を import しない"
 )
+TEXT_SIDE_CONTRACT = "文と値を作る側は描く側を import しない"
 
 
 @dataclass(frozen=True)
@@ -217,6 +220,41 @@ class Test境界を守る検査:
         assert result.failed
         assert f"{LAYERS_CONTRACT} BROKEN" in result.output
         assert f"{PROBE_NAME} -> animal_bomber.presentation" in result.output
+
+    @pytest.mark.parametrize("package", ["hud", "menu"])
+    def test_文と値を作る側から描く側を_import_すると_import_linterが失敗する(
+        self, probe: Probe, package: str
+    ) -> None:
+        """画面の文と値を作る側（`presentation/hud/`・`menu/` など）は描く側を読まない。
+
+        presentation は層の検査では1つの層なので、層の検査は失敗しない（同じ層の中の
+        import）。止めるのは `TEXT_SIDE_CONTRACT` だけ。`hud/`・`menu/` を
+        `source_modules` から外したときにも、ここが失敗する。
+        """
+        probe.write(
+            f"presentation/{package}",
+            "import animal_bomber.presentation.render  # noqa: F401\n",
+        )
+        result = lint_imports()
+        assert result.failed
+        assert f"{TEXT_SIDE_CONTRACT} BROKEN" in result.output
+        # 長い名前の行は、端末の幅で折り返して出る。空白をまとめてから探す。
+        flat = " ".join(result.output.split())
+        assert (
+            f"animal_bomber.presentation.{package}.{PROBE_NAME} -> "
+            "animal_bomber.presentation.render (l.1)"
+        ) in flat
+        assert f"{LAYERS_CONTRACT} BROKEN" not in result.output
+
+    def test_描く側から文と値を作る側を_import_するのはよい(self, probe: Probe) -> None:
+        """両方が使う絵文字は文の側に置き、描く側が読む（`pyproject.toml` の説明）。"""
+        probe.write(
+            "presentation/render",
+            "import animal_bomber.presentation.emoji  # noqa: F401\n"
+            "import animal_bomber.presentation.hud.scoreboard  # noqa: F401\n",
+        )
+        result = lint_imports()
+        assert not result.failed, result.output
 
     def test_層の一覧に無いモジュールを置くと_import_linterが失敗する(
         self, probe: Probe

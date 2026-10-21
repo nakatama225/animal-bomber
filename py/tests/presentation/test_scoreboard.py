@@ -16,13 +16,22 @@ from animal_bomber.ai.levels import CpuLevelKey
 from animal_bomber.app.session import GameSession
 from animal_bomber.domain.abilities.frog import REGEN_TIME
 from animal_bomber.domain.abilities.mole import HOLD_TIME
-from animal_bomber.domain.core.coord import Cell, Direction
+from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.core.tick import TICKS_PER_SECOND, Tick, seconds_to_ticks
 from animal_bomber.domain.events import (
     BombPlaced,
+    BurntOff,
     EffectApplied,
+    LanesClosed,
     Moment,
+    PlayerDown,
     PlayerHurt,
+    ReachRestored,
+    Revived,
+    RoundEnded,
+    SimEvent,
+    SuddenDeath,
+    SuddenDeathReason,
     TechniqueMoment,
     TechniqueUsed,
 )
@@ -367,3 +376,32 @@ class Test名札をすぐ作り直すイベント:
         assert refreshes_panel(EffectApplied(target=0, effect=EffectKind.PITFALL))
         assert not refreshes_panel(EffectApplied(target=0, effect=EffectKind.SLIDE))
         assert not refreshes_panel(BombPlaced(cell=Cell(1, 1), owner=0))
+
+    @pytest.mark.parametrize(
+        "event",
+        [
+            PlayerDown(target=1, by=0, at=Point(1.5, 1.5)),
+            Revived(player=1, replaced=0, at=Point(1.5, 1.5)),
+            LanesClosed(players=(1,)),
+            BurntOff(player=0, cell=Cell(2, 1)),
+            ReachRestored(player=0, reach=3),
+            SuddenDeath(
+                reason=SuddenDeathReason.TIME_UP,
+                players=(0, 1),
+                moved_from=(Point(3.5, 1.5), Point(5.5, 1.5)),
+            ),
+            RoundEnded(round=1, winner=0),
+        ],
+        ids=lambda event: type(event).__name__,
+    )
+    def test_いつも作り直す種類は_どれも横の板をすぐ作り直す(
+        self, event: SimEvent
+    ) -> None:
+        """やられた・入れ替わった・外周が閉じた・舌が焼き切れた・舌が戻った・延長戦・決着。
+
+        原型の L1668・L2270・L2355・L2362・L2489・L4308・L4464・L4510。延長戦（時間
+        切れで入ったとき）と舌が戻ったときは、同じ tick にほかのすぐ作り直すイベントが
+        無いので、ここで作り直さないと名札が最大 250 ms 遅れて替わる。やられたときは、
+        同じ tick に被弾（`PlayerHurt`）もある。
+        """
+        assert refreshes_panel(event)

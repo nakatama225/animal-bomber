@@ -48,7 +48,7 @@ from animal_bomber.presentation.hud.roster import Human, Roster, controller_of
 class SpanKind(Enum):
     """行の中の1区切りの種類。
 
-    キーの案内のほか、設定の画面の注記とマニュアル・更新履歴の文
+    キーの案内のほか、ルールの画面の注記とマニュアル・更新履歴の文
     （`menu/manual.py`・`menu/screens.py`）も同じ区切りで持つ。
     """
 

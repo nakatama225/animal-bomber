@@ -460,7 +460,7 @@ class Shell:
             self._dragging = False
 
     def _key_down(self, event: pygame.event.Event, now_ms: float) -> None:
-        """キーを1つ押した（10c の申し送りの順）。"""
+        """キーを1つ押した（モジュールの説明の「1フレームの順」の 1. の順に渡す）。"""
         flow = self._flow
         # どのキーでも起動の幕を消し、同じキーを下の画面へも渡す（原型の2つの keydown
         # の登録が、同じキーを受ける）。

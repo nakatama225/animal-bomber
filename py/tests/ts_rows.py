@@ -11,8 +11,9 @@ TypeScript 版の写しには、振る舞いの中身を同じ形の文字列に
 
 ## TypeScript 版に無いもの（比べない）
 
-この版だけが画面の通知のために足したものは、行に入れない。足したのは段階 10b で、
-原型の通知（`presentation/notices.py`）を出すのに、TypeScript 版のイベントでは足りない
+この版だけが画面の通知のために足したものは、行に入れない。足したのは段階 10
+（a11fc48。`ItemTaken.swept` だけは a2ac403）で、原型の通知
+（`presentation/notices.py`）を出すのに、TypeScript 版のイベントでは足りない
 所があったため（TypeScript 版は原型の通知の多くを出していない）。どれも試合の状態は
 変えないので、状態の行（`world_rows`）は TypeScript 版と同じまま比べられる。
 

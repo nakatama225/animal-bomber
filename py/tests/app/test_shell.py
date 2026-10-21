@@ -17,6 +17,7 @@ TypeScript 版の `tests/ui/shell.test.ts`（本物の GameSession を回す通�
 
 import itertools
 
+import numpy as np
 import pygame
 import pytest
 
@@ -44,14 +45,19 @@ from animal_bomber.presentation.hud.banner import (
     NEXT_ROUND_BUTTON,
     SETUP_BUTTON,
 )
+from animal_bomber.presentation.lan_status import WAIT_NOTICE_FRAMES
 from animal_bomber.presentation.menu.choices import hp_for_hits
 from animal_bomber.presentation.menu.screens import LanView, LobbyView, MenuScreen
 from animal_bomber.presentation.render.layout import PANEL_WIDTH, fit_window
-from animal_bomber.presentation.render.loading import BACKGROUND
+from animal_bomber.presentation.render.loading import BACKGROUND, TEXT_COLOR
 from animal_bomber.presentation.render.panel.side_panel import SidePanel, thumb_center
 from animal_bomber.presentation.render.renderer import Visuals
 from animal_bomber.presentation.render.screens.manual import MANUAL_BOX
-from animal_bomber.presentation.render.ui.shapes import page_background
+from animal_bomber.presentation.render.ui.shapes import (
+    page_background,
+    splash_background,
+)
+from animal_bomber.presentation.render.ui.typeset import TextStyle
 from animal_bomber.presentation.render.views.player import drawn_position
 from animal_bomber.shell.gamepad import PadButton
 from tests.net.fake_relay import FakeConnection, FakeRelay
@@ -155,6 +161,26 @@ def leave_by_settings(driver: Driver) -> None:
     assert screen_of(driver) is MenuScreen.TITLE
 
 
+def board_pixels(driver: Driver) -> np.ndarray:
+    """描く面のうち、盤面の四角の画素（横・縦・色の3つの軸）。"""
+    board = driver.shell.canvas.subsurface(pygame.Rect(driver.window.board_rect))
+    return pygame.surfarray.array3d(board)
+
+
+def notice_text_pixels(driver: Driver) -> int:
+    """盤面の下の端の、通信対戦の案内の帯の高さにある、案内の字の色の画素の数。
+
+    帯の高さは、帯を描く `LanScreen` と同じく、盤面の高さから決めた字の行の高さに
+    8px を足したもの。
+    """
+    board = pygame.Rect(driver.window.board_rect)
+    style = TextStyle(max(14, board.h // 36), TEXT_COLOR)
+    height = PAINTER.normal_line(style) + 8
+    strip = pygame.Rect(board.x, board.bottom - height, board.w, height)
+    pixels = pygame.surfarray.array3d(driver.shell.canvas.subsurface(strip))
+    return int(np.all(pixels == TEXT_COLOR, axis=2).sum())
+
+
 class Test画面の切り替え:
     def test_タイトルから試合を始め_横の板と幕を出し_もういっかいのあとタイトルへ(
         self,
@@ -243,11 +269,30 @@ class Test画面の切り替え:
         assert screen_of(driver) is MenuScreen.PICK
 
     def test_起動の幕を消したキーは_下の画面にも届く(self) -> None:
-        """Enter は枠を出すだけ（原型も、幕を消したキーがタイトルへ届く）。"""
+        """どのキーでも幕は消え始め、そのキーは下のタイトルにも届く。
+
+        Enter は枠を出すだけ（原型も、幕を消したキーがタイトルへ届く）。
+        """
         driver = Driver()
         driver.tap(pygame.KSCAN_RETURN)
+        assert driver.shell.flow.splash.dismissed_at(driver.now) is not None
         assert driver.shell.flow.cursor_shown
         assert screen_of(driver) is MenuScreen.TITLE
+        # 消え始めてから 0.5 秒で外す（何もしなければ 3.2 秒まで出たまま）。
+        driver.frame(ticks=0, ms=600)
+        assert driver.shell.flow.splash_view(driver.now) is None
+
+    def test_起動の幕を窓に描き_外したら下の画面を描く(self) -> None:
+        """幕の背景と画面の背景が違う色の点で、描く面の色を見る（ロゴや項目の無い所）。"""
+        driver = Driver()
+        size = driver.shell.canvas.get_size()
+        splash, page = splash_background(size), page_background(size)
+        spot = (2, size[1] // 3)
+        assert splash.get_at(spot) != page.get_at(spot)
+        driver.frame(ticks=0)
+        assert driver.shell.canvas.get_at(spot) == splash.get_at(spot)
+        driver.skip_splash()
+        assert driver.shell.canvas.get_at(spot) == page.get_at(spot)
 
 
 class Testキーボードでメニューを動かす:
@@ -416,6 +461,28 @@ class Testゲームパッドでメニューを動かす:
         assert driver.shell.flow.dialog is None
         assert screen_of(driver) is MenuScreen.PLAY
 
+    def test_確認の画面が開いている間は_Pでポーズをやめない(self) -> None:
+        """原型のキーボードの入口は、P より先に確認の画面を見る。
+
+        原型の L3074-3078（確認の画面）が L3081（P）より前にある。P でポーズをやめると、
+        確認の画面を出したまま試合が進む。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.pads.hold(1, PadButton.START)
+        driver.frame()
+        driver.pads.hold(1)
+        driver.frame()
+        driver.pads.hold(1, PadButton.BACK)
+        driver.frame()
+        assert runner.paused and driver.shell.flow.dialog is not None
+        now = runner.world.now
+        driver.tap(pygame.KSCAN_P)
+        driver.frames(5)
+        assert runner.paused
+        assert runner.world.now == now
+        assert driver.shell.flow.dialog is not None
+
 
 class Testラウンドの幕:
     def test_1台の幕はボタンで送るまで出たまま_送ると次のラウンド(self) -> None:
@@ -522,6 +589,52 @@ class Testラウンドの幕:
         driver.click(NEXT_ROUND_BUTTON)
         assert driver.sounds.played.count(SoundName.UI) == before
 
+    def test_幕を送ったあとのラウンドでも_パッドのStartでポーズでき_幕のボタンは無い(
+        self,
+    ) -> None:
+        """幕が消えたら、画面の流れ（`MenuFlow`）にも幕を外したことを伝える。
+
+        伝えないと、流れは幕が出たままと見て、パッドの Start を幕の送りに、パッドの
+        下と A を幕の「⚙ 設定をやりなおす」に使う（試合の途中でタイトルへ戻る）。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        finish_round(driver, runner)
+        driver.frame()
+        assert driver.shell.flow.groups() != ()
+        driver.click(NEXT_ROUND_BUTTON)
+        assert runner.match.round == 2
+        driver.frame()
+        assert driver.shell.flow.groups() == ()
+        driver.pads.hold(1, PadButton.START)
+        driver.frame()
+        assert runner.paused
+
+    def test_幕の間は_幕の下の横の板の設定へを押しても_試合をやめない(self) -> None:
+        """幕は窓全体を覆う（原型の `#banner` は `position:fixed; inset:0`。L139）。
+
+        幕の間に押せるのは幕のボタンだけ。ラウンドの幕で横の板の「設定へ」の位置を
+        押して戻ると、試合の途中でタイトルへ戻る。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        # 「設定へ」が窓の中に来るまで横の板をスクロールしてから、幕を出す（幕の間は
+        # 横の板を描かないので、押せる所の四角は幕を出したフレームのまま）。
+        scroll_panel_down(driver)
+        hits = driver.shell.panel_hits
+        assert hits is not None
+        settings = hits.settings.center
+        assert settings[1] < driver.shell.canvas.get_height()
+        finish_round(driver, runner)
+        driver.frame()
+        assert labels(driver) == [NEXT_ROUND_BUTTON, SETUP_BUTTON]
+        assert not any(hit.rect.collidepoint(settings) for hit in driver.shell.hits)
+        driver.click_at(settings)
+        assert screen_of(driver) is MenuScreen.PLAY
+        assert driver.shell.runner is runner
+        assert runner.between_rounds
+
 
 class Test試合を進める:
     def test_試合の外で押したキーは_そのフレームで忘れる(self) -> None:
@@ -561,6 +674,24 @@ class Test試合を進める:
         driver.frame(down, up, ticks=3)
         driver.frames(2)
         assert runner.world.players[0].position.y == 1.5
+
+    def test_窓から離れたら_押していた向きのキーを離したことにする(self) -> None:
+        """離したことは届かないので、忘れないと歩き続ける（`KeyboardWatcher.handle`）。
+
+        原型も窓から離れたら押しているキーを忘れる（`blur` の `keys.clear`。L3100）。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        world = runner.world
+        for row in range(2, 6):
+            world.board.put(Cell(1, row), Tile.EMPTY)
+        driver.down(pygame.KSCAN_S)
+        driver.frames(2)
+        assert world.players[0].position.y > 1.5
+        driver.frame(pygame.event.Event(pygame.WINDOWFOCUSLOST))
+        stopped = world.players[0].position.y
+        driver.frames(30)
+        assert world.players[0].position.y == stopped
 
     def test_最初のtickから歩いた距離を数え_もういっかいの試合でも数える(
         self,
@@ -653,6 +784,23 @@ class Testポーズ:
         assert driver.music.log[-1] == "start"
         driver.frames(3)
         assert runner.world.now > now
+
+    def test_ポーズの間は_盤面にポーズの幕を重ねる(self) -> None:
+        """幕（原型 L4566-4573）は盤面全体を不透明度 0.6 の暗い色で覆う。
+
+        止めている間は盤面の tick が変わらないので、止める前のフレームとの違いは幕だけ。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frames(3)
+        before = board_pixels(driver).mean()
+        driver.down(pygame.KSCAN_P)
+        assert runner.paused
+        assert board_pixels(driver).mean() < 0.6 * before
+        driver.up(pygame.KSCAN_P)
+        driver.tap(pygame.KSCAN_P)
+        assert not runner.paused
+        assert board_pixels(driver).mean() > 0.9 * before
 
     def test_ポーズの間に押した爆弾のキーは_再開しても置かない(self) -> None:
         """原型も毎フレーム押した瞬間を忘れる（ポーズの間も）。"""
@@ -1004,10 +1152,21 @@ class Test音:
         driver.click("BGM + 効果音")
         assert (driver.sounds.volume, driver.music.volume) == (1.0, 1.0)
 
-    def test_試合の曲は_ゲーム速度に合わせた速さで鳴らす(self) -> None:
+    @pytest.mark.parametrize(("rate", "before"), [(2.0, TEMPO), (1.0, tempo_for(2.0))])
+    def test_試合の曲は_ゲーム速度に合わせた速さで鳴らす(
+        self, rate: float, before: int
+    ) -> None:
+        """1台の試合を始めるときに、ゲーム速度の曲の速さを当てる。
+
+        ゲーム速度は試合をまたいで保ち、通信対戦を始めると曲は等倍に戻す。始める前の
+        曲の速さに頼ると、1台の試合で速めたあとに通信対戦をして、また1台の試合を
+        始めたとき、試合は速いまま曲だけが等倍で鳴る。
+        """
         driver = Driver()
+        driver.shell.speed.set(rate)
+        driver.music.tempo = before
         start_local(driver)
-        assert driver.music.tempo == TEMPO
+        assert driver.music.tempo == tempo_for(rate)
 
 
 class Testマウス:
@@ -1339,17 +1498,39 @@ class Test通信対戦:
         assert world is not None
         assert [bomb.owner for bomb in world.bombs] == [0]
 
-    def test_試合の最中にずれが知らされたら_進めずに曲を止める(self) -> None:
+    def test_入力を待つ間が続いたら_盤面の下の端に待ちの案内の帯を出す(self) -> None:
+        """待ちが `WAIT_NOTICE_FRAMES` フレーム続くまでは出さない。
+
+        一瞬の待ちで出すと、文が出たり消えたりする。帯（`MatchView.draw_notice`）は、待ち・ずれ・決まったあとの案内を窓に出す
+        ただ1つの所。出さないと、盤面が理由も出さずに止まって見える。
+        """
+        pair = LanPair()
+        host, _ = pair.start()
+        pair.step(5)
+        assert notice_text_pixels(pair.host) == 0
+        for _ in range(10):
+            pair.relay.deliver()
+            pair.host.frame()
+        assert not host.ready
+        assert notice_text_pixels(pair.host) == 0
+        pair.host.frames(WAIT_NOTICE_FRAMES)
+        assert notice_text_pixels(pair.host) > 0
+
+    def test_試合の最中にずれが知らされたら_進めずに曲を止め_帯に理由を出す(
+        self,
+    ) -> None:
         pair = LanPair()
         host, _ = pair.start()
         pair.step(5)
         assert pair.host.music.playing
+        assert notice_text_pixels(pair.host) == 0
         world = host.world
         assert world is not None
         world.players[3].hp += 1  # ホストの盤面だけを変える
         pair.step(45)
         assert not host.in_progress
         assert pair.host.music.log[-1] == "stop"
+        assert notice_text_pixels(pair.host) > 0
         now = _now(host)
         pair.step(5)
         assert _now(host) == now
@@ -1408,6 +1589,24 @@ class TestLANの画面:
         )
         assert view.host.items[0].enabled
         assert driver.shell.lan is None
+
+    def test_欄に字を打てる間のBackspaceは_字を1つ消すだけで_もどらない(self) -> None:
+        """消しているうちに1回多く押して、画面を出てしまわないように（欄が空でも）。
+
+        Esc は、ほかの画面と同じく1つ前の画面（タイトル）へ戻る。
+        """
+        driver = Driver()
+        driver.skip_splash()
+        driver.click("LAN対戦")
+        driver.tap(pygame.KSCAN_M, "m")
+        driver.tap(pygame.KSCAN_A, "a")
+        driver.tap(pygame.KSCAN_BACKSPACE)
+        assert screen_of(driver) is MenuScreen.LAN
+        view = driver.shell.flow.screen_view()
+        assert isinstance(view, LanView)
+        assert view.field_text == "m"
+        driver.tap(pygame.KSCAN_ESCAPE)
+        assert screen_of(driver) is MenuScreen.TITLE
 
     def test_欄に名前を打ち込んで_さんかするでその中継につなぐ(self) -> None:
         addresses: list[str] = []
