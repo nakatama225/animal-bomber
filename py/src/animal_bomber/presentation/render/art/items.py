@@ -8,6 +8,9 @@
 札（光のにじみ・下地・枠）を描く `draw_item_plate`・絵文字を描く `draw_item_emoji`。
 `draw_item` はこれを原型と同じ順に呼ぶ。分けてあるのは、描いた絵を取っておく所
 （`render/sprites.py`）が、札と絵文字を別々に取っておけるようにするため。
+
+アイテムの絵文字は、通知の文にも出すので文の側（`presentation/emoji.py` の
+`item_emoji`）に置いてあり、ここはそれを読む。
 """
 
 import math
@@ -23,6 +26,7 @@ from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.items import POOP_LIFETIME, ItemKind
 from animal_bomber.domain.state.item import Item
+from animal_bomber.presentation.emoji import item_emoji
 from animal_bomber.presentation.render.art.shapes import round_rect
 from animal_bomber.presentation.render.art.timing import seconds
 from animal_bomber.presentation.render.canvas.protocol import Canvas
@@ -44,27 +48,6 @@ class ItemTone(Enum):
     """拾うと損をするもの。赤い枠。"""
     SCATTERED = "scattered"
     """とくぎで撒かれたもの。桃色の枠。"""
-
-
-def item_emoji(kind: ItemKind) -> str:
-    """アイテムの絵文字（原型の ITEM_DEF の emoji）。"""
-    match kind:
-        case ItemKind.BOMB:
-            return "💣"
-        case ItemKind.FIRE:
-            return "🔥"
-        case ItemKind.SHOE:
-            return "👟"
-        case ItemKind.BANANA:
-            return "🍌"
-        case ItemKind.ONION:
-            return "🧅"
-        case ItemKind.CHICKEN:
-            return "🍗"
-        case ItemKind.POOP:
-            return "💩"
-        case _:
-            assert_never(kind)
 
 
 def is_harmful(kind: ItemKind) -> bool:

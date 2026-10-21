@@ -57,19 +57,12 @@
 
 import string
 from collections.abc import Callable, Collection
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Final, TypeAlias, assert_never
 
 from animal_bomber.net.client import HOST, Lobby
 from animal_bomber.presentation.hud.toast import ease
-from animal_bomber.presentation.menu.choices import (
-    CPU_LEVEL_CHOICES,
-    HIT_CHOICES,
-    TIME_CHOICES,
-    WIN_CHOICES,
-    SoundSetting,
-    assert_choice,
-)
+from animal_bomber.presentation.menu.choices import SoundSetting
 from animal_bomber.presentation.menu.cursor import (
     Activate,
     GoBack,
@@ -82,7 +75,6 @@ from animal_bomber.presentation.menu.items import (
     Answer,
     Back,
     ChooseMode,
-    HitsOf,
     HostLan,
     JoinLan,
     Leave,
@@ -108,7 +100,7 @@ from animal_bomber.presentation.menu.items import (
 from animal_bomber.presentation.menu.lan_setup import LanSetup, LobbyChoices
 from animal_bomber.presentation.menu.local_setup import (
     DEFAULT_LOCAL_SETUP,
-    MODE_SIZES,
+    LocalChoices,
     LocalSetup,
 )
 from animal_bomber.presentation.menu.screens import (
@@ -356,7 +348,7 @@ class MenuFlow:
         self._host_address = host_address
         self._address_of = address_of
         self._screen = MenuScreen.TITLE
-        self._setup = setup
+        self._local_choices = LocalChoices(setup)
         self._sound = sound
         self._lobby_choices = LobbyChoices()
         self._cursor = MenuCursor()
@@ -378,7 +370,7 @@ class MenuFlow:
     @property
     def setup(self) -> LocalSetup:
         """1台の遊び方で選んでいるもの。"""
-        return self._setup
+        return self._local_choices.setup
 
     @property
     def lobby_setup(self) -> LanSetup:
@@ -420,9 +412,9 @@ class MenuFlow:
             case MenuScreen.TITLE:
                 return title_view()
             case MenuScreen.PICK:
-                return pick_view(self._setup)
+                return pick_view(self.setup)
             case MenuScreen.RULES:
-                return rules_view(self._setup)
+                return rules_view(self.setup)
             case MenuScreen.MANUAL:
                 return manual_view(self._sound)
             case MenuScreen.LAN:
@@ -658,7 +650,7 @@ class MenuFlow:
     def _apply(self, action: MenuAction) -> tuple[Effect, ...]:
         match action:
             case ChooseMode(mode=mode):
-                self._setup = replace(self._setup, mode=mode)
+                self._local_choices.set_mode(mode)
                 self._show(MenuScreen.PICK)
             case OpenLan():
                 self._show(MenuScreen.LAN)
@@ -671,31 +663,29 @@ class MenuFlow:
                     self._show(MENU_BACK[self._screen])
             case Next():
                 self._show(MenuScreen.RULES)
-            case PickAnimal():
-                self._pick(action)
+            case PickAnimal(human=human, animal=animal):
+                self._local_choices.set_pick(human, animal)
             case SetHits(who=who, hits=hits):
-                self._set_hits(who, hits)
-            case SetCpuLevel():
-                self._set_cpu_level(action)
+                self._local_choices.set_hits(who, hits)
+            case SetCpuLevel(index=index, level=level):
+                self._local_choices.set_cpu_level(index, level)
             case SetWins(wins=wins, lobby=True):
                 self._lobby_choices.set_wins_to_take(wins)
                 return self._share()
             case SetWins(wins=wins):
-                assert_choice(WIN_CHOICES, wins, "勝ち数")
-                self._setup = replace(self._setup, wins_to_take=wins)
+                self._local_choices.set_wins_to_take(wins)
             case SetTime(seconds=seconds, lobby=True):
                 self._lobby_choices.set_round_seconds(seconds)
                 return self._share()
             case SetTime(seconds=seconds):
-                assert_choice(TIME_CHOICES, seconds, "制限時間")
-                self._setup = replace(self._setup, round_seconds=seconds)
+                self._local_choices.set_round_seconds(seconds)
             case SetSudden(on=on, lobby=True):
                 self._lobby_choices.set_sudden_death(on)
                 return self._share()
             case SetSudden(on=on):
-                self._setup = replace(self._setup, sudden_death=on)
+                self._local_choices.set_sudden_death(on)
             case StartLocal():
-                return (StartLocalMatch(self._setup),)
+                return (StartLocalMatch(self.setup),)
             case SetSound(sound=sound):
                 self._sound = sound
                 return (ApplySound(sound),)
@@ -726,57 +716,6 @@ class MenuFlow:
             case _:
                 assert_never(action)
         return ()
-
-    def _pick(self, action: PickAnimal) -> None:
-        """人間の動物を選ぶ。
-
-        Raises:
-            ValueError: その遊び方にいないプレイヤー（1人で遊ぶときの 2P）のとき。
-        """
-        human = action.human
-        if not 0 <= human < MODE_SIZES[self._setup.mode].humans:
-            raise ValueError(f"この遊び方に {human + 1}P はいない")
-        first, second = self._setup.picks
-        picks = (action.animal, second) if human == 0 else (first, action.animal)
-        self._setup = replace(self._setup, picks=picks)
-
-    def _set_hits(self, who: HitsOf, hits: int) -> None:
-        """爆風の回数を選ぶ。
-
-        Raises:
-            ValueError: 選べない回数か、その遊び方にいない相手のとき。
-        """
-        assert_choice(HIT_CHOICES, hits, "爆風の回数")
-        size = MODE_SIZES[self._setup.mode]
-        if (who is HitsOf.P2 and size.humans < 2) or (
-            who is HitsOf.CPU and size.cpus == 0
-        ):
-            raise ValueError(f"この遊び方に {who.value} はいない")
-        current = self._setup.hits
-        match who:
-            case HitsOf.P1:
-                chosen = replace(current, p1=hits)
-            case HitsOf.P2:
-                chosen = replace(current, p2=hits)
-            case HitsOf.CPU:
-                chosen = replace(current, cpu=hits)
-            case _:
-                assert_never(who)
-        self._setup = replace(self._setup, hits=chosen)
-
-    def _set_cpu_level(self, action: SetCpuLevel) -> None:
-        """CPU の強さを選ぶ。
-
-        Raises:
-            ValueError: 選べない強さか、その遊び方にいない CPU のとき。
-        """
-        index = action.index
-        assert_choice(CPU_LEVEL_CHOICES, action.level, "CPU の強さ")
-        if not 0 <= index < MODE_SIZES[self._setup.mode].cpus:
-            raise ValueError(f"この遊び方に CPU{index + 1} はいない")
-        levels = list(self._setup.cpu_levels)
-        levels[index] = action.level
-        self._setup = replace(self._setup, cpu_levels=(levels[0], levels[1], levels[2]))
 
     def _connect(self, address: str | None) -> tuple[Effect, ...]:
         """中継につなぎ始める（原型の `joinLan`）。

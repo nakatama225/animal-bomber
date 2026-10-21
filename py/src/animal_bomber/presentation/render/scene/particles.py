@@ -16,8 +16,9 @@ from typing import Final
 from animal_bomber.domain.core.coord import Cell, Direction
 from animal_bomber.domain.core.tick import TICKS_PER_SECOND
 from animal_bomber.domain.rules.animals import Animal
+from animal_bomber.presentation.animal_text import animal_emoji
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng
-from animal_bomber.presentation.render.art.animals.looks import animal_emoji, look_of
+from animal_bomber.presentation.render.art.animals.looks import look_of
 from animal_bomber.presentation.render.art.particles import ParticleLook
 
 DT: Final = 1 / TICKS_PER_SECOND

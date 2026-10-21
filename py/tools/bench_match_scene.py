@@ -30,8 +30,9 @@
 
 場面で使う絵は、作るときに全部描いておく（試合の前に描いておく `BakedArt.prebuild` と、
 場面だけで出る状態の印の組み合わせ）。盤面は描く面の左上 (0, 0) に盤面の四角で切って
-描き、横の板はその右に貼る（遊ぶときの窓の並び。`layout.WindowLayout` と
-`app/shell.py`）。
+描き、横の板はその右に貼る（遊ぶときの窓の並び。`layout.WindowLayout`）。横の板の中身を
+組む所と、盤面を描いて横の板を貼る所は、遊ぶときと同じ関数を呼ぶ
+（`render/match_frame.py` の `panel_content`・`draw_match_frame`）。
 
 遊ぶときに試合の画面へ重ねるもののうち、通知（`#toast`）・ポーズの幕・ラウンドの幕と
 優勝の幕・確認の画面・通信対戦の案内の帯は、場面に入れていない。出ている間だけ重ね、
@@ -61,17 +62,16 @@ from animal_bomber.domain.state.match import MatchState
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState, create_world
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng
-from animal_bomber.presentation.hud.key_help import KeyHelpSource, describe_key_help
 from animal_bomber.presentation.hud.roster import Cpu, Human, Roster
-from animal_bomber.presentation.hud.scoreboard import (
-    HudSource,
-    describe_clock,
-    describe_players,
-)
+from animal_bomber.presentation.hud.scoreboard import HudSource
 from animal_bomber.presentation.render.art.player import BLINK_ALPHA
 from animal_bomber.presentation.render.art.player_marks import MAX_MARKS
 from animal_bomber.presentation.render.baked.art import BakedArt
 from animal_bomber.presentation.render.layout import PANEL_GAP, Layout
+from animal_bomber.presentation.render.match_frame import (
+    draw_match_frame,
+    panel_content,
+)
 from animal_bomber.presentation.render.panel.side_panel import (
     PanelContent,
     SidePanel,
@@ -196,37 +196,34 @@ class MatchScene:
     def draw(self, target: pygame.Surface, frame: int) -> None:
         """`frame` フレーム目を描く（盤面を左上に、横の板をその右に）。
 
-        盤面は、遊ぶときと同じく盤面の四角で切って描く（画面の揺れと粒子が、すき間へ
-        はみ出さない。`app/shell.py`）。
+        盤面を切って描いて横の板を貼る所は、遊ぶときと同じ関数
+        （`render/match_frame.py` の `draw_match_frame`）を呼ぶ。
         """
         self._pose(frame)
         self.visuals.advance(frame, self._fire, self._cells)
-        target.set_clip(self._board_rect)
-        self._renderer.draw(target, self._world, self.visuals)
-        target.set_clip(None)
         now_ms = self._start_ms + frame * FRAME_MS
-        self._panel.show(self._panel_content(), now_ms)
-        self._panel.draw(target, (self._panel_left, 0), now_ms)
+        draw_match_frame(
+            target,
+            board_rect=self._board_rect,
+            renderer=self._renderer,
+            world=self._world,
+            visuals=self.visuals,
+            panel=self._panel,
+            content=self._panel_content(),
+            panel_topleft=(self._panel_left, 0),
+            now_ms=now_ms,
+        )
 
     def _panel_content(self) -> PanelContent:
-        """いまの盤面から作る、横の板の中身。"""
-        world = self._world
-        source = HudSource(world, self._match, self._config, ROSTER, False)
-        keys = KeyHelpSource(
-            world,
-            ROSTER,
-            pad_connected=True,
-            pad_in_match=True,
-            paused=False,
-            can_pause=True,
-        )
-        return PanelContent(
-            clock=describe_clock(source),
-            cards=describe_players(source),
-            help_rows=describe_key_help(keys),
+        """いまの盤面から作る、横の板の中身（遊ぶときと同じ関数で組む）。"""
+        source = HudSource(self._world, self._match, self._config, ROSTER, False)
+        return panel_content(
+            source,
             speed=GAME_SPEED,
             paused=False,
             can_pause=True,
+            pad_connected=True,
+            pad_in_match=True,
         )
 
     def _build_world(self, rng: random.Random) -> WorldState:

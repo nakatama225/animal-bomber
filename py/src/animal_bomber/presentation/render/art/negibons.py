@@ -22,7 +22,7 @@ from animal_bomber.domain.core.coord import Direction
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.tuning import LEEK_COOLDOWN
-from animal_bomber.presentation.render.art.animals.looks import animal_emoji
+from animal_bomber.presentation.animal_text import animal_emoji
 from animal_bomber.presentation.render.art.shapes import round_rect
 from animal_bomber.presentation.render.art.timing import FULL_TURN
 from animal_bomber.presentation.render.canvas.protocol import Canvas

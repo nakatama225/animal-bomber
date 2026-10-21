@@ -28,14 +28,13 @@ from animal_bomber.presentation.menu.flow import (
     UiSound,
 )
 from animal_bomber.presentation.menu.items import (
-    HitsOf,
     MenuItem,
     PickAnimal,
     SetCpuLevel,
     SetHits,
     SetWins,
 )
-from animal_bomber.presentation.menu.local_setup import LocalHits, PlayMode
+from animal_bomber.presentation.menu.local_setup import HitsOf, LocalHits, PlayMode
 from animal_bomber.presentation.menu.screens import (
     DialogKind,
     LanView,

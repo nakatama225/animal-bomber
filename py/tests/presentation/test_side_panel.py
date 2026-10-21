@@ -22,6 +22,7 @@ from animal_bomber.presentation.hud.scoreboard import (
     describe_clock,
     describe_players,
 )
+from animal_bomber.presentation.menu.choices import SPEED_CHOICES, format_speed
 from animal_bomber.presentation.render.layout import PANEL_WIDTH
 from animal_bomber.presentation.render.panel.side_panel import (
     REFRESH_MS,
@@ -29,7 +30,6 @@ from animal_bomber.presentation.render.panel.side_panel import (
     SidePanel,
     pulse_opacity,
     speed_at,
-    speed_label,
     thumb_center,
 )
 from animal_bomber.presentation.render.ui.theme import ACCENT2, INK, NG
@@ -219,12 +219,23 @@ class Testつまみ:
         assert speed_at(track.right - 8.5 - 0.02 * 195, track) == 3.0
 
     def test_値の字は原型の書き方(self) -> None:
-        assert [speed_label(v) for v in (0.5, 1.0, 1.25, 3.0)] == [
+        assert [format_speed(v) for v in (0.5, 1.0, 1.25, 3.0)] == [
             "0.5×",
             "1×",
             "1.25×",
             "3×",
         ]
+
+    def test_どの位置でも_選べる倍率の表の値を返し_表の全部に届く(self) -> None:
+        """つまみの範囲と刻みを、ゲーム速度の表（`SPEED_CHOICES`）から出していること。
+
+        表に無い値を返すと、ゲーム速度を変える所（`GameSpeed.set`）が例外を出す。
+        """
+        track = pygame.Rect(10, 0, 212, 17)
+        seen = [speed_at(x, track) for x in range(track.x - 5, track.right + 5)]
+        assert set(seen) == set(SPEED_CHOICES)
+        for speed in SPEED_CHOICES:
+            assert speed_at(thumb_center(speed, track), track) == speed
 
 
 def test_明滅は07秒で_1から045へ下がって戻る() -> None:

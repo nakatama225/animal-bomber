@@ -17,8 +17,9 @@ from typing import Final
 
 import pygame
 
+from animal_bomber.presentation.render.ui.fonts import Face
 from animal_bomber.presentation.render.ui.theme import ACCENT2, DIM
-from animal_bomber.presentation.render.ui.typeset import Face, TextPainter
+from animal_bomber.presentation.render.ui.typeset import TextPainter
 from animal_bomber.presentation.render.ui.widgets import css_style
 
 SHADE: Final = (10, 6, 4)

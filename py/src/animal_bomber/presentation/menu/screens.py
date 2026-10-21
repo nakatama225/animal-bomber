@@ -38,6 +38,7 @@ from animal_bomber.presentation.animal_text import (
 )
 from animal_bomber.presentation.hud.banner import SETUP_BUTTON
 from animal_bomber.presentation.hud.key_help import HelpSpan, SpanKind
+from animal_bomber.presentation.hud.roster import numbered_name
 from animal_bomber.presentation.menu.choices import (
     CPU_LEVEL_CHOICES,
     HIT_CHOICES,
@@ -52,7 +53,6 @@ from animal_bomber.presentation.menu.items import (
     Answer,
     Back,
     ChooseMode,
-    HitsOf,
     HostLan,
     ItemStyle,
     JoinLan,
@@ -84,6 +84,7 @@ from animal_bomber.presentation.menu.lan_setup import (
 )
 from animal_bomber.presentation.menu.local_setup import (
     MODE_SIZES,
+    HitsOf,
     LocalSetup,
     PlayMode,
 )
@@ -823,7 +824,7 @@ def lobby_view(lobby: Lobby, choices: LanSetup) -> LobbyView:
     groups: list[MenuGroup] = []
     for slot in PLAYER_IDS[:LAN_SLOTS]:
         connected = slot in lobby.present
-        who = f"{slot + 1}P{YOU if slot == lobby.seat else ''}"
+        who = f"{numbered_name(slot)}{YOU if slot == lobby.seat else ''}"
         status = CONNECTED if connected else VACANT
         if host:
             animals, cpu, hits = _slot_rows(setup, slot, connected)
@@ -868,7 +869,7 @@ def lobby_view(lobby: Lobby, choices: LanSetup) -> LobbyView:
 def _me(lobby: Lobby) -> str:
     """ロビーの冒頭の注記（原型の `あなたは ${NET.seat+1}P（ホスト／ゲスト）`）。"""
     role = "ホスト" if lobby.seat == HOST else "ゲスト"
-    return f"あなたは {lobby.seat + 1}P（{role}）"
+    return f"あなたは {numbered_name(lobby.seat)}（{role}）"
 
 
 def _shared_setup(lobby: Lobby) -> LanSetup:

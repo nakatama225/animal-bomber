@@ -28,6 +28,7 @@ from animal_bomber.domain.state.player import Negibon, PlayerState
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.blast import add_blast
+from animal_bomber.presentation.animal_text import special_emoji
 from animal_bomber.presentation.render.art.animals.frog import tongue_reach
 from animal_bomber.presentation.render.art.animals.mole import dig_progress
 from animal_bomber.presentation.render.art.player import (
@@ -35,7 +36,6 @@ from animal_bomber.presentation.render.art.player import (
     gauge_progress,
     is_blinking_off,
 )
-from animal_bomber.presentation.render.art.player_marks import special_emoji
 from animal_bomber.presentation.render.art.slimes import SlimeLook, slime_shape
 from animal_bomber.presentation.render.art.timing import seconds
 from animal_bomber.presentation.render.views.actors import slime_look

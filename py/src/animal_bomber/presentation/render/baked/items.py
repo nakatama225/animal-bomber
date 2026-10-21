@@ -22,6 +22,7 @@ from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.state.item import Item
+from animal_bomber.presentation.emoji import item_emoji
 from animal_bomber.presentation.render.art.items import (
     SNOT_MELT,
     ItemLook,
@@ -29,7 +30,6 @@ from animal_bomber.presentation.render.art.items import (
     draw_item_emoji,
     draw_item_look,
     draw_item_plate,
-    item_emoji,
     item_frame,
     item_look,
 )

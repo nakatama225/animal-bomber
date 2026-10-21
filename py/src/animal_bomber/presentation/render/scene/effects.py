@@ -62,7 +62,8 @@ from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng
-from animal_bomber.presentation.render.art.items import is_harmful, item_emoji
+from animal_bomber.presentation.emoji import item_emoji
+from animal_bomber.presentation.render.art.items import is_harmful
 from animal_bomber.presentation.render.scene.clues import (
     carried_items,
     dropped_color,

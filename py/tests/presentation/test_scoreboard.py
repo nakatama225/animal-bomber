@@ -18,6 +18,14 @@ from animal_bomber.domain.abilities.frog import REGEN_TIME
 from animal_bomber.domain.abilities.mole import HOLD_TIME
 from animal_bomber.domain.core.coord import Cell, Direction
 from animal_bomber.domain.core.tick import TICKS_PER_SECOND, Tick, seconds_to_ticks
+from animal_bomber.domain.events import (
+    BombPlaced,
+    EffectApplied,
+    Moment,
+    PlayerHurt,
+    TechniqueMoment,
+    TechniqueUsed,
+)
 from animal_bomber.domain.input.sources import IdleSource
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.match import MatchConfig
@@ -38,6 +46,7 @@ from animal_bomber.presentation.hud.scoreboard import (
     describe_players,
     fixed_seconds,
     hearts,
+    refreshes_panel,
 )
 from tests.helpers import grant_special
 
@@ -344,3 +353,17 @@ class Test小数1桁の秒:
         """0.25 秒（15 tick）と 1.25 秒（75 tick）は、Python の書式では偶数に寄る。"""
         assert (fixed_seconds(15), f"{15 / 60:.1f}") == ("0.3", "0.2")
         assert (fixed_seconds(75), f"{75 / 60:.1f}") == ("1.3", "1.2")
+
+
+class Test名札をすぐ作り直すイベント:
+    def test_原型が名札をすぐ作り直す場面のイベントだけ_横の板をすぐ作り直す(
+        self,
+    ) -> None:
+        assert refreshes_panel(PlayerHurt(target=1, by=None, amount=2))
+        assert refreshes_panel(TechniqueUsed(player=0, special=True))
+        assert not refreshes_panel(TechniqueUsed(player=0, special=False))
+        assert refreshes_panel(TechniqueMoment(player=0, moment=Moment.PIT_DUG))
+        assert not refreshes_panel(TechniqueMoment(player=0, moment=Moment.RAMMED))
+        assert refreshes_panel(EffectApplied(target=0, effect=EffectKind.PITFALL))
+        assert not refreshes_panel(EffectApplied(target=0, effect=EffectKind.SLIDE))
+        assert not refreshes_panel(BombPlaced(cell=Cell(1, 1), owner=0))

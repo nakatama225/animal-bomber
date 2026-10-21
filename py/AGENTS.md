@@ -44,8 +44,11 @@ uv run tools/verify.sh   # ruff → ruff format --check → mypy --strict → li
   1 回だけ貼ります（合否はこの形で測って決めました。窓の面がアルファの桁を持つ形式だと、
   直接描く形は重くなります。`app/main.py` の `run` と `app/shell.py` の描く面）
 - 試合の画面の毎フレームの描き方（盤面を盤面の四角で切って描き、横の板の1枚と時計の数字の
-  1枚を貼る）は、描画の重さの場面（`tools/bench_match_scene.py`）と同じ形にしてあります。
-  `app/shell.py` の試合の描き方を変えたら、場面も同じく変えてください
+  1枚を貼る）と横の板の中身の組み方は、`render/match_frame.py` の `draw_match_frame` と
+  `panel_content` にまとめてあり、遊ぶときの窓（`app/match_view.py`）・窓の高さ
+  （`app/main.py` の `tallest_panel`）・描画の重さの場面（`tools/bench_match_scene.py`）が
+  同じ関数を呼びます。描き方を変えるときはこの関数を変えてください（場面も同じく変わります）。
+  呼ぶ側に描く処理を書き足さないでください（場面と遊ぶときの描き方が分かれます）
 - ⛔ 描く面をマス 60px より大きくしないでください（`render/layout.py` の `TILE_MAX`）。上げるなら
   測り直してください（段階 0 の測定で、マス 96 は、3 回測った四角い粒と光の玉の p99 の 6 つのうち
   5 つが、しきい値を超えました）。pygame の SCALED は整数倍でしか広げないので、拡大するのは、画面の

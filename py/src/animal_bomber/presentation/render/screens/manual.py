@@ -36,6 +36,7 @@ from animal_bomber.presentation.render.screens.parts import (
     card_inner,
     positions_of,
 )
+from animal_bomber.presentation.render.ui.fonts import Face
 from animal_bomber.presentation.render.ui.shapes import dashed_line, rounded_box
 from animal_bomber.presentation.render.ui.theme import (
     ACCENT2,
@@ -47,7 +48,6 @@ from animal_bomber.presentation.render.ui.theme import (
     NG,
 )
 from animal_bomber.presentation.render.ui.typeset import (
-    Face,
     RichStyle,
     TextPainter,
     TextStyle,

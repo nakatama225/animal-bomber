@@ -8,14 +8,11 @@ import pytest
 
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.state.effects import EffectKind
+from animal_bomber.presentation.animal_text import special_emoji
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng, ScriptedRandom
+from animal_bomber.presentation.emoji import HOLE, PICK
 from animal_bomber.presentation.render.art.frame import shake_offset
-from animal_bomber.presentation.render.art.player_marks import (
-    HOLE,
-    PICK,
-    special_emoji,
-    status_marks,
-)
+from animal_bomber.presentation.render.art.player_marks import status_marks
 
 
 def marks_of(effects: tuple[EffectKind, ...] = (), **flags: bool) -> list[str]:

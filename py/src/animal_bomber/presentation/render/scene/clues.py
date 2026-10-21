@@ -41,7 +41,8 @@ from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import POWER_UP_KINDS
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState
-from animal_bomber.presentation.render.art.items import is_harmful, item_emoji
+from animal_bomber.presentation.emoji import item_emoji
+from animal_bomber.presentation.render.art.items import is_harmful
 from animal_bomber.presentation.render.scene.particles import (
     CARRIED_SMOKE,
     GOOD_SMOKE,

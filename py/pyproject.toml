@@ -161,5 +161,22 @@ forbidden_modules = [
     "cmath",
 ]
 
+# 画面の文と値を作る側は、描く側を読まない（docs/11 の分け方。文の側を窓を開かずに
+# テストできるように保つ）。両方が使う絵文字は文の側（presentation/emoji.py・animal_text.py）
+# に置き、描く側がそれを読む。presentation は層の検査では1つの層なので、ここで分ける。
+[[tool.importlinter.contracts]]
+name = "文と値を作る側は描く側を import しない"
+type = "forbidden"
+source_modules = [
+    "animal_bomber.presentation.hud",
+    "animal_bomber.presentation.menu",
+    "animal_bomber.presentation.notices",
+    "animal_bomber.presentation.emoji",
+    "animal_bomber.presentation.animal_text",
+    "animal_bomber.presentation.presenter",
+    "animal_bomber.presentation.lan_status",
+]
+forbidden_modules = ["animal_bomber.presentation.render"]
+
 [tool.uv.sources]
 animal-bomber-server = { path = "../server", editable = true }

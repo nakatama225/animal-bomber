@@ -1,53 +1,22 @@
-"""プレイヤーの足元の状態の印と、とくぎの長押しのゲージ（原型の drawPlayer の後半）。"""
+"""プレイヤーの足元の状態の印と、とくぎの長押しのゲージ（原型の drawPlayer の後半）。
+
+印のうち、名札の文にも出す絵文字（落とし穴・つるはし・うんこでかかる状態・とくぎ）は、文の側
+（`presentation/emoji.py`・`presentation/animal_text.py`）の表を読む。
+"""
 
 import math
 from collections.abc import Sequence
-from typing import Final, assert_never
+from typing import Final
 
 from animal_bomber.domain.rules.animals import Animal, stats_of
 from animal_bomber.domain.state.effects import EffectKind
+from animal_bomber.presentation.animal_text import special_emoji
+from animal_bomber.presentation.emoji import HOLE, PICK, POOP_MARKS
 from animal_bomber.presentation.render.art.timing import seconds
 from animal_bomber.presentation.render.canvas.protocol import Canvas
 
 MAX_MARKS: Final = 3
 """足元に並べる印の数の上限。多く並べると隣のマスまではみ出す（原型の slice(0,3)）。"""
-
-HOLE: Final = "\N{HOLE}\N{VARIATION SELECTOR-16}"
-"""落とし穴の絵文字（原型の 🕳️。見え方を選ぶ印 U+FE0F まで同じ文字列にする）。"""
-
-PICK: Final = "\N{PICK}\N{VARIATION SELECTOR-16}"
-"""つるはしの絵文字（原型の ⛏️）。"""
-
-POOP_MARKS: Final = (
-    (EffectKind.REVERSE, "\N{ANTICLOCKWISE DOWNWARDS AND UPWARDS OPEN CIRCLE ARROWS}"),
-    (EffectKind.NOBOMB, "\N{NO ENTRY SIGN}"),
-    (EffectKind.RUNAWAY, "\N{DASH SYMBOL}"),
-    (EffectKind.WEAK, "\N{CANDLE}\N{VARIATION SELECTOR-16}"),
-    (EffectKind.AUTOBOMB, "\N{SLOT MACHINE}"),
-    (EffectKind.SLOW, "\N{SNAIL}"),
-)
-"""うんこでかかる状態と、その印（原型の POOP_KEYS の並びと POOPS の emoji）。
-
-並びは原型の POOPS に書いた順（そうさ反転・爆弾おけない・とまれない・爆風1マス・勝手に
-設置・超スロー）。`EffectKind` の定義の順とは違うので、ここに並べ直してある。
-"""
-
-
-def special_emoji(animal: Animal) -> str:
-    """その動物のとくぎの絵文字（原型の SPECIALS の emoji）。"""
-    match animal:
-        case Animal.RABBIT:
-            return "\N{PILE OF POO}"
-        case Animal.ELEPHANT:
-            return "\N{BOAR}"
-        case Animal.MOLE:
-            return HOLE
-        case Animal.FOX:
-            return "\N{LARGE BLUE CIRCLE}"
-        case Animal.FROG:
-            return "\N{LARGE GREEN CIRCLE}"
-        case _:
-            assert_never(animal)
 
 
 def status_marks(

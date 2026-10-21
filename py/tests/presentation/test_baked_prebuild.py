@@ -19,13 +19,13 @@ from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.rules.lane import lane_spot
 from animal_bomber.domain.rules.tuning import LEEK_FIRST_COOLDOWN
 from animal_bomber.domain.state.actors import SlimeBomb
+from animal_bomber.presentation.animal_text import special_emoji
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng
 from animal_bomber.presentation.render.art.animals.body import BodyMotion, BodyPose
 from animal_bomber.presentation.render.art.animals.frog import TongueLook
 from animal_bomber.presentation.render.art.foxfires import FoxfireLook, TrailMark
 from animal_bomber.presentation.render.art.negibons import LeekLook, NegibonLook
 from animal_bomber.presentation.render.art.player import PlayerLook
-from animal_bomber.presentation.render.art.player_marks import special_emoji
 from animal_bomber.presentation.render.baked.art import BakedArt
 from animal_bomber.presentation.render.layout import Layout
 from animal_bomber.presentation.render.views.actors import slime_look

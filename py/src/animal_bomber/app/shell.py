@@ -20,14 +20,16 @@
 5. 描く。試合の画面は 盤面 → 横の板 →（ポーズの幕）→（幕）→（通信対戦の案内の帯）、
    どの画面でも最後に 通知 → 確認の画面 → 起動の幕（原型の重なりの順）
 
-## 描画の重さ
+## 置き場所
 
-試合の毎フレームは、盤面（`Renderer`。盤面の四角で切って描く）と横の板（板の1枚と
-時計の数字の1枚）を貼る。描画の重さの場面（`tools/bench_match_scene.py`）と同じ形。
-通知・ポーズの幕・幕・案内の帯・確認の画面は、出ている間だけ重ねる。窓の背景を
-塗り直すのは、試合が始まったとき・幕や確認の画面を外したあと・横の板の高さが
-変わったときと、前のフレームの通知の下（通知は盤面と横の板の間のすき間にも
-かかるため）だけ。
+ここに残すのは、イベントの配線・流れが返した「すること」（`Effect`）の実行・試合を
+進める所。ほかは次へ分けてある。
+
+- 試合の画面を描く（盤面・横の板・ポーズの幕・幕・案内の帯と、窓の背景の塗り直し）：
+  `app/match_view.py` の `MatchView`。盤面と横の板は、描画の重さの場面
+  （`tools/bench_match_scene.py`）と同じ関数（`render/match_frame.py`）で描く
+- 通信対戦の局面から画面への反映と、中継との接続：`app/lan_flow.py` の `LanFlow`
+- 横の板をすぐ作り直すイベント：`presentation/hud/scoreboard.py` の `refreshes_panel`
 
 ## 原型と違う所（`docs/11-画面と設定.md` の表）
 
@@ -47,43 +49,24 @@ import pygame
 from animal_bomber.ai.levels import CPU_LEVELS
 from animal_bomber.ai.source import CpuInputSource, cpu_seed
 from animal_bomber.app.lan import LanMatch, RelayConnection
+from animal_bomber.app.lan_flow import BeginLanGame, LanEffect, LanFlow
+from animal_bomber.app.match_view import MatchView
 from animal_bomber.app.runner import LocalMatch, MatchRunner, cpu_players
 from animal_bomber.app.session import GameSession
-from animal_bomber.domain.events import (
-    BurntOff,
-    EffectApplied,
-    LanesClosed,
-    Moment,
-    PlayerDown,
-    PlayerHurt,
-    ReachRestored,
-    Revived,
-    RoundEnded,
-    SimEvent,
-    SuddenDeath,
-    TechniqueMoment,
-    TechniqueUsed,
-)
+from animal_bomber.domain.events import SimEvent
 from animal_bomber.domain.input.sources import EitherSource, InputSource
 from animal_bomber.domain.rules.animals import Animal
-from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.player import PLAYER_IDS, PlayerId
 from animal_bomber.domain.state.world import WorldState
-from animal_bomber.net.client import HOST, Connecting, Failed, Lobby, Playing
 from animal_bomber.presentation import notices
 from animal_bomber.presentation.animal_text import animal_name
 from animal_bomber.presentation.audio.countdown import Countdown
 from animal_bomber.presentation.audio.music import RoundMusic
 from animal_bomber.presentation.audio.score import TEMPO, tempo_for
 from animal_bomber.presentation.audio.sounds import SoundName
-from animal_bomber.presentation.hud.banner import AGAIN_BUTTON, BannerView, RoundBanner
-from animal_bomber.presentation.hud.key_help import KeyHelpSource, describe_key_help
+from animal_bomber.presentation.hud.banner import BannerView, RoundBanner
 from animal_bomber.presentation.hud.roster import Cpu, Roster
-from animal_bomber.presentation.hud.scoreboard import (
-    HudSource,
-    describe_clock,
-    describe_players,
-)
+from animal_bomber.presentation.hud.scoreboard import HudSource, refreshes_panel
 from animal_bomber.presentation.hud.toast import Toast
 from animal_bomber.presentation.lan_status import connecting_lines
 from animal_bomber.presentation.menu.choices import SoundSetting
@@ -91,7 +74,6 @@ from animal_bomber.presentation.menu.flow import (
     AdvanceBanner,
     ApplySound,
     ConnectLan,
-    Effect,
     MenuFlow,
     ReturnToTitle,
     ShareLobby,
@@ -113,16 +95,14 @@ from animal_bomber.presentation.menu.screens import MenuScreen, banner_groups
 from animal_bomber.presentation.presenter import Presenter
 from animal_bomber.presentation.render.baked.art import BakedArt
 from animal_bomber.presentation.render.lan_screen import LanScreen
-from animal_bomber.presentation.render.layout import PANEL_WIDTH, WindowLayout
+from animal_bomber.presentation.render.layout import WindowLayout
 from animal_bomber.presentation.render.loading import draw_loading
-from animal_bomber.presentation.render.overlay.banner import BannerOverlay
+from animal_bomber.presentation.render.match_frame import panel_content
 from animal_bomber.presentation.render.overlay.dialog import DialogOverlay
-from animal_bomber.presentation.render.overlay.pause import PauseOverlay
 from animal_bomber.presentation.render.overlay.toast import ToastOverlay
 from animal_bomber.presentation.render.panel.side_panel import (
     PanelContent,
     PanelHits,
-    SidePanel,
     speed_at,
 )
 from animal_bomber.presentation.render.renderer import Renderer
@@ -163,18 +143,12 @@ WHEEL_PX: Final = 48
 見ていない。
 """
 
-PANEL_BACKDROP_EXTRA: Final = 1024
-"""横の板の後ろの背景を、窓の高さより長く作る分（px。板が窓より高いときのため）。"""
-
 KEY_LAYOUTS: Final = {
     KeyLayout.SOLO: SOLO_KEYS,
     KeyLayout.LEFT: PLAYER1_KEYS,
     KeyLayout.RIGHT: PLAYER2_KEYS,
 }
 """1台の遊び方のキーの組（`presentation/menu/local_setup.py`）を、実物の割り当てへ。"""
-
-_PANEL_MOMENTS: Final = frozenset({Moment.PIT_DUG})
-"""横の板をすぐ作り直す、技の途中のこと（穴を掘り終えた。原型 L2578）。"""
 
 
 class Speakers(Protocol):
@@ -283,14 +257,6 @@ class _Game:
     """横の板をすぐ作り直すか（原型が `renderCards` をすぐ呼ぶ場面）。"""
 
 
-@dataclass(slots=True)
-class _PanelSize:
-    """前のフレームに出した横の板の中身と、その高さ。"""
-
-    content: PanelContent | None = None
-    height: int = 0
-
-
 class _ToastNotices:
     """`Presenter` の通知の出し先。時刻を持たない呼び方を、`Toast` に時刻つきで渡す。"""
 
@@ -302,16 +268,6 @@ class _ToastNotices:
 
     def show(self, message: str) -> None:
         self._toast.show(message, self._clock())
-
-
-@dataclass(slots=True)
-class _LanState:
-    """通信対戦の接続ごとに覚えること。"""
-
-    lobby: Lobby | None = None
-    """前に受け取ったロビーの様子（ロビーに入ったかと、様子が変わったかを見る）。"""
-    host_seen: bool = False
-    """ロビーでホストがつながっているのを見たか（ホストが抜けたかを見る）。"""
 
 
 class Shell:
@@ -333,7 +289,6 @@ class Shell:
         size = window.size
         self._canvas = _canvas(size)
         self._background = page_background(size)
-        self._board_rect = pygame.Rect(window.board_rect)
         self._panel_left = window.panel_origin[0]
         painter = tools.painter
         widgets = Widgets(painter)
@@ -346,15 +301,10 @@ class Shell:
         self._screens = MenuScreens(widgets)
         self._splash = SplashPainter(widgets)
         self._dialog = DialogOverlay(widgets)
-        self._banner = BannerOverlay(widgets)
-        self._pause = PauseOverlay(painter)
         self._toasts = ToastOverlay(painter)
-        self._panel = SidePanel(painter, _panel_backdrop(self._background, window))
-        self._texts = LanScreen(self._board_rect.h, painter)
+        self._view = MatchView(self._canvas, self._background, window, painter, widgets)
         self._toast = Toast()
         self._now = started_ms
-        self._art = BakedArt(window.board)
-        self._renderer = Renderer(self._art)
         self._prepared: set[Animal] = set()
         self._speed = GameSpeed()
         self._choice = PadChoice()
@@ -362,20 +312,13 @@ class Shell:
         self._pad_found = False
         self._pad_warned = False
         self._game: _Game | None = None
-        self._lan: LanMatch | None = None
-        self._lan_state = _LanState()
+        self._lan_flow = LanFlow(self._flow, self._toast)
         self._scrolls: dict[str, int] = {}
         self._scrolled_screen = self._flow.screen
-        self._panel_scroll = 0
-        self._panel_size = _PanelSize()
         self._mouse = (0, 0)
         self._dragging = False
         self._menu_drawn: DrawnScreen | None = None
         self._dialog_hits: tuple[Hit, ...] = ()
-        self._banner_hits: tuple[Hit, ...] = ()
-        self._panel_hits: PanelHits | None = None
-        self._repaint = True
-        self._toast_rect: pygame.Rect | None = None
         self._apply_sound(self._flow.sound)
         if relay is not None:
             self._flow.splash.dismiss(started_ms)
@@ -401,7 +344,7 @@ class Shell:
     @property
     def lan(self) -> LanMatch | None:
         """中継との接続（LAN の画面でつないでから、タイトルへ戻るまで）。"""
-        return self._lan
+        return self._lan_flow.lan
 
     @property
     def speed(self) -> GameSpeed:
@@ -416,12 +359,12 @@ class Shell:
     @property
     def renderer(self) -> Renderer:
         """盤面を描くもの。"""
-        return self._renderer
+        return self._view.renderer
 
     @property
     def panel_scroll(self) -> int:
         """横の板をスクロールした量（px）。"""
-        return self._panel_scroll
+        return self._view.panel_scroll
 
     @property
     def hits(self) -> tuple[Hit, ...]:
@@ -433,14 +376,14 @@ class Shell:
         if self._flow.dialog is not None:
             return self._dialog_hits
         if self._game is not None:
-            return self._banner_hits
+            return self._view.banner_hits
         drawn = self._menu_drawn
         return () if drawn is None else drawn.hits
 
     @property
     def panel_hits(self) -> PanelHits | None:
         """横の板の押せる所（前のフレームに描いたもの）。試合の外なら None。"""
-        return self._panel_hits
+        return self._view.panel_hits
 
     @property
     def scene(self) -> SceneTracker | None:
@@ -450,7 +393,7 @@ class Shell:
     @property
     def panel_content(self) -> PanelContent | None:
         """いま横の板に出している中身。"""
-        return self._panel.content
+        return self._view.panel_content
 
     @property
     def drawn_screen(self) -> DrawnScreen | None:
@@ -489,9 +432,7 @@ class Shell:
 
     def close(self) -> None:
         """終わるときの後始末（中継との接続を閉じ、曲を止める）。"""
-        if self._lan is not None:
-            self._lan.close()
-            self._lan = None
+        self._lan_flow.close()
         self._tools.music.stop()
 
     # イベント
@@ -554,7 +495,7 @@ class Shell:
             if game.shown is not None:
                 # 幕は窓全体を覆う（原型の `#banner` は fixed）。幕のボタンのほかは
                 # 押せない。
-                self._press(_hit_at(self._banner_hits, pos))
+                self._press(_hit_at(self._view.banner_hits, pos))
                 return
             self._click_panel(game, pos)
             return
@@ -564,7 +505,7 @@ class Shell:
 
     def _click_panel(self, game: _Game, pos: tuple[int, int]) -> None:
         """横の板のつまみ・ポーズ・設定へ（原型はどれも画面の操作の音を鳴らさない）。"""
-        hits = self._panel_hits
+        hits = self._view.panel_hits
         if hits is None:
             return
         if hits.speed is not None and hits.speed.collidepoint(pos):
@@ -582,7 +523,7 @@ class Shell:
             self._apply(self._flow.press(item))
 
     def _drag(self, x: int) -> None:
-        hits = self._panel_hits
+        hits = self._view.panel_hits
         if hits is not None and hits.speed is not None:
             self._set_speed(speed_at(x, hits.speed))
 
@@ -597,8 +538,7 @@ class Shell:
         x, y = self._mouse
         if self._game is not None:
             if x >= self._panel_left:
-                limit = max(0, self._panel_size.height - self._canvas.get_height())
-                self._panel_scroll = _clamp(self._panel_scroll + delta, limit)
+                self._view.scroll_panel(delta)
             return
         drawn = self._menu_drawn
         if drawn is None:
@@ -634,47 +574,17 @@ class Shell:
         self._apply(self._flow.gamepad(commands, paused=paused))
 
     def _poll_lan(self, now_ms: float) -> None:
-        """中継から届いたものを受け取り、局面に合わせて画面を替える。"""
-        lan = self._lan
-        if lan is None:
-            return
-        lan.poll()
-        phase = lan.phase
-        state = self._lan_state
-        match phase:
-            case Connecting():
-                pass
-            case Lobby():
-                if state.host_seen and HOST not in phase.present:
-                    # 原型も、ホストが抜けたらゲストはタイトルへ戻る（L3787-3788）。
-                    self._toast.show(notices.HOST_LOST, now_ms)
-                    self._apply(self._flow.back_to_setup())
-                    return
-                state.host_seen = state.host_seen or HOST in phase.present
-                if phase != state.lobby:
-                    state.lobby = phase
-                    self._apply(self._flow.update_lobby(phase))
-            case Playing():
-                game = self._game
-                if game is None or game.generation != lan.generation:
-                    self._begin_lan_game(lan)
-            case Failed(played=played, reason=reason):
-                if played is None and state.lobby is None:
-                    # ロビーに入る前（つなげなかった・断られた）。LAN の画面に理由を
-                    # 出す。
-                    self._flow.connection_failed(reason)
-                    self._close_lan()
-                else:
-                    # 原型も、つないだあとに切れたらタイトルへ戻して知らせる（L3735）。
-                    self._toast.show(notices.SERVER_LOST, now_ms)
-                    self._apply(self._flow.back_to_setup())
-            case _:
-                assert_never(phase)
+        """中継から届いたものを受け取り、局面に合わせて画面を替える（`LanFlow`）。"""
+        game = self._game
+        self._apply(
+            self._lan_flow.poll(now_ms, None if game is None else game.generation)
+        )
 
-    # すること（流れが返したもの）
+    # すること（流れと通信対戦の局面が返したもの）
 
-    def _apply(self, effects: Sequence[Effect]) -> None:
+    def _apply(self, effects: Sequence[LanEffect]) -> None:
         for effect in effects:
+            lan = self._lan_flow.lan
             match effect:
                 case UiSound():
                     self._tools.sounds.play(SoundName.UI)
@@ -683,11 +593,11 @@ class Shell:
                 case ConnectLan(address=address):
                     self._connect(address)
                 case ShareLobby(setup=setup):
-                    if self._lan is not None:
-                        self._lan.share(setup)
+                    if lan is not None:
+                        lan.share(setup)
                 case StartLanMatch(setup=setup):
-                    if self._lan is not None:
-                        self._lan.start(setup)
+                    if lan is not None:
+                        lan.start(setup)
                 case ApplySound(sound=sound):
                     self._apply_sound(sound)
                 case AdvanceBanner():
@@ -696,6 +606,9 @@ class Shell:
                     self._toggle_pause()
                 case ReturnToTitle():
                     self._leave()
+                case BeginLanGame():
+                    if lan is not None:
+                        self._begin_lan_game(lan)
                 case _:
                     assert_never(effect)
 
@@ -755,13 +668,14 @@ class Shell:
             self._canvas, connecting_lines(address)
         )
         self._tools.present(self._canvas)
-        self._repaint = True
-        self._lan_state = _LanState()
-        self._lan = LanMatch(
-            address=address,
-            connect=self._tools.connect,
-            local_source=self._lan_source,
-            new_seed=self._tools.new_seed,
+        self._view.invalidate()
+        self._lan_flow.open(
+            LanMatch(
+                address=address,
+                connect=self._tools.connect,
+                local_source=self._lan_source,
+                new_seed=self._tools.new_seed,
+            )
         )
 
     def _prepare(self, animals: Sequence[Animal]) -> None:
@@ -773,9 +687,9 @@ class Shell:
             return
         draw_loading(self._canvas, self._tools.painter)
         self._tools.present(self._canvas)
-        self._tools.prepare(self._art, animals)
+        self._tools.prepare(self._view.art, animals)
         self._prepared.update(animals)
-        self._repaint = True
+        self._view.invalidate()
 
     def _begin_game(
         self,
@@ -804,7 +718,7 @@ class Shell:
             Countdown(tools.sounds),
             RoundMusic(tools.music),
         )
-        self._renderer.cpu_players = cpu_players(roster)
+        self._view.renderer.cpu_players = cpu_players(roster)
         self._game = _Game(
             runner=runner,
             local=local,
@@ -816,10 +730,7 @@ class Shell:
             pad_in_match=pad_in_match,
             roster=roster,
         )
-        self._banner.forget()
-        self._banner_hits = ()
-        self._panel_scroll = 0
-        self._repaint = True
+        self._view.start()
 
     def _begin_lan_game(self, lan: LanMatch) -> None:
         """通信対戦の試合が始まった（接続を保った次の試合も）。曲は等倍で鳴らす。"""
@@ -841,8 +752,8 @@ class Shell:
             elif local.between_rounds:
                 local.start_next_round()
                 game.refresh = True
-        elif self._lan is not None:
-            self._lan.rematch()
+        elif self._lan_flow.lan is not None:
+            self._lan_flow.lan.rematch()
 
     def _toggle_pause(self) -> None:
         """ポーズする・やめる（1台の試合の最中だけ。原型の `togglePause`）。
@@ -872,20 +783,11 @@ class Shell:
 
     def _leave(self) -> None:
         """試合と中継との接続をやめる（原型の `backToSetup`。流れはタイトルにいる）。"""
-        self._close_lan()
+        self._lan_flow.close()
         self._game = None
         self._tools.music.stop()
-        self._banner.forget()
-        self._banner_hits = ()
-        self._panel_hits = None
+        self._view.leave()
         self._dragging = False
-        self._repaint = True
-
-    def _close_lan(self) -> None:
-        if self._lan is not None:
-            self._lan.close()
-            self._lan = None
-        self._lan_state = _LanState()
 
     # 試合を進める
 
@@ -916,7 +818,7 @@ class Shell:
             game.presenter.consume(events, world)
             game.banner.observe(events, self._hud_source(game, world))
             game.scene.observe(world, events)
-            if any(_refreshes_panel(event) for event in events):
+            if any(refreshes_panel(event) for event in events):
                 game.refresh = True
             # 押してすぐ離したキーは、読んだ tick のあとで忘れる。進めなかった tick で
             # 忘れると、読まれないまま消える（py/AGENTS.md の「通信対戦」）。倍速でも
@@ -942,7 +844,7 @@ class Shell:
                 name = animal_name(world.players[player].animal)
                 self._toast.show(notices.cpu_took_over(name), self._now)
         game.roster = roster
-        self._renderer.cpu_players = cpu_players(roster)
+        self._view.renderer.cpu_players = cpu_players(roster)
         game.refresh = True
 
     def _hud_source(self, game: _Game, world: WorldState) -> HudSource:
@@ -961,17 +863,17 @@ class Shell:
         else:
             self._draw_menu()
         canvas = self._canvas
-        self._toast_rect = self._toasts.draw(canvas, self._toast.view(now_ms))
+        self._view.note_toast(self._toasts.draw(canvas, self._toast.view(now_ms)))
         flow = self._flow
         dialog = flow.dialog_view()
         self._dialog_hits = ()
         if dialog is not None:
             self._dialog_hits = self._dialog.draw(canvas, dialog, flow.focus())
-            self._repaint = True
+            self._view.invalidate()
         splash = flow.splash_view(now_ms)
         if splash is not None:
             self._splash.draw(canvas, splash, now_ms)
-            self._repaint = True
+            self._view.invalidate()
 
     def _draw_menu(self) -> None:
         flow = self._flow
@@ -980,7 +882,7 @@ class Shell:
             self._scrolls.clear()
             self._scrolled_screen = flow.screen
         view = flow.screen_view()
-        self._repaint = True
+        self._view.invalidate()
         if view is None:
             self._canvas.blit(self._background, (0, 0))
             self._menu_drawn = None
@@ -989,68 +891,28 @@ class Shell:
         self._menu_drawn = self._screens.draw(self._canvas, view, focus, self._scrolls)
 
     def _draw_match(self, game: _Game, world: WorldState, now_ms: float) -> None:
-        canvas = self._canvas
-        if self._repaint:
-            canvas.blit(self._background, (0, 0))
-            self._repaint = False
-        elif self._toast_rect is not None:
-            canvas.blit(self._background, self._toast_rect, self._toast_rect)
-        canvas.set_clip(self._board_rect)
-        self._renderer.draw(canvas, world, game.scene)
-        canvas.set_clip(None)
-        immediate = game.refresh or world is not game.world
-        game.refresh = False
-        game.world = world
-        panel = self._panel
-        panel.show(self._panel_content(game, world), now_ms, immediate=immediate)
-        hits = panel.draw(canvas, (self._panel_left, -self._panel_scroll), now_ms)
-        self._panel_hits = hits
-        self._fit_panel()
-        notice = game.runner.notice()
-        local = game.local
-        if local is not None and local.paused:
-            self._pause.draw(canvas, self._board_rect)
-        self._draw_banner(game, world)
-        if notice:
-            self._texts.draw_notice(canvas.subsurface(self._board_rect), notice)
-
-    def _fit_panel(self) -> None:
-        """出している横の板の高さを控え、スクロールの量を丸める。
-
-        板が低くなったら、次のフレームで窓の背景を塗り直す（前の板の下の端が残る）。
-        """
-        content = self._panel.content
-        size = self._panel_size
-        if content is None or content is size.content:
-            return
-        height = self._panel.height(content)
-        if height < size.height:
-            self._repaint = True
-        size.content = content
-        size.height = height
-        limit = max(0, height - self._canvas.get_height())
-        self._panel_scroll = _clamp(self._panel_scroll, limit)
-
-    def _panel_content(self, game: _Game, world: WorldState) -> PanelContent:
-        source = self._hud_source(game, world)
+        """試合の画面を描く（中身を決めて、描くのは `MatchView`）。"""
         local = game.local
         paused = local is not None and local.paused
-        keys = KeyHelpSource(
-            world,
-            game.roster,
-            pad_connected=self._menu_pad.connected,
-            pad_in_match=game.pad_in_match,
-            paused=paused,
-            can_pause=local is not None,
-        )
-        return PanelContent(
-            clock=describe_clock(source),
-            cards=describe_players(source),
-            help_rows=describe_key_help(keys),
+        content = panel_content(
+            self._hud_source(game, world),
             speed=self._speed.rate if local is not None else None,
             paused=paused,
             can_pause=local is not None,
+            pad_connected=self._menu_pad.connected,
+            pad_in_match=game.pad_in_match,
         )
+        immediate = game.refresh or world is not game.world
+        game.refresh = False
+        game.world = world
+        view = self._view
+        view.draw(
+            world, game.scene, content, now_ms, immediate=immediate, paused=paused
+        )
+        notice = game.runner.notice()
+        self._draw_banner(game, world)
+        if notice:
+            view.draw_notice(notice)
 
     def _draw_banner(self, game: _Game, world: WorldState) -> None:
         """幕を、流れのボタンと揃えて描く。"""
@@ -1062,9 +924,7 @@ class Shell:
             game.refresh = True
             if view is None:
                 flow.hide_banner()
-                self._banner.forget()
-                self._banner_hits = ()
-                self._repaint = True
+                self._view.hide_banner()
                 return
             game.buttons = buttons
             flow.show_banner(*buttons)
@@ -1075,9 +935,7 @@ class Shell:
         if view is None:
             return
         focus = None if flow.dialog is not None else flow.focus()
-        groups = banner_groups(*game.buttons)
-        self._banner_hits = self._banner.draw(self._canvas, view, groups, focus)
-        self._repaint = True
+        self._view.draw_banner(view, banner_groups(*game.buttons), focus)
 
     def _banner_buttons(
         self, game: _Game, view: BannerView | None
@@ -1085,50 +943,13 @@ class Shell:
         """幕のボタン（1つ目の文・「⚙ 設定をやりなおす」を出すか）。
 
         1台は原型どおり（「つぎのラウンド ▶」か「もういっかい」と、設定をやりなおす）。
-        通信対戦のラウンドの幕はボタン無し（決着のあとの待ちで消える）。試合が決まった
-        幕は、ホストで次の試合を始められるときだけ「もういっかい」。
+        通信対戦は `LanFlow.banner_buttons`。
         """
         if view is None:
             return None, False
         if game.local is not None:
             return view.button, True
-        if not view.final:
-            return None, False
-        lan = self._lan
-        can_rematch = lan is not None and lan.can_rematch
-        return (AGAIN_BUTTON if can_rematch else None), True
-
-
-def _refreshes_panel(event: SimEvent) -> bool:
-    """横の板をすぐ作り直すイベントか（ふだんは約 4 Hz。`panel/side_panel.py`）。
-
-    原型が `renderCards` を、4 Hz を待たずに呼ぶ場面：被弾（L1668）・外周へ回った・
-    入れ替わった（L2270・L2355）・外周が閉じた（L2362）・舌が焼き切れた（L2489）・
-    穴を掘り終えた・落とし穴にはまった（L2578・L2598）・とくぎを使った（L2627）・
-    舌が戻った（L4308）・延長戦（L4464）・決着（L4510）。ラウンドの始まり（L4158）と
-    ポーズの切り替えは、呼ぶ側が別に見る。
-    """
-    match event:
-        case (
-            PlayerHurt()
-            | PlayerDown()
-            | Revived()
-            | LanesClosed()
-            | BurntOff()
-            | ReachRestored()
-            | SuddenDeath()
-            | RoundEnded()
-        ):
-            return True
-        case TechniqueUsed(special=special):
-            return special
-        case TechniqueMoment(moment=moment):
-            return moment in _PANEL_MOMENTS
-        case EffectApplied(effect=effect):
-            return effect is EffectKind.PITFALL
-        case _:
-            # ほかのイベントは名札の中身を約 4 Hz の作り直しで出す（原型と同じ）。
-            return False
+        return self._lan_flow.banner_buttons(view)
 
 
 def _animal_of(runner: MatchRunner, player: PlayerId) -> Animal | None:
@@ -1161,21 +982,3 @@ def _canvas(size: tuple[int, int]) -> pygame.Surface:
     if pygame.display.get_surface() is not None:
         return canvas.convert()
     return canvas
-
-
-def _panel_backdrop(background: pygame.Surface, window: WindowLayout) -> pygame.Surface:
-    """横の板の後ろに見える窓の背景（板の角と箱の間から見える）。
-
-    窓の背景の、板の位置の縦の帯。板が窓より高いとき（スクロールする）のために、窓の
-    高さより長く作り、窓の下の端の色の並びで伸ばす。
-    """
-    left, _ = window.panel_origin
-    height = background.get_height()
-    strip = background.subsurface(pygame.Rect(left, 0, PANEL_WIDTH, height))
-    backdrop = pygame.Surface((PANEL_WIDTH, height + PANEL_BACKDROP_EXTRA))
-    backdrop.blit(strip, (0, 0))
-    bottom = strip.subsurface(pygame.Rect(0, height - 1, PANEL_WIDTH, 1))
-    backdrop.blit(
-        pygame.transform.scale(bottom, (PANEL_WIDTH, PANEL_BACKDROP_EXTRA)), (0, height)
-    )
-    return backdrop

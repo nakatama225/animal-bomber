@@ -17,6 +17,7 @@ from typing import Final, NamedTuple
 import pygame
 
 from animal_bomber.presentation.menu.items import ItemStyle, MenuGroup, MenuItem
+from animal_bomber.presentation.render.ui.fonts import Face
 from animal_bomber.presentation.render.ui.shapes import (
     Fader,
     opacity_level,
@@ -44,7 +45,7 @@ from animal_bomber.presentation.render.ui.theme import (
     Color,
     css_px,
 )
-from animal_bomber.presentation.render.ui.typeset import Face, TextPainter, TextStyle
+from animal_bomber.presentation.render.ui.typeset import TextPainter, TextStyle
 
 DISABLED_OPACITY: Final = 0.45
 """押せない項目の不透明度（この版で決めた値。モジュールの説明）。"""

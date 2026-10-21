@@ -36,19 +36,15 @@ from animal_bomber.domain.state.match import MatchState
 from animal_bomber.domain.state.world import create_world
 from animal_bomber.presentation.audio.bank import open_sound_bank
 from animal_bomber.presentation.audio.music import open_music
-from animal_bomber.presentation.hud.key_help import KeyHelpSource, describe_key_help
-from animal_bomber.presentation.hud.scoreboard import (
-    HudSource,
-    describe_clock,
-    describe_players,
-)
+from animal_bomber.presentation.hud.scoreboard import HudSource
 from animal_bomber.presentation.menu.choices import DEFAULT_SPEED
 from animal_bomber.presentation.menu.local_setup import (
     DEFAULT_LOCAL_SETUP,
     plan_local_match,
 )
 from animal_bomber.presentation.render.layout import WindowLayout, fit_window
-from animal_bomber.presentation.render.panel.side_panel import PanelContent, SidePanel
+from animal_bomber.presentation.render.match_frame import panel_content
+from animal_bomber.presentation.render.panel.side_panel import SidePanel
 from animal_bomber.presentation.render.ui.typeset import TextPainter
 from animal_bomber.shell.gamepad import ControllerReader
 from animal_bomber.shell.keyboard import KeyboardWatcher
@@ -97,7 +93,8 @@ def tallest_panel(painter: TextPainter) -> int:
     名札がいちばん多く（4枚）、キーの案内の行もいちばん多い、1人で CPU 3体と遊ぶ試合の
     始まりの形（つまみ・パッドの段・ポーズ中の Select の行まで出す）。外周にいる間の
     段など、試合の途中で増える行は入れない（そのときは板だけをスクロールする。
-    `app/shell.py`）。
+    `app/shell.py`）。中身は、遊ぶときと同じ関数（`render/match_frame.py` の
+    `panel_content`）で組む。
     """
     plan = plan_local_match(DEFAULT_LOCAL_SETUP, seed=0)
     config: MatchConfig = plan.config
@@ -109,21 +106,13 @@ def tallest_panel(painter: TextPainter) -> int:
         config.round_limit,
     )
     source = HudSource(world, MatchState(), config, plan.roster, False)
-    keys = KeyHelpSource(
-        world,
-        plan.roster,
-        pad_connected=True,
-        pad_in_match=True,
-        paused=True,
-        can_pause=True,
-    )
-    content = PanelContent(
-        clock=describe_clock(source),
-        cards=describe_players(source),
-        help_rows=describe_key_help(keys),
+    content = panel_content(
+        source,
         speed=DEFAULT_SPEED,
         paused=True,
         can_pause=True,
+        pad_connected=True,
+        pad_in_match=True,
     )
     return SidePanel(painter).height(content)
 

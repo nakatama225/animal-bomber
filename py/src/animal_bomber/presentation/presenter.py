@@ -127,6 +127,7 @@ from animal_bomber.presentation.audio.cues import (
     technique_sounds,
 )
 from animal_bomber.presentation.audio.sounds import NullSoundBank, SoundBank, SoundName
+from animal_bomber.presentation.emoji import item_emoji
 from animal_bomber.presentation.hud.roster import (
     Controller,
     Cpu,
@@ -134,7 +135,6 @@ from animal_bomber.presentation.hud.roster import (
     Roster,
     numbered_name,
 )
-from animal_bomber.presentation.render.art.items import item_emoji
 
 
 class NoticeSink(Protocol):

@@ -44,6 +44,7 @@ from animal_bomber.presentation.hud.scoreboard import (
     PlayerCard,
     TagStyle,
 )
+from animal_bomber.presentation.menu.choices import SPEED_CHOICES, format_speed
 from animal_bomber.presentation.render.layout import PANEL_WIDTH
 from animal_bomber.presentation.render.ui.shapes import (
     Fader,
@@ -100,15 +101,6 @@ REFRESH_MS: Final = 250
 
 WARN_PULSE_MS: Final = 700
 """残り 30 秒からの時計の数字の明滅の周期（ms。原型の `animation:pulse .7s`）。"""
-
-SPEED_MIN: Final = 0.5
-"""ゲーム速度の下限（原型の `<input type=range min=0.5>`）。"""
-
-SPEED_MAX: Final = 3.0
-"""ゲーム速度の上限（原型の `max=3`）。"""
-
-SPEED_STEP: Final = 0.25
-"""ゲーム速度の刻み（原型の `step=0.25`）。"""
 
 THUMB: Final = 17
 """つまみの丸の直径（px。原型の `::-webkit-slider-thumb{width:17px}`）。"""
@@ -198,26 +190,23 @@ class PanelHits:
     """「設定へ」のボタン（原型は確認の画面を出さずにタイトルへ戻る）。"""
 
 
-def speed_label(speed: float) -> str:
-    """つまみの値の字（原型の `${v}×`。1 は「1×」、1.25 は「1.25×」）。"""
-    return f"{speed:g}×"
-
-
 def speed_at(x: float, track: pygame.Rect) -> float:
-    """マウスの横の位置 `x` を、つまみの値（0.5〜3 を 0.25 刻み）にする。
+    """マウスの横の位置 `x` を、つまみの値（`SPEED_CHOICES` のどれか）にする。
 
     原型の `<input type=range>` と同じく、つまみの丸の真ん中が溝の左端から丸の半径
-    だけ内側（値 0.5）と、右端から半径だけ内側（値 3）の間を動く。
+    だけ内側（いちばん小さい倍率）と、右端から半径だけ内側（いちばん大きい倍率）の間を
+    動き、いちばん近い刻みに丸める。刻みは等しい間隔で並んでいるものとして数える。
     """
     usable = max(1, track.w - THUMB)
     ratio = min(1.0, max(0.0, (x - track.x - THUMB / 2) / usable))
-    steps = math.floor(ratio * (SPEED_MAX - SPEED_MIN) / SPEED_STEP + 0.5)
-    return SPEED_MIN + steps * SPEED_STEP
+    steps = math.floor(ratio * (len(SPEED_CHOICES) - 1) + 0.5)
+    return SPEED_CHOICES[steps]
 
 
 def thumb_center(speed: float, track: pygame.Rect) -> int:
     """値 `speed` のときの、つまみの丸の真ん中の横の位置（`speed_at` の逆）。"""
-    ratio = (speed - SPEED_MIN) / (SPEED_MAX - SPEED_MIN)
+    low, high = SPEED_CHOICES[0], SPEED_CHOICES[-1]
+    ratio = (speed - low) / (high - low)
     return round(track.x + THUMB / 2 + ratio * (track.w - THUMB))
 
 
@@ -530,7 +519,7 @@ class SidePanel:
         y = top + BORDER + PAD_Y
         head = max(self._line(SPEED_LABEL), self._line(SPEED_VALUE))
         label = painter.render("ゲーム速度", SPEED_LABEL)
-        value = painter.render(speed_label(speed), SPEED_VALUE)
+        value = painter.render(format_speed(speed), SPEED_VALUE)
         base = y + head - 4
         body.blit(label, (left, base - painter.metrics(SPEED_LABEL)[1]))
         body.blit(
@@ -547,11 +536,12 @@ class SidePanel:
         thumb = rounded_box((THUMB, THUMB), THUMB // 2, INK, None, ACCENT, 3)
         body.blit(thumb, (center - THUMB // 2, track.centery - THUMB // 2))
         y += TRACK_HEIGHT + 4
+        # 目盛りの位置は原型の CSS の値（1× と 2× は丸の幅の分を足し引きした位置）。
         ticks = (
-            ("0.5×", track.x, "left"),
-            ("1×", track.x + 0.2 * track.w + 5.1, "center"),
-            ("2×", track.x + 0.6 * track.w - 1.7, "center"),
-            ("3×", track.right, "right"),
+            (format_speed(SPEED_CHOICES[0]), track.x, "left"),
+            (format_speed(1.0), track.x + 0.2 * track.w + 5.1, "center"),
+            (format_speed(2.0), track.x + 0.6 * track.w - 1.7, "center"),
+            (format_speed(SPEED_CHOICES[-1]), track.right, "right"),
         )
         for text, at, align in ticks:
             image = painter.render(text, SPEED_TICK)

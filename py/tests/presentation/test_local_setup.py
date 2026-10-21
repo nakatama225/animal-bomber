@@ -10,6 +10,7 @@ JavaScript に写し、`planLocalMatch(DEFAULT_SETUP を遊び方と動物だけ
 """
 
 import json
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
@@ -27,8 +28,10 @@ from animal_bomber.presentation.hud.roster import Cpu, Human, tag_of
 from animal_bomber.presentation.menu.local_setup import (
     DEFAULT_LOCAL_SETUP,
     CpuControl,
+    HitsOf,
     KeyLayout,
     KeysControl,
+    LocalChoices,
     LocalHits,
     LocalPlan,
     LocalSetup,
@@ -207,6 +210,91 @@ class TestCPUの動物:
         )
         with pytest.raises(ValueError, match="足りない"):
             pick_cpu_animals((R,), 5, 1)
+
+
+class Test1台で選び直す:
+    """ロビーの `LobbyChoices`（`test_lan_setup.py`）と同じ形の検査。"""
+
+    def test_選んだ所だけが替わる(self) -> None:
+        choices = LocalChoices()
+        choices.set_mode(PlayMode.DUO)
+        assert choices.setup.mode is PlayMode.DUO
+        choices.set_pick(1, M)
+        choices.set_pick(0, X)
+        choices.set_hits(HitsOf.P1, 3)
+        choices.set_hits(HitsOf.P2, 4)
+        choices.set_hits(HitsOf.CPU, 6)
+        choices.set_cpu_level(1, CpuLevelKey.ONI)
+        choices.set_wins_to_take(7)
+        choices.set_round_seconds(420)
+        choices.set_sudden_death(False)
+        assert choices.setup == LocalSetup(
+            mode=PlayMode.DUO,
+            picks=(X, M),
+            hits=LocalHits(p1=3, p2=4, cpu=6),
+            cpu_levels=(CpuLevelKey.NORMAL, CpuLevelKey.ONI, CpuLevelKey.NORMAL),
+            wins_to_take=7,
+            round_seconds=420,
+            sudden_death=False,
+        )
+        # 既定の選択そのものは書き換えない（もういっかいの段取りは選んだものから作る）。
+        assert LocalSetup() == DEFAULT_LOCAL_SETUP
+
+    def test_遊び方を替えても_使わなくなった値は残る(self) -> None:
+        """2人で選んだ 2P の動物と3体目の CPU の強さを、遊び方を替えても忘れない。"""
+        choices = LocalChoices(replace(DEFAULT_LOCAL_SETUP, mode=PlayMode.SOLO))
+        choices.set_cpu_level(2, CpuLevelKey.EASY)
+        choices.set_mode(PlayMode.DUO)
+        choices.set_pick(1, E)
+        choices.set_mode(PlayMode.VERSUS)
+        choices.set_mode(PlayMode.SOLO)
+        assert choices.setup.picks == (R, E)
+        assert choices.setup.cpu_levels[2] is CpuLevelKey.EASY
+
+    @pytest.mark.parametrize(
+        ("mode", "choose", "what"),
+        [
+            (PlayMode.SOLO, lambda c: c.set_pick(1, X), "2P はいない"),
+            (PlayMode.SOLO, lambda c: c.set_pick(-1, X), "0P はいない"),
+            (PlayMode.SOLO, lambda c: c.set_hits(HitsOf.P1, 0), "爆風の回数"),
+            (PlayMode.SOLO, lambda c: c.set_hits(HitsOf.P1, 7), "爆風の回数"),
+            (PlayMode.SOLO, lambda c: c.set_hits(HitsOf.P2, 1), "p2 はいない"),
+            (PlayMode.VERSUS, lambda c: c.set_hits(HitsOf.CPU, 2), "cpu はいない"),
+            (PlayMode.VERSUS, lambda c: c.set_cpu_level(0, CpuLevelKey.HARD), "CPU1"),
+            (PlayMode.DUO, lambda c: c.set_cpu_level(2, CpuLevelKey.HARD), "CPU3"),
+            (PlayMode.DUO, lambda c: c.set_cpu_level(-1, CpuLevelKey.HARD), "CPU0"),
+            (PlayMode.SOLO, lambda c: c.set_cpu_level(0, "oni"), "CPU の強さ"),
+            (PlayMode.SOLO, lambda c: c.set_wins_to_take(4), "勝ち数"),
+            (PlayMode.SOLO, lambda c: c.set_round_seconds(120), "制限時間"),
+        ],
+        ids=[
+            "1人の2P",
+            "番号が負",
+            "0回",
+            "7回",
+            "1人の2Pの回数",
+            "タイマンのCPUの回数",
+            "タイマンのCPU",
+            "2人の3体目のCPU",
+            "CPUの番号が負",
+            "強さの名前の文字列",
+            "4勝",
+            "2分",
+        ],
+    )
+    def test_選べない値と_その遊び方にいない相手は受け付けず_選択を変えない(
+        self, mode: PlayMode, choose: Callable[[LocalChoices], None], what: str
+    ) -> None:
+        start = replace(DEFAULT_LOCAL_SETUP, mode=mode)
+        choices = LocalChoices(start)
+        try:
+            choose(choices)
+        except ValueError as error:
+            message = str(error)
+        else:
+            message = ""
+        assert what in message
+        assert choices.setup == start
 
 
 class Test作った設定で試合を進める:

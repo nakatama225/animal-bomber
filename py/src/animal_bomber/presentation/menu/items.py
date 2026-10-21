@@ -18,7 +18,7 @@ from animal_bomber.ai.levels import CpuLevelKey
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.presentation.menu.choices import SoundSetting
-from animal_bomber.presentation.menu.local_setup import PlayMode
+from animal_bomber.presentation.menu.local_setup import HitsOf, PlayMode
 
 
 class ItemStyle(Enum):
@@ -38,14 +38,6 @@ class ItemStyle(Enum):
     """画面の頭の「← もどる」（原型の `.backb`）。カーソルには載せない。"""
     TOOL = "tool"
     """幕の「⚙ 設定をやりなおす」（原型の `.tbtn.bback`）。"""
-
-
-class HitsOf(Enum):
-    """1台の遊び方で、爆風の回数を選ぶ相手（原型の `hpP1`・`hpP2`・`hpCPU`）。"""
-
-    P1 = "p1"
-    P2 = "p2"
-    CPU = "cpu"
 
 
 @dataclass(frozen=True, slots=True)

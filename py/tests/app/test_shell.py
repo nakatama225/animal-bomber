@@ -20,23 +20,14 @@ import pytest
 
 from animal_bomber.app.lan import LanMatch
 from animal_bomber.app.runner import LocalMatch
-from animal_bomber.app.shell import _refreshes_panel
-from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.core.entity_id import EntityId
 from animal_bomber.domain.core.tick import TICKS_PER_SECOND, Tick
 from animal_bomber.domain.events import (
-    BombPlaced,
-    EffectApplied,
-    Moment,
-    PlayerHurt,
     SuddenDeathReason,
-    TechniqueMoment,
-    TechniqueUsed,
 )
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
-from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
 from animal_bomber.domain.state.player import OUT
 from animal_bomber.domain.state.world import WorldState
@@ -734,18 +725,6 @@ class Test盤面と横の板:
         driver.click_at((thumb_center(1.5, hits.speed), hits.speed.centery))
         content = driver.shell.panel_content
         assert content is not None and content.speed == 1.5
-
-    def test_原型が名札をすぐ作り直す場面のイベントだけ_横の板をすぐ作り直す(
-        self,
-    ) -> None:
-        assert _refreshes_panel(PlayerHurt(target=1, by=None, amount=2))
-        assert _refreshes_panel(TechniqueUsed(player=0, special=True))
-        assert not _refreshes_panel(TechniqueUsed(player=0, special=False))
-        assert _refreshes_panel(TechniqueMoment(player=0, moment=Moment.PIT_DUG))
-        assert not _refreshes_panel(TechniqueMoment(player=0, moment=Moment.RAMMED))
-        assert _refreshes_panel(EffectApplied(target=0, effect=EffectKind.PITFALL))
-        assert not _refreshes_panel(EffectApplied(target=0, effect=EffectKind.SLIDE))
-        assert not _refreshes_panel(BombPlaced(cell=Cell(1, 1), owner=0))
 
     def test_通知が消えたあと_盤面と横の板の間のすき間に通知の跡を残さない(
         self,

@@ -12,13 +12,14 @@ CPU×2」「2人タイマン」。`CFG.mode` の `1p`・`2p`・`vs`）。
 パッドを試合に繋ぐのは1人で遊ぶときだけ（原型 L3570。パッドは1台に1人ぶんで、2人で
 遊ぶときの左右の組に足すと、2人とも同じパッドで動く。原型の注記 L1131-1132）。
 
-選んだものから試合の設定を作るのは `plan_local_match`（原型の `setupPlayers`
-L1216-1243）。
+画面で選び直すのは `LocalChoices`（ロビーの `lan_setup.py` の `LobbyChoices` と同じ形。
+選べない値と、その遊び方にいない相手は例外にする）。選んだものから試合の設定を作るのは
+`plan_local_match`（原型の `setupPlayers` L1216-1243）。
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
-from typing import Final, TypeAlias
+from typing import Final, TypeAlias, assert_never
 
 from animal_bomber.ai.levels import CpuLevelKey
 from animal_bomber.domain.core.rng import Rng
@@ -33,7 +34,15 @@ from animal_bomber.domain.rules.tuning import (
 )
 from animal_bomber.presentation.animal_text import ANIMAL_ORDER
 from animal_bomber.presentation.hud.roster import Roster, local_roster
-from animal_bomber.presentation.menu.choices import hits_for_hp, hp_for_hits
+from animal_bomber.presentation.menu.choices import (
+    CPU_LEVEL_CHOICES,
+    HIT_CHOICES,
+    TIME_CHOICES,
+    WIN_CHOICES,
+    assert_choice,
+    hits_for_hp,
+    hp_for_hits,
+)
 
 
 class PlayMode(Enum):
@@ -101,6 +110,14 @@ class LocalHits:
     cpu: int = _DEFAULT_HITS
 
 
+class HitsOf(Enum):
+    """1台の遊び方で、爆風の回数を選ぶ相手（原型の `hpP1`・`hpP2`・`hpCPU`）。"""
+
+    P1 = "p1"
+    P2 = "p2"
+    CPU = "cpu"
+
+
 @dataclass(frozen=True, slots=True)
 class LocalSetup:
     """1台で遊ぶときに、画面で選んだもの。既定は原型の `CFG`（L801-810）。
@@ -134,6 +151,107 @@ class LocalSetup:
 
 DEFAULT_LOCAL_SETUP: Final = LocalSetup()
 """はじめて開いたときの選択（原型の `CFG` の既定）。"""
+
+
+class LocalChoices:
+    """1台の遊び方で選んでいるもの。
+
+    選べない値と、いまの遊び方にいない相手（1人で遊ぶときの 2P など）は例外にする
+    （どちらも画面の作りの誤り。既定値に戻すと気づけない）。例外にしたときは、選んで
+    いるものを変えない。
+    """
+
+    __slots__ = ("_setup",)
+
+    def __init__(self, setup: LocalSetup = DEFAULT_LOCAL_SETUP) -> None:
+        """選んでいるものを持つ。
+
+        Args:
+            setup: 最初の選択。
+        """
+        self._setup = setup
+
+    @property
+    def setup(self) -> LocalSetup:
+        """いま選んでいるもの。"""
+        return self._setup
+
+    def set_mode(self, mode: PlayMode) -> None:
+        """遊び方を選ぶ（ほかの値はそのまま残す。`LocalSetup` の説明）。"""
+        self._setup = replace(self._setup, mode=mode)
+
+    def set_pick(self, human: int, animal: Animal) -> None:
+        """人間の動物を選ぶ。`human` は 0 が 1P、1 が 2P。
+
+        Raises:
+            ValueError: その遊び方にいないプレイヤー（1人で遊ぶときの 2P）のとき。
+        """
+        if not 0 <= human < MODE_SIZES[self._setup.mode].humans:
+            raise ValueError(f"この遊び方に {human + 1}P はいない")
+        first, second = self._setup.picks
+        picks = (animal, second) if human == 0 else (first, animal)
+        self._setup = replace(self._setup, picks=picks)
+
+    def set_hits(self, who: HitsOf, hits: int) -> None:
+        """爆風の回数を選ぶ。
+
+        Raises:
+            ValueError: 選べない回数（`HIT_CHOICES` に無い）か、その遊び方にいない相手の
+                とき。
+        """
+        assert_choice(HIT_CHOICES, hits, "爆風の回数")
+        size = MODE_SIZES[self._setup.mode]
+        if (who is HitsOf.P2 and size.humans < 2) or (
+            who is HitsOf.CPU and size.cpus == 0
+        ):
+            raise ValueError(f"この遊び方に {who.value} はいない")
+        current = self._setup.hits
+        match who:
+            case HitsOf.P1:
+                chosen = replace(current, p1=hits)
+            case HitsOf.P2:
+                chosen = replace(current, p2=hits)
+            case HitsOf.CPU:
+                chosen = replace(current, cpu=hits)
+            case _:
+                assert_never(who)
+        self._setup = replace(self._setup, hits=chosen)
+
+    def set_cpu_level(self, index: int, level: CpuLevelKey) -> None:
+        """CPU の強さを選ぶ。`index` は CPU の何体目か（0 から）。
+
+        Raises:
+            ValueError: 選べない強さ（`CPU_LEVEL_CHOICES` に無い）か、その遊び方にいない
+                CPU のとき。
+        """
+        assert_choice(CPU_LEVEL_CHOICES, level, "CPU の強さ")
+        if not 0 <= index < MODE_SIZES[self._setup.mode].cpus:
+            raise ValueError(f"この遊び方に CPU{index + 1} はいない")
+        levels = list(self._setup.cpu_levels)
+        levels[index] = level
+        self._setup = replace(self._setup, cpu_levels=(levels[0], levels[1], levels[2]))
+
+    def set_wins_to_take(self, wins: int) -> None:
+        """何勝で優勝するかを選ぶ。
+
+        Raises:
+            ValueError: 選べる勝ち数（`WIN_CHOICES`）でないとき。
+        """
+        assert_choice(WIN_CHOICES, wins, "勝ち数")
+        self._setup = replace(self._setup, wins_to_take=wins)
+
+    def set_round_seconds(self, seconds: int) -> None:
+        """1ラウンドの制限時間（秒）を選ぶ。
+
+        Raises:
+            ValueError: 選べる時間（`TIME_CHOICES`）でないとき。
+        """
+        assert_choice(TIME_CHOICES, seconds, "制限時間")
+        self._setup = replace(self._setup, round_seconds=seconds)
+
+    def set_sudden_death(self, on: bool) -> None:
+        """延長戦（サドンデス）に入るかを選ぶ。"""
+        self._setup = replace(self._setup, sudden_death=on)
 
 
 class KeyLayout(Enum):

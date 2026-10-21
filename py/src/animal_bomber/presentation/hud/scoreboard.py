@@ -6,7 +6,8 @@
 
 原型は名札を約 4 Hz で丸ごと作り直す（`update` の `G.elapsed%0.25<dt`。L4406）。
 落とし穴の残り秒（小数1桁）もその粒で変わって見える。作り直す間隔は描く側が決め、
-ここの関数は渡された盤面の値をそのまま文にする。
+ここの関数は渡された盤面の値をそのまま文にする。原型が 4 Hz を待たずにすぐ作り直す
+イベント（被弾など）は、名札の決まりとしてここに置く（`refreshes_panel`）。
 """
 
 import math
@@ -17,6 +18,21 @@ from typing import Final, assert_never
 
 from animal_bomber.domain.abilities.frog import TONGUE_REACH
 from animal_bomber.domain.core.tick import TICKS_PER_SECOND
+from animal_bomber.domain.events import (
+    BurntOff,
+    EffectApplied,
+    LanesClosed,
+    Moment,
+    PlayerDown,
+    PlayerHurt,
+    ReachRestored,
+    Revived,
+    RoundEnded,
+    SimEvent,
+    SuddenDeath,
+    TechniqueMoment,
+    TechniqueUsed,
+)
 from animal_bomber.domain.rules.animals import stats_of
 from animal_bomber.domain.rules.items import POOP_EFFECTS
 from animal_bomber.domain.rules.match import MatchConfig
@@ -40,9 +56,9 @@ from animal_bomber.presentation.animal_text import (
     special_name,
 )
 from animal_bomber.presentation.audio.countdown import seconds_left
+from animal_bomber.presentation.emoji import HOLE, PICK, POOP_MARKS
 from animal_bomber.presentation.hud.roster import Roster, is_cpu, tag_of
 from animal_bomber.presentation.menu.choices import format_seconds
-from animal_bomber.presentation.render.art.player_marks import HOLE, PICK, POOP_MARKS
 
 WARN_SECONDS: Final = 30
 """残り時間がこれ以下（秒）になったら時計を目立たせる（原型 L5547 の `t<=30`）。"""
@@ -70,6 +86,9 @@ HALF_HEART: Final = "💔"
 
 LOST_HEART: Final = "🖤"
 """減ったぶんのハート（原型 `heartsOf`）。"""
+
+PANEL_MOMENTS: Final = frozenset({Moment.PIT_DUG})
+"""横の板をすぐ作り直す、技の途中のこと（穴を掘り終えた。原型 L2578）。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -323,6 +342,38 @@ def fixed_seconds(ticks: int) -> str:
     exact = Fraction(ticks / TICKS_PER_SECOND)
     tenths = math.floor(exact * 10 + Fraction(1, 2))
     return f"{tenths // 10}.{tenths % 10}"
+
+
+def refreshes_panel(event: SimEvent) -> bool:
+    """横の板をすぐ作り直すイベントか（ふだんは約 4 Hz。`render/panel/side_panel.py`）。
+
+    原型が `renderCards` を、4 Hz を待たずに呼ぶ場面：被弾（L1668）・外周へ回った・
+    入れ替わった（L2270・L2355）・外周が閉じた（L2362）・舌が焼き切れた（L2489）・
+    穴を掘り終えた・落とし穴にはまった（L2578・L2598）・とくぎを使った（L2627）・
+    舌が戻った（L4308）・延長戦（L4464）・決着（L4510）。ラウンドの始まり（L4158）と
+    ポーズの切り替えは、呼ぶ側（`app/shell.py`）が別に見る。
+    """
+    match event:
+        case (
+            PlayerHurt()
+            | PlayerDown()
+            | Revived()
+            | LanesClosed()
+            | BurntOff()
+            | ReachRestored()
+            | SuddenDeath()
+            | RoundEnded()
+        ):
+            return True
+        case TechniqueUsed(special=special):
+            return special
+        case TechniqueMoment(moment=moment):
+            return moment in PANEL_MOMENTS
+        case EffectApplied(effect=effect):
+            return effect is EffectKind.PITFALL
+        case _:
+            # ほかのイベントは名札の中身を約 4 Hz の作り直しで出す（原型と同じ）。
+            return False
 
 
 def _burnt_tongue_of(world: WorldState, player: PlayerState) -> BurntTongue | None:

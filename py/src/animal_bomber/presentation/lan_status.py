@@ -17,6 +17,7 @@ from typing import Final, assert_never
 
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.net.client import HOST, Connecting, Failed, LanPhase, Lobby, Playing
+from animal_bomber.presentation.hud.roster import numbered_name
 
 START_OVER: Final = (
     "もう一度遊ぶときは、全員が「設定へ」でタイトルへ戻ってから、つなぎ直す"
@@ -54,11 +55,6 @@ WAIT_NOTICE_FRAMES: Final = 30
 """
 
 
-def label(player_id: PlayerId) -> str:
-    """プレイヤー番号の画面での呼び方（0 → 1P）。"""
-    return f"{player_id + 1}P"
-
-
 def connecting_lines(address: str) -> tuple[str, ...]:
     """中継につないでいる間に、窓の真ん中に出す行。
 
@@ -88,7 +84,8 @@ def describe_lan_phase(phase: LanPhase, waiting: Sequence[PlayerId]) -> str:
                     f"{START_OVER}"
                 )
             if waiting:
-                return f"{'・'.join(label(p) for p in waiting)} の操作を待っている"
+                names = "・".join(numbered_name(p) for p in waiting)
+                return f"{names} の操作を待っている"
             if not driver.session.match.finished:
                 return ""
             if seat == HOST:

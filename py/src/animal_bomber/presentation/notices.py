@@ -35,8 +35,8 @@ from animal_bomber.domain.rules.tuning import (
     SUDDEN_DEATH_HP,
     SUDDEN_DEATH_LENGTH,
 )
+from animal_bomber.presentation.emoji import HOLE
 from animal_bomber.presentation.menu.choices import hits_for_hp
-from animal_bomber.presentation.render.art.player_marks import HOLE
 
 DOUBLED: Final = "（2倍！）"
 """効果が2倍になる動物の、アイテムの通知の末尾（原型の `bonus`。L1603）。"""

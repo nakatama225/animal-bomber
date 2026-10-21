@@ -10,12 +10,12 @@ from typing import Final
 
 from animal_bomber.domain.core.coord import Direction
 from animal_bomber.domain.rules.items import ItemKind
+from animal_bomber.presentation.emoji import item_emoji
 from animal_bomber.presentation.render.art.animals.eye import (
     EyeOptions,
     HeadMode,
     draw_eye,
 )
-from animal_bomber.presentation.render.art.items import item_emoji
 from animal_bomber.presentation.render.art.shapes import ink_line
 from animal_bomber.presentation.render.art.timing import FULL_TURN
 from animal_bomber.presentation.render.canvas.protocol import Canvas, LineCap

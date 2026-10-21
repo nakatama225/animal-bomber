@@ -5,9 +5,10 @@
 （`domain/rules/animals.py`）には置かない。文を変えても試合は変わらず、能力を変えても文は
 変わらない（変わる理由が違う）。
 
-絵文字は描く層が先に持っていたもの（`render/art/animals/looks.py` の `animal_emoji` と
-`render/art/player_marks.py` の `special_emoji`）を、そのままここからも出す（同じ字を
-2か所に書かない）。
+動物の顔の絵文字（`animal_emoji`）ととくぎの絵文字（`special_emoji`）は、盤面の絵
+（倒れたときに浮かぶ顔・外周の鍋に乗る顔・足元の印）にも出す。描く側
+（`render/art/`）がここを読み、ここは描く側を読まない（同じ字を2か所に書かない。
+`presentation/emoji.py` の説明）。
 
 ## 原型の文から言い換えた所
 
@@ -22,12 +23,7 @@
 from typing import Final, assert_never
 
 from animal_bomber.domain.rules.animals import Animal
-from animal_bomber.presentation.render.art.animals.looks import (
-    animal_emoji as animal_emoji,
-)
-from animal_bomber.presentation.render.art.player_marks import (
-    special_emoji as special_emoji,
-)
+from animal_bomber.presentation.emoji import HOLE
 
 ANIMAL_ORDER: Final = tuple(Animal)
 """動物を画面に並べる順（うさぎ・ぞう・もぐら・きつね・かえる）。
@@ -54,6 +50,28 @@ def animal_name(animal: Animal) -> str:
             return "きつね"
         case Animal.FROG:
             return "かえる"
+        case _:
+            assert_never(animal)
+
+
+def animal_emoji(animal: Animal) -> str:
+    """動物の顔の絵文字（原型の ANIMALS の emoji）。
+
+    名札・幕・キャラ選びのほか、倒れたときに浮かぶ顔（`render/scene/particles.py`）と、
+    外周の鍋に乗る顔（`render/art/negibons.py`）にも出す。
+    """
+    match animal:
+        case Animal.RABBIT:
+            return "\N{RABBIT FACE}"
+        case Animal.ELEPHANT:
+            return "\N{ELEPHANT}"
+        case Animal.MOLE:
+            # 原型はもぐらにビーバーの絵文字を当てている（もぐらの絵文字が無いため）。
+            return "\N{BEAVER}"
+        case Animal.FOX:
+            return "\N{FOX FACE}"
+        case Animal.FROG:
+            return "\N{FROG FACE}"
         case _:
             assert_never(animal)
 
@@ -113,6 +131,26 @@ def special_name(animal: Animal) -> str:
             return "狐火"
         case Animal.FROG:
             return "粘膜爆弾"
+        case _:
+            assert_never(animal)
+
+
+def special_emoji(animal: Animal) -> str:
+    """その動物のとくぎの絵文字（原型の SPECIALS の emoji）。
+
+    名札・通知のほか、盤面の足元の印（`render/art/player_marks.py`）にも出す。
+    """
+    match animal:
+        case Animal.RABBIT:
+            return "\N{PILE OF POO}"
+        case Animal.ELEPHANT:
+            return "\N{BOAR}"
+        case Animal.MOLE:
+            return HOLE
+        case Animal.FOX:
+            return "\N{LARGE BLUE CIRCLE}"
+        case Animal.FROG:
+            return "\N{LARGE GREEN CIRCLE}"
         case _:
             assert_never(animal)
 

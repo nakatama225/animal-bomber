@@ -2,19 +2,9 @@
 
 原型の画面の文は、ほとんどが日本語と色つきの絵文字の混ぜ書き（「🌿 葱ボン（場外）」
 「❤️❤️🖤」）。ブラウザは字ごとに、字形を持つ書体を選んで補う。この版は1行を
-「どの書体で描く字か」の並びに切り、並びごとに描いて、基準の線をそろえて横に並べる。
-
-## どの書体で描くか（`choose_source`）
-
-1. 絵文字として出す字（見え方を選ぶ印 U+FE0F が続く・U+1F000 より後・Unicode の
-   Emoji_Presentation の字）は、色つきの絵文字の書体が持っていればそれで描く
-2. それ以外は、文の書体（文字の書体・等幅・画面の既定）が持っていればそれで描く。
-   勝ち星の ★☆ と「つぎへ ▶」の ▶ はヒラギノが持つので文字の書体で描く（原型も
-   文字の色で塗る）
-3. 文の書体に無ければ、文字の書体（等幅と画面の既定の書体に無い日本語）・色つきの
-   絵文字の書体・記号の書体の順に、持っているもので描く。「⚙ 設定をやりなおす」の ⚙ と
-   「⏸ ポーズ」の ⏸ はヒラギノに無いので色つきの絵文字で、マニュアルの ✛ はどちらにも
-   無いので記号の書体で描く
+「どの書体で描く字か」の並びに切り（`ui/fonts.py` の `split_runs`）、並びごとに描いて、
+基準の線をそろえて横に並べる。折ってよい所と行への詰め方は `ui/linebreak.py` が決め、
+ここは幅を測って渡す。
 
 書体が字を持つかは、その字の絵を、書体に無い字（U+FFFF）の絵と比べて見分ける（pygame の
 `metrics` は、書体に無い字にも値を返すので使えない）。
@@ -34,29 +24,26 @@
 import math
 import os
 from collections import OrderedDict
-from collections.abc import Callable, Hashable, Sequence
+from collections.abc import Hashable, Sequence
 from dataclasses import dataclass, replace
-from enum import Enum
 from pathlib import Path
-from typing import Final, TypeAlias, TypeVar
+from typing import Final, TypeAlias
 
 import numpy as np
 import pygame
 
 from animal_bomber.presentation.hud.key_help import HelpSpan, SpanKind
 from animal_bomber.presentation.render.canvas.glyphs import EM_DESCENT
-from animal_bomber.presentation.render.canvas.text import (
-    EMOJI_STRIKE,
-    find_emoji_font,
+from animal_bomber.presentation.render.canvas.text import EMOJI_STRIKE
+from animal_bomber.presentation.render.ui.fonts import (
+    Face,
+    FontFiles,
+    Source,
+    find_font_files,
+    split_runs,
 )
-from animal_bomber.presentation.render.ui import fonts
+from animal_bomber.presentation.render.ui.linebreak import break_units, fill_lines
 from animal_bomber.presentation.render.ui.theme import Color
-
-VARIATION_EMOJI: Final = "️"
-"""直前の字を絵文字の見え方で出す印（U+FE0F）。"""
-
-INVISIBLE: Final = frozenset({VARIATION_EMOJI, "‍"})
-"""幅を持たず、描かない字（見え方を選ぶ印と、つなぐ印 U+200D）。"""
 
 MISSING_PROBE: Final = "￿"
 """どの書体も持たない字。書体が字を持つかを見分けるときに、この字の絵と比べる。"""
@@ -64,234 +51,11 @@ MISSING_PROBE: Final = "￿"
 PROBE_SIZE: Final = 16
 """字を持つかを見分けるときに描く大きさ（px）。"""
 
-EMOJI_PRESENTATION: Final = frozenset(
-    [
-        *range(0x231A, 0x231C),
-        *range(0x23E9, 0x23ED),
-        0x23F0,
-        0x23F3,
-        *range(0x25FD, 0x25FF),
-        *range(0x2614, 0x2616),
-        *range(0x2648, 0x2654),
-        0x267F,
-        0x2693,
-        0x26A1,
-        *range(0x26AA, 0x26AC),
-        *range(0x26BD, 0x26BF),
-        *range(0x26C4, 0x26C6),
-        0x26CE,
-        0x26D4,
-        0x26EA,
-        *range(0x26F2, 0x26F4),
-        0x26F5,
-        0x26FA,
-        0x26FD,
-        0x2705,
-        *range(0x270A, 0x270C),
-        0x2728,
-        0x274C,
-        0x274E,
-        *range(0x2753, 0x2756),
-        0x2757,
-        *range(0x2795, 0x2798),
-        0x27B0,
-        0x27BF,
-        *range(0x2B1B, 0x2B1D),
-        0x2B50,
-        0x2B55,
-    ]
-)
-"""U+1F000 より前で、既定で絵文字の見え方になる字（Unicode の Emoji_Presentation）。
-
-ブラウザは、この字を見え方の印が無くても色つきの絵文字で描く（⚡・⚪・⛔ など）。
-"""
-
 EMOJI_RISE: Final = 1 - EM_DESCENT
 """絵文字の em の正方形のうち、基準の線より上に出る割合。"""
 
-NO_BREAK_BEFORE: Final = frozenset("、。，．）」』】〕〉》！？：；ー…‥・％")
-"""行の頭に置かない字（直前の字と離さない）。"""
-
-NO_BREAK_AFTER: Final = frozenset("（「『【〔〈《")
-"""行の終わりに置かない字（直後の字と離さない）。"""
-
 DEFAULT_CAPACITY: Final = 4096
 """文の絵を取っておく数。名札・キーの案内・マニュアルの行を合わせても十分に大きい。"""
-
-
-class Source(Enum):
-    """字を描く書体の種類。"""
-
-    PRIMARY = "primary"
-    """その文の書体（文字の書体・等幅・画面の既定のどれか。`Face`）。"""
-    JAPANESE = "japanese"
-    """文字の書体（等幅・画面の既定の書体に無い日本語を補う）。"""
-    EMOJI = "emoji"
-    """色つきの絵文字の書体。"""
-    SYMBOL = "symbol"
-    """記号の書体（どちらにも無い字を補う）。"""
-
-
-class Face(Enum):
-    """文の書体（原型の CSS の font-family）。"""
-
-    TEXT = "text"
-    """文字の書体（原型の画面の `"Hiragino Maru Gothic ProN"`）。"""
-    MONO = "mono"
-    """等幅の書体（原型の `<kbd>`・`<code>`）。"""
-    SYSTEM = "system"
-    """画面の既定の書体（原型の canvas の `system-ui`。PAUSE の幕）。"""
-
-
-def wants_emoji(char: str, following: str) -> bool:
-    """絵文字の見え方で出す字か（モジュールの説明の 1.）。"""
-    code = ord(char)
-    return following == VARIATION_EMOJI or code >= 0x1F000 or code in EMOJI_PRESENTATION
-
-
-def choose_source(
-    char: str, following: str, has: Callable[[Source, str], bool]
-) -> Source:
-    """字 `char` を描く書体（モジュールの説明）。
-
-    Args:
-        char: 描く字。
-        following: 直後の字（無ければ空）。見え方を選ぶ印を見る。
-        has: 書体がその字を持つか。
-    """
-    emoji = wants_emoji(char, following)
-    if emoji and has(Source.EMOJI, char):
-        return Source.EMOJI
-    for source in (Source.PRIMARY, Source.JAPANESE, Source.EMOJI, Source.SYMBOL):
-        if has(source, char):
-            return source
-    # どの書体にも無い。絵文字の見え方の字は描かずに幅だけ空ける（色つきの絵文字の書体が
-    # 無い環境。`canvas/text.py` と同じく止まらずに進む）。ほかは文の書体の
-    # 「無い字」の形で描く。
-    return Source.EMOJI if emoji else Source.PRIMARY
-
-
-def split_runs(
-    text: str, has: Callable[[Source, str], bool]
-) -> list[tuple[Source, str]]:
-    """文を、同じ書体で描く字の並びに切る。描かない字（`INVISIBLE`）は落とす。"""
-    runs: list[tuple[Source, str]] = []
-    for index, char in enumerate(text):
-        if char in INVISIBLE:
-            continue
-        following = text[index + 1] if index + 1 < len(text) else ""
-        source = choose_source(char, following, has)
-        if runs and runs[-1][0] is source:
-            runs[-1] = (source, runs[-1][1] + char)
-        else:
-            runs.append((source, char))
-    return runs
-
-
-def break_units(text: str) -> list[str]:
-    """折り返してよい所で切った文の並び。
-
-    英数字の続き（ASCII の空白でない字）は1つにまとめ、空白は1つずつ、ほかの字（日本語・
-    絵文字）は1字ずつに切る。行の頭に置かない字（`NO_BREAK_BEFORE`）は前に付け、行の
-    終わりに置かない字（`NO_BREAK_AFTER`）は後ろに付ける。描かない字は前の字に付ける。
-    """
-    units: list[str] = []
-    opening = ""
-    index = 0
-    while index < len(text):
-        char = text[index]
-        if char == " ":
-            unit = " "
-            index += 1
-        elif "!" <= char <= "~":
-            end = index
-            while end < len(text) and "!" <= text[end] <= "~":
-                end += 1
-            unit = text[index:end]
-            index = end
-        else:
-            unit = char
-            index += 1
-            while index < len(text) and text[index] in INVISIBLE:
-                unit += text[index]
-                index += 1
-        after_space = units[-1:] == [" "]
-        joins = char in INVISIBLE or (unit[0] in NO_BREAK_BEFORE and not after_space)
-        if joins and units:
-            units[-1] += unit
-        elif unit in NO_BREAK_AFTER:
-            opening += unit
-        else:
-            units.append(opening + unit)
-            opening = ""
-    if opening:
-        units.append(opening)
-    return units
-
-
-Unit = TypeVar("Unit")
-
-
-def fill_lines(
-    units: Sequence[Unit],
-    width: float,
-    measure: Callable[[Sequence[Unit]], float],
-    is_space: Callable[[Unit], bool],
-) -> list[list[Unit]]:
-    """`units` を、幅 `width` に収まるように前から詰めて行に分ける。
-
-    `measure` は並べた行の全体の幅（単位ごとの幅を足すと、字詰めと幅の丸めの分だけ
-    1行の幅より広くなるので、行のまま測る）。行の頭と終わりの空白は落とす。1つで幅を
-    超える並びは、その1つだけで1行にする（はみ出す）。空の入力は空の行1つ。
-
-    単位ごとの幅の合計が幅に収まるうちは、行の全体を測らずに足していく（合計は行の
-    全体の幅より狭くならないので、収まるなら行も収まる）。合計が幅を超えてから、行の
-    全体を測って決める（長い文で、足すたびに行の全体を測り直す手間を減らす）。
-    """
-    lines: list[list[Unit]] = [[]]
-    total = 0.0
-    for unit in units:
-        line = lines[-1]
-        if is_space(unit):
-            if line:
-                line.append(unit)
-                total += measure([unit])
-            continue
-        size = measure([unit])
-        if line and total + size > width and measure([*line, unit]) > width:
-            while line and is_space(line[-1]):
-                line.pop()
-            lines.append([unit])
-            total = size
-        else:
-            line.append(unit)
-            total += size
-    last = lines[-1]
-    while last and is_space(last[-1]):
-        last.pop()
-    return lines
-
-
-@dataclass(frozen=True, slots=True)
-class FontFiles:
-    """使う書体のファイル（無いものは None）。"""
-
-    japanese: str | None
-    emoji: Path | None
-    symbol: Path | None
-    mono: Path | None
-    system: Path | None
-
-
-def find_font_files() -> FontFiles:
-    """手元の書体を探す（`fonts.py` の一覧の順）。"""
-    return FontFiles(
-        japanese=fonts.japanese_font_path(),
-        emoji=find_emoji_font(),
-        symbol=fonts.symbol_font_path(),
-        mono=fonts.mono_font_path(),
-        system=fonts.system_font_path(),
-    )
 
 
 @dataclass(frozen=True, slots=True)

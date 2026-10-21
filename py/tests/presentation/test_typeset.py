@@ -1,11 +1,9 @@
 """混ぜ書きの文を描く所（`render/ui/typeset.py`）の検査。
 
-どの書体で描くかの決め方・折り返し・取っておくことは、書体を探さずに（字を持つかの
-関数や、幅を測る関数を差し替えて）見る。描いた絵は、手元の書体で描いて画素を数える
-（書体の無い環境では飛ばす）。
+取っておくことは、書体を探さずに見る。描いた絵は、手元の書体で描いて画素を数える
+（書体の無い環境では飛ばす）。どの書体で描くかの決め方は `test_fonts.py`、折り返す所の
+決め方は `test_linebreak.py` が、差し替えた関数で見る。
 """
-
-from collections.abc import Sequence
 
 import numpy as np
 import pygame
@@ -14,18 +12,14 @@ import pytest
 from animal_bomber.presentation.hud.key_help import HelpSpan, SpanKind
 from animal_bomber.presentation.render.canvas.text import find_emoji_font
 from animal_bomber.presentation.render.ui import fonts
+from animal_bomber.presentation.render.ui.fonts import FontFiles, Source
+from animal_bomber.presentation.render.ui.linebreak import break_units
 from animal_bomber.presentation.render.ui.theme import KEY_FILL, LINE
 from animal_bomber.presentation.render.ui.typeset import (
-    FontFiles,
     KeyLook,
     RichStyle,
-    Source,
     TextPainter,
     TextStyle,
-    break_units,
-    choose_source,
-    fill_lines,
-    split_runs,
 )
 
 from .frame_scenes import rgb
@@ -39,60 +33,7 @@ RED = (255, 0, 0)
 STYLE = TextStyle(16, RED)
 
 
-class HasGlyph:
-    """書体ごとに持つ字を決めた、字を持つかの関数。"""
-
-    def __init__(self, table: dict[Source, str]) -> None:
-        self._table = table
-
-    def __call__(self, source: Source, char: str) -> bool:
-        return char in self._table.get(source, "")
-
-
-HIRAGINO_LIKE = HasGlyph(
-    {
-        Source.PRIMARY: "あいう★☆▶⚡ABC ",
-        Source.EMOJI: "⚙⏸⚡❤🍗🌿",
-        Source.SYMBOL: "✛",
-    }
-)
-"""手元のヒラギノと Apple Color Emoji と Zapf Dingbats の持つ字に似せた表。"""
-
-
 class Test書体の選び方:
-    def test_文字の書体に無い記号は_絵文字の書体で描く(self) -> None:
-        """原型の「⚙ 設定をやりなおす」「⏸ ポーズ」（ヒラギノに無い）。"""
-        assert choose_source("⚙", " ", HIRAGINO_LIKE) is Source.EMOJI
-        assert choose_source("⏸", " ", HIRAGINO_LIKE) is Source.EMOJI
-
-    def test_文字の書体が持つ記号は_文字の書体で描く(self) -> None:
-        """勝ち星 ★☆（文字の色で塗る）と「つぎへ ▶」。"""
-        for char in "★☆▶":
-            assert choose_source(char, "", HIRAGINO_LIKE) is Source.PRIMARY
-
-    def test_絵文字の見え方の字は_文字の書体が持っていても絵文字で描く(self) -> None:
-        """⚡（Emoji_Presentation の字）と、見え方の印 U+FE0F が続く字。"""
-        assert choose_source("⚡", "サ", HIRAGINO_LIKE) is Source.EMOJI
-        both = HasGlyph({Source.PRIMARY: "❤", Source.EMOJI: "❤"})
-        assert choose_source("❤", "️", both) is Source.EMOJI
-        assert choose_source("❤", "", both) is Source.PRIMARY
-
-    def test_どちらにも無い字は_記号の書体で描く(self) -> None:
-        """マニュアルの「✛（十字キー）」。"""
-        assert choose_source("✛", "（", HIRAGINO_LIKE) is Source.SYMBOL
-
-    def test_どの書体にも無い字は_文の書体のまま_絵文字なら描かずに空ける(self) -> None:
-        """色つきの絵文字の書体が無い環境で、絵文字を「無い字」の四角にしない。"""
-        assert choose_source("𝄞", "", HIRAGINO_LIKE) is Source.PRIMARY
-        assert choose_source("🍕", "", HasGlyph({})) is Source.EMOJI
-
-    def test_同じ書体の字をまとめ_見え方の印を落とす(self) -> None:
-        assert split_runs("あ❤️❤️い", HIRAGINO_LIKE) == [
-            (Source.PRIMARY, "あ"),
-            (Source.EMOJI, "❤❤"),
-            (Source.PRIMARY, "い"),
-        ]
-
     @needs_fonts
     def test_手元の書体でも_同じように分ける(self) -> None:
         """この Mac のヒラギノ丸ゴ・Apple Color Emoji・記号の書体で分ける。"""
@@ -107,43 +48,6 @@ class Test書体の選び方:
 
 
 class Test折り返し:
-    def test_英数字の続きは切らず_日本語は1字ずつ切る(self) -> None:
-        assert break_units("LAN対戦 Wi-Fi") == ["LAN", "対", "戦", " ", "Wi-Fi"]
-
-    def test_閉じかっこと句点は前に_開きかっこは後ろに付ける(self) -> None:
-        assert break_units("（例）。あ「い」") == ["（例）。", "あ", "「い」"]
-
-    def test_見え方の印は前の字に付ける(self) -> None:
-        assert break_units("❤️❤️") == ["❤️", "❤️"]
-
-    def test_行の幅は_行のまま測って詰める(self) -> None:
-        """単位ごとの幅を足すと広く出る測り方でも、行の全体の幅で決める。
-
-        1字ずつ測ると 12px（丸めの分だけ広い）、行のまま測ると 1字 10px。幅 30px に
-        3字まで入る（足すと 36px で超えるが、行は 30px）。
-        """
-
-        def measure(line: Sequence[str]) -> float:
-            text = "".join(line)
-            return 12.0 if len(text) == 1 else len(text) * 10.0
-
-        assert fill_lines(list("あいうえお"), 30, measure, lambda u: u == " ") == [
-            ["あ", "い", "う"],
-            ["え", "お"],
-        ]
-
-    def test_行の頭と終わりの空白を落とし_幅を超える1つは1行にする(self) -> None:
-        def measure(line: Sequence[str]) -> float:
-            return len("".join(line)) * 10.0
-
-        units = ["ab", " ", "cdefgh", " ", "i"]
-        assert fill_lines(units, 30, measure, lambda u: u == " ") == [
-            ["ab"],
-            ["cdefgh"],
-            ["i"],
-        ]
-        assert fill_lines([], 30, measure, lambda u: u == " ") == [[]]
-
     def test_折り返した行は_幅に収まる(self) -> None:
         painter = TextPainter()
         text = "ハンデをつけたい時に使う（例：1P だけ 3回にする）。🐘ぞうは常に +1回"

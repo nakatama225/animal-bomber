@@ -79,11 +79,19 @@ _SOUND_LABELS: Final = {
 SOUND_CHOICES: Final = tuple(SoundSetting)
 """音の設定のチップの並び（BGM + 効果音・効果音だけ・無音）。"""
 
-SPEED_CHOICES: Final = tuple(step / 4 for step in range(2, 13))
+SPEED_PARTS: Final = 4
+"""ゲーム速度の刻み（0.25 倍）を整数にするときの分母（倍率 × 4 が整数になる）。
+
+選べる倍率（`SPEED_CHOICES`）を作るのと、試合を進める回数の端数を整数で数える
+`shell/loop.py` の `GameSpeed` が、この値を読む。
+"""
+
+SPEED_CHOICES: Final = tuple(part / SPEED_PARTS for part in range(2, 13))
 """ゲーム速度の倍率。0.5 から 3 まで 0.25 刻み（原型のつまみ。L524）。
 
 原型は `<input type=range min=0.5 max=3 step=0.25>`。どの値も2進数の小数でちょうど
-表せる（4 で割った値なので、足し引きで誤差が出ない）。
+表せる（4 で割った値なので、足し引きで誤差が出ない）。横の板のつまみ
+（`render/panel/side_panel.py`）も、この並びから範囲と刻みを出す。
 """
 
 DEFAULT_SPEED: Final = 1.0
@@ -91,7 +99,7 @@ DEFAULT_SPEED: Final = 1.0
 
 
 def format_speed(speed: float) -> str:
-    """倍率を「1×」「1.25×」の形にする（原型の `${v}×`。L6050）。
+    """倍率を「1×」「1.25×」の形にする（原型の `${v}×`。L6050。横の板のつまみの字）。
 
     原型は JavaScript の数の書き方なので、整数なら小数点を付けず、端数は要るだけの桁で
     書く（0.5 → 「0.5×」、2 → 「2×」）。

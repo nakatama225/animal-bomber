@@ -3,8 +3,8 @@
 from collections.abc import Iterable
 
 from animal_bomber.domain.rules.animals import Animal, stats_of
+from animal_bomber.presentation.animal_text import special_emoji
 from animal_bomber.presentation.render.art.player import BLINK_ALPHA, IN_BLOCK_ALPHA
-from animal_bomber.presentation.render.art.player_marks import special_emoji
 from animal_bomber.presentation.render.baked.actors import FoxfireSprites, SlimeSprites
 from animal_bomber.presentation.render.baked.board import BoardSprites
 from animal_bomber.presentation.render.baked.bodies import BodySprites

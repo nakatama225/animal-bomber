@@ -76,12 +76,12 @@ TypeScript 版（`ts/src/platform/FrameLoop.ts`）は、ブラウザが画面の
 
 import time
 from collections.abc import Callable, Iterator
-from typing import Final
 
 from animal_bomber.domain.core.tick import TICKS_PER_SECOND
 from animal_bomber.presentation.menu.choices import (
     DEFAULT_SPEED,
     SPEED_CHOICES,
+    SPEED_PARTS,
     assert_choice,
 )
 
@@ -176,10 +176,6 @@ def sleep_then_spin(
     """予定の時刻の少し前（`SPIN_MARGIN_NS`）まで眠り、残りを空回りして待つ。"""
     sleep_until(deadline - SPIN_MARGIN_NS, clock, sleep)
     spin_until(deadline, clock)
-
-
-SPEED_PARTS: Final = 4
-"""ゲーム速度の刻み（0.25 倍）を整数にするときの分母（速さは `rate × 4` で持つ）。"""
 
 
 class GameSpeed:
