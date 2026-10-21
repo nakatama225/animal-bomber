@@ -2,8 +2,8 @@
 
 画面の頭・注記・2つのボタン（原型の `.menu`：上から 22px・間 10px・幅 520px まで）。
 その下に、この版で足した「さんかする」でつなぐ中継の名前の欄（見出しのラベルと、
-チップと同じ形の箱。ボタンと同じ幅）。つなぎ始めたら、欄の下に「接続しています…」
-（原型の `#lanStatus`。注記の形）。
+チップと同じ形の箱。ボタンと同じ幅）。つなぎ始めたら、2つのボタンを出さず、欄の下に
+「接続しています…」（原型の `#lanStatus`。注記の形）。
 
 欄の右の端の縦の線は、字が入る所の印（つなぎ始めたら出さない）。
 """
@@ -59,12 +59,14 @@ def plan_lan(view: LanView, widgets: Widgets, window: tuple[int, int]) -> Screen
     placer.gap(MENU_TOP)
     menu = min(MENU_MAX_WIDTH, inner)
     left = (inner - menu) // 2
-    for item in view.host.items:
+    # つないでいる間は2つのボタンを出さない（`lan_view`）。間をあけるのは出すときだけ。
+    buttons = (*view.host.items, *view.join.items)
+    for index, item in enumerate(buttons):
+        if index:
+            placer.gap(MENU_GAP)
         placer.wide_item(item, left, menu)
-    placer.gap(MENU_GAP)
-    for item in view.join.items:
-        placer.wide_item(item, left, menu)
-    placer.gap(ROW_GAP)
+    if buttons:
+        placer.gap(ROW_GAP)
     placer.label(view.field_label, left)
     placer.put(_field(widgets, view.field_text, menu, active=not view.status), left)
     if view.status:

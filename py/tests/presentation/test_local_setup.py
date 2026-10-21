@@ -255,7 +255,7 @@ class Test1台で選び直す:
         ("mode", "choose", "what"),
         [
             (PlayMode.SOLO, lambda c: c.set_pick(1, X), "2P はいない"),
-            (PlayMode.SOLO, lambda c: c.set_pick(-1, X), "0P はいない"),
+            (PlayMode.SOLO, lambda c: c.set_pick(-1, X), "番号 -1 の人間 はいない"),
             (PlayMode.SOLO, lambda c: c.set_hits(HitsOf.P1, 0), "爆風の回数"),
             (PlayMode.SOLO, lambda c: c.set_hits(HitsOf.P1, 7), "爆風の回数"),
             (PlayMode.SOLO, lambda c: c.set_hits(HitsOf.P2, 1), "p2 はいない"),

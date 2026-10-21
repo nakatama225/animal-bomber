@@ -40,8 +40,10 @@
 - ロビーのゲストと同じく、項目が1つも無い画面では戻る（B・Escape）も何もしない
   （原型の `MENU.nav` も、名簿が空なら戻るの前に帰る。原型の注記 L5926-5928 は
   B が使えると書くが、コードは何もしない。コードに合わせた）
-- LAN の画面で、つないでいる最中は「たてる」「さんかする」を押せない（原型は
-  押すたびにもう1本つなぐ）
+- LAN の画面で、つないでいる最中は「たてる」「さんかする」を出さない（原型は
+  出したままで、押すたびにもう1本つなぐ）。出さないのでカーソルで選べる項目が
+  無くなるが、戻る（B・Escape）は原型と同じく切るかの確認を開く（原型は2つの
+  ボタンが残るので名簿が空にならず、`MENU.back` が確認を開く。L3335）
 - タイトルへ戻るときに「接続しています…」を消す（原型は一度出すと消さず、
   つながらずにタイトルへ戻ったあと、LAN の画面を開き直しても残る）
 - LAN の画面の、名前を打ち込む欄（原型に無い）。字はいつでも欄に入る。Backspace は
@@ -616,6 +618,12 @@ class MenuFlow:
 
     def _navigate(self, commands: Collection[NavCommand]) -> tuple[Effect, ...]:
         groups = self.groups()
+        if not groups and NavCommand.BACK in commands and self._lan_connecting():
+            # つないでいる間の LAN の画面は、カーソルで選べる項目を出さない
+            # （`lan_view`）。原型はボタンが残るので、B で切るかの確認を開ける
+            # （`MENU.back` L3335）。項目が無くても同じく開く。
+            self._ask(DialogKind.DISCONNECT)
+            return ()
         result = self._cursor.handle(commands, _sizes(groups))
         match result:
             case Activate(group=group, item=item):
@@ -643,9 +651,11 @@ class MenuFlow:
 
     def _asks_before_leaving(self) -> bool:
         """戻ると中継との接続を切ることになるか（ロビーと、つないでいる最中の LAN）。"""
-        return self._screen is MenuScreen.LOBBY or (
-            self._screen is MenuScreen.LAN and self._connecting
-        )
+        return self._screen is MenuScreen.LOBBY or self._lan_connecting()
+
+    def _lan_connecting(self) -> bool:
+        """つないでいる最中の LAN の画面か。"""
+        return self._screen is MenuScreen.LAN and self._connecting
 
     def _apply(self, action: MenuAction) -> tuple[Effect, ...]:
         match action:

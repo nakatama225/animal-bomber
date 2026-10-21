@@ -20,6 +20,9 @@
   いること。」だが、この版はブラウザのページではない。中継を立てておくことを書いた
 - LAN の画面に、「さんかする」でつなぐ中継の名前を打ち込む欄を足した（原型は開いた
   ページのアドレスにつなぐので、欄が要らない）
+- LAN の画面で、つないでいる間は「たてる」「さんかする」を出さない（原型は出したまま
+  で、押すともう1本つなぐ。この版は1本しか持たない）。欄の名前が中継の名前として
+  読めない間の「さんかする」は、隠さずに薄く描く（docs/11 の表）
 """
 
 from collections.abc import Mapping, Sequence
@@ -436,9 +439,9 @@ class LanView:
     head: Heading
     note: str
     host: MenuGroup
-    """「たてる」。"""
+    """「たてる」（つないでいる間は項目が無い）。"""
     join: MenuGroup
-    """「さんかする」。"""
+    """「さんかする」（つないでいる間は項目が無い）。"""
     field_label: str
     field_text: str
     """いま欄に打ち込まれている名前。"""
@@ -766,36 +769,41 @@ def lan_view(
 
     Args:
         field_text: 欄に打ち込まれている名前。
-        connecting: つなぎ始めたか。つないでいる間は、どちらのボタンも押せず、
-            「接続しています…」を出す。
+        connecting: つなぎ始めたか。つないでいる間は、どちらのボタンも出さず
+            （グループの項目を空にする）、「接続しています…」を出す。原型の
+            `applyRoleUI` の注記（L4196-4199）と同じく、押しても反応しないボタンは
+            出さない。
         can_join: 欄の名前が中継の名前として読めるか（読めなければ「さんかする」を
-            押せない）。
+            薄く描き、押せない。隠すと、名前を打てば押せることが分からない）。
         failure: つなげなかった理由（`MenuFlow.connection_failed`）。つないでいない
             間、「接続しています…」の行に出す。無ければ空。
     """
     host = MenuGroup(
         "m0",
-        (
+        ()
+        if connecting
+        else (
             MenuItem(
                 HostLan(),
                 "たてる",
                 ItemStyle.MENU,
                 icon="🏠",
                 detail="この端末が試合を進める（ホスト）",
-                enabled=not connecting,
             ),
         ),
     )
     join = MenuGroup(
         "m1",
-        (
+        ()
+        if connecting
+        else (
             MenuItem(
                 JoinLan(),
                 "さんかする",
                 ItemStyle.MENU,
                 icon="🚪",
                 detail="別の端末の試合に参加する（ゲスト）",
-                enabled=can_join and not connecting,
+                enabled=can_join,
             ),
         ),
     )

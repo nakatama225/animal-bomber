@@ -55,14 +55,49 @@ def test_新しい文で置き換え_消え始めるまでを数え直す() -> N
     assert toast.view(2600.0) is None
 
 
-def test_薄れている最中に出し直すと_その濃さから濃くなる() -> None:
+def test_薄れている途中に出し直すと_その濃さから_縮めた長さで濃くなる() -> None:
+    """CSS は、向きの替わった変化の長さを、前の変化が進んだ割合（`ease` の値）に縮める。
+
+    原型は class を付け外すだけなので、濃さはこの決まりに従う。薄れ始めて 100 ms
+    （薄れる時間の半分）で出し直すと、200 ms × ease(0.5) ≒ 160 ms で濃さ 1 に届く。
+    """
     toast = Toast()
     toast.show("1枚目", 0.0)
     fading = toast.opacity(1500.0)
+    assert fading == pytest.approx(1 - EASE_HALF, rel=1e-6)
     toast.show("2枚目", 1500.0)
+    length = FADE_MS * EASE_HALF
     assert toast.opacity(1500.0) == pytest.approx(fading)
-    assert toast.opacity(1600.0) == pytest.approx(fading + (1 - fading) * EASE_HALF)
-    assert toast.opacity(1700.0) == 1.0
+    assert toast.opacity(1500.0 + length / 2) == pytest.approx(
+        fading + (1 - fading) * EASE_HALF, rel=1e-6
+    )
+    assert toast.opacity(1500.0 + length - 1) < 1.0
+    assert toast.opacity(1500.0 + length + 0.5) == 1.0
+    # 消え始めるのは、出し直してから 1400 ms（濃くなる長さとは別に数える）。
+    assert toast.opacity(1500.0 + SHOW_MS) == 1.0
+    assert toast.opacity(1500.0 + SHOW_MS + FADE_MS / 2) == pytest.approx(
+        1 - EASE_HALF, rel=1e-6
+    )
+
+
+def test_濃くなる途中に出し直しても_濃くなる変化はそのまま続く() -> None:
+    """行き先の濃さが替わらないので、CSS は変化を始め直さない。
+
+    出して 50 ms で出し直しても、最初に出したときから 200 ms で濃さ 1 に届く。
+    数え直すのは、消え始めるまでの 1400 ms だけ。
+    """
+    toast = Toast()
+    toast.show("1枚目", 0.0)
+    toast.show("2枚目", 50.0)
+    view = toast.view(50.0)
+    assert view is not None and view.text == "2枚目"
+    assert toast.opacity(100.0) == pytest.approx(EASE_HALF, rel=1e-6)
+    assert toast.opacity(199.0) < 1.0
+    assert toast.opacity(200.0) == 1.0
+    assert toast.opacity(50.0 + SHOW_MS) == 1.0
+    assert toast.opacity(50.0 + SHOW_MS + FADE_MS / 2) == pytest.approx(
+        1 - EASE_HALF, rel=1e-6
+    )
 
 
 def test_easeは端で0と1_途中は増える一方() -> None:

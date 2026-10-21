@@ -751,6 +751,12 @@ class Shell:
                 self._start_local(local.setup)
             elif local.between_rounds:
                 local.start_next_round()
+                # 新しい盤面の控えをすぐ取らせる（`_begin_game` と同じ）。取らないと、
+                # 新しい盤面を最初に進めるまで前のラウンドの位置が控えに残り、1 より
+                # 小さいゲーム速度（0.5 倍・0.75 倍）では、押したフレームに前の
+                # ラウンドの位置と混ぜて描く。最初の tick に歩いた距離も数えない
+                # （原型の startRound は walk を 0 に戻し、最初の update から数える）。
+                game.scene.observe(local.world, [])
                 game.refresh = True
         elif self._lan_flow.lan is not None:
             self._lan_flow.lan.rematch()
@@ -806,7 +812,8 @@ class Shell:
             # 止めている間（ポーズ・幕・決まった試合）は、ゲーム速度の端数を進めない
             # （原型も止めている間は試合の時間を進めない）。進めると、描く位置を
             # 混ぜる割合（`GameSpeed.blend`）がフレームごとに変わり、止まった盤面の
-            # プレイヤーが揺れて見える。
+            # プレイヤーが揺れて見える。割合は `take` で決めるので、止めている間に
+            # つまみを動かしても変わらない。
             steps = 0 if runner.stopped else self._speed.take(ticks)
         stepped = 0
         for _ in range(steps):

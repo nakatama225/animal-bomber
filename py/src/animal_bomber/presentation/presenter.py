@@ -135,6 +135,7 @@ from animal_bomber.presentation.hud.roster import (
     Cpu,
     Human,
     Roster,
+    label_of,
     numbered_name,
 )
 
@@ -590,21 +591,17 @@ class Presenter:
         return numbered_name(player) if animal is None else animal_name(animal)
 
     def _label(self, player: PlayerId, world: WorldState | None) -> str:
-        """原型の `label` の呼び方（`hud/roster.py` の `label_of` と同じ決まり）。
+        """原型の `label` の呼び方（`hud/roster.py` の `label_of` を呼ぶ）。
 
         人間は「1P」、CPU は動物の名前。通信対戦で抜けて CPU に替わったプレイヤーは、
-        人間だったときの「2P」のまま（`Cpu.label`）。
+        人間だったときの「2P」のまま（`Cpu.label`）。CPU の呼び名は `_name`（動物が
+        分からなければ番号）。名札の一覧にいないプレイヤーは、`_controller` と同じく
+        人間として番号で呼ぶ。
         """
-        controller = self._controller(player)
-        match controller:
-            case Human(label=label):
-                return label
-            case Cpu(label=str(label)):
-                return label
-            case Cpu():
-                return self._name(player, world)
-            case _:
-                assert_never(controller)
+        roster = self._roster_of()
+        if player >= len(roster):
+            return numbered_name(player)
+        return label_of(roster, player, self._name(player, world))
 
 
 def _item_label(kind: ItemKind) -> str:

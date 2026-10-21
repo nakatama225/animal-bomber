@@ -7,6 +7,17 @@
 時刻は呼ぶ側がミリ秒で渡す。この型は時計を持たない（テストで時刻を決めて渡せる）。
 試合の盤面の時刻ではなく実時間で数える（原型も `setTimeout` で数え、ポーズの間も
 消える）。
+
+## 変化の途中で出し直したとき
+
+原型は class `on` を付け外すだけで、濃さの変化は CSS の transition の決まりに従う。
+その決まりを写した。
+
+- 薄れている途中で出し直すと、いまの濃さから濃くなる。かかる長さは 0.2 秒ではなく、
+  薄れた変化が進んだ割合（`ease` の値）を 0.2 秒に掛けた長さに縮む（向きの替わった
+  変化を縮める決まり）。薄れ始めて 0.1 秒で出し直すと、約 0.16 秒で濃さ 1 に届く
+- 濃くなる途中で出し直しても、濃くなる変化はそのまま続く（行き先の濃さが替わらない
+  ので、CSS は変化を始め直さない）。数え直すのは、消え始めるまでの 1400 ms だけ
 """
 
 from dataclasses import dataclass
@@ -37,12 +48,25 @@ class Toast:
     def __init__(self) -> None:
         self._text: str | None = None
         self._shown_at = 0.0
-        self._from = 0.0
-        """出したときの不透明度（薄れている最中に出し直すと、その濃さから濃くなる）。"""
+        """最後に出した時刻（消え始めるまでの 1400 ms をここから数える）。"""
+        self._rise_at = 0.0
+        """濃くなる変化を始めた時刻。"""
+        self._rise_from = 0.0
+        """濃くなる変化を始めたときの不透明度（薄れている途中に出し直すと、その濃さ）。"""
+        self._rise_ms: float = FADE_MS
+        """濃くなる変化の長さ（薄れている途中に出し直すと縮む。モジュールの説明）。"""
 
     def show(self, text: str, now_ms: float) -> None:
-        """通知を出す。出ている通知は置き換え、消え始めるまでを数え直す。"""
-        self._from = self.opacity(now_ms)
+        """通知を出す。出ている通知は置き換え、消え始めるまでを数え直す。
+
+        濃くなる途中なら、濃くなる変化はそのまま続ける。薄れている途中なら、いまの濃さ
+        から、薄れた割合で縮めた長さで濃くする（モジュールの説明）。
+        """
+        if not self._rising(now_ms):
+            fading = self._fade_progress(now_ms)
+            self._rise_from = self.opacity(now_ms)
+            self._rise_at = now_ms
+            self._rise_ms = FADE_MS if fading is None else FADE_MS * ease(fading)
         self._text = text
         self._shown_at = now_ms
 
@@ -50,15 +74,38 @@ class Toast:
         """時刻 `now_ms` の不透明度。出していなければ 0。"""
         if self._text is None:
             return 0.0
+        if self._rising(now_ms):
+            start = self._rise_from
+            progress = max(0.0, now_ms - self._rise_at) / self._rise_ms
+            return start + (1.0 - start) * ease(progress)
         elapsed = now_ms - self._shown_at
-        if elapsed < FADE_MS:
-            start = self._from
-            return start + (1.0 - start) * ease(max(0.0, elapsed) / FADE_MS)
         if elapsed < SHOW_MS:
             return 1.0
         if elapsed < SHOW_MS + FADE_MS:
             return 1.0 - ease((elapsed - SHOW_MS) / FADE_MS)
         return 0.0
+
+    def _rising(self, now_ms: float) -> bool:
+        """時刻 `now_ms` に、濃くなる変化の途中か。
+
+        濃くなる長さは消え始めるまでの 1400 ms より短いので、濃くなる途中に薄れ始める
+        ことは無い。薄れ始めたちょうどの時刻に出し直すと長さは 0 に縮み、変化は無い
+        （その時刻の濃さは 1）。
+        """
+        return (
+            self._text is not None
+            and self._rise_ms > 0.0
+            and now_ms - self._rise_at < self._rise_ms
+        )
+
+    def _fade_progress(self, now_ms: float) -> float | None:
+        """時刻 `now_ms` に薄れている途中なら、薄れる時間の進み（0 以上 1 未満）。"""
+        if self._text is None:
+            return None
+        elapsed = now_ms - self._shown_at
+        if SHOW_MS <= elapsed < SHOW_MS + FADE_MS:
+            return (elapsed - SHOW_MS) / FADE_MS
+        return None
 
     def view(self, now_ms: float) -> ToastView | None:
         """時刻 `now_ms` に描く通知。消えきっていれば（出していなければ）None。"""
@@ -76,9 +123,7 @@ def ease(progress: float) -> float:
 
     3次のベジェ曲線（始点 (0,0)・終点 (1,1)・制御点 `EASE`）の、横が `progress` になる
     点の縦。横は曲線の媒介変数に対して増える一方なので、二分法で媒介変数を探す。
-
-    ⚠️ CSS は、向きの替わった変化（薄れている最中に出し直した）の長さを縮める決まりを
-    持つが、写していない。どちらも 0.2 秒以内の差で、目で見て分かる違いにならない。
+    向きの替わった変化を縮める割合にも使う（`Toast.show`）。
     """
     if progress <= 0.0:
         return 0.0

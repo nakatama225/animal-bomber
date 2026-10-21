@@ -195,19 +195,28 @@ class GameSpeed:
     1回と2回を交互に進める。端数は 0.25 倍の刻みの整数で持つので、何時間回しても
     倍率どおりの回数からずれない。整数でない倍率のときは、持ち越した端数を、描く
     位置を前の tick と混ぜる割合にする（`blend`。モジュールの説明の「TypeScript 版との
-    違い」）。試合を止めている間（ポーズ・幕）は呼ぶ側が `take` を呼ばないので、端数も
-    割合も変わらず、描く位置は揺れない。
+    違い」）。割合は `take` のときに決めて控え、`set` では替えない。試合を止めている間
+    （ポーズ・幕）は呼ぶ側が `take` を呼ばないので、つまみを動かしても端数も割合も
+    変わらず、描く位置は揺れない（原型も、止めている間は位置を動かさない）。新しい倍率の
+    割合は、次に進めたフレームから使う。
+
+    ⚠️ 試合の最中に、整数と整数でない倍率の間でつまみを動かしたフレームだけは、
+    1フレームの進みが倍率ぶんから外れる（最大 1 tick。等倍から 1.25 倍へ替えた
+    フレームは 0.25 tick ぶんしか進まず、1.25 倍から等倍へ替えたフレームは 1 tick
+    より多く進む）。混ぜる割合が「混ぜない（1）」と「端数の割合」の間で替わるため。
+    整数でない倍率どうし（1.25 倍から 1.5 倍など）なら外れない。
 
     ⚠️ 押してすぐ離した爆弾と技のキーを、何回進めても1回ぶんにするのは、進めるたびに
     キーを忘れる呼ぶ側（`keyboard.end_tick()`）。原型にも、2倍速で1回の押しが2〜3回ぶんに
     増えた事故があった（更新履歴 1.6.2）。
     """
 
-    __slots__ = ("_carry", "_parts")
+    __slots__ = ("_blend", "_carry", "_parts")
 
     def __init__(self, rate: float = DEFAULT_SPEED) -> None:
         self._parts = 0
         self._carry = 0
+        self._blend = 1.0
         self.set(rate)
 
     @property
@@ -225,10 +234,14 @@ class GameSpeed:
         self._parts = round(rate * SPEED_PARTS)
 
     def take(self, ticks: int) -> int:
-        """実時間で `ticks` 回ぶん進んだフレームに、試合を進める回数。"""
+        """実時間で `ticks` 回ぶん進んだフレームに、試合を進める回数。
+
+        描く位置を混ぜる割合（`blend`）も、ここでいまの倍率と端数から決めて控える。
+        """
         self._carry += ticks * self._parts
         steps = self._carry // SPEED_PARTS
         self._carry -= steps * SPEED_PARTS
+        self._blend = 1.0 if self._parts % SPEED_PARTS == 0 else self.progress
         return steps
 
     @property
@@ -245,14 +258,14 @@ class GameSpeed:
     def blend(self) -> float:
         """描くプレイヤーの位置を、1つ前の tick の位置と混ぜる割合（0 以上 1 以下）。
 
-        0 なら1つ前の tick の位置、1 なら最後に進めた tick の位置に描く。倍率が整数の
-        ときは 1（等倍の見た目と、描画の重さの場面の描き方を変えない）。整数でないときは
-        `progress`（前の tick の位置に、端数の割合だけ寄せる。どの倍率でも1フレームの
-        進みが倍率ぶんで揃う。モジュールの説明）。
+        0 なら1つ前の tick の位置、1 なら最後に進めた tick の位置に描く。最後に
+        `take` を呼んだときの倍率が整数なら 1（等倍の見た目と、描画の重さの場面の
+        描き方を変えない）。整数でなければ、そのときの `progress`（前の tick の位置に、
+        端数の割合だけ寄せる。どの倍率でも1フレームの進みが倍率ぶんで揃う。モジュールの
+        説明）。まだ `take` を呼んでいなければ 1。`set` で倍率を替えても、次の `take`
+        までは変わらない（クラスの説明）。
         """
-        if self._parts % SPEED_PARTS == 0:
-            return 1.0
-        return self.progress
+        return self._blend
 
 
 def frames(

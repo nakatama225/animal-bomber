@@ -32,8 +32,9 @@ from animal_bomber.domain.rules.tuning import (
     STARTING_HP,
     WINS_TO_TAKE_MATCH,
 )
+from animal_bomber.domain.state.player import PLAYER_IDS
 from animal_bomber.presentation.animal_text import ANIMAL_ORDER
-from animal_bomber.presentation.hud.roster import Roster, local_roster
+from animal_bomber.presentation.hud.roster import Roster, local_roster, numbered_name
 from animal_bomber.presentation.menu.choices import (
     CPU_LEVEL_CHOICES,
     HIT_CHOICES,
@@ -187,7 +188,14 @@ class LocalChoices:
             ValueError: その遊び方にいないプレイヤー（1人で遊ぶときの 2P）のとき。
         """
         if not 0 <= human < MODE_SIZES[self._setup.mode].humans:
-            raise ValueError(f"この遊び方に {human + 1}P はいない")
+            # 呼び方は `numbered_name` に揃える。プレイヤーの番号の外（負など）は
+            # 呼び方を作れないので、番号のまま出す（`PLAYER_IDS[-1]` は 4P を指す）。
+            who = (
+                numbered_name(PLAYER_IDS[human])
+                if 0 <= human < len(PLAYER_IDS)
+                else f"番号 {human} の人間"
+            )
+            raise ValueError(f"この遊び方に {who} はいない")
         first, second = self._setup.picks
         picks = (animal, second) if human == 0 else (first, animal)
         self._setup = replace(self._setup, picks=picks)

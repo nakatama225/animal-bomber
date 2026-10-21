@@ -16,10 +16,8 @@ from dataclasses import dataclass
 from typing import TypeAlias, assert_never
 
 from animal_bomber.ai.levels import CPU_LEVELS, CpuLevelKey
-from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.state.player import PLAYER_IDS, PlayerId
 from animal_bomber.net.protocol import LanSettings, cpu_level_of
-from animal_bomber.presentation.animal_text import animal_name
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,12 +92,16 @@ def tag_of(roster: Roster, player: PlayerId) -> str:
             assert_never(controller)
 
 
-def label_of(roster: Roster, player: PlayerId, animal: Animal) -> str:
-    """原型の `label` の呼び方。人間は「1P」、CPU は動物の名前（「うさぎ」）。
+def label_of(roster: Roster, player: PlayerId, cpu_name: str) -> str:
+    """原型の `label` の呼び方。人間は「1P」、CPU は `cpu_name`（動物の名前）。
 
     原型は CPU の名前を動物の名前そのままにしている（L1160「渾名だと何の動物か分から
     なくなる」・L1237・L1260）。通信対戦で抜けて CPU に替わったプレイヤーは、人間
     だったときの「2P」のまま（`Cpu.label`。原型 L3793 は `label` を書き換えない）。
+
+    呼び方の決まりはここだけに置き、幕（`hud/banner.py`）と通知（`presenter.py` の
+    `Presenter._label`）がここを呼ぶ。CPU の呼び名は呼ぶ側が決めて渡す（通知は、動物が
+    分からなければ番号の「1P」を渡す）。
     """
     controller = controller_of(roster, player)
     match controller:
@@ -108,7 +110,7 @@ def label_of(roster: Roster, player: PlayerId, animal: Animal) -> str:
         case Cpu(label=str(label)):
             return label
         case Cpu():
-            return animal_name(animal)
+            return cpu_name
         case _:
             assert_never(controller)
 

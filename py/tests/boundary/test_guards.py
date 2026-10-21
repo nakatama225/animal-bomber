@@ -19,6 +19,10 @@ D205・D209・D212）・import-linter・mypy の設定や型として書いて�
 - import-linter の禁止を掛ける範囲を、`domain/` より狭める
 - import-linter の「文と値を作る側は描く側を import しない」から、`presentation/hud/`
   か `presentation/menu/` を外す
+- 同じ contract の `source_modules` から1つでも外す・名前を変える、`forbidden_modules`
+  （`presentation/render/`）を変える（`TEXT_SIDE` の一覧と突き合わせる。1ファイルの
+  モジュールの `presenter`・`lan_status` は中に違反を書き出せず、`hud/`・`menu/` からも
+  import されないので、外しても違反を見つけられなくなるだけで、ほかの所は失敗しない）
 - ruff の禁止を外す先に、`domain/` か `domain/core/` を足す
 - import-linter の層の検査から `exhaustive` を外す
 - mypy の設定から `exhaustive-match` を外す
@@ -49,6 +53,20 @@ FORBIDDEN_CONTRACT = (
     "ルールの層は乱数・実時間・描画・環境で結果が違いうる計算を import しない"
 )
 TEXT_SIDE_CONTRACT = "文と値を作る側は描く側を import しない"
+
+TEXT_SIDE: tuple[str, ...] = (
+    "animal_bomber.presentation.hud",
+    "animal_bomber.presentation.menu",
+    "animal_bomber.presentation.notices",
+    "animal_bomber.presentation.emoji",
+    "animal_bomber.presentation.animal_text",
+    "animal_bomber.presentation.presenter",
+    "animal_bomber.presentation.lan_status",
+)
+"""画面の文と値を作る側。`TEXT_SIDE_CONTRACT` の `source_modules` の正（docs/11）。"""
+
+DRAWING_SIDE: tuple[str, ...] = ("animal_bomber.presentation.render",)
+"""描く側。`TEXT_SIDE_CONTRACT` の `forbidden_modules` の正。"""
 
 
 @dataclass(frozen=True)
@@ -98,10 +116,16 @@ def ruff_bans() -> dict[str, str]:
     return {str(name): str(entry["msg"]) for name, entry in table["banned-api"].items()}
 
 
+def contract_of(name: str) -> dict[str, Any]:
+    """import-linter の contract のうち、名前が `name` のもの（ちょうど1つ）。"""
+    contracts = load_pyproject()["tool"]["importlinter"]["contracts"]
+    (contract,) = [c for c in contracts if c["name"] == name]
+    return dict(contract)
+
+
 def forbidden_modules() -> set[str]:
     """import-linter の「ルールの層は…を import しない」が禁じているもの。"""
-    contracts = load_pyproject()["tool"]["importlinter"]["contracts"]
-    (contract,) = [c for c in contracts if c["name"] == FORBIDDEN_CONTRACT]
+    contract = contract_of(FORBIDDEN_CONTRACT)
     return {str(module) for module in contract["forbidden_modules"]}
 
 
@@ -159,6 +183,18 @@ class Test境界を守る検査:
         """
         assert set(ruff_bans()) == {*MODULES_BANNED, *MEMBERS_BANNED}
         assert forbidden_modules() == set(MODULES_BANNED)
+
+    def test_文と値を作る側の範囲は_この一覧と等しい(self) -> None:
+        """「文と値を作る側は描く側を import しない」の範囲を、正の一覧と突き合わせる。
+
+        違反を書き出すテスト（下の `test_文と値を作る側から描く側を_import_すると…`）は
+        `hud/`・`menu/` にしか書き出せない。1ファイルのモジュール（`presenter`・
+        `lan_status` など）を範囲から外しても、そこは失敗しない。
+        """
+        contract = contract_of(TEXT_SIDE_CONTRACT)
+        assert contract["type"] == "forbidden"
+        assert sorted(contract["source_modules"]) == sorted(TEXT_SIDE)
+        assert sorted(contract["forbidden_modules"]) == sorted(DRAWING_SIDE)
 
     def test_ルールの層で禁じたものを使うと_ruffが失敗する(self, probe: Probe) -> None:
         """禁じたものがすべて、禁じた理由とともに名指しされる。"""

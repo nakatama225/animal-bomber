@@ -362,7 +362,7 @@ class Test確認の画面:
 
 
 class TestLANの画面:
-    def test_たてるは音を鳴らしてこのMacの中継につなぎ_つないでいる間は押せない(
+    def test_たてるは音を鳴らしてこのMacの中継につなぎ_つないでいる間は出さない(
         self,
     ) -> None:
         flow = make_flow()
@@ -371,11 +371,10 @@ class TestLANの画面:
         view = lan_view(flow)
         assert view.status == "接続しています…"
         assert flow.connecting
-        assert [i.enabled for group in view.groups for i in group.items] == [
-            False,
-            False,
-        ]
-        assert flow.press(item(flow, "たてる")) == ()
+        assert view.groups == ()
+        assert flow.groups() == ()
+        # 画面の頭の「← もどる」は残る（押すと切るかの確認。下のテスト）。
+        assert item(flow, "← もどる").enabled
 
     def test_つなぐ前に描いたボタンを_つないでいる最中に押しても_もう1本つながない(
         self,
@@ -390,12 +389,25 @@ class TestLANの画面:
         assert flow.press(join) == (UiSound(),)
 
     def test_つないでいる最中のBは_切るかの確認(self) -> None:
-        flow = make_flow()
-        press(flow, "LAN対戦")
-        press(flow, "たてる")
-        assert flow.keyboard(BACK) == ()
-        assert flow.dialog is DialogKind.DISCONNECT
-        assert press(flow, "← もどる") == ()
+        """カーソルで選べる項目が無くても、原型と同じく確認を開く（原型 L3335）。
+
+        Escape（キーボード）・パッドの B・「← もどる」のどれでも開く。
+        """
+        for back in ("Escape", "パッドのB", "← もどる"):
+            flow = make_flow()
+            press(flow, "LAN対戦")
+            press(flow, "たてる")
+            assert flow.groups() == ()
+            match back:
+                case "Escape":
+                    assert flow.keyboard(BACK) == ()
+                case "パッドのB":
+                    assert flow.gamepad({BACK}) == ()
+                case _:
+                    assert press(flow, back) == (UiSound(),)
+            assert flow.dialog is DialogKind.DISCONNECT, back
+            assert screen_of(flow) is MenuScreen.LAN
+            assert press(flow, "← もどる") == ()
 
     def test_さんかするは打ち込んだ名前の中継につなぐ(self) -> None:
         flow = make_flow()

@@ -451,14 +451,21 @@ class TestLANの画面:
         assert view.field_text == "mac.local"
         assert view.status == ""
 
-    def test_名前が読めなければ_さんかするは押せない(self) -> None:
+    def test_名前が読めなければ_さんかするは隠さず_押せない形で出す(self) -> None:
+        """隠すと、欄に名前を打てば参加できることが分からない（docs/11 の表）。"""
         view = lan_view("", connecting=False, can_join=False)
-        assert [item.enabled for item in every_item(view.groups)] == [True, False]
+        items = every_item(view.groups)
+        assert [item.label for item in items] == ["たてる", "さんかする"]
+        assert [item.enabled for item in items] == [True, False]
 
-    def test_つないでいる間は_どちらも押せず_接続していますを出す(self) -> None:
-        view = lan_view("mac.local", connecting=True, can_join=True)
-        assert [item.enabled for item in every_item(view.groups)] == [False, False]
-        assert view.status == "接続しています…"
+    def test_つないでいる間は_どちらも出さず_接続していますを出す(self) -> None:
+        """押しても反応しないボタンは出さない（原型の `applyRoleUI` の注記）。"""
+        for can_join in (True, False):
+            view = lan_view("mac.local", connecting=True, can_join=can_join)
+            assert every_item(view.groups) == []
+            assert view.host.items == ()
+            assert view.join.items == ()
+            assert view.status == "接続しています…"
 
     def test_注記の2文目は中継を立てておくこと(self) -> None:
         assert screens.LAN_NOTE == (

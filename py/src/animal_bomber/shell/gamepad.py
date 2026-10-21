@@ -86,7 +86,10 @@ class PadSnapshot:
     """読み取ったパッド1つの、その瞬間の状態。"""
 
     pad_id: int
-    """パッドを見分ける番号。繋いでいる間は変わらない（`PadClaims` はこれに拠る）。"""
+    """パッドを見分ける番号。繋いでいる間は変わらない。
+
+    `PadChoice` と `PadClaims` は、どのパッドを使っているかをこれで覚える。
+    """
     pressed: frozenset[PadButton]
     """押されているボタン。"""
     stick_x: float = 0.0
@@ -194,10 +197,11 @@ class StickReader:
 class PadClaims:
     """どのパッドをどのプレイヤーが使っているか。
 
-    2人がそれぞれパッドを使うときは、2人の窓口に同じものを渡す。プレイヤーは、まだ
-    だれも使っていないパッドのうち、繋がっている順で最初のものを使い始め、外れるまで
-    使い続ける。ほかのパッドが繋がっても移らず、片方のパッドが外れても、もう片方の
-    パッドを取りに行かない。
+    段階 4〜9 の形（2人がそれぞれのパッドで遊ぶ）。段階 10 から、1台で使うパッドは1つ
+    （`PadChoice`）で、`PadClaims` はいまは `GamepadSource` の既定とテストだけが使う
+    （docs/05）。2人の窓口に同じものを渡すと、プレイヤーは、まだだれも使っていない
+    パッドのうち、繋がっている順で最初のものを使い始め、外れるまで使い続ける。ほかの
+    パッドが繋がっても移らず、片方のパッドが外れても、もう片方のパッドを取りに行かない。
     """
 
     _owners: dict[int, PlayerId] = field(default_factory=dict)
@@ -233,8 +237,10 @@ class GamepadSource:
     claims: PadOwner = field(default_factory=PadClaims)
     """どのパッドをだれが使っているか。
 
-    メニューと分け合うときは `PadChoice` を渡す（モジュールの説明）。2人がそれぞれ
-    パッドを使うときは、2人の窓口に同じ `PadClaims` を渡す。
+    メニューと分け合うときは `PadChoice` を渡す（モジュールの説明。段階 10 から、
+    試合に繋ぐ所はどれもこれを渡す）。既定の `PadClaims` は段階 4〜9 の形（2人が
+    それぞれのパッドで遊ぶときに、2人の窓口に同じものを渡す）で、いまはテストだけが
+    使う。
     """
     _stick: StickReader = field(default_factory=StickReader, init=False)
 

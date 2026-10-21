@@ -194,19 +194,27 @@ class Driver:
         labels = [hit.item.label for hit in self.shell.hits]
         raise AssertionError(f"「{label}」が無い: {labels}")
 
-    def click(self, label: str) -> None:
-        """いま押せる項目のうち、文が `label` のものをマウスで押す。"""
+    def click(self, label: str, ticks: int = 0) -> None:
+        """いま押せる項目のうち、文が `label` のものをマウスで押す。
+
+        `ticks` は押すフレームに輪が返す tick の数（`click_at`）。
+        """
         for hit in self.shell.hits:
             if hit.item.label == label:
-                self.click_at(hit.rect.center)
+                self.click_at(hit.rect.center, ticks)
                 return
         labels = [hit.item.label for hit in self.shell.hits]
         raise AssertionError(f"「{label}」が無い: {labels}")
 
-    def click_at(self, pos: tuple[int, int]) -> None:
+    def click_at(self, pos: tuple[int, int], ticks: int = 0) -> None:
+        """`pos` をマウスで押して離すフレームを1つ回す。
+
+        既定の `ticks` は 0（押したフレームに試合を進めない）。実機の輪は、最初の
+        フレームのほかは 1 以上を返すので、押したフレームの進め方を見るときは 1 を渡す。
+        """
         down = pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=pos, button=1)
         up = pygame.event.Event(pygame.MOUSEBUTTONUP, pos=pos, button=1)
-        self.frame(down, up, ticks=0)
+        self.frame(down, up, ticks=ticks)
 
     def move_mouse(self, pos: tuple[int, int]) -> None:
         self.frame(pygame.event.Event(pygame.MOUSEMOTION, pos=pos, rel=(0, 0)), ticks=0)

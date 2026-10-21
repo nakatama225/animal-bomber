@@ -1,8 +1,10 @@
 """画面の色と寸法（原型の CSS の値。`legacy/animal-bomber.html` の L8-238）。
 
-色の名前は原型の `:root` の変数（L8-12）と同じにした。CSS の px は、pygame の書体が
-整数の大きさしか受け取らないので、字の大きさだけ `css_px` で整数に丸める（端数 0.5 は
-大きいほうへ。11.5px は 12px、10.5px は 11px）。
+色の名前は原型の `:root` の変数（L8-12）と同じにした。字の大きさだけ `css_px` で整数に
+丸める（端数 0.5 は大きいほうへ。11.5px は 12px、10.5px は 11px）。文を描く所
+（`render/ui/typeset.py`）は `pygame.font` で書いてあり、`pygame.font` は整数の
+大きさしか受け取らない。`pygame.freetype` は端数を受け取るが、字の送りが整数の画素に
+そろい、11.5px は 12px とほぼ同じ幅になる。色の絵文字も1色になる。
 """
 
 import math
@@ -25,9 +27,10 @@ def hex_color(text: str) -> Color:
 
 
 def css_px(size: float) -> int:
-    """CSS の字の大きさ（px）を、pygame の書体に渡せる整数にする。
+    """CSS の字の大きさ（px）を、`pygame.font` の書体に渡せる整数にする。
 
-    端数 0.5 は大きいほうへ丸める（11.5px は 12px）。
+    端数 0.5 は大きいほうへ丸める（11.5px は 12px）。`pygame.font` は整数の大きさしか
+    受け取らない（`pygame.freetype` を使わない理由はモジュールの説明）。
     """
     return max(1, math.floor(size + 0.5))
 

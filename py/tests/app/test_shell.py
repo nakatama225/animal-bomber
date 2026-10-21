@@ -45,6 +45,7 @@ from animal_bomber.presentation.hud.banner import (
     NEXT_ROUND_BUTTON,
     SETUP_BUTTON,
 )
+from animal_bomber.presentation.hud.scoreboard import CardLook
 from animal_bomber.presentation.lan_status import WAIT_NOTICE_FRAMES
 from animal_bomber.presentation.menu.choices import hp_for_hits
 from animal_bomber.presentation.menu.screens import LanView, LobbyView, MenuScreen
@@ -531,6 +532,38 @@ class Testラウンドの幕:
         assert runner.world.players[0].hp == hp_for_hits(3)
         assert runner.world.players[1].hp == hp_for_hits(1)
 
+    def test_0点5倍でも_つぎのラウンドを押したフレームは_開始位置に描く(self) -> None:
+        """幕を送ったら、新しい盤面の控えをすぐ取らせる（`_advance_banner`）。
+
+        原型の startRound も位置を置き直す。0.5 倍では、ラウンドを決めたフレームで
+        持ち越した端数を使い切るので、押したフレームは新しい盤面を 1 tick も進めない
+        （押すフレームは、実機と同じく輪が 1 tick を返す形で回す）。控えが前の
+        ラウンドのままだと、前のラウンドの最後の位置と混ぜて描き、次のフレームで
+        開始位置へ跳ぶ。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        world = runner.world
+        for row in range(2, 6):
+            world.board.put(Cell(1, row), Tile.EMPTY)
+        set_speed(driver, 0.5)
+        driver.down(pygame.KSCAN_S)
+        driver.frames(6)
+        driver.up(pygame.KSCAN_S)
+        last = world.players[0].position.y
+        # 瞬間移動とみなす 0.5 マスより開始位置に近い（混ぜる場面）。
+        assert 1.5 < last < 2.0
+        finish_round(driver, runner)
+        if not runner.between_rounds:
+            driver.frame()
+        assert runner.between_rounds
+        drawn = watch_drawn(driver)
+        driver.click(NEXT_ROUND_BUTTON, ticks=1)
+        assert runner.match.round == 2
+        assert runner.world.now == 0
+        start = runner.world.players[0].position
+        assert drawn == [(0.5, start.y)]
+
     def test_幕の下のぼかしは幕を出したとき1回だけ_幕の間は盤面を描かない(
         self,
     ) -> None:
@@ -720,6 +753,26 @@ class Test試合を進める:
                 first.position.y - 1.5
             )
 
+    def test_つぎのラウンドでも_最初のtickから歩いた距離を数える(self) -> None:
+        """幕を送ったときも、新しい盤面の控えを取らせる。
+
+        原型の startRound も walk を 0 に戻し、最初の update から数える。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        finish_round(driver, runner)
+        driver.frame()
+        driver.click(NEXT_ROUND_BUTTON)
+        assert runner.match.round == 2
+        driver.down(pygame.KSCAN_S)
+        driver.frames(3)
+        first = runner.world.players[0]
+        scene = driver.shell.scene
+        assert scene is not None
+        assert first.position.y > 1.5
+        assert scene.motion(first.id).walked == pytest.approx(first.position.y - 1.5)
+
     def test_試合の通知は_そのフレームの時刻で通知の板に出す(self) -> None:
         """`Presenter` の通知を、時刻を持つ通知の状態（`Toast`）へ渡す。"""
         driver = Driver()
@@ -789,6 +842,7 @@ class Testポーズ:
         """幕（原型 L4566-4573）は盤面全体を不透明度 0.6 の暗い色で覆う。
 
         止めている間は盤面の tick が変わらないので、止める前のフレームとの違いは幕だけ。
+        原型は止めている間も毎フレーム幕を描くので、止めたフレームのあとも重ねる。
         """
         driver = Driver()
         runner = start_local(driver)
@@ -798,6 +852,8 @@ class Testポーズ:
         assert runner.paused
         assert board_pixels(driver).mean() < 0.6 * before
         driver.up(pygame.KSCAN_P)
+        driver.frames(3)
+        assert board_pixels(driver).mean() < 0.6 * before
         driver.tap(pygame.KSCAN_P)
         assert not runner.paused
         assert board_pixels(driver).mean() > 0.9 * before
@@ -931,6 +987,37 @@ class Testゲームの速さ:
         assert len(set(drawn)) == 1
         assert drawn[0][0] < 1.0
 
+    def test_止めている間につまみを動かしても_描く位置は動かない(self) -> None:
+        """混ぜる割合は、試合を進めたフレームに決める（`GameSpeed.take`）。
+
+        原型も、止めている間は位置を動かさない。整数の倍率（混ぜない）と整数でない倍率
+        （混ぜる）の間で替えても、止めている間は割合を替えない。つまみを押すフレームは、
+        実機と同じく輪が 1 tick を返す形で回す。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        world = runner.world
+        for row in range(2, 6):
+            world.board.put(Cell(1, row), Tile.EMPTY)
+        drawn = watch_drawn(driver)
+        driver.down(pygame.KSCAN_S)
+        driver.frames(3)
+        driver.down(pygame.KSCAN_P)
+        assert runner.paused
+        stopped = world.players[0].position.y
+        assert stopped > 1.5
+        drawn.clear()
+        for rate in (1.25, 2.0, 0.5, 1.0):
+            hits = driver.shell.panel_hits
+            assert hits is not None and hits.speed is not None
+            driver.click_at(
+                (thumb_center(rate, hits.speed), hits.speed.centery), ticks=1
+            )
+            assert driver.shell.speed.rate == rate
+            driver.frames(2)
+        assert runner.paused
+        assert set(drawn) == {(1.0, stopped)}
+
     @pytest.mark.parametrize("rate", [1.0, 2.0])
     def test_整数の倍率では_混ぜずにいまの位置に描く(self, rate: float) -> None:
         """等倍の見た目と、描画の重さの場面の描き方を変えない。"""
@@ -1016,6 +1103,23 @@ class Test盤面と横の板:
         driver.click_at((thumb_center(1.5, hits.speed), hits.speed.centery))
         content = driver.shell.panel_content
         assert content is not None and content.speed == 1.5
+
+    def test_決着したら_約4Hzを待たずに名札を作り直す(self) -> None:
+        """決着のイベントで横の板の作り直しの印を立てる（`refreshes_panel` の配線）。
+
+        原型も決着で `renderCards` を呼ぶ（L4510）。立てないと、前の作り直しから
+        250 ms 以内に決まったラウンドでは古い名札のままぼかし、幕の間は横の板を描かない
+        ので、幕を外すまで古い名札が残る。イベントの種類ごとの抜けは
+        `test_scoreboard.py` が見る。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        finish_round(driver, runner)
+        driver.frames(30)
+        content = driver.shell.panel_content
+        assert content is not None
+        assert content.cards[1].look is CardLook.OUT
 
     def test_通知が消えたあと_盤面と横の板の間のすき間に通知の跡を残さない(
         self,

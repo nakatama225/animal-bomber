@@ -309,6 +309,22 @@ class Testゲーム速度:
         # 持ち越した端数は残っている（倍率を変えても時間を捨てない）。
         assert speed.progress == 0.5
 
+    def test_倍率を変えても_混ぜる割合は次に進めるまで変わらない(self) -> None:
+        """止めている間（`take` を呼ばない間）につまみを動かしても、描く位置は同じ。"""
+        speed = GameSpeed()
+        assert speed.blend == 1.0
+        speed.take(1)
+        speed.set(1.25)
+        assert speed.blend == 1.0
+        speed.set(0.5)
+        assert speed.blend == 1.0
+        speed.take(1)
+        assert speed.blend == 0.5
+        speed.set(2.0)
+        assert speed.blend == 0.5
+        speed.take(1)
+        assert speed.blend == 1.0
+
     @pytest.mark.parametrize("rate", [0.25, 3.25, 1.1])
     def test_範囲と刻みの外の倍率は受け付けない(self, rate: float) -> None:
         """原型のつまみは 0.5〜3 を 0.25 刻み。"""

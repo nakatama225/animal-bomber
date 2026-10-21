@@ -412,7 +412,8 @@ def logo_plate(widgets: Widgets, window: int, logo: str) -> pygame.Surface:
     """ロゴの銘板（原型の `.logoPlate` と `.logo`）。
 
     字の大きさは原型の `clamp(40px,9vw,86px)`（窓の幅の 9%）。字の影は、ぼかさない
-    2つ（`0 4px 0`・`0 9px 0`）だけ写す（3つ目のぼかした影は写さない）。
+    2つ（`0 4px 0`・`0 9px 0`）を写す。3つ目のぼかした影と、銘板のまわりの 6px の輪は
+    描いていない（`docs/11-画面と設定.md` の「原型に合わせる作業が残っている所」）。
     """
     painter = widgets.painter
     size = max(40, min(LOGO_MAX, math.floor(window * 0.09)))
@@ -436,7 +437,11 @@ def logo_plate(widgets: Widgets, window: int, logo: str) -> pygame.Surface:
 
 
 def logo_subtitle(widgets: Widgets, window: int, text: str) -> pygame.Surface:
-    """ロゴの下の題（原型の `.logoSub`：黄・太字・字の間 0.1em・ぼかさない影 3px）。"""
+    """ロゴの下の題（原型の `.logoSub`：黄・太字・字の間 0.1em・ぼかさない影 3px）。
+
+    原型の2つ目の影（ぼかした影）は描いていない（`docs/11-画面と設定.md` の「原型に
+    合わせる作業が残っている所」）。
+    """
     size = max(17, min(LOGO_SUB_MAX, math.floor(window * 0.026)))
     style = css_style(size, ACCENT2, 900, 0.1)
     return widgets.painter.shadowed(text, style, [(0, 3, SELECTED_SHADOW)])

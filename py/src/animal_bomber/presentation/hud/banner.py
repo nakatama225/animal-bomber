@@ -97,7 +97,7 @@ def describe_banner(
         who = (
             "（CPU）"
             if is_cpu(roster, champion)
-            else f"（{label_of(roster, champion, animal)}）"
+            else f"（{label_of(roster, champion, animal_name(animal))}）"
         )
         return BannerView(
             emoji=CHAMPION_EMOJI,

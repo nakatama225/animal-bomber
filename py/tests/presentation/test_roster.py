@@ -65,11 +65,14 @@ class Test1台の名札:
         with pytest.raises(ValueError, match="名札の一覧にいない"):
             tag_of(roster, 2)
 
-    def test_呼び方は_人間が番号_CPUが動物の名前(self) -> None:
-        """原型は CPU の名前を動物の名前そのままにする（L1160・L1237）。"""
+    def test_呼び方は_人間が番号_CPUが渡した呼び名(self) -> None:
+        """原型は CPU の名前を動物の名前そのままにする（L1160・L1237）。
+
+        動物の名前（通知では、動物が分からなければ番号）は、呼ぶ側（幕と通知）が渡す。
+        """
         roster = local_roster(1, (NORMAL,))
-        assert label_of(roster, 0, Animal.FOX) == "1P"
-        assert label_of(roster, 1, Animal.FOX) == "きつね"
+        assert label_of(roster, 0, "きつね") == "1P"
+        assert label_of(roster, 1, "きつね") == "きつね"
 
     def test_番号の呼び方(self) -> None:
         assert [numbered_name(p) for p in (0, 1, 2, 3)] == ["1P", "2P", "3P", "4P"]
@@ -127,6 +130,5 @@ class Test通信対戦の名札:
         """
         replaced: tuple[PlayerId, ...] = (2,)
         roster = lan_roster(SETTINGS, humans=(0, 2), local=0, replaced=replaced)
-        assert label_of(roster, 2, Animal.FOX) == "3P"
-        assert label_of(roster, 1, Animal.FROG) == "かえる"
-        assert label_of(roster, 2, Animal.FOX) != "きつね"
+        assert label_of(roster, 2, "きつね") == "3P"
+        assert label_of(roster, 1, "かえる") == "かえる"
