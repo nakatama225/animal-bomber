@@ -33,8 +33,10 @@ from animal_bomber.presentation.audio.parts import Wave
 from animal_bomber.presentation.audio.score import (
     LOOP_STEPS,
     STEP_SECONDS,
+    TEMPO,
     loop_frames,
     loop_voices,
+    tempo_for,
 )
 from animal_bomber.presentation.audio.sounds import SoundName
 from animal_bomber.presentation.audio.synth import frame_at, mix, white_noise
@@ -44,6 +46,38 @@ from tests.helpers import make_world
 from tests.presentation.conftest import samples_of
 
 RATE = 48000
+
+
+class Test曲の速さ:
+    def test_ゲーム速度の倍率を掛け_2倍で頭打ちにし_JavaScriptと同じく丸める(
+        self,
+    ) -> None:
+        """原型の `Math.round(138 * Math.min(2, v))`（L6054）。端数 0.5 は大きいほうへ。
+
+        Python の `round` で丸めると、0.75 倍（103.5）が 104、1.75 倍（241.5）が 242 で
+        合うが、1.25 倍（172.5）が 172 になる。
+        """
+        speeds = [step / 4 for step in range(2, 13)]
+        assert [tempo_for(speed) for speed in speeds] == [
+            69,
+            104,
+            138,
+            173,
+            207,
+            242,
+            276,
+            276,
+            276,
+            276,
+            276,
+        ]
+
+    def test_速めても_刻みの間隔だけが縮み_音符の長さは変わらない(self) -> None:
+        slow, fast = loop_voices(TEMPO), loop_voices(276)
+        assert len(slow) == len(fast)
+        for one, two in zip(slow, fast, strict=True):
+            assert two.start == pytest.approx(one.start / 2)
+            assert two.stop - two.start == pytest.approx(one.stop - one.start)
 
 
 class Test1周:
@@ -148,10 +182,10 @@ class Test鳴らす場面:
     def test_試合を進めると_ラウンドごとに鳴らし始めと止めるを繰り返す(self) -> None:
         """制限時間 2 秒（120 tick）の引き分けを2回。決着のあとの待ちの間は止めたまま。
 
-        遊ぶときと同じ配線と順（`app/main.py` の `open_audio` と `run`）で、1 tick
-        進めるたびに、進めたあとの盤面を `RoundMusic` に、イベントを曲を止める先を
-        持った `Presenter` に渡す。表の数は、試合を始めてから進めた tick の数。時間切れ
-        を引き分けにするため、延長戦は切る。
+        遊ぶときと同じ配線と順（`app/shell.py` の `Shell._begin_game` と `_advance`）
+        で、1 tick 進めるたびに、進めたあとの盤面を `RoundMusic` に、イベントを曲を
+        止める先を持った `Presenter` に渡す。表の数は、試合を始めてから進めた tick の
+        数。時間切れを引き分けにするため、延長戦は切る。
         """
         config = MatchConfig(
             seed=5,
@@ -228,6 +262,68 @@ class Test専用のチャンネル:
         for _ in range(100):
             bank.play(SoundName.CHAMPION)
         assert pygame.mixer.Channel(MUSIC_CHANNEL).get_sound() is loop
+
+    def test_速さを変えると_その速さで焼いた1周を_鳴っていれば頭から鳴らす(
+        self, mixer: int
+    ) -> None:
+        """焼いた1周は速さごとに取っておき、同じ速さは焼き直さない。"""
+        loop = pygame.mixer.Sound(buffer=bytes(400))
+        baked: list[int] = []
+        sounds: dict[int, pygame.mixer.Sound] = {}
+
+        def bake(tempo: int) -> pygame.mixer.Sound:
+            baked.append(tempo)
+            sounds[tempo] = pygame.mixer.Sound(buffer=bytes(200 + tempo))
+            return sounds[tempo]
+
+        channel = _Channel()
+        music = LoopMusic(loop, cast(pygame.mixer.Channel, channel), bake)
+        music.set_tempo(207)
+        assert channel.calls == []
+        music.start()
+        music.set_tempo(TEMPO)
+        music.set_tempo(207)
+        music.stop()
+        music.set_tempo(TEMPO)
+        assert baked == [207]
+        assert music.tempo == TEMPO
+        assert channel.calls == [
+            ("play", sounds[207], -1),
+            ("play", loop, -1),
+            ("play", sounds[207], -1),
+            ("fadeout", None, FADE_MS),
+        ]
+
+    def test_音量は焼いた1周の全部に当て_あとから焼いた1周にも当てる(
+        self, mixer: int
+    ) -> None:
+        """1.0 が原型の曲の音量（焼いた音に 0.15 が入っている）、0.0 が無音。"""
+        loop = pygame.mixer.Sound(buffer=bytes(400))
+        baked: list[pygame.mixer.Sound] = []
+
+        def bake(tempo: int) -> pygame.mixer.Sound:
+            baked.append(pygame.mixer.Sound(buffer=bytes(300)))
+            return baked[-1]
+
+        music = LoopMusic(loop, cast(pygame.mixer.Channel, _Channel()), bake)
+        music.set_volume(0.0)
+        music.set_tempo(276)
+        assert [loop.get_volume(), baked[0].get_volume()] == [0.0, 0.0]
+        music.set_volume(1.0)
+        music.set_tempo(207)
+        assert [sound.get_volume() for sound in (loop, *baked)] == [1.0] * 3
+        music.set_volume(0.0)
+        assert [sound.get_volume() for sound in (loop, *baked)] == [0.0] * 3
+
+    def test_遅い速さで焼いた1周は_等倍より長い(self, mixer: int) -> None:
+        music = open_music(random.Random(1))
+        assert isinstance(music, LoopMusic)
+        music.set_tempo(tempo_for(0.5))
+        music.start()
+        sound = pygame.mixer.Channel(MUSIC_CHANNEL).get_sound()
+        assert sound is not None
+        assert samples_of(sound).shape == (loop_frames(mixer, 69), 2)
+        assert loop_frames(mixer, 69) == pytest.approx(2 * loop_frames(mixer), abs=1)
 
     def test_曲が止まっている間も_効果音は曲のチャンネルで鳴らさない(
         self, mixer: int

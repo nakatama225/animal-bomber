@@ -16,7 +16,9 @@ class SoundName(Enum):
     ルールの層はこの一覧を知らない。どのイベントにどの音を当てるかはこの層の判断で、
     変えても試合の結果は変わらない。
 
-    ⚠️ `UI`（画面の操作）は段階 10 で鳴らす場面ができる。いまは表にだけある。
+    `UI`（画面の操作）は、メニューの項目を押したときと戻るとき（`app/shell.py` が
+    `menu/flow.py` の `UiSound` を受けて鳴らす）と、根元まで焼けた舌を出そうとした
+    とき（`presenter.py`）に鳴らす。
     """
 
     PLACE = "place"
@@ -78,4 +80,7 @@ class NullSoundBank:
     """
 
     def play(self, name: SoundName, intensity: int = 1) -> None:
+        """何もしない。"""
+
+    def set_volume(self, level: float) -> None:
         """何もしない。"""

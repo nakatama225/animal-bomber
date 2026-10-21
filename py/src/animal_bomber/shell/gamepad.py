@@ -369,14 +369,33 @@ class ControllerReader:
     ⚠️ 実機のパッドでは確かめていない（SDL の仮想パッドで確かめた）。HOME ボタンは
     割り当てない。原型の実機（macOS）では、システムが握っていてブラウザに届かなかった
     （SDL でも届くかは確かめていない）。
+
+    ## 対応していない機器（`unsupported`）
+
+    SDL がジョイスティックとしては見つけたが、ゲームコントローラーの決まった並びに
+    できない機器（対応していない機器）は読まない（ボタンの番号が製品ごとに違い、当て
+    推量で割り当てると「A のつもりが技だった」が起きる。原型の注記）。原型は、使って
+    いるパッドが無いときに並びを先頭から見て、決まった並びでないパッドが標準のパッドより
+    前にあると「🎮 このコントローラーには対応していません」を1回だけ出す。そのために、
+    繋がっている順で最初のパッドより前に並んでいた、対応していない機器の名前を控える。
     """
 
-    __slots__ = ("_count", "_pads")
+    __slots__ = ("_count", "_pads", "_unsupported")
 
     def __init__(self) -> None:
         controller.init()
+        pygame.joystick.init()
         self._count = -1
         self._pads: list[tuple[int, controller.Controller]] = []
+        self._unsupported: tuple[str, ...] = ()
+
+    @property
+    def unsupported(self) -> tuple[str, ...]:
+        """最初のパッドより前に並んでいた、対応していない機器の名前（クラスの説明）。
+
+        パッドが1つも無ければ、対応していない機器の全部。前に読んだときの並びで答える。
+        """
+        return self._unsupported
 
     def __call__(self) -> list[PadSnapshot]:
         """いま繋がっているパッドの状態を、繋がっている順に返す。"""
@@ -391,12 +410,16 @@ class ControllerReader:
         for _, pad in self._pads:
             pad.quit()
         pads: list[tuple[int, controller.Controller]] = []
+        unsupported: list[str] = []
         for index in range(count):
             if not controller.is_controller(index):
+                if not pads:
+                    unsupported.append(_device_name(index))
                 continue
             pad = controller.Controller(index)
             pads.append((pad.as_joystick().get_instance_id(), pad))
         self._pads = pads
+        self._unsupported = tuple(unsupported)
         self._count = count
 
     def _snapshot(self, pad_id: int, pad: controller.Controller) -> PadSnapshot:
@@ -409,3 +432,14 @@ class ControllerReader:
             stick_x=pad.get_axis(pygame.CONTROLLER_AXIS_LEFTX) / _AXIS_MAX,
             stick_y=pad.get_axis(pygame.CONTROLLER_AXIS_LEFTY) / _AXIS_MAX,
         )
+
+
+def _device_name(index: int) -> str:
+    """並びの番号 `index` のジョイスティックの名前（原型の通知の `gp.id` に当たる）。
+
+    名前を読むために開き、読んだら閉じる（読み続けない機器を開いたままにしない）。
+    """
+    stick = pygame.joystick.Joystick(index)
+    name = stick.get_name()
+    stick.quit()
+    return name

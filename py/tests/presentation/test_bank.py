@@ -80,6 +80,17 @@ def test_同時に鳴らせる数を増やす(mixer: int) -> None:
     assert pygame.mixer.get_busy()
 
 
+def test_音量は_全部の音と連鎖した爆発に当てる(mixer: int) -> None:
+    """音の設定の「無音」は 0、それ以外は 1（焼いた音に原型の音量 0.55 が入る）。"""
+    bank = _open()
+    sounds = [bank.sound_of(name) for name in SoundName]
+    sounds.append(bank.sound_of(SoundName.EXPLODE, 2))
+    bank.set_volume(0.0)
+    assert {sound.get_volume() for sound in sounds} == {0.0}
+    bank.set_volume(1.0)
+    assert {sound.get_volume() for sound in sounds} == {1.0}
+
+
 def test_mixerが開いていなければ_何も鳴らさないものを返す() -> None:
     pygame.mixer.quit()
     bank = open_sound_bank(random.Random(1))

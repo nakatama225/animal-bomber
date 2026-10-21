@@ -8,19 +8,26 @@ import itertools
 import json
 from dataclasses import replace
 
-import pygame
-
-from animal_bomber.app.lan import DEFAULT_LAN_SETTINGS, REFUSED, LanMatch
+from animal_bomber.ai.levels import CpuLevelKey
+from animal_bomber.app.lan import PREVIEW_SEED, REFUSED, LanMatch
+from animal_bomber.app.runner import cpu_players
 from animal_bomber.domain.input.player_input import PlayerInput
+from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.net.client import Failed, Lobby, Playing
 from animal_bomber.net.protocol import (
     REFUSED_CLOSE_CODE,
     PeerMessage,
     RequestStart,
+    ShareSettings,
     encode_lan_settings,
 )
+from animal_bomber.presentation.hud.roster import Cpu, Human
 from animal_bomber.presentation.lan_status import WAIT_NOTICE_FRAMES
+from animal_bomber.presentation.menu.lan_setup import (
+    DEFAULT_LAN_SETUP,
+    lan_settings_from,
+)
 from animal_bomber.shell.relay_link import RelayUnavailable
 from tests.net.fake_relay import ScriptedLocal
 
@@ -75,11 +82,12 @@ def lan_match(connection: _Connection) -> LanMatch:
     )
 
 
-def key(scancode: int, kind: int = pygame.KEYDOWN) -> pygame.event.Event:
-    return pygame.event.Event(kind, scancode=scancode, key=0)
-
-
-ENTER = key(pygame.KSCAN_RETURN)
+CHOSEN = replace(
+    DEFAULT_LAN_SETUP,
+    animals=(Animal.MOLE, Animal.FOX, Animal.FROG, Animal.RABBIT),
+    wins_to_take=1,
+)
+"""ロビーでホストが選び直した設定（既定と違う値）。"""
 
 
 def host_in_lobby(humans: list[int] | None = None) -> tuple[LanMatch, _Connection]:
@@ -94,9 +102,9 @@ def host_in_lobby(humans: list[int] | None = None) -> tuple[LanMatch, _Connectio
 
 
 def started(humans: list[int]) -> tuple[LanMatch, _Connection]:
-    """ホストが Enter で始め、中継が配り返した start で試合が始まったところまで。"""
+    """ホストが「はじめる ▶」で始め、配り返した start で試合が始まったところまで。"""
     match, connection = host_in_lobby(humans)
-    match.handle(ENTER)
+    assert match.start(DEFAULT_LAN_SETUP)
     match.poll()
     assert isinstance(match.phase, Playing)
     return match, connection
@@ -117,12 +125,15 @@ class Testつなぐ:
         )
 
         assert isinstance(match.phase, Failed)
-        lines = match.lobby_lines()
-        assert lines[0] == f"中継（{ADDRESS}）につなげなかった（Connection refused）。"
+        assert match.phase.reason == (
+            f"中継（{ADDRESS}）につなげなかった（Connection refused）"
+        )
         assert match.world is None
         assert not match.ready
+        assert match.roster() == ()
         # 送る口が無くても、止まる（例外を出さない）。
-        match.handle(ENTER)
+        assert not match.start(DEFAULT_LAN_SETUP)
+        match.share(DEFAULT_LAN_SETUP)
         match.poll()
         match.close()
 
@@ -149,7 +160,7 @@ class Testつなぐ:
         connection = _Connection()
         match = lan_match(connection)
         connection.push("welcome", seat=0, role="host", seats=[])
-        config = encode_lan_settings(DEFAULT_LAN_SETTINGS)
+        config = encode_lan_settings(lan_settings_from(DEFAULT_LAN_SETUP, SEED))
         connection.push("start", seats=[0], config=config, match=1)
         connection.closed_code = 1006
         match.poll()
@@ -164,35 +175,37 @@ class Testつなぐ:
 
 
 class Test始める:
-    def test_ホストのEnterで_既定の設定に新しい種を入れて始める合図を送る(
+    def test_ホストのはじめるで_選んだ設定に新しい種を入れて始める合図を送る(
         self,
     ) -> None:
         match, connection = host_in_lobby()
         assert match.world is None
 
-        match.handle(ENTER)
+        assert match.start(CHOSEN)
 
-        expected = replace(DEFAULT_LAN_SETTINGS.match, seed=SEED)
-        assert connection.sent[-1] == RequestStart(
-            replace(DEFAULT_LAN_SETTINGS, match=expected)
-        )
+        assert connection.sent[-1] == RequestStart(lan_settings_from(CHOSEN, SEED))
         # 送っただけでは始めない（中継が配り返した start で始める）。
         assert isinstance(match.phase, Lobby)
         assert match.world is None
 
-    def test_ゲストのEnterと_決めたキーのほかは何も送らない(self) -> None:
+    def test_ゲストのはじめるは何も送らない(self) -> None:
         connection = _Connection()
         match = lan_match(connection)
         connection.push("welcome", seat=1, role="guest", seats=[0])
         match.poll()
-        match.handle(ENTER)
 
-        host, host_connection = host_in_lobby()
-        host.handle(key(pygame.KSCAN_SPACE))
-        host.handle(key(pygame.KSCAN_RETURN, pygame.KEYUP))
-
+        assert not match.start(CHOSEN)
+        assert not match.rematch()
         assert [m for m in connection.sent if isinstance(m, RequestStart)] == []
-        assert [m for m in host_connection.sent if isinstance(m, RequestStart)] == []
+
+    def test_選び直した設定は_種を入れずにゲストの画面へ配る(self) -> None:
+        """始まる前に配る設定の種は `PREVIEW_SEED`（試合は始めるときの設定で作る）。"""
+        match, connection = host_in_lobby()
+        match.share(CHOSEN)
+        assert connection.sent[-1] == ShareSettings(
+            lan_settings_from(CHOSEN, PREVIEW_SEED)
+        )
+        assert PREVIEW_SEED == 0
 
     def test_中継が配り返したstartで試合が始まり_盤面を出す(self) -> None:
         match, _ = started([0])
@@ -202,8 +215,9 @@ class Test始める:
         assert world is not None and config is not None
         assert config.seed == SEED
         assert [p.animal for p in world.players] == list(config.animals)
-        assert match.lobby_lines() == ()
         assert match.in_progress
+        assert not match.stopped
+        assert not match.between_rounds
         # 人間が自分だけなら、入力はいつも揃っている。
         assert match.ready
         for _ in range(10):
@@ -212,21 +226,23 @@ class Test始める:
         assert isinstance(session, Playing)
         assert session.session.clock.now == 10
 
-    def test_試合が決まったら_ホストのEnterで同じ設定のまま次の試合を始める(
+    def test_試合が決まったら_ホストのもういっかいで同じ設定のまま次の試合を始める(
         self,
     ) -> None:
         match, connection = started([0])
         phase = match.phase
         assert isinstance(phase, Playing)
         first = phase.settings
-        # 試合の最中は、ホストの Enter でも次の試合を始めない。
-        match.handle(ENTER)
+        # 試合の最中は、ホストでも次の試合を始めない。
+        assert not match.can_rematch
+        assert not match.rematch()
         assert len([m for m in connection.sent if isinstance(m, RequestStart)]) == 1
         # 試合が決まったことにする（既定の設定は3勝で優勝なので、試合を回すと長い）。
         phase.session.match.finished = True
         assert not match.in_progress
+        assert match.can_rematch
 
-        match.handle(ENTER)
+        assert match.rematch()
         match.poll()
 
         phase = match.phase
@@ -271,3 +287,49 @@ class Test案内:
         # 盤面は残すが、試合の最中ではない（曲を止める）。
         assert not match.in_progress
         assert match.notice().startswith("中継との接続が切れた。")
+
+    def test_ずれたら_もういっかいを受け付けない(self) -> None:
+        match, connection = started([0])
+        phase = match.phase
+        assert isinstance(phase, Playing)
+        phase.session.match.finished = True
+        assert match.can_rematch
+        connection.push("desync", tick=19, reports=[])
+        match.poll()
+        assert not match.can_rematch
+        assert not match.rematch()
+
+
+class Test名札:
+    def test_始めたときにつながっていなかった枠は_CPU(self) -> None:
+        match, _ = started([0, 2])
+        roster = match.roster()
+        assert roster == (
+            Human("1P", local=True),
+            Cpu(1, CpuLevelKey.NORMAL),
+            Human("3P"),
+            Cpu(2, CpuLevelKey.NORMAL),
+        )
+        assert cpu_players(roster) == {1, 3}
+
+    def test_抜けたプレイヤーは_CPUに任せるtickを進めてから_CPU1になる(self) -> None:
+        """原型と同じく「CPU1」。強さは設定の枠ごとの強さ（原型と違う所。docs/11）。"""
+        match, connection = started([0, 1])
+        connection.push("input", seat=1, tick=0, bits=0, match=1)
+        connection.push("peer_left", seat=1, lastTick=0)
+        match.poll()
+        assert match.roster()[1] == Human("2P")
+        for _ in range(4):
+            match.step()
+        assert match.roster()[1] == Cpu(1, CpuLevelKey.NORMAL)
+        assert cpu_players(match.roster()) == {1, 2, 3}
+
+    def test_ゲストの名札は_自分の枠をこの端末の枠にする(self) -> None:
+        connection = _Connection()
+        connection.echo_start = [0, 1]
+        match = lan_match(connection)
+        connection.push("welcome", seat=1, role="guest", seats=[0])
+        config = encode_lan_settings(lan_settings_from(DEFAULT_LAN_SETUP, SEED))
+        connection.push("start", seats=[0, 1], config=config, match=1)
+        match.poll()
+        assert match.roster()[:2] == (Human("1P"), Human("2P", local=True))

@@ -24,6 +24,7 @@ for kind in ("square", "glow"):
     spec = MatchSceneSpec(26, kind)
     pygame.display.set_mode(spec.size)
     panel_left = spec.board_size[0] + PANEL_GAP
+    board_rect = pygame.Rect((0, 0), spec.board_size)
     class Counting(pygame.Surface):
         def __init__(self, size):
             super().__init__(size)
@@ -31,7 +32,11 @@ for kind in ("square", "glow"):
             self.spinner_blits = 0
             self.panels = []
             self.on_panel = 0
+            self.unclipped = 0
         def blit(self, source, dest, area=None, special_flags=0):
+            x = dest[0] if isinstance(dest, tuple) else dest.x
+            if x < panel_left and self.get_clip() != board_rect:
+                self.unclipped += 1
             if source.get_masks()[3]:
                 self.alpha_blits += 1
                 alpha = source.get_alpha()
@@ -43,7 +48,6 @@ for kind in ("square", "glow"):
                     self.shaken_boards += 1
                 else:
                     self.spinner_blits += 1
-            x = dest[0] if isinstance(dest, tuple) else dest.x
             if x >= panel_left:
                 self.on_panel += 1
                 if source.get_width() == PANEL_WIDTH:
@@ -56,6 +60,7 @@ for kind in ("square", "glow"):
     shaken = []
     spinners = []
     panels = []
+    unclipped = []
     for frame in range(40):
         target = Counting(spec.size)
         scene.draw(target, frame)
@@ -63,10 +68,11 @@ for kind in ("square", "glow"):
         shaken.append(target.shaken_boards)
         spinners.append(target.spinner_blits)
         panels.append([target.panels, target.on_panel])
+        unclipped.append(target.unclipped)
     out[kind] = {{"frames": frames, "drawn": scene.renders - built,
                   "counts": scene.counts, "phases": scene.blast_phases,
                   "shaken": shaken, "spinners": spinners, "panels": panels,
-                  "panel_builds": scene.panel_builds}}
+                  "panel_builds": scene.panel_builds, "unclipped": unclipped}}
 print(json.dumps(out))
 """
 
@@ -95,6 +101,8 @@ def test_場面は_取っておいた絵を薄めずに貼り_測る間に絵を
       2枚だけ（板の中の箱や文を、毎フレーム1つずつ貼らない）
     - 板の絵は、名札の中身が変わるたびに作り直す（場面はきつねのとくぎの回数を
       15 フレームごとに変えるので、40 フレームで 0・15・30 フレーム目の3回）
+    - 盤面は、遊ぶときと同じく盤面の四角で切って描く（板より左に貼るときは、描く先の
+      切り取りが盤面の四角になっている）
     """
     completed = subprocess.run(
         [sys.executable, "-c", COUNTING],
@@ -132,3 +140,4 @@ def test_場面は_取っておいた絵を薄めずに貼り_測る間に絵を
             assert panel_blits == [[False, None, 0]]
             assert on_panel == 2
         assert result["panel_builds"] == 3
+        assert result["unclipped"] == [0] * len(result["unclipped"])

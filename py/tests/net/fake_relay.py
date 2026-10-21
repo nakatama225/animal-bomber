@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Callable, Sequence
+from typing import Protocol
 
 from animal_bomber.app.session import GameSession
 from animal_bomber.domain.core.tick import MatchTick
@@ -16,6 +17,13 @@ from animal_bomber.net.protocol import LanSettings, PeerMessage, encode_peer_mes
 
 Script = Callable[[PlayerId, int], PlayerInput]
 """台本。プレイヤー番号と「何回目に読まれたか」から、押すボタンを返す。"""
+
+
+class _Receiver(Protocol):
+    """中継の代わりから届いたものを受け取る端末（`LockstepClient` などの形）。"""
+
+    def receive(self, text: str) -> None:
+        """届いた文字列を1つ受け取る。"""
 
 
 class FakeRelay:
@@ -45,7 +53,7 @@ class FakeRelay:
 
     def __init__(self) -> None:
         self._queues: dict[int, list[str]] = {}
-        self._clients: dict[int, LockstepClient] = {}
+        self._clients: dict[int, _Receiver] = {}
         self._members: list[int] | None = None
         self._match = 0
         self._last_tick: dict[int, int] = {}
@@ -56,13 +64,33 @@ class FakeRelay:
 
     def connect(self, hooks: "TestHooks") -> LockstepClient:
         """新しい端末をつなぐ。番号は空いているいちばん小さいもの。"""
+        seat = self._free_seat()
+        client = LockstepClient(_Link(self, seat), hooks)
+        self._join(seat, client)
+        return client
+
+    def open(self) -> "FakeConnection":
+        """新しい接続を開く（`app/lan.py` の `RelayConnection` の形）。
+
+        画面の流れのテスト（`tests/app/test_shell.py`）で使う。届いたものは接続の
+        受け取り口に溜まり、端末の側が `drain` で吸い出す（本物の
+        `RelayLink` と同じ）。届くのは `deliver()` を呼んだとき。
+        """
+        seat = self._free_seat()
+        connection = FakeConnection(self, seat)
+        self._join(seat, connection)
+        return connection
+
+    def _free_seat(self) -> int:
         if self._members is not None:
             # 本物の中継は MatchInProgressError で断る。
             raise AssertionError("試合中は入れない")
         seat = 0
         while seat in self._clients:
             seat += 1
-        client = LockstepClient(_Link(self, seat), hooks)
+        return seat
+
+    def _join(self, seat: int, client: _Receiver) -> None:
         existing = sorted(self._clients)
         for other in existing:
             self._push(other, {"t": "peer_joined", "seat": seat})
@@ -71,7 +99,6 @@ class FakeRelay:
         role = "host" if seat == 0 else "guest"
         welcome = {"t": "welcome", "seat": seat, "role": role, "seats": existing}
         self._push(seat, welcome)
-        return client
 
     def deliver(self) -> None:
         """溜まっているメッセージを、列が空になるまで届ける。
@@ -189,6 +216,38 @@ class _Link:
 
     def send(self, message: PeerMessage) -> None:
         self._relay.from_peer(self._seat, message)
+
+
+class FakeConnection:
+    """中継の代わりとの接続1本（`app/lan.py` の `RelayConnection` の形）。
+
+    閉じると、中継の代わりは抜けたものとしてほかへ知らせる（本物の中継と同じ）。
+    """
+
+    def __init__(self, relay: FakeRelay, seat: int) -> None:
+        self._relay = relay
+        self.seat = seat
+        """中継の代わりが割り当てた番号。"""
+        self._inbox: list[str] = []
+        self.closed = False
+        self.closed_code: int | None = None
+        """切れたときの番号（テストが書く。閉じただけでは書かない）。"""
+
+    def receive(self, text: str) -> None:
+        self._inbox.append(text)
+
+    def send(self, message: PeerMessage) -> None:
+        if not self.closed and self.closed_code is None:
+            self._relay.from_peer(self.seat, message)
+
+    def drain(self) -> list[str]:
+        received, self._inbox = self._inbox, []
+        return received
+
+    def close(self) -> None:
+        if not self.closed:
+            self.closed = True
+            self._relay.leave(self.seat)
 
 
 class ScriptedLocal:

@@ -86,7 +86,7 @@ def test_CPUどうしの試合を決着まで毎tick描いても_試合は変わ
         events = session.tick()
         tracker.observe(session.world, events)
         before = (hash_world(session.world), match_summary(session.match))
-        renderer.draw(target, session.world, session.match, tracker)
+        renderer.draw(target, session.world, tracker)
         assert (hash_world(session.world), match_summary(session.match)) == before
         between += session.between_rounds
     assert session.match.finished
@@ -131,7 +131,7 @@ def test_技の台本で_全部の振る舞いと盤面の物を描いても_試
             events = simulation.step(world, inputs)
             tracker.observe(world, events)
             before = hash_world(world)
-            renderer.draw(target, world, MatchState(), tracker)
+            renderer.draw(target, world, tracker)
             assert hash_world(world) == before
             actions |= {type(p.action) for p in world.players if p.action is not None}
             actors |= {type(actor) for actor in world.actors}

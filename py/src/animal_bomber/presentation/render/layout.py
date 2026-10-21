@@ -7,12 +7,10 @@
 60px にする。描く面をマス 60 より大きくすると描画が間に合わなくなる（py/AGENTS.md
 「描画の重さ」・README の Design Choice 1.）。pygame の SCALED は整数倍でしか広げない
 ので、拡大するのは、画面の縦が描く面の 2 倍以上あるときだけ。それより小さい画面では、
-窓は描く面と同じ大きさ（マス 60 で 1454×1126）。そのため大きい画面では、盤面が原型より
-小さい（2560×1440 相当でマス 60 と 69、3840×2160 を等倍で使うとき 60 と 96）。整数で
-ない倍率で広げる設定は、実機の窓で見た目と重さを確かめてから決める（`app/main.py` の
-`window_layout`）。
-
-盤面の上に帯（ラウンドや勝ち数を出す所）を置けるよう、`band` のぶん下へずらせる。
+窓は描く面と同じ大きさ（マス 60 で、盤面とすき間と横の板を並べて 1708×1094）。そのため
+大きい画面では、盤面が原型より小さい（2560×1440 相当でマス 60 と 69、3840×2160 を等倍で
+使うとき 60 と 96）。整数でない倍率で広げる設定は、実機の窓で見た目と重さを検証してから
+決める（`app/main.py` の `window_layout`）。
 
 ## 窓の寸法（`fit_window`）
 
@@ -20,8 +18,11 @@
 （原型 L72-75）。1マスの大きさは、窓の幅から横の板などの分（`SIDE_RESERVE`）、高さから
 56px を引いた残りで決める（原型の fitBoard。L591-606）。窓の高さは、盤面と横の板の
 高いほう。⚠️ 横の板の高さは中身（名札の数・キーの案内の行）で変わるので、引数で受ける。
-上の帯（`band`）を使う今の窓の決め方（`fit_layout`）は、起動の層が `fit_window` に
-替えるまで残す。
+
+窓の高さには上限を置ける（`max_height`）。原型はページ全体が縦に流れるので、横の板が
+画面より高くてもスクロールして見られる。窓は流れず、盤面を動かすと遊べないので、窓の
+高さを画面に収まる高さで頭打ちにし、はみ出した横の板だけをマウスのホイールで
+スクロールする（`app/shell.py`）。
 """
 
 import math
@@ -63,19 +64,13 @@ def js_round(value: float) -> int:
 
 @dataclass(frozen=True, slots=True)
 class Layout:
-    """マスの大きさと、盤面の左上の位置・描く面の大きさ。
-
-    `band` は盤面の上に足す帯の高さ（px）。帯の下に、原型と同じ寸法の描く面を置く。
-    """
+    """マスの大きさと、盤面の左上の位置・盤面を描く面の大きさ。"""
 
     tile: int
-    band: int = 0
 
     def __post_init__(self) -> None:
         if not TILE_MIN <= self.tile <= TILE_MAX:
             raise ValueError(f"マスの大きさは {TILE_MIN}〜{TILE_MAX}: {self.tile}")
-        if self.band < 0:
-            raise ValueError(f"帯の高さは 0 以上: {self.band}")
 
     @property
     def origin_x(self) -> float:
@@ -84,8 +79,8 @@ class Layout:
 
     @property
     def origin_y(self) -> float:
-        """盤面の上端（px。原型の OY に帯の高さを足したもの）。"""
-        return LANE * self.tile + self.band
+        """盤面の上端（px。原型の OY）。"""
+        return LANE * self.tile
 
     @property
     def board_size(self) -> tuple[int, int]:
@@ -97,9 +92,12 @@ class Layout:
 
     @property
     def surface_size(self) -> tuple[int, int]:
-        """描く面の大きさ（px）。盤面の上の帯を含む。"""
-        width, height = self.board_size
-        return (width, height + self.band)
+        """盤面を描く面の大きさ（px）。盤面とまわりの帯の大きさ（`board_size`）と同じ。
+
+        窓はこの右にすき間と横の板を足した大きさ（`WindowLayout.size`）。盤面の絵
+        （`Renderer`）は、窓の大きさの面の左上 (0, 0) から、この大きさだけを描く。
+        """
+        return self.board_size
 
     def px(self, x: float) -> float:
         """マス単位の横の座標を、ピクセルにする（原型の px）。"""
@@ -108,18 +106,6 @@ class Layout:
     def py(self, y: float) -> float:
         """マス単位の縦の座標を、ピクセルにする（原型の py）。"""
         return self.origin_y + y * self.tile
-
-
-def fit_layout(width: int, height: int, band: int = 0) -> Layout:
-    """窓の大きさに収まる、いちばん大きいマスの寸法（原型の fitBoard）。
-
-    原型は窓の幅から右のサイドパネルなどの幅を引いてから決めるが、この版の窓は盤面と
-    上の帯だけなので、引くのは帯の高さだけ。マスは 26〜60px に収める。
-    """
-    available_height = height - band
-    fit = min(width / (COLS + LANE * 2), available_height / (ROWS + LANE * 2))
-    tile = max(TILE_MIN, min(TILE_MAX, math.floor(fit)))
-    return Layout(tile, band)
 
 
 PANEL_WIDTH: Final = 238
@@ -164,28 +150,50 @@ class WindowLayout:
     """窓の中の並び：盤面を左上に、すき間をあけて右に横の板。"""
 
     board: Layout
-    """盤面の寸法（上の帯は無し）。盤面は窓の左上 (0, 0) に置く。"""
+    """盤面の寸法。盤面は窓の左上 (0, 0) に置く。"""
     panel_height: int
     """横の板の高さ（px）。"""
+    max_height: int | None = None
+    """窓の高さの上限（px。モジュールの説明）。None なら上限を置かない。"""
 
     @property
     def panel_origin(self) -> tuple[int, int]:
-        """横の板の左上の位置（px）。"""
+        """横の板の左上の位置（px。スクロールしていないとき）。"""
         return self.board.board_size[0] + PANEL_GAP, 0
 
     @property
-    def size(self) -> tuple[int, int]:
-        """窓の大きさ（px）。高さは盤面と横の板の高いほう。"""
+    def board_rect(self) -> tuple[int, int, int, int]:
+        """盤面の四角（左, 上, 幅, 高さ。px）。
+
+        盤面を描くときの切り取りと、ポーズの幕・通信対戦の案内の帯を置く所。
+        """
         width, height = self.board.board_size
-        return width + PANEL_GAP + PANEL_WIDTH, max(height, self.panel_height)
+        return 0, 0, width, height
+
+    @property
+    def size(self) -> tuple[int, int]:
+        """窓の大きさ（px）。高さは盤面と横の板の高いほう（上限があれば上限まで）。"""
+        width, height = self.board.board_size
+        tall = max(height, self.panel_height)
+        if self.max_height is not None:
+            tall = min(tall, self.max_height)
+        return width + PANEL_GAP + PANEL_WIDTH, tall
+
+    @property
+    def panel_overflow(self) -> int:
+        """横の板が窓からはみ出す高さ（px。スクロールできる量の上限）。"""
+        return max(0, self.panel_height - self.size[1])
 
 
-def fit_window(width: int, height: int, panel_height: int) -> WindowLayout:
+def fit_window(
+    width: int, height: int, panel_height: int, max_height: int | None = None
+) -> WindowLayout:
     """画面の大きさ（px）に合わせた窓の並び（原型の fitBoard。モジュールの説明）。
 
     Args:
         width: 窓に使える幅（原型の `window.innerWidth`）。
         height: 窓に使える高さ（原型の `window.innerHeight`）。
-        panel_height: 横の板の高さ（`panel/side_panel.py` の `panel_height`）。
+        panel_height: 横の板の高さ（`panel/side_panel.py` の `SidePanel.height`）。
+        max_height: 窓の高さの上限。省くと上限を置かない。
     """
-    return WindowLayout(Layout(fit_tile(width, height)), panel_height)
+    return WindowLayout(Layout(fit_tile(width, height)), panel_height, max_height)

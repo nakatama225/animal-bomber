@@ -10,7 +10,6 @@ import pytest
 
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.state.board import Tile
-from animal_bomber.domain.state.match import MatchState
 from animal_bomber.domain.state.player import OUT
 from animal_bomber.domain.state.world import create_world
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng, ScriptedRandom
@@ -39,10 +38,10 @@ def test_ブロックが壊れたら_次に描く1枚は壊れたあとの盤面
     visuals = FixedVisuals(shake=shake)
     renderer = Renderer(BakedArt(LAYOUT), CosmeticRng(ScriptedRandom(randoms * 2)))
     target = pygame.Surface(LAYOUT.surface_size)
-    renderer.draw(target, world, MatchState(), visuals)
+    renderer.draw(target, world, visuals)
     soft = [cell for cell, tile in world.board.cells() if tile is Tile.SOFT]
     for cell in soft[:3]:
         world.board.put(cell, Tile.EMPTY)
-    renderer.draw(target, world, MatchState(), visuals)
+    renderer.draw(target, world, visuals)
     wanted, _ = direct_image(LAYOUT, world, visuals, randoms)
     assert_same_frame(rgb(target), wanted, 0)

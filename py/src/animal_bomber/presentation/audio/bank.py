@@ -62,6 +62,17 @@ class PygameSoundBank:
         """音を1つ鳴らす。空いているチャンネルが無ければ鳴らさない。"""
         self.sound_of(name, intensity).play()
 
+    def set_volume(self, level: float) -> None:
+        """全部の音の音量を変える（0.0〜1.0。鳴っている音にもすぐ反映される）。
+
+        焼いた音には効果音の系統の音量（0.55）が入っているので、1.0 が原型の効果音の
+        音量で、0.0 が無音（原型の `A.setSfx`）。音の設定で「無音」を押したとき、押した
+        音（画面の操作の音）は鳴らしてから無音にするので、ほとんど聞こえない（原型も
+        同じ順）。
+        """
+        for sound in (*self._sounds.values(), self._chained):
+            sound.set_volume(level)
+
 
 def open_sound_bank(
     noise_rng: random.Random | None = None,

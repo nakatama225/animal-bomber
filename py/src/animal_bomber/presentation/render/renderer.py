@@ -3,10 +3,10 @@
 並べる順・画面の揺れ・見た目の乱数を引く順は、手本の `art/frame.py` の draw_frame と
 同じ（背景 → 画面の揺れ → 床と壁 → アイテム → 爆弾 → 爆風 → プレイヤー（上にいる順）→
 炎 → 粘膜爆弾 → 外周の鍋（プレイヤーの番号の順）→ 飛んでいる葱 → 粒子）。描く関数を
-直接呼ぶ手本と違い、ここは取っておいた絵（`render/baked/`）を貼る。最後に、盤面の上の帯
-（`band.py`）を貼る。
+直接呼ぶ手本と違い、ここは取っておいた絵（`render/baked/`）を貼る。描くのは盤面だけで、
+横の板・幕・通知は起動の層（`app/shell.py`）が同じ面の外の場所に貼る。
 
-試合の状態（`WorldState`・`MatchState`）は読むだけで書き換えない。試合の状態に無い値
+試合の状態（`WorldState`）は読むだけで書き換えない。試合の状態に無い値
 （粒子・画面の揺れ・歩いた距離など）は `Visuals` から読む（`scene/tracker.py` の
 `SceneTracker` が数える）。
 
@@ -46,7 +46,6 @@ from animal_bomber.domain.state.actors import (
     Scatter,
     SlimeBomb,
 )
-from animal_bomber.domain.state.match import MatchState
 from animal_bomber.domain.state.player import (
     Alive,
     Negibon,
@@ -62,7 +61,6 @@ from animal_bomber.presentation.render.art.particles import ParticleLook
 from animal_bomber.presentation.render.baked.art import BakedArt
 from animal_bomber.presentation.render.baked.board import BoardLayer
 from animal_bomber.presentation.render.baked.techniques import snap
-from animal_bomber.presentation.render.band import Band
 from animal_bomber.presentation.render.canvas.surface import SurfaceCanvas
 from animal_bomber.presentation.render.layout import Layout
 from animal_bomber.presentation.render.views.actors import leek_look, slime_look
@@ -100,20 +98,18 @@ class Renderer:
     """1フレームの絵を描く。
 
     `art` は試合の前に描いておいた絵（`BakedArt.prebuild`）、`rng` は見た目の乱数
-    （画面の揺れ・爆風のちらつき・被弾の揺れ）。`band` を省くと、帯の高さが
-    `art.layout.band` の帯を作る（高さ 0 なら帯を描かない）。
+    （画面の揺れ・爆風のちらつき・被弾の揺れ）。
 
     `cpu_players` は CPU が操作しているプレイヤーの番号。そのプレイヤーには、とくぎの
     長押しのゲージを描かない（原型の CPU は長押しの長さを増やさない。`art/player.py`
-    の `gauge_progress`）。省くと空（全員を人間として描く）。試合の途中で替わったとき
-    （通信対戦で抜けたプレイヤーを CPU が引き継いだ）は、属性に入れ直す。
+    の `gauge_progress`）。省くと空（全員を人間として描く）。試合ごと、と、試合の途中で
+    替わったとき（通信対戦で抜けたプレイヤーを CPU が引き継いだ）は、属性に入れ直す。
     """
 
     def __init__(
         self,
         art: BakedArt,
         rng: CosmeticRng | None = None,
-        band: Band | None = None,
         cpu_players: Collection[PlayerId] = (),
     ) -> None:
         self.art = art
@@ -121,25 +117,21 @@ class Renderer:
         """CPU が操作しているプレイヤーの番号（クラスの説明）。"""
         self._rng = rng if rng is not None else CosmeticRng()
         layout = art.layout
-        self._band = band
-        if band is None and layout.band > 0:
-            self._band = Band(layout.band)
         self._background = background(layout)
         self._board = BoardLayer(art.board, layout)
 
     @property
     def layout(self) -> Layout:
-        """描く面の寸法。"""
+        """盤面を描く面の寸法。"""
         return self.art.layout
 
-    def draw(
-        self,
-        target: pygame.Surface,
-        world: WorldState,
-        match: MatchState,
-        visuals: Visuals,
-    ) -> None:
-        """いまの盤面を `target`（描く面。アルファの桁の無い面）に描く。"""
+    def draw(self, target: pygame.Surface, world: WorldState, visuals: Visuals) -> None:
+        """いまの盤面を `target`（描く面。アルファの桁の無い面）の左上 (0, 0) に描く。
+
+        ⚠️ 画面の揺れでずらした盤面と粒子は、盤面の大きさ（`Layout.surface_size`）の
+        外へはみ出して描くことがある。窓の大きさの面に描くときは、呼ぶ側が盤面の四角で
+        切っておく（`target.set_clip`。原型の canvas も盤面の外を描かない）。
+        """
         art, rng, now = self.art, self._rng, world.now
         moved = shake_offset(visuals.shake, rng)
         offset = (0, 0) if moved is None else (snap(moved[0]), snap(moved[1]))
@@ -224,8 +216,6 @@ class Renderer:
                     assert_never(actor)
         for particle in visuals.particles:
             art.particles.draw(target, particle, offset)
-        if self._band is not None:
-            self._band.draw(target, world, match)
 
 
 def background(layout: Layout) -> pygame.Surface:

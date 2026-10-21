@@ -17,8 +17,8 @@ from animal_bomber.presentation.lan_status import (
     START_OVER,
     WAIT_NOTICE_FRAMES,
     WaitingNotice,
+    connecting_lines,
     describe_lan_phase,
-    lobby_lines,
 )
 from tests.net.fake_relay import TestHooks
 
@@ -68,40 +68,11 @@ def playing(client: LockstepClient) -> Playing:
     return phase
 
 
-class Test始まる前の数行:
+class Testつないでいる間の行:
     def test_つないでいる間は_中継の場所を出す(self) -> None:
-        assert lobby_lines(new_client().phase, "mac.local:8777") == (
+        assert connecting_lines("mac.local:8777") == (
             "中継（mac.local:8777）につないでいる",
         )
-
-    def test_ホストには_自分の番号とつながっている端末と始め方を出す(self) -> None:
-        client = welcomed(0, 1)
-        assert lobby_lines(client.phase, "localhost:8777") == (
-            "通信対戦　あなたは 1P（ホスト）",
-            "つながっている：1P・2P",
-            "全員がつながったら Enter で始める（人間のいない枠は CPU）",
-        )
-
-    def test_ゲストには_ホストを待っていることを出す(self) -> None:
-        client = welcomed(2, 0, 1)
-        lines = lobby_lines(client.phase, "mac.local:8777")
-        assert lines[0] == "通信対戦　あなたは 3P（ゲスト）"
-        assert lines[-1] == "1P（ホスト）が始めるのを待っている"
-
-    def test_始まる前に止まったら_理由と開き直し方を出す(self) -> None:
-        client = new_client()
-        client.disconnected("前の試合が続いているか、定員いっぱいで入れなかった")
-        assert lobby_lines(client.phase, "mac.local:8777") == (
-            "前の試合が続いているか、定員いっぱいで入れなかった。",
-            START_OVER,
-        )
-        # 始まる前は、盤面に重ねる1行は出さない（盤面が無い）。
-        assert describe(client) == ""
-
-    def test_始まったあとは_数行を出さない(self) -> None:
-        client = welcomed(0)
-        client.receive(relay("start", seats=[0, 1], config=SETTINGS, match=1))
-        assert lobby_lines(client.phase, "localhost:8777") == ()
 
 
 class Test盤面に重ねる1行:
@@ -109,6 +80,8 @@ class Test盤面に重ねる1行:
         client = new_client()
         assert describe(client) == ""
         client.receive(relay("welcome", seat=0, role="host", seats=[]))
+        assert describe(client) == ""
+        client.disconnected("前の試合が続いているか、定員いっぱいで入れなかった")
         assert describe(client) == ""
 
     def test_試合中は_操作を待っているプレイヤーがいるときだけ出す(self) -> None:
@@ -120,8 +93,13 @@ class Test盤面に重ねる1行:
         client.receive(relay("input", seat=1, tick=0, bits=0, match=1))
         assert describe(client) == ""
 
-    def test_ずれたとき_止めたときは_全員が閉じてから開き直すよう出す(self) -> None:
-        """開き直すだけでは、ほかの端末がつながっている間は中継に断られる。"""
+    def test_ずれたとき_止めたときは_全員がタイトルへ戻ってからつなぎ直すよう出す(
+        self,
+    ) -> None:
+        """自分だけつなぎ直しても、ほかの端末がつながっている間は中継に断られる。"""
+        assert START_OVER == (
+            "もう一度遊ぶときは、全員が「設定へ」でタイトルへ戻ってから、つなぎ直す"
+        )
         client = welcomed(0)
         client.receive(relay("start", seats=[0, 1], config=SETTINGS, match=1))
         client.receive(relay("desync", tick=19, reports=[]))
@@ -152,10 +130,11 @@ class Test盤面に重ねる1行:
             return describe(client)
 
         assert finished_as(0) == (
-            "試合が終わった。Enter で、同じ顔ぶれ・同じ設定のまま次の試合を始める"
+            "試合が終わった。「もういっかい」で、同じ顔ぶれ・同じ設定のまま次の試合を"
+            "始める"
         )
         assert finished_as(1) == (
-            "試合が終わった。1P（ホスト）が Enter を押すと、次の試合が始まる"
+            "試合が終わった。1P（ホスト）が「もういっかい」を押すと、次の試合が始まる"
         )
 
     def test_ホストが抜けたあとに試合が終わったら_次の試合が始められないと出す(

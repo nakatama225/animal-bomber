@@ -11,7 +11,6 @@ from collections.abc import Callable
 import pytest
 from websockets.protocol import State
 
-from animal_bomber.app.lan import DEFAULT_LAN_SETTINGS
 from animal_bomber.net.protocol import (
     REFUSED_CLOSE_CODE,
     HostSettings,
@@ -22,6 +21,10 @@ from animal_bomber.net.protocol import (
     Welcome,
     parse_relay_message,
 )
+from animal_bomber.presentation.menu.lan_setup import (
+    DEFAULT_LAN_SETUP,
+    lan_settings_from,
+)
 from animal_bomber.shell.relay_link import (
     DEFAULT_RELAY_PORT,
     LEFT_CLOSE_CODE,
@@ -31,6 +34,9 @@ from animal_bomber.shell.relay_link import (
     parse_relay_address,
 )
 from tests.relay_server import running_relay
+
+DEFAULT_LAN_SETTINGS = lan_settings_from(DEFAULT_LAN_SETUP, seed=0)
+"""ロビーの既定から作った設定（中継へ送るものの例。中身は検査に関わらない）。"""
 
 WAIT_SECONDS = 5.0
 """中継から届くのを待つ秒数。同じマシンの中継なら一瞬で届く。"""

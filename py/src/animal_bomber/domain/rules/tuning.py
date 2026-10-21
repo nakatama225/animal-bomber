@@ -198,8 +198,9 @@ BLAST_DAMAGE: Final = 2
 STARTING_HP: Final = 2
 """体力の始めの値（半分の単位）。爆風1回で倒れる。
 
-原型の既定（hpP1・hpP2・hpCPU = 1）と同じ。設定の画面（段階 10）でプレイヤーごとに
-変えられるようにする。動物ごとの上乗せは、この値に足す。
+原型の既定（hpP1・hpP2・hpCPU = 1）と同じ。設定の画面（ルールの画面とロビー）で、
+プレイヤーごとに爆風 1〜6 回ぶんを選べる（`MatchConfig.starting_hp`）。動物ごとの
+上乗せは、この値に足す。
 """
 
 INVULNERABLE_SECONDS: Final = 1.25
@@ -253,7 +254,8 @@ AUTOBOMB_INTERVAL: Final = seconds_to_ticks(AUTOBOMB_INTERVAL_SECONDS)
 ROUND_SECONDS: Final = 180
 """1ラウンドの制限時間の既定値（秒）。原型・TypeScript 版と同じ。
 
-設定の画面（段階 10）で変えられるようにする。
+設定の画面（ルールの画面とロビー）で、1:00・3:00・5:00・7:00 から選べる
+（`MatchConfig.round_limit`）。
 """
 
 WINS_TO_TAKE_MATCH: Final = 3
@@ -264,8 +266,10 @@ ROUND_INTERMISSION_SECONDS: Final = 2
 
 ⚠️ 決まった tick のうちに盤面を作り直すと、決着をつけた爆発も、倒れる瞬間も、画面に
 1度も描かれない（描く前に次の盤面へ切り替わる）。決着の場面を見せるために、前の盤面を
-止めたまま少し待つ（TypeScript 版は 42d1cda で直した）。ラウンドの間に出す画面
-（段階 10）は、この待ちの間に重ねる。
+止めたまま少し待つ（TypeScript 版は 42d1cda で修正した）。ラウンドの幕は、この待ちの
+間に重ねる。1台の試合は原型どおり幕をボタンで送るので、送るまで待ちを進めず、送ったら
+待ちを切り上げる（`app/session.py` の `start_next_round`）。通信対戦は、全員が同じ
+tick に次のラウンドへ進むため、この待ちが尽きたら幕を消す。
 """
 
 ROUND_INTERMISSION: Final = seconds_to_ticks(ROUND_INTERMISSION_SECONDS)

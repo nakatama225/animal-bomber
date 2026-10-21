@@ -442,3 +442,78 @@ def test_実物の読み取り_StartとBackを読む() -> None:
     if last == "SKIP-REAL":
         pytest.skip("実機のパッドが繋がっている（仮想パッドの割り当ての前提が崩れる）")
     assert json.loads(last) == ["BACK", "START"]
+
+
+# SDL の仮想の機器を2つ繋ぐ。1つ目は型 0（ゲームコントローラーでない。対応して
+# いない機器）、2つ目は型 1（ゲームコントローラー）。"after" では順を逆にする。窓は
+# 開かない。
+VIRTUAL_UNSUPPORTED = """
+import ctypes, json, sys
+from pathlib import Path
+import pygame
+from pygame._sdl2 import controller
+from animal_bomber.shell.gamepad import ControllerReader
+
+dylib = Path(pygame.__file__).parent / ".dylibs" / "libSDL2-2.0.0.dylib"
+if not dylib.exists():
+    print("SKIP")
+    sys.exit(0)
+SDL = ctypes.CDLL(str(dylib))
+SDL.SDL_JoystickAttachVirtual.argtypes = [ctypes.c_int] * 4
+pygame.display.init()
+controller.init()
+pygame.event.pump()
+if controller.get_count() > 0:
+    print("SKIP-REAL")
+    sys.exit(0)
+reader = ControllerReader()
+before = reader.unsupported
+kinds = [(0, 2, 3, 0), (1, 6, 21, 0)]
+if sys.argv[1] == "after":
+    kinds.reverse()
+for kind in kinds:
+    SDL.SDL_JoystickAttachVirtual(*kind)
+pygame.event.pump()
+pads = reader()
+print(json.dumps({"before": list(before), "pads": len(pads),
+                  "unsupported": list(reader.unsupported)}))
+"""
+
+
+def _unsupported(order: str) -> dict[str, object]:
+    completed = subprocess.run(
+        [sys.executable, "-c", VIRTUAL_UNSUPPORTED, order],
+        env={**os.environ, "SDL_VIDEODRIVER": "dummy"},
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert completed.returncode == 0, completed.stderr
+    last = completed.stdout.splitlines()[-1]
+    if last == "SKIP":
+        pytest.skip(
+            "SDL のライブラリが pygame の中に見つからない（macOS の wheel でない）"
+        )
+    if last == "SKIP-REAL":
+        pytest.skip("実機のパッドが繋がっている（仮想パッドの並びの前提が崩れる）")
+    result: dict[str, object] = json.loads(last)
+    return result
+
+
+def test_実物の読み取り_最初のパッドより前の_対応していない機器の名前を控える() -> None:
+    """原型は、標準のパッドより前に並んだ非標準のパッドで「対応していません」を出す。
+
+    対応していない機器はパッドとしては読まない（パッドは1つだけ）。
+    """
+    result = _unsupported("before")
+    assert result == {
+        "before": [],
+        "pads": 1,
+        "unsupported": ["Virtual Joystick"],
+    }
+
+
+def test_実物の読み取り_最初のパッドよりあとの_対応していない機器は控えない() -> None:
+    """原型は標準のパッドを見つけた所で探すのをやめるので、あとの機器では出さない。"""
+    result = _unsupported("after")
+    assert result == {"before": [], "pads": 1, "unsupported": []}

@@ -14,13 +14,33 @@ from animal_bomber.presentation.audio.parts import Wave
 from animal_bomber.presentation.audio.voices import Voice, hat_voice, note_voice
 
 TEMPO: Final = 138
-"""1分あたりの拍数。"""
+"""1分あたりの拍数（等倍のとき）。"""
+
+MAX_TEMPO_RATE: Final = 2
+"""ゲーム速度に合わせて曲を速めるときの倍率の上限（原型の `Math.min(2, v)`。L6054）。"""
 
 STEPS_PER_BEAT: Final = 4
 """1拍を4つに刻む（16 分音符）。"""
 
 STEP_SECONDS: Final = 60 / TEMPO / STEPS_PER_BEAT
-"""刻み1つの長さ（秒。原型の `60/this.tempo/4`）。"""
+"""等倍の刻み1つの長さ（秒。原型の `60/this.tempo/4`）。"""
+
+
+def tempo_for(speed: float) -> int:
+    """ゲーム速度 `speed` のときの曲の速さ（原型 L6054 の `Math.round(138 * …)`）。
+
+    原型の式は `Math.round(138 * Math.min(2, v))`。
+
+    丸めは JavaScript の `Math.round` と同じく、端数 0.5 を大きいほうへ（1.25 倍は
+    172.5 → 173。Python の `round` だと 172 になる）。
+    """
+    return math.floor(TEMPO * min(MAX_TEMPO_RATE, speed) + 0.5)
+
+
+def step_seconds(tempo: int) -> float:
+    """曲の速さ `tempo` のときの、刻み1つの長さ（秒）。"""
+    return 60 / tempo / STEPS_PER_BEAT
+
 
 ROOT_HZ: Final = 220
 """基準の音（A3）。"""
@@ -70,19 +90,24 @@ def step_voices(step: int, at: float) -> list[Voice]:
     return voices
 
 
-def loop_voices() -> list[Voice]:
-    """1周ぶん（16 刻み）の音。刻み s は時刻 s × `STEP_SECONDS` に置く。"""
+def loop_voices(tempo: int = TEMPO) -> list[Voice]:
+    """1周ぶん（16 刻み）の音。刻み s は時刻 s × 刻みの長さに置く。
+
+    曲を速めても、音符1つの長さ（`BASS_DUR`・`ARP_DUR`）は変えない（原型も刻みの間隔
+    だけを縮める）。
+    """
+    step = step_seconds(tempo)
     voices: list[Voice] = []
-    for step in range(LOOP_STEPS):
-        voices.extend(step_voices(step, step * STEP_SECONDS))
+    for index in range(LOOP_STEPS):
+        voices.extend(step_voices(index, index * step))
     return voices
 
 
-def loop_frames(sample_rate: int) -> int:
+def loop_frames(sample_rate: int, tempo: int = TEMPO) -> int:
     """1周の長さ（標本の数）。
 
     1周は 16 × 60/138/4 = 1.739… 秒で、標本の数にすると割り切れない（48000 Hz で
     83478.26…）。いちばん近い整数に丸める。1周ごとに 1/2 標本までずれるが、曲の
     速さが 10 万分の 1 より小さく変わるだけで、聞き分けられない。
     """
-    return math.floor(LOOP_STEPS * STEP_SECONDS * sample_rate + 0.5)
+    return math.floor(LOOP_STEPS * step_seconds(tempo) * sample_rate + 0.5)

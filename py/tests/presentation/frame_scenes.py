@@ -27,7 +27,6 @@ import pygame
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.lane import lane_spot
 from animal_bomber.domain.state.actors import Foxfire, Leek, SlimeBomb
-from animal_bomber.domain.state.match import MatchState
 from animal_bomber.domain.state.player import Negibon, PlayerId, is_alive
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng, ScriptedRandom
@@ -198,14 +197,13 @@ def renderer_image(
     world: WorldState,
     visuals: FixedVisuals,
     randoms: Sequence[float],
-    match: MatchState | None = None,
     cpu_players: Collection[PlayerId] = (),
 ) -> tuple[Image, list[float]]:
     """取っておいた絵を貼って描いた絵と、引いた見た目の乱数。"""
     scripted = ScriptedRandom(list(randoms))
     renderer = Renderer(art, CosmeticRng(scripted), cpu_players=cpu_players)
     target = pygame.Surface(art.layout.surface_size)
-    renderer.draw(target, world, match or MatchState(), visuals)
+    renderer.draw(target, world, visuals)
     return rgb(target), scripted.used
 
 

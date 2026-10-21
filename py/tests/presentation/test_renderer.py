@@ -28,7 +28,6 @@ from animal_bomber.domain.state.actors import Actor, Foxfire, Leek, SlimeBomb
 from animal_bomber.domain.state.bomb import Blast, Bomb
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.match import MatchState
 from animal_bomber.domain.state.player import OUT, Negibon
 from animal_bomber.domain.state.world import WorldState, create_world, hash_world
 from animal_bomber.presentation.render.art.blasts import progress_of
@@ -44,7 +43,6 @@ from animal_bomber.presentation.render.baked import (
     players,
 )
 from animal_bomber.presentation.render.baked.art import BakedArt
-from animal_bomber.presentation.render.band import BAND_HEIGHT
 from animal_bomber.presentation.render.layout import Layout
 from animal_bomber.presentation.render.renderer import Renderer
 from animal_bomber.presentation.render.views.player import (
@@ -387,20 +385,6 @@ class Test手本と同じ絵:
         assert_same_frame(got, wanted, FADED)
 
 
-def test_帯は盤面の上に描き_盤面は帯の高さだけ下にずらす() -> None:
-    """帯（ラウンド・勝ち数・体力の1行）は揺らさず、手本の絵には無い。帯の下は同じ。"""
-    layout = Layout(50, BAND_HEIGHT)
-    world = create_world(5, (Animal.RABBIT, Animal.ELEPHANT))
-    world.now = Tick(0)
-    visuals = FixedVisuals()
-    match = MatchState(round=2, wins={0: 1})
-    got, _ = renderer_image(BakedArt(layout), world, visuals, [], match)
-    wanted, _ = direct_image(layout, world, visuals, [])
-    band = np.abs(got[:BAND_HEIGHT] - wanted[:BAND_HEIGHT]).max(axis=2)
-    assert (band > 100).sum() > 50
-    assert_same_frame(got[BAND_HEIGHT:], wanted[BAND_HEIGHT:], 0)
-
-
 @pytest.mark.usefixtures("fine_levels")
 def test_倒れたプレイヤーは描かない() -> None:
     """原型の drawPlayer は、退場したプレイヤーでは最初に帰る。
@@ -475,7 +459,7 @@ def test_知らない種類の盤面の物が来たら止まる() -> None:
     world.actors = [cast(Actor, object())]
     target = pygame.Surface(layout.surface_size)
     with pytest.raises(AssertionError):
-        Renderer(BakedArt(layout)).draw(target, world, MatchState(), FixedVisuals())
+        Renderer(BakedArt(layout)).draw(target, world, FixedVisuals())
 
 
 @pytest.mark.parametrize("tile", [26, 44, 60])

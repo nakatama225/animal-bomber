@@ -1,15 +1,15 @@
 """通信対戦の、いまの様子を文にする（画面のどこに出すかは `render/lan_screen.py`）。
 
-文だけを作る所を、描く所と分けてある。文だけなら、窓を開かずに確かめられる。
+文だけを作る所を、描く所と分けてある。文だけなら、窓を開かずに検証できる。
 
-始まる前（つないでいる・待っている・始まる前に止まった）は、盤面の代わりに数行を出す
-（`lobby_lines`）。試合が始まったあとは、盤面の下の端に1行だけ重ねる
-（`describe_lan_phase`）。⚠️ 重ねた帯は、下の外周と盤面の下の端を隠す。出すのは、入力を
-待って進めない間・試合が決まったあと・止まったあとだけ（盤面が止まっている間）。
+中継につないでいる間（つなぐのを待つ間は窓が止まる）は、窓の真ん中に1行を出す
+（`connecting_lines`）。ロビーは画面（`menu/screens.py` の `lobby_view`）が出す。試合が
+始まったあとは、盤面の下の端に1行だけ重ねる（`describe_lan_phase`）。⚠️ 重ねた帯は、
+下の外周と盤面の下の端を隠す。出すのは、入力を待って進めない間・試合が決まったあと・
+止まったあとだけ（盤面が止まっている間）。
 
-⚠️ ロビーの画面（ホストが動物・CPU の強さ・体力・ルールを選ぶ画面）は段階 10 で作る。
-いまは、ホストが Enter で、既定の設定（`app/lan.py` の `DEFAULT_LAN_SETTINGS`）のまま
-始める。
+中継との接続が切れたときは、原型と同じくタイトルへ戻して通知を出す（`app/shell.py`）
+ので、ここの文は出さない。
 """
 
 from collections.abc import Sequence
@@ -18,22 +18,25 @@ from typing import Final, assert_never
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.net.client import HOST, Connecting, Failed, LanPhase, Lobby, Playing
 
-START_OVER: Final = "もう一度遊ぶときは、全員が窓を閉じてから開き直す"
-"""止まったあと（ずれ・切断・断られた）の案内。
+START_OVER: Final = (
+    "もう一度遊ぶときは、全員が「設定へ」でタイトルへ戻ってから、つなぎ直す"
+)
+"""止まったあと（ずれた・ホストが抜けた）の案内。
 
-⚠️ 開き直すだけでは足りない。中継は、前の試合にいた端末が1つでもつながっている間は、
-新しい接続を断る（途中から入った端末の入力は、誰の試合にも入れられないため）。全員が
-閉じてからでないと、開き直した端末は入れない。同じ顔ぶれのまま続けるときは、試合が
-決まったあとに閉じずに、ホストが Enter で次の試合を始める（`FINISHED_HOST`）。
+⚠️ 自分だけつなぎ直しても足りない。中継は、前の試合にいた端末が1つでもつながっている
+間は、新しい接続を断る（途中から入った端末の入力は、誰の試合にも入れられないため）。
+全員がタイトルへ戻って（接続を閉じて）からでないと、つなぎ直した端末は入れない。同じ
+顔ぶれのまま続けるときは、試合が決まったあとにタイトルへ戻らずに、ホストが
+「もういっかい」で次の試合を始める（`FINISHED_HOST`）。
 """
 
 FINISHED_HOST: Final = (
-    "試合が終わった。Enter で、同じ顔ぶれ・同じ設定のまま次の試合を始める"
+    "試合が終わった。「もういっかい」で、同じ顔ぶれ・同じ設定のまま次の試合を始める"
 )
 """試合が決まったあとの、ホストへの案内。接続を保ったまま次の試合を始める。"""
 
 FINISHED_GUEST: Final = (
-    "試合が終わった。1P（ホスト）が Enter を押すと、次の試合が始まる"
+    "試合が終わった。1P（ホスト）が「もういっかい」を押すと、次の試合が始まる"
 )
 """試合が決まったあとの、ゲストへの案内（原型も、次の試合を始めるのはホストだけ）。"""
 
@@ -56,34 +59,13 @@ def label(player_id: PlayerId) -> str:
     return f"{player_id + 1}P"
 
 
-def lobby_lines(phase: LanPhase, address: str) -> tuple[str, ...]:
-    """試合が始まる前に、盤面の代わりに出す数行。試合が始まったあとは空。
+def connecting_lines(address: str) -> tuple[str, ...]:
+    """中継につないでいる間に、窓の真ん中に出す行。
 
     Args:
-        phase: いまの局面（`net/client.py` の `LanPhase`）。
-        address: つないでいる中継の「ホスト名:ポート」。
+        address: つなぐ中継の「ホスト名:ポート」。
     """
-    match phase:
-        case Connecting():
-            return (f"中継（{address}）につないでいる",)
-        case Lobby(seat=seat, present=present):
-            role = "ホスト" if seat == HOST else "ゲスト"
-            joined = "・".join(label(player) for player in present)
-            if seat == HOST:
-                action = "全員がつながったら Enter で始める（人間のいない枠は CPU）"
-            else:
-                action = "1P（ホスト）が始めるのを待っている"
-            return (
-                f"通信対戦　あなたは {label(seat)}（{role}）",
-                f"つながっている：{joined}",
-                action,
-            )
-        case Failed(played=None, reason=reason):
-            return (f"{reason}。", START_OVER)
-        case Playing() | Failed():
-            return ()
-        case _:
-            assert_never(phase)
+    return (f"中継（{address}）につないでいる",)
 
 
 def describe_lan_phase(phase: LanPhase, waiting: Sequence[PlayerId]) -> str:

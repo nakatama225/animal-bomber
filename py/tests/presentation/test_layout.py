@@ -21,7 +21,6 @@ from animal_bomber.presentation.render.layout import (
     TILE_MAX,
     TILE_MIN,
     Layout,
-    fit_layout,
     fit_tile,
     fit_window,
     js_round,
@@ -108,31 +107,37 @@ def test_マスの座標をピクセルに直す() -> None:
     assert layout.py(2.5) == pytest.approx(0.62 * 44 + 2.5 * 44)
 
 
-def test_帯の高さだけ盤面を下へずらし_描く面を高くする() -> None:
-    """盤面の上にラウンドや勝ち数の帯を足せること（組み立ての段で使う）。"""
-    plain, banded = Layout(44), Layout(44, band=32)
-    assert banded.px(3) == plain.px(3)
-    assert banded.py(3) == plain.py(3) + 32
-    assert banded.surface_size == (plain.board_size[0], plain.board_size[1] + 32)
-
-
 @pytest.mark.parametrize(
     ("window", "tile"),
     [
-        ((1067, 803), 44),
         ((4000, 3000), TILE_MAX),  # 大きい窓でもマス 60 まで（描画の重さの上限）
         ((300, 200), TILE_MIN),  # 小さい窓でもマス 26 から
-        ((1454, 1093), 59),  # 1px でも足りなければ、ひとつ小さいマス
+        # マス 60 の盤面は 24.24 × 60 = 1454.4・18.24 × 60 = 1094.4 px 要る。横の板の
+        # 分（312）と高さの 56 を引いた残りが、1px でも足りなければひとつ小さいマス。
+        ((1455 + 312, 1095 + 56), 60),
+        ((1455 + 312, 1094 + 56), 59),
+        ((1454 + 312, 1095 + 56), 59),
     ],
 )
 def test_窓に収まるいちばん大きいマス(window: tuple[int, int], tile: int) -> None:
-    assert fit_layout(*window).tile == tile
+    assert fit_tile(*window) == tile
 
 
-def test_帯の分を引いてから収める() -> None:
-    # マス 60 の盤面は 24.24 × 60 = 1454.4・18.24 × 60 = 1094.4 px 要る。
-    assert fit_layout(1455, 1095 + 40, band=40).tile == 60
-    assert fit_layout(1455, 1094 + 40, band=40).tile == 59
+def test_窓の高さは上限で頭打ちにし_はみ出す板の高さを返す() -> None:
+    """横の板だけをスクロールする量（`panel_overflow`）は、板の高さと窓の高さの差。"""
+    window = fit_window(1440, 900, panel_height=979, max_height=810)
+    assert window.size == (1369, 810)
+    assert window.panel_overflow == 979 - 810
+    # 上限より低ければ、上限は使わない。盤面のほうが高ければ板ははみ出さない。
+    low = fit_window(1440, 900, panel_height=600, max_height=1000)
+    assert low.size == (1369, 839)
+    assert low.panel_overflow == 0
+    assert fit_window(1440, 900, panel_height=979).panel_overflow == 0
+
+
+def test_盤面の四角は_窓の左上の盤面の大きさ() -> None:
+    window = fit_window(1440, 900, panel_height=979, max_height=810)
+    assert window.board_rect == (0, 0, 1115, 839)
 
 
 def test_範囲の外のマスは作らない() -> None:
@@ -157,7 +162,7 @@ def test_外周の鍋は_盤面のまわりの余白の真ん中に乗る(tile: 
     ルールの層は外周のプレイヤーを帯の真ん中に置く。余白の幅が違うと、鍋の中心が余白の
     真ん中からずれる（4辺とも、描く面の縁から余白の半分の所に乗るはず）。
     """
-    layout = Layout(tile, band=32)
+    layout = Layout(tile)
     width, height = layout.surface_size
     margin = layout.origin_x
     alongs = (3.25, 26.6, 43.1, 61.3)
@@ -166,6 +171,6 @@ def test_外周の鍋は_盤面のまわりの余白の真ん中に乗る(tile: 
         spot = lane_spot(along)
         x, y = layout.px(spot.position.x), layout.py(spot.position.y)
         across = spot.side in (LaneSide.LEFT, LaneSide.RIGHT)
-        gaps = (x, width - x) if across else (y - layout.band, height - y)
+        gaps = (x, width - x) if across else (y, height - y)
         # 描く面の大きさは px の整数に丸めてあるので、右と下の余白は 0.5px まで違う。
         assert min(gaps) == pytest.approx(margin / 2, abs=0.5)

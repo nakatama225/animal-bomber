@@ -1,12 +1,12 @@
 """通信対戦の様子を、窓に描く（文は `presentation/lan_status.py` が作る）。
 
-- 試合が始まる前：盤面の代わりに、真ん中に数行（`LanScreen.draw_lobby`）
+- 中継につないでいる間（窓が止まる）：窓を塗り、真ん中に1行（`LanScreen.draw_lobby`）
 - 試合が始まったあと：盤面の下の端に、1行の帯（`LanScreen.draw_notice`）
 
-文は、画面の文を描く部品（`ui/typeset.py` の `TextPainter`）で描く。日本語は
-ヒラギノ丸ゴ（`ui/fonts.py`）、絵文字は色つきの絵文字の書体。⚠️ 日本語の書体が
-見つからなければ pygame の既定の書体で描くので、四角に化ける。ロビーの画面は、起動の
-層がロビーの画面（`screens/lobby.py`）に替えるまでの間のもの。
+ロビーは画面（`screens/lobby.py`）が描く。文は、画面の文を描く部品
+（`ui/typeset.py` の `TextPainter`）で描く。日本語はヒラギノ丸ゴ（`ui/fonts.py`）、
+絵文字は色つきの絵文字の書体。⚠️ 日本語の書体が見つからなければ pygame の既定の書体で
+描くので、四角に化ける。
 """
 
 from collections.abc import Sequence

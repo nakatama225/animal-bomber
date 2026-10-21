@@ -48,6 +48,11 @@
   欄の字を1つ消し、もどるには使わない（もどるのは Escape とパッドの B と
   「← もどる」）。欄が空でももどらない（消しているうちに1回多く押して画面を
   出てしまわないように）
+- 中継につなげなかったとき（名前を引けない・断られた・ロビーに入る前に切れた）は、
+  LAN の画面に留まり、「接続しています…」の行に理由を出す（`connection_failed`）。
+  原型は何も出さずにタイトルへ戻る（ブラウザのページのアドレスにつなぐので、打ち
+  間違いが無い）。この版は打ち込んだ名前につなぐので、名前を修正して押し直せるように
+  した
 """
 
 import string
@@ -360,6 +365,7 @@ class MenuFlow:
         self._splash = Splash(started_ms)
         self._field = NameField(relay or "")
         self._connecting = False
+        self._failure = ""
         self._lobby: Lobby | None = None
         self._pad_drives_match = False
         self._can_pause = False
@@ -424,6 +430,7 @@ class MenuFlow:
                     self._field.text,
                     connecting=self._connecting,
                     can_join=self._address_of(self._field.text) is not None,
+                    failure=self._failure,
                 )
             case MenuScreen.LOBBY:
                 if self._lobby is None:
@@ -552,6 +559,25 @@ class MenuFlow:
         if first:
             self._show(MenuScreen.LOBBY)
         return self._share()
+
+    def connect_at_launch(self) -> tuple[Effect, ...]:
+        """起動の引数 `--relay` の中継に、起動してすぐつなぎ始める。
+
+        LAN の画面へ移り、欄の名前（`--relay` の値）で「さんかする」を押したのと同じく
+        つなぐ（段階 9 の遊び方のまま、ロビーから始まる）。欄の名前が読めなければ
+        何もしない（起動の引数は、読めることを先に確認してある）。
+        """
+        self._show(MenuScreen.LAN)
+        return self._connect(self._address_of(self._field.text))
+
+    def connection_failed(self, reason: str) -> None:
+        """中継につなげなかった（ロビーに入る前に止まった）。
+
+        LAN の画面に留まり、「接続しています…」の行に `reason` を出す（モジュールの説明
+        の「原型と違えた所」）。また押せるようにする。
+        """
+        self._connecting = False
+        self._failure = reason
 
     def start_play(self, *, pad_drives_match: bool, can_pause: bool) -> None:
         """試合が始まった（もういっかいで次の試合が始まったときも）。
@@ -760,6 +786,7 @@ class MenuFlow:
         if address is None or self._connecting:
             return ()
         self._connecting = True
+        self._failure = ""
         return (ConnectLan(address),)
 
     def _share(self) -> tuple[Effect, ...]:
@@ -769,9 +796,13 @@ class MenuFlow:
         return (ShareLobby(self._lobby_choices.setup),)
 
     def _show(self, screen: MenuScreen) -> None:
-        """画面を替える（原型の `showScreen`）。確認の画面を畳み、カーソルを先頭へ。"""
+        """画面を替える（原型の `showScreen`）。確認の画面を畳み、カーソルを先頭へ。
+
+        つなげなかった理由は、LAN の画面を出たら消す。
+        """
         self._dialog = None
         self._screen = screen
+        self._failure = ""
         self._cursor.reset()
 
     def _ask(self, kind: DialogKind) -> None:

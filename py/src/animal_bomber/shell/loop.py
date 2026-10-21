@@ -27,12 +27,11 @@ TypeScript 版（`ts/src/platform/FrameLoop.ts`）は、ブラウザが画面の
 進み具合）を、描く位置の補間に使っている。Python 版は描く時刻を自分で決められる
 ので、tick の境目に合わせて描き、補間をしない。
 
-これが成り立つのは、ゲームの速さが等倍か、整数の倍速のときだけ。TypeScript 版は、
-整数でない速さ（0.5 倍・1.5 倍など）でも補間している。0.5 倍では試合が2フレームに
-1回しか進まず、試合が tick の途中にいるフレームが出るため。Python 版で整数でない
-速さを作るなら、`step()` を呼ぶ回数の端数（0.5 倍なら 1 フレームに半回ぶん）で補間
-する（TypeScript 版の `GameSpeed.progress`）。輪が返すもの（tick の数）は変えなくて
-よい。
+ゲームの速さ（`GameSpeed`）が整数でないとき（0.5 倍・1.5 倍など）、TypeScript 版は
+`step()` を呼ぶ回数の端数で補間している（`GameSpeed.progress`）。0.5 倍では試合が
+2フレームに1回しか進まないため。この版は補間を作らず、進めた tick の盤面をそのまま
+描く（0.5 倍では、同じ盤面を2フレーム続けて描く）。輪が返すもの（tick の数）は
+速さに関わらず同じで、倍率を掛けるのは呼ぶ側（`app/shell.py`）。
 
 輪の形も変えた。呼び返す関数を2つ渡すのでなく、generator にしてある
 （`for ticks in frames():`）。止めるときは `break` で抜けるだけで、止めるための
@@ -77,8 +76,14 @@ TypeScript 版（`ts/src/platform/FrameLoop.ts`）は、ブラウザが画面の
 
 import time
 from collections.abc import Callable, Iterator
+from typing import Final
 
 from animal_bomber.domain.core.tick import TICKS_PER_SECOND
+from animal_bomber.presentation.menu.choices import (
+    DEFAULT_SPEED,
+    SPEED_CHOICES,
+    assert_choice,
+)
 
 NS_PER_SECOND = 1_000_000_000
 """1秒のナノ秒数。時刻はナノ秒の整数（`time.perf_counter_ns`）で扱う。"""
@@ -171,6 +176,57 @@ def sleep_then_spin(
     """予定の時刻の少し前（`SPIN_MARGIN_NS`）まで眠り、残りを空回りして待つ。"""
     sleep_until(deadline - SPIN_MARGIN_NS, clock, sleep)
     spin_until(deadline, clock)
+
+
+SPEED_PARTS: Final = 4
+"""ゲーム速度の刻み（0.25 倍）を整数にするときの分母（速さは `rate × 4` で持つ）。"""
+
+
+class GameSpeed:
+    """ゲーム速度（1台の試合の横の板のつまみ。0.5〜3 倍を 0.25 刻み）。
+
+    輪が返す tick の数（実時間の進み）に倍率を掛けて、そのフレームで試合を進める回数に
+    する（TypeScript 版の `GameSpeed.take` と同じ）。1回に進める時間の長さ（1 tick）は
+    変えない。原型は経過時間に倍率を掛けて細かく刻むが、この版の 1 tick は固定の長さで、
+    ルールの層に経過時間を渡さない（リポジトリ共通の約束）。
+
+    1 に満たない端数は次のフレームへ持ち越す。0.5 倍なら2フレームに1回、1.5 倍なら
+    1回と2回を交互に進める。端数は 0.25 倍の刻みの整数で持つので、何時間回しても
+    倍率どおりの回数からずれない。補間はしない（描く位置は進めた tick のまま。0.5 倍
+    では、試合が進まないフレームが出る。モジュールの説明の「TypeScript 版との違い」）。
+
+    ⚠️ 押してすぐ離した爆弾と技のキーを、何回進めても1回ぶんにするのは、進めるたびに
+    キーを忘れる呼ぶ側（`keyboard.end_tick()`）。原型にも、2倍速で1回の押しが2〜3回ぶんに
+    増えた事故があった（更新履歴 1.6.2）。
+    """
+
+    __slots__ = ("_carry", "_parts")
+
+    def __init__(self, rate: float = DEFAULT_SPEED) -> None:
+        self._parts = 0
+        self._carry = 0
+        self.set(rate)
+
+    @property
+    def rate(self) -> float:
+        """いまの倍率。"""
+        return self._parts / SPEED_PARTS
+
+    def set(self, rate: float) -> None:
+        """倍率を変える。持ち越した端数は残す（つまみを動かしても、時間を捨てない）。
+
+        Raises:
+            ValueError: 選べる倍率（`SPEED_CHOICES`）でないとき。
+        """
+        assert_choice(SPEED_CHOICES, rate, "ゲーム速度")
+        self._parts = round(rate * SPEED_PARTS)
+
+    def take(self, ticks: int) -> int:
+        """実時間で `ticks` 回ぶん進んだフレームに、試合を進める回数。"""
+        self._carry += ticks * self._parts
+        steps = self._carry // SPEED_PARTS
+        self._carry -= steps * SPEED_PARTS
+        return steps
 
 
 def frames(

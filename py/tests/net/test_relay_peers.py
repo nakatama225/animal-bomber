@@ -26,13 +26,14 @@ PY_ROOT = Path(__file__).resolve().parents[2]
 
 PEER = """
 import json, sys, time
-from animal_bomber.app.lan import DEFAULT_LAN_SETTINGS
 from animal_bomber.domain.input.player_input import PlayerInput
+from animal_bomber.presentation.menu import lan_setup
 from animal_bomber.domain.state.world import hash_world
 from animal_bomber.net.client import Failed, Lobby, LockstepClient, Playing
 from animal_bomber.shell.relay_link import RelayLink
 from tests.net.fake_relay import TestHooks
 
+DEFAULT_LAN_SETTINGS = lan_setup.lan_settings_from(lan_setup.DEFAULT_LAN_SETUP, seed=0)
 port, ticks, leave_after = (int(value) for value in sys.argv[1:4])
 MOVES = (PlayerInput.RIGHT, PlayerInput.DOWN, PlayerInput.LEFT, PlayerInput.UP)
 EVERY = PlayerInput.UP | PlayerInput.DOWN | PlayerInput.LEFT | PlayerInput.RIGHT

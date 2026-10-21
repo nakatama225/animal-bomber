@@ -197,8 +197,7 @@ class LockstepDriver:
         self._link = link
         self._match = match
         self._clock = MatchClock()
-        # CPU に替わったと数える人間のプレイヤー（段階 10 の名札のため。替えるのは
-        # 窓口）。
+        # CPU に替わったと数える人間のプレイヤー（名札のため。替えるのは窓口）。
         self._replaced: list[PlayerId] = []
         self._desync: Desync | None = None
         self._started = False
@@ -319,12 +318,17 @@ class LockstepDriver:
             if not log.replaced_at(tick, player) and not self._inputs.has(player, tick)
         ]
 
+    @property
+    def humans(self) -> tuple[PlayerId, ...]:
+        """試合を始めたときに人間が操作していたプレイヤー（中継が配った人間の一覧）。"""
+        return self._humans
+
     def human_players(self) -> list[PlayerId]:
         """いま人間が操作しているプレイヤー。抜けて CPU に替わったプレイヤーは含めない。
 
         替わったと数えるのは、CPU に任せる tick を進めてから。抜けた知らせが届いた
-        時点ではまだ届いていた入力で進めているので、名札もそれに合わせる。名札は段階 10
-        で作るので、いまは src から読まない（テストだけが読む）。
+        時点ではまだ届いていた入力で進めているので、名札もそれに合わせる（名札は
+        `app/lan.py` の `LanMatch.roster` が作る）。
         """
         return [player for player in self._humans if player not in self._replaced]
 
@@ -368,11 +372,7 @@ class LockstepDriver:
             log.depart(last_tick, player_id)
 
     def _note_replaced(self, tick: MatchTick) -> None:
-        """この tick から CPU に任せるプレイヤーを、替わったと数える。
-
-        段階 10 の名札のため。数えた結果は、いまは src から読まない（読む
-        `human_players` を、テストだけが呼ぶ）。
-        """
+        """この tick から CPU に任せるプレイヤーを、替わったと数える（名札のため）。"""
         log = self._inputs.log
         for player in self._humans:
             if player not in self._replaced and log.replaced_at(tick, player):

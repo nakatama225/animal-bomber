@@ -11,7 +11,6 @@ from dataclasses import replace
 import pytest
 
 from animal_bomber.ai.levels import CpuLevelKey
-from animal_bomber.app.lan import DEFAULT_LAN_SETTINGS
 from animal_bomber.domain.core.tick import seconds_to_ticks
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.match import MatchConfig
@@ -61,15 +60,11 @@ class Test既定:
             == DEFAULT_LAN_SETUP
         )
 
-    def test_ホストがEnterで始める設定は_ロビーの既定から作る(self) -> None:
-        """段階 9 で書いた既定の設定と、1つも値が変わらない。"""
-        assert lan_settings_from(DEFAULT_LAN_SETUP, 0) == DEFAULT_LAN_SETTINGS
-        assert (
-            LanSettings(
-                MatchConfig(seed=0, animals=(R, F, X, E), starting_hp=(2, 2, 2, 2)),
-                (CpuLevelKey.NORMAL,) * 4,
-            )
-            == DEFAULT_LAN_SETTINGS
+    def test_ロビーの既定から作る設定は_段階9の既定の設定と同じ(self) -> None:
+        """段階 9 でホストが Enter で始めていた既定の設定と、1つも値が変わらない。"""
+        assert lan_settings_from(DEFAULT_LAN_SETUP, 0) == LanSettings(
+            MatchConfig(seed=0, animals=(R, F, X, E), starting_hp=(2, 2, 2, 2)),
+            (CpuLevelKey.NORMAL,) * 4,
         )
 
 

@@ -29,8 +29,13 @@
 `bench_render.py` の冒頭の「測っていないもの」）。
 
 場面で使う絵は、作るときに全部描いておく（試合の前に描いておく `BakedArt.prebuild` と、
-場面だけで出る状態の印の組み合わせ）。盤面は描く面の左上 (0, 0) に描き、横の板は
-その右に貼る（遊ぶときの窓の並び。`layout.WindowLayout`）。
+場面だけで出る状態の印の組み合わせ）。盤面は描く面の左上 (0, 0) に盤面の四角で切って
+描き、横の板はその右に貼る（遊ぶときの窓の並び。`layout.WindowLayout` と
+`app/shell.py`）。
+
+遊ぶときに試合の画面へ重ねるもののうち、通知（`#toast`）・ポーズの幕・ラウンドの幕と
+優勝の幕・確認の画面・通信対戦の案内の帯は、場面に入れていない。出ている間だけ重ね、
+どれも取っておいた絵を1〜2枚貼るだけ（幕のぼかしは幕を出したときに1回だけ作る）。
 """
 
 import math
@@ -118,6 +123,7 @@ class MatchScene:
         self._renderer = Renderer(self._art, CosmeticRng(rng), cpu_players=CPU_PLAYERS)
         self._panel = SidePanel(TextPainter())
         self._panel_left = layout.board_size[0] + PANEL_GAP
+        self._board_rect = pygame.Rect((0, 0), layout.board_size)
         self._cells = open_cells()
         self._world = self._build_world(rng)
         self._match = MatchState()
@@ -188,10 +194,16 @@ class MatchScene:
         return self._panel.builds - self._panel_builds_before
 
     def draw(self, target: pygame.Surface, frame: int) -> None:
-        """`frame` フレーム目を描く（盤面を左上に、横の板をその右に）。"""
+        """`frame` フレーム目を描く（盤面を左上に、横の板をその右に）。
+
+        盤面は、遊ぶときと同じく盤面の四角で切って描く（画面の揺れと粒子が、すき間へ
+        はみ出さない。`app/shell.py`）。
+        """
         self._pose(frame)
         self.visuals.advance(frame, self._fire, self._cells)
-        self._renderer.draw(target, self._world, self._match, self.visuals)
+        target.set_clip(self._board_rect)
+        self._renderer.draw(target, self._world, self.visuals)
+        target.set_clip(None)
         now_ms = self._start_ms + frame * FRAME_MS
         self._panel.show(self._panel_content(), now_ms)
         self._panel.draw(target, (self._panel_left, 0), now_ms)

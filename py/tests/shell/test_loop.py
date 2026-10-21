@@ -13,6 +13,7 @@ from animal_bomber.shell.loop import (
     MAX_TICKS_PER_FRAME,
     NS_PER_SECOND,
     SPIN_MARGIN_NS,
+    GameSpeed,
     TickAccumulator,
     frames,
     sleep_then_spin,
@@ -234,3 +235,42 @@ class Test待ち方:
         expected = (deadline - SPIN_MARGIN_NS - read_ns) / NS_PER_SECOND
         assert slept == [pytest.approx(expected)]
         assert now[0] >= deadline
+
+
+class Testゲーム速度:
+    def test_等倍なら_輪が返した数だけ進める(self) -> None:
+        speed = GameSpeed()
+        assert speed.rate == 1.0
+        assert [speed.take(ticks) for ticks in (0, 1, 2, 15)] == [0, 1, 2, 15]
+
+    def test_2倍なら_1フレームに2回進める(self) -> None:
+        speed = GameSpeed(2.0)
+        assert [speed.take(1) for _ in range(3)] == [2, 2, 2]
+
+    def test_0点5倍なら_2フレームに1回進める(self) -> None:
+        speed = GameSpeed(0.5)
+        assert [speed.take(1) for _ in range(6)] == [0, 1, 0, 1, 0, 1]
+
+    def test_端数は持ち越し_長く回しても合計は倍率どおり(self) -> None:
+        """1.25 倍で 400 フレーム回すと、ちょうど 500 回。"""
+        speed = GameSpeed(1.25)
+        steps = [speed.take(1) for _ in range(400)]
+        assert set(steps) == {1, 2}
+        assert sum(steps) == 500
+
+    def test_倍率を変えても_持ち越した端数は捨てない(self) -> None:
+        speed = GameSpeed(0.5)
+        assert speed.take(1) == 0
+        speed.set(1.5)
+        # 持ち越した 0.5 回ぶんに 1.5 回ぶんを足して 2 回。
+        assert speed.take(1) == 2
+
+    @pytest.mark.parametrize("rate", [0.25, 3.25, 1.1])
+    def test_範囲と刻みの外の倍率は受け付けない(self, rate: float) -> None:
+        """原型のつまみは 0.5〜3 を 0.25 刻み。"""
+        with pytest.raises(ValueError, match="ゲーム速度"):
+            GameSpeed(rate)
+        speed = GameSpeed()
+        with pytest.raises(ValueError, match="ゲーム速度"):
+            speed.set(rate)
+        assert speed.rate == 1.0

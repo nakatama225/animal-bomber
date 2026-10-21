@@ -758,7 +758,9 @@ def manual_view(sound: SoundSetting) -> ManualView:
     )
 
 
-def lan_view(field_text: str, *, connecting: bool, can_join: bool) -> LanView:
+def lan_view(
+    field_text: str, *, connecting: bool, can_join: bool, failure: str = ""
+) -> LanView:
     """LAN対戦。
 
     Args:
@@ -767,6 +769,8 @@ def lan_view(field_text: str, *, connecting: bool, can_join: bool) -> LanView:
             「接続しています…」を出す。
         can_join: 欄の名前が中継の名前として読めるか（読めなければ「さんかする」を
             押せない）。
+        failure: つなげなかった理由（`MenuFlow.connection_failed`）。つないでいない
+            間、「接続しています…」の行に出す。無ければ空。
     """
     host = MenuGroup(
         "m0",
@@ -801,7 +805,7 @@ def lan_view(field_text: str, *, connecting: bool, can_join: bool) -> LanView:
         join=join,
         field_label=JOIN_FIELD_LABEL,
         field_text=field_text,
-        status=CONNECTING if connecting else "",
+        status=CONNECTING if connecting else failure,
         groups=_ordered(MenuScreen.LAN, [host, join]),
     )
 
