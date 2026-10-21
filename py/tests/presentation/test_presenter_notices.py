@@ -36,6 +36,7 @@ from animal_bomber.domain.events import (
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
+from animal_bomber.domain.rules.match import MatchConfig
 from animal_bomber.domain.state.actions import Charge, Tongue
 from animal_bomber.domain.state.actors import BurntTongue
 from animal_bomber.domain.state.effects import EffectKind
@@ -46,7 +47,8 @@ from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.blast import add_blast
 from animal_bomber.domain.systems.bomb import place_bomb_at
 from animal_bomber.domain.systems.negibon import send_to_lane
-from animal_bomber.presentation.hud.roster import Roster, local_roster
+from animal_bomber.net.protocol import LanSettings
+from animal_bomber.presentation.hud.roster import Roster, lan_roster, local_roster
 from animal_bomber.presentation.presenter import Presenter
 from tests.helpers import clear_board, idle, make_world, only_for
 
@@ -198,6 +200,31 @@ class Test葱ボン:
             "🌿 かえる 復活！ 1P が葱ボンへ",
         ]
 
+    def test_通信対戦で抜けてCPUに替わったプレイヤーは_入れ替わりで元の番号で呼ぶ(
+        self,
+    ) -> None:
+        """原型の negiHit（L2354）は `label` で呼び、抜けても書き換えない（L3793）。
+
+        替わったプレイヤーが当てる側でも、当てられる側でも「2P」のまま。替わった
+        プレイヤーは CPU なので、当てられても外へ回った通知（L2269。人間だけ）は
+        出さない。
+        """
+        settings = LanSettings(
+            MatchConfig(seed=1, animals=(Animal.ELEPHANT, Animal.FROG)),
+            (CpuLevelKey.NORMAL, CpuLevelKey.NORMAL),
+        )
+        replaced: tuple[PlayerId, ...] = (1,)
+        roster = lan_roster(settings, humans=(0, 1), local=0, replaced=replaced)
+        shooter: list[SimEvent] = [Revived(player=1, replaced=0, at=Point(5.5, 5.5))]
+        assert notices_of(shooter, roster=roster) == [
+            "🌿 ぞう は葱ボンへ！ 外周から葱を撃って復活をねらえ",
+            "🌿 2P 復活！ 1P が葱ボンへ",
+        ]
+        victim: list[SimEvent] = [Revived(player=0, replaced=1, at=Point(5.5, 5.5))]
+        shown = notices_of(victim, roster=roster)
+        assert shown == ["🌿 1P 復活！ 2P が葱ボンへ"]
+        assert not any("かえる" in text for text in shown)
+
     def test_外周が閉じたら_退場したと出す(self) -> None:
         """原型の negibonCutoff（L2362）。"""
         assert notices_of([LanesClosed(players=(1,))]) == [
@@ -339,17 +366,19 @@ class Test体当たりと鼻水:
             "🍗 ぞう 突進で チキン を吸い込んだ！",
         ]
 
-    def test_前のtickに体当たりで進んでいなければ_吸い込んだとは出さない(self) -> None:
+    def test_体当たりしていなければ_足元で拾っても吸い込んだとは出さない(
+        self,
+    ) -> None:
         world, elephant, _ = arena((Animal.ELEPHANT, Animal.RABBIT))
         put_item(world, elephant.position.cell(), ItemKind.FIRE)
         assert Recorder(world).step() == []
-        taken: list[SimEvent] = [
-            ItemTaken(cell=Cell(3, 5), kind=ItemKind.FIRE, taker=0)
-        ]
-        assert notices_of(taken, world) == []
 
-    def test_体当たりで吸い込んだと出すのは_そのtickの最初の1つだけ(self) -> None:
-        """見た目の粒（`scene/effects.py` の `scooped`）と同じ見分け方。"""
+    def test_吸い込んだと出すのは_吸い込んだ印のある取得だけ(self) -> None:
+        """見た目の粒（`scene/effects.py` の `scooped`）と同じ項目で見分ける。
+
+        項目は `ItemTaken.swept`。前の tick に体当たりしていたかは見ない（体当たりの
+        最中の盤面を渡しても、印の無い取得には出さない）。
+        """
         world, elephant, _ = arena((Animal.ELEPHANT, Animal.RABBIT))
         elephant.action = Charge(direction=Direction.RIGHT, remaining=CHARGE_DURATION)
         notices = RecordingNotices()
@@ -357,13 +386,67 @@ class Test体当たりと鼻水:
         presenter.consume([], world)
         presenter.consume(
             [
-                ItemTaken(cell=Cell(4, 5), kind=ItemKind.FIRE, taker=0),
+                ItemTaken(cell=Cell(4, 5), kind=ItemKind.FIRE, taker=0, swept=True),
                 ItemTaken(cell=Cell(5, 5), kind=ItemKind.SHOE, taker=0),
                 ItemTaken(cell=None, kind=ItemKind.BOMB, taker=0),
             ],
             world,
         )
         assert notices.shown == ["🔥 ぞう 突進で 火力+1 を吸い込んだ！"]
+        # 盤面を渡さなくても、印があれば出す（前の tick を覚えない）。
+        swept: list[SimEvent] = [
+            ItemTaken(cell=Cell(4, 5), kind=ItemKind.SHOE, taker=0, swept=True)
+        ]
+        assert notices_of(swept) == ["👟 ぞう 突進で スピード+ を吸い込んだ！"]
+
+    def test_体当たりが時間切れで終わったtickに_歩いて拾ったものには出さない(
+        self,
+    ) -> None:
+        """吸い込んだ通知（原型 L2818）は突進の最中にしか出ない。
+
+        原型は効果の残りを先に減らし、突進が切れたフレームは pickupCheck で拾う
+        （L4312-4317・L4342）。残り 1 tick の体当たりの最後の1歩はマス 3 の中で
+        止まり、同じ tick のふつうの移動でマス 4 に入って拾う。
+        """
+        world, elephant, _ = arena((Animal.ELEPHANT, Animal.RABBIT))
+        elephant.position = Point(3.78, 5.5)
+        elephant.action = Charge(direction=Direction.RIGHT, remaining=Tick(1))
+        put_item(world, Cell(4, 5), ItemKind.FIRE)
+        recorder = Recorder(world)
+        shown = recorder.step(only_for(world, 0, PlayerInput.RIGHT))
+        assert elephant.action is None
+        assert not any(item.cell == Cell(4, 5) for item in world.items)
+        assert not any("吸い込んだ" in text for text in shown)
+
+    def test_体当たりの最後の1歩でマスに入ったなら_吸い込んだと出す(self) -> None:
+        """残り 1 tick の体当たりの最後の1歩がマス 4 に入るなら、体当たりで吸い込む。"""
+        world, elephant, _ = arena((Animal.ELEPHANT, Animal.RABBIT))
+        elephant.position = Point(3.81, 5.5)
+        elephant.action = Charge(direction=Direction.RIGHT, remaining=Tick(1))
+        put_item(world, Cell(4, 5), ItemKind.FIRE)
+        recorder = Recorder(world)
+        shown = recorder.step(only_for(world, 0, PlayerInput.RIGHT))
+        assert elephant.action is None
+        assert shown == ["🔥 ぞう 突進で 火力+1 を吸い込んだ！"]
+
+    def test_体当たりが柱で終わったtickに_歩いて拾ったものには出さない(
+        self,
+    ) -> None:
+        """原型は柱に当たると突進を消して戻り（L2863）、ふつうに動いて拾う（L4342）。
+
+        上の柱 (4, 4) の手前で上へ体当たりを始めた直後、最初の1歩で柱に当たって
+        終わり、同じ tick に右へ歩いてマス 5 に入って拾う。
+        """
+        world, elephant, _ = arena((Animal.ELEPHANT, Animal.RABBIT))
+        elephant.position = Point(4.97, 5.5)
+        elephant.facing = Direction.UP
+        elephant.action = Charge(direction=Direction.UP, remaining=CHARGE_DURATION)
+        put_item(world, Cell(5, 5), ItemKind.FIRE)
+        recorder = Recorder(world)
+        shown = recorder.step(only_for(world, 0, PlayerInput.RIGHT))
+        assert elephant.action is None
+        assert not any(item.cell == Cell(5, 5) for item in world.items)
+        assert not any("吸い込んだ" in text for text in shown)
 
     def test_鼻水は_消した爆弾と流したうんこの数を出す(self) -> None:
         """原型の elephantSnot（L3034-3036）。何も消さなければ出さない。"""

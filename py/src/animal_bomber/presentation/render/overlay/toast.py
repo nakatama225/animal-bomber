@@ -7,9 +7,10 @@
 薄れていく間の絵は、整数の不透明度ごとに薄めた写しを取っておいて、薄めずに貼る
 （py/AGENTS.md の「描画の重さ」。`ui/shapes.py` の `Fader`）。
 
-⚠️ 原型の地は不透明度 0.92 で、下の盤面がわずかに透ける。この版の地は不透明にした
-（枠と字を不透明のまま地だけ透かすには、地と枠を分けて描く手間が要るので。見て分かる
-違いは小さい）。
+地は原型と同じく不透明度 0.92 で、下の盤面がわずかに透ける。枠と字は不透明のまま
+（`rounded_box` の `fill_alpha` で内側だけを透かす）。通知の下は毎フレーム描き直す
+（試合の画面は前のフレームの通知の下を塗り直してから盤面を描き、試合の外の画面と幕は
+全面を描く）ので、透けた地が重なって濃くなることは無い。
 """
 
 from typing import Final
@@ -31,6 +32,12 @@ TOP: Final = 18
 
 FILL: Final = (20, 12, 8)
 """地の色（原型の `rgba(20,12,8,.92)` の色）。"""
+
+FILL_ALPHA: Final = round(0.92 * 255)
+"""地の不透明度（原型の 0.92 を 8 bit にした 235）。
+
+幕の `SHADE_ALPHA` と同じく四捨五入する（切り捨てなら 234）。
+"""
 
 PAD_X: Final = 18
 """左右の余白（px。原型の `padding:9px 18px`）。"""
@@ -78,7 +85,10 @@ class ToastOverlay:
                 line + 2 * (PAD_Y + BORDER),
             )
             image = pygame.Surface(size, pygame.SRCALPHA)
-            image.blit(rounded_box(size, RADIUS, FILL, None, ACCENT2, BORDER), (0, 0))
+            box = rounded_box(
+                size, RADIUS, FILL, None, ACCENT2, BORDER, fill_alpha=FILL_ALPHA
+            )
+            image.blit(box, (0, 0))
             image.blit(
                 words,
                 (PAD_X + BORDER, PAD_Y + BORDER + (line - words.get_height()) // 2),

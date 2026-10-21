@@ -321,7 +321,7 @@ class Test名札:
         assert match.roster()[1] == Human("2P")
         for _ in range(4):
             match.step()
-        assert match.roster()[1] == Cpu(1, CpuLevelKey.NORMAL)
+        assert match.roster()[1] == Cpu(1, CpuLevelKey.NORMAL, label="2P")
         assert cpu_players(match.roster()) == {1, 2, 3}
 
     def test_ゲストの名札は_自分の枠をこの端末の枠にする(self) -> None:

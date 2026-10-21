@@ -14,7 +14,9 @@
 
 import math
 
-from animal_bomber.domain.core.coord import Cell, Direction
+import pytest
+
+from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.core.entity_id import EntityId
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import Moment, TechniqueMoment
@@ -42,6 +44,7 @@ from animal_bomber.presentation.render.views.actors import slime_look
 from animal_bomber.presentation.render.views.lane import lane_cooldown_left
 from animal_bomber.presentation.render.views.player import (
     TrackedMotion,
+    drawn_position,
     invulnerable_left,
     player_look,
 )
@@ -370,3 +373,56 @@ def cooldown_of(world: WorldState, player: PlayerState) -> Tick:
     life = player.life
     assert isinstance(life, Negibon), "外周にいない"
     return lane_cooldown_left(life, world.now)
+
+
+class Test描く位置を前のtickと混ぜる:
+    """ゲーム速度が整数でないときに、1フレームの進みを揃える（`shell/loop.py`）。"""
+
+    def test_割合のぶんだけ前の位置からいまの位置へ寄せる(self) -> None:
+        now, before = Point(3.6, 5.5), Point(3.4, 5.5)
+        quarter = drawn_position(now, before, 0.25)
+        assert (quarter.x, quarter.y) == pytest.approx((3.45, 5.5))
+        assert drawn_position(now, before, 0.0) == before
+        assert drawn_position(now, before, 1.0) == now
+
+    def test_前の位置が無ければ_いまの位置(self) -> None:
+        now = Point(3.6, 5.5)
+        assert drawn_position(now, None, 0.5) == now
+
+    @pytest.mark.parametrize(
+        "before",
+        [
+            Point(3.5, 5.5),  # 跳ぶ技の1マス（マスの真ん中から）
+            Point(5.0, 5.5),  # 左へ跳ぶ技の1マス（マスの左の端から。ちょうど 0.5 マス）
+            Point(4.1, 4.4),  # 体当たりの押しのけ（縦に 1.1 マス）
+            Point(4.5, 3.5),  # 跳ぶ技の2マス（縦）
+        ],
+    )
+    def test_瞬間移動したら_混ぜずにいまの位置(self, before: Point) -> None:
+        """混ぜると、盤面を滑っていくように見える。"""
+        now = Point(4.5, 5.5)
+        assert drawn_position(now, before, 0.5) == now
+
+    def test_1tickに動ける距離なら混ぜる(self) -> None:
+        """歩く・滑る・体当たりは 0.2 マスほど。
+
+        体当たりが終わった tick に歩いても 0.4 マスより短い。
+        """
+        now = Point(4.0, 5.5)
+        before = Point(4.0 - 0.36, 5.5)
+        assert drawn_position(now, before, 0.5).x == pytest.approx(4.0 - 0.18)
+
+    def test_描く関数の入力の位置だけを混ぜ_ブロックの中かはいまの位置で決める(
+        self,
+    ) -> None:
+        world, rabbit = arena((Animal.RABBIT, Animal.FOX))
+        rabbit.position = Point(1.5, 12.1)
+        world.board.put(Cell(1, 12), Tile.SOFT)
+        motion = TrackedMotion(previous=Point(1.5, 11.7))
+        look = player_look(world, rabbit, motion, blend=0.5)
+        # 混ぜた位置（11.9）はマス (1, 11) だが、いまいるのはブロックのマス (1, 12)。
+        assert (look.x, look.y) == pytest.approx((1.5, 11.9))
+        assert world.board.at(Cell(1, 11)) is Tile.EMPTY
+        assert look.in_block
+        assert player_look(world, rabbit, motion).y == 12.1
+        assert player_look(world, rabbit, motion, blend=1.0).y == 12.1

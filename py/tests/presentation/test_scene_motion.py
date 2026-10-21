@@ -15,7 +15,13 @@ from animal_bomber.domain.abilities.frog import SLIME_FLY_TICKS
 from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.core.entity_id import EntityId
 from animal_bomber.domain.core.tick import Tick
-from animal_bomber.domain.events import Moment, SimEvent, TechniqueMoment
+from animal_bomber.domain.events import (
+    Moment,
+    SimEvent,
+    SuddenDeath,
+    SuddenDeathReason,
+    TechniqueMoment,
+)
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
@@ -23,7 +29,9 @@ from animal_bomber.domain.rules.tuning import MAX_SPEED
 from animal_bomber.domain.state.actors import Foxfire, SlimeBomb
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
+from animal_bomber.domain.state.player import ALIVE
 from animal_bomber.domain.systems.blast import add_blast
+from animal_bomber.domain.systems.negibon import send_to_lane
 from animal_bomber.presentation.render.scene.actors import TRAIL_TICKS
 from animal_bomber.presentation.render.scene.motion import HURT_FRAMES
 from tests.helpers import grant_special, idle, only_for
@@ -145,6 +153,70 @@ class Test歩いた距離:
         tracker.observe(fresh, [])
         assert tracker.motion(rabbit.id).walked == 0
         assert tracker.motion(rabbit.id).last_moved_at is None
+
+
+class Test1つ前のtickの位置:
+    """ゲーム速度が整数でないときに、描く位置を混ぜるのに使う（`TrackedMotion.previous`）。"""
+
+    def test_最後に数えたtickの1つ前の位置を持ち_最初のtickの前は持たない(
+        self,
+    ) -> None:
+        world = arena((Animal.RABBIT, Animal.FOX))
+        rabbit = world.players[0]
+        tracker = started(world)
+        assert tracker.motion(rabbit.id).previous is None
+        right = only_for(world, rabbit.id, PlayerInput.RIGHT)
+        start = rabbit.position
+        step(world, tracker, right)
+        assert tracker.motion(rabbit.id).previous == start
+        first = rabbit.position
+        assert first != start
+        step(world, tracker, right)
+        assert tracker.motion(rabbit.id).previous == first
+
+    def test_盤面が止まっている間は変えない(self) -> None:
+        """決着のあとの待ちなどで盤面の時刻が進まなければ、数え直さない。"""
+        world = arena((Animal.RABBIT, Animal.FOX))
+        rabbit = world.players[0]
+        tracker = started(world)
+        right = only_for(world, rabbit.id, PlayerInput.RIGHT)
+        for _ in range(2):
+            step(world, tracker, right)
+        held = tracker.motion(rabbit.id).previous
+        assert held is not None and held != rabbit.position
+        for _ in range(3):
+            tracker.observe(world, [])
+        assert tracker.motion(rabbit.id).previous == held
+
+    def test_延長戦で開始位置へ移ったtickは持たない(self) -> None:
+        """TypeScript 版の `PositionHistory` も延長戦で1つ前の位置を捨てる。"""
+        world = arena((Animal.RABBIT, Animal.FOX))
+        rabbit, fox = world.players
+        tracker = started(world)
+        step(world, tracker, idle(world))
+        moved_from = (rabbit.position, fox.position)
+        rabbit.position = Point(1.5, 1.5)
+        world.now = Tick(world.now + 1)
+        sudden = SuddenDeath(
+            reason=SuddenDeathReason.TIME_UP, players=(0,), moved_from=moved_from[:1]
+        )
+        tracker.observe(world, [sudden])
+        assert tracker.motion(rabbit.id).previous is None
+        assert tracker.motion(fox.id).previous == moved_from[1]
+
+    def test_1つ前のtickに盤面にいなかったなら持たない(self) -> None:
+        """外周から入れ替わりで戻った tick（TypeScript 版も捨てる）。"""
+        world = arena((Animal.RABBIT, Animal.FOX))
+        rabbit = world.players[0]
+        tracker = started(world)
+        send_to_lane(world, rabbit)
+        step(world, tracker, idle(world))
+        rabbit.life = ALIVE
+        rabbit.position = Cell(5, 13).center()
+        step(world, tracker, idle(world))
+        assert tracker.motion(rabbit.id).previous is None
+        step(world, tracker, idle(world))
+        assert tracker.motion(rabbit.id).previous == Cell(5, 13).center()
 
 
 class Test被弾の揺れ:

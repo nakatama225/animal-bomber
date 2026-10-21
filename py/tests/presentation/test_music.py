@@ -23,6 +23,7 @@ from animal_bomber.presentation.audio.bank import open_sound_bank
 from animal_bomber.presentation.audio.music import (
     FADE_MS,
     MUSIC_CHANNEL,
+    SPEED_TEMPOS,
     LoopMusic,
     RoundMusic,
     bake_loop,
@@ -212,6 +213,25 @@ class Test鳴らす場面:
         ]
 
 
+def numbered_sound(frames: int) -> pygame.mixer.Sound:
+    """標本ごとに違う値を持つ、`frames` 標本の音（回した位置が値で分かる）。"""
+    init = pygame.mixer.get_init()
+    assert init is not None, "mixer を開いてから作る"
+    channels = init[2]
+    values = np.arange(frames * channels, dtype=np.int16).reshape(frames, channels)
+    return pygame.sndarray.make_sound(values)
+
+
+class FakeClock:
+    """決めた時刻（秒）を返す時計。"""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
 class _Channel:
     """チャンネルへの頼みを控える。"""
 
@@ -263,36 +283,91 @@ class Test専用のチャンネル:
             bank.play(SoundName.CHAMPION)
         assert pygame.mixer.Channel(MUSIC_CHANNEL).get_sound() is loop
 
-    def test_速さを変えると_その速さで焼いた1周を_鳴っていれば頭から鳴らす(
+    def test_速さごとに焼いた1周を取っておき_止まっている間は次に鳴らす速さだけ変える(
         self, mixer: int
     ) -> None:
-        """焼いた1周は速さごとに取っておき、同じ速さは焼き直さない。"""
-        loop = pygame.mixer.Sound(buffer=bytes(400))
+        """同じ速さは焼き直さない。鳴らし始めはいつも頭から（原型の `BGM.start`）。"""
+        loop = numbered_sound(400)
         baked: list[int] = []
         sounds: dict[int, pygame.mixer.Sound] = {}
 
         def bake(tempo: int) -> pygame.mixer.Sound:
             baked.append(tempo)
-            sounds[tempo] = pygame.mixer.Sound(buffer=bytes(200 + tempo))
+            sounds[tempo] = numbered_sound(tempo)
             return sounds[tempo]
 
         channel = _Channel()
-        music = LoopMusic(loop, cast(pygame.mixer.Channel, channel), bake)
+        clock = FakeClock()
+        music = LoopMusic(loop, cast(pygame.mixer.Channel, channel), bake, clock)
         music.set_tempo(207)
         assert channel.calls == []
         music.start()
-        music.set_tempo(TEMPO)
-        music.set_tempo(207)
         music.stop()
         music.set_tempo(TEMPO)
+        music.set_tempo(207)
+        clock.now = 5.0
+        music.start()
         assert baked == [207]
-        assert music.tempo == TEMPO
+        assert music.tempo == 207
         assert channel.calls == [
             ("play", sounds[207], -1),
-            ("play", loop, -1),
-            ("play", sounds[207], -1),
             ("fadeout", None, FADE_MS),
+            ("play", sounds[207], -1),
         ]
+
+    def test_鳴っている最中に速さを変えると_頭に戻らず_1周の中の同じ位置から鳴らす(
+        self, mixer: int
+    ) -> None:
+        """原型は刻みを1つずつ予約するので、速さを変えても頭に戻らない（L1000-1006）。
+
+        1周の 1/4 まで鳴らしたところで速さを変えると、新しい速さの1周を 1/4 の所から
+        始まるように回した音を鳴らす。そこからさらに時間が経ってから戻しても、続きの
+        位置から鳴らす。
+        """
+        slow, fast = numbered_sound(800), numbered_sound(400)
+        sounds = {TEMPO: slow, 276: fast}
+        channel = _Channel()
+        clock = FakeClock()
+        music = LoopMusic(
+            slow, cast(pygame.mixer.Channel, channel), sounds.__getitem__, clock
+        )
+        music.set_volume(0.5)
+        # 1周の長さの倍数でない時刻に鳴らし始める（鳴らし始めた時刻を数えていなくても、
+        # 位置が合ってしまわないように）。
+        clock.now = 10.005
+        music.start()
+        clock.now = 10.005 + slow.get_length() / 4
+        music.set_tempo(276)
+        _, played, loops = channel.calls[-1]
+        assert loops == -1
+        assert isinstance(played, pygame.mixer.Sound)
+        expected = np.roll(pygame.sndarray.array(fast), -100, axis=0)
+        assert np.array_equal(pygame.sndarray.array(played), expected)
+        assert not np.array_equal(
+            pygame.sndarray.array(played), pygame.sndarray.array(fast)
+        )
+        assert played.get_volume() == pytest.approx(0.5, abs=0.01)
+        # 速い1周の 1/4 の所から、さらに速い1周の 1/2 だけ鳴らしてから戻す（3/4 の所）。
+        clock.now += fast.get_length() / 2
+        music.set_tempo(TEMPO)
+        _, back, _ = channel.calls[-1]
+        assert isinstance(back, pygame.mixer.Sound)
+        expected = np.roll(pygame.sndarray.array(slow), -600, axis=0)
+        assert np.array_equal(pygame.sndarray.array(back), expected)
+        assert music.tempo == TEMPO
+        assert [call[0] for call in channel.calls] == ["play", "play", "play"]
+        # 回した音にも、あとから変えた音量を当てる（無音を選んだら鳴りやむ）。
+        music.set_volume(0.0)
+        assert back.get_volume() == 0.0
+
+    def test_曲を開くと_ゲーム速度で取りうる7通りの速さを全部焼いておく(
+        self, mixer: int
+    ) -> None:
+        """つまみを動かす間に焼くと、そのぶんフレームが止まる（1周で約 20 ms）。"""
+        assert SPEED_TEMPOS == (69, 104, 138, 173, 207, 242, 276)
+        music = open_music(random.Random(1))
+        assert isinstance(music, LoopMusic)
+        assert music.baked == SPEED_TEMPOS
 
     def test_音量は焼いた1周の全部に当て_あとから焼いた1周にも当てる(
         self, mixer: int

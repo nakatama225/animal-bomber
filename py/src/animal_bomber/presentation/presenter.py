@@ -40,8 +40,9 @@
 見える（原型も同じ）。
 
 プレイヤーの呼び方は動物の名前（原型の `p.animal.name`）。葱が当たって入れ替わった
-通知だけが原型の `label`（人間は「1P」、CPU は動物の名前。`hud/roster.py` の
-`label_of`）で呼ぶ。盤面で倒れて外周へ回った通知は、人間のプレイヤーにだけ出す（原型
+通知だけが原型の `label`（人間は「1P」、CPU は動物の名前。通信対戦で抜けて CPU に
+替わったプレイヤーは人間だったときの「2P」のまま。`hud/roster.py` の `label_of`）で
+呼ぶ。盤面で倒れて外周へ回った通知は、人間のプレイヤーにだけ出す（原型
 L2269）。どのプレイヤーを人間が操作しているかはルールの層に無いので、名札の一覧
 （`Roster`）を返す関数を外から渡す（通信対戦では、抜けたプレイヤーが CPU に替わる
 ので、毎回尋ねる）。
@@ -53,10 +54,12 @@ L2269）。どのプレイヤーを人間が操作しているかはルールの
   tick に倒れて延長戦に入った tick は、倒れたプレイヤーが盤面へ戻っているので出さない。
   原型はこのとき葱ボンへの通知を出してから延長戦の通知を出すので、見える通知は同じ
 - 舌が焼き切れたあとに伸ばせる長さ：進めたあとの焼けた舌（`BurntTongue`）
-- 体当たりで良いアイテムを取ったか：前の tick の終わりにそのプレイヤーが体当たりで
-  進んでいて、その tick に最初に取ったアイテムか。見た目の粒（`render/scene/effects.py`
-  の `scooped`）と同じ見分け方にして、粒と通知が食い違わないようにしてある。前の tick の
-  ぶんを覚えるので、`consume` は 1 tick ごとに必ず呼ぶ
+
+体当たりで進む間に吸い込んだアイテム（原型 L2818 の通知）は、拾った知らせの
+項目（`ItemTaken.swept`）で見分ける。前の tick に体当たりしていたかでは見分け
+ない（体当たりが終わった tick に、ふつうに歩いて拾ったものまで吸い込んだと
+数えてしまう）。見た目の粒（`render/scene/effects.py` の `scooped`）も同じ項目で
+見分けるので、粒と通知は食い違わない。
 
 ## 扱いの書き忘れは型検査で失敗する
 
@@ -67,7 +70,7 @@ L2269）。どのプレイヤーを人間が操作しているかはルールの
 """
 
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Protocol, TypeAlias, assert_never
 
 from animal_bomber.domain.abilities.frog import tongue_reach_of
@@ -110,9 +113,8 @@ from animal_bomber.domain.rules.items import (
     POWER_UP_KINDS,
     ItemKind,
 )
-from animal_bomber.domain.state.actions import Charge
 from animal_bomber.domain.state.effects import EffectKind
-from animal_bomber.domain.state.player import Negibon, PlayerId, is_alive
+from animal_bomber.domain.state.player import Negibon, PlayerId
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.presentation import notices
 from animal_bomber.presentation.animal_text import (
@@ -295,24 +297,12 @@ class _Tick:
         )
 
 
-@dataclass(slots=True)
-class _Pass:
-    """`consume` 1回ぶんの、通知を決めるのに使う事柄。"""
-
-    world: WorldState | None
-    """tick を進めたあとの盤面。渡されなければ None。"""
-    charging: frozenset[PlayerId]
-    """前の tick の終わりに、盤面で体当たりで進んでいたプレイヤー。"""
-    swept: list[PlayerId] = field(default_factory=list)
-    """この tick に、体当たりで最初のアイテムを取ったプレイヤー。"""
-
-
 class Presenter:
     """イベントを受け取り、音と通知に変える。
 
     差し替える出し先（音・通知・名札の一覧・動物の引き方・曲を止める先）を5つ抱える。
-    前の tick の終わりに体当たりで進んでいたプレイヤーを覚える（通知の見分けに使う。
-    モジュールの説明）。
+    前の tick のことは覚えない（1 tick ぶんのイベントと、進めたあとの盤面だけで
+    決める）。
     """
 
     def __init__(
@@ -328,8 +318,6 @@ class Presenter:
         self._roster_of = roster_of
         self._animal_of = animal_of
         self._stop_music = stop_music
-        self._world: WorldState | None = None
-        self._charging: frozenset[PlayerId] = frozenset()
 
     def consume(
         self, events: Iterable[SimEvent], world: WorldState | None = None
@@ -345,18 +333,9 @@ class Presenter:
                 （モジュールの説明）。渡さなければ、その通知は出さない。
         """
         tick = _Tick.of(events)
-        same = world is not None and world is self._world
-        state = _Pass(world=world, charging=self._charging if same else frozenset())
         for index in range(len(tick.events)):
             self._handle(tick, index)
-            self._notify(tick, index, state)
-        if world is not None:
-            self._world = world
-            self._charging = frozenset(
-                player.id
-                for player in world.players
-                if is_alive(player) and isinstance(player.action, Charge)
-            )
+            self._notify(tick, index, world)
 
     def _handle(self, tick: _Tick, index: int) -> None:
         play = self._sounds.play
@@ -455,10 +434,12 @@ class Presenter:
             case _:
                 assert_never(event)
 
-    def _notify(self, tick: _Tick, index: int, state: _Pass) -> None:
-        """通知を出す（原型の `toast`・`flash` を呼ぶ場面。文は `notices.py`）。"""
+    def _notify(self, tick: _Tick, index: int, world: WorldState | None) -> None:
+        """通知を出す（原型の `toast`・`flash` を呼ぶ場面。文は `notices.py`）。
+
+        `world` は tick を進めたあとの盤面。渡されなければ None。
+        """
         show = self._notices.show
-        world = state.world
         event = tick.events[index]
         match event:
             case EffectApplied(target=target, effect=effect):
@@ -469,20 +450,15 @@ class Presenter:
                 if count is not None and event.pushed_by is not None:
                     name = self._name(event.pushed_by, world)
                     show(notices.pushed(name, self._name(target, world), count))
-            case ItemTaken(cell=cell, kind=kind, taker=taker):
+            case ItemTaken(kind=kind, taker=taker, swept=swept):
                 name = self._name(taker, world)
                 animal = self._animal(taker, world)
                 times = 1 if animal is None else stats_of(animal).item_multiplier
                 if kind is ItemKind.CHICKEN and animal is not None:
                     show(notices.chicken_taken(name, special_name(animal), times))
-                # 体当たりで進む間に取ったもの（前の tick に体当たりで進んでいて、この
-                # tick に最初に取ったもの）。原型は、チキンの通知のあとに出す（L2818）。
-                if (
-                    cell is not None
-                    and taker in state.charging
-                    and taker not in state.swept
-                ):
-                    state.swept.append(taker)
+                # 体当たりで進む間に吸い込んだもの。原型は、チキンの通知のあとに出す
+                # （L2818）。
+                if swept:
                     show(notices.swept(item_emoji(kind), name, _item_label(kind)))
             case PlayerDown(target=target):
                 # 盤面で倒れて外周へ回った（人間だけ。原型 L2269）。
@@ -614,10 +590,16 @@ class Presenter:
         return numbered_name(player) if animal is None else animal_name(animal)
 
     def _label(self, player: PlayerId, world: WorldState | None) -> str:
-        """原型の `label` の呼び方（人間は「1P」、CPU は動物の名前）。"""
+        """原型の `label` の呼び方（`hud/roster.py` の `label_of` と同じ決まり）。
+
+        人間は「1P」、CPU は動物の名前。通信対戦で抜けて CPU に替わったプレイヤーは、
+        人間だったときの「2P」のまま（`Cpu.label`）。
+        """
         controller = self._controller(player)
         match controller:
             case Human(label=label):
+                return label
+            case Cpu(label=str(label)):
                 return label
             case Cpu():
                 return self._name(player, world)

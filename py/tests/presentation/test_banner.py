@@ -24,7 +24,7 @@ from animal_bomber.presentation.hud.banner import (
     BannerView,
     RoundBanner,
 )
-from animal_bomber.presentation.hud.roster import Roster, local_roster
+from animal_bomber.presentation.hud.roster import Cpu, Human, Roster, local_roster
 from animal_bomber.presentation.hud.scoreboard import HudSource
 
 LEGACY = Path(__file__).resolve().parents[3] / "legacy" / "animal-bomber.html"
@@ -173,6 +173,23 @@ class Test優勝の幕:
         assert view.final is True
         # 試合が決まったあとは、別の盤面を渡されても消さない（「もういっかい」まで）。
         assert banner.current(game().world) == view
+
+    def test_抜けてCPUに替わったプレイヤーの優勝は_元の番号でなくCPUと出す(
+        self,
+    ) -> None:
+        """原型は `isCPU` で「（CPU）」を選ぶ（L4486）。
+
+        抜けたプレイヤーは `isCPU` が true になり、`label`（「2P」）は使わない。
+        """
+        roster: Roster = (Human("1P"), Cpu(1, CpuLevelKey.NORMAL, label="2P"))
+        session = game(wins_to_take=1)
+        session.world.players[0].life = OUT
+        banner = RoundBanner()
+        for _ in range(2):
+            banner.observe(session.tick(), hud_of(session, roster))
+        title = shown(session, banner).title
+        assert title == "ぞう（CPU） 優勝！"
+        assert "2P" not in title
 
     def test_人間の優勝は_札を括弧に入れる(self) -> None:
         session = game(wins_to_take=1)

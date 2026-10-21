@@ -801,7 +801,13 @@ class Shell:
             keyboard.end_tick()
             return
         runner = game.runner
-        steps = self._speed.take(ticks) if game.local is not None else ticks
+        steps = ticks
+        if game.local is not None:
+            # 止めている間（ポーズ・幕・決まった試合）は、ゲーム速度の端数を進めない
+            # （原型も止めている間は試合の時間を進めない）。進めると、描く位置を
+            # 混ぜる割合（`GameSpeed.blend`）がフレームごとに変わり、止まった盤面の
+            # プレイヤーが揺れて見える。
+            steps = 0 if runner.stopped else self._speed.take(ticks)
         stepped = 0
         for _ in range(steps):
             # 入力が揃っていない（通信対戦）・止めている（1台）なら、このフレームは
@@ -907,7 +913,15 @@ class Shell:
         game.world = world
         view = self._view
         view.draw(
-            world, game.scene, content, now_ms, immediate=immediate, paused=paused
+            world,
+            game.scene,
+            content,
+            now_ms,
+            immediate=immediate,
+            paused=paused,
+            banner=game.banner.current(world),
+            # 位置を前の tick と混ぜるのは1台の試合だけ（通信対戦はゲーム速度が無い）。
+            blend=self._speed.blend if local is not None else 1.0,
         )
         notice = game.runner.notice()
         self._draw_banner(game, world)

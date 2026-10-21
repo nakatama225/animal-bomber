@@ -265,6 +265,50 @@ class Testゲーム速度:
         # 持ち越した 0.5 回ぶんに 1.5 回ぶんを足して 2 回。
         assert speed.take(1) == 2
 
+    @pytest.mark.parametrize(
+        ("rate", "progress"),
+        [
+            (0.5, [0.5, 0.0, 0.5, 0.0]),
+            (0.75, [0.75, 0.5, 0.25, 0.0]),
+            (1.5, [0.5, 0.0, 0.5, 0.0]),
+            (2.5, [0.5, 0.0, 0.5, 0.0]),
+        ],
+    )
+    def test_整数でない倍率では_持ち越した端数を_描く位置を混ぜる割合にする(
+        self, rate: float, progress: list[float]
+    ) -> None:
+        """前の tick の位置に端数の割合だけ寄せると、1フレームの進みが倍率ぶんで揃う。
+
+        0.75 倍で進める回数は 0・1・1・1。最後に進めた tick を n とすると、描く位置は
+        n−1+0.75・n+0.5（n が 1 増える）・… と、どのフレームも 0.75 tick ずつ進む。
+        """
+        speed = GameSpeed(rate)
+        got: list[float] = []
+        drawn: list[float] = []
+        last = 0
+        for _ in range(4):
+            last += speed.take(1)
+            got.append(speed.blend)
+            drawn.append(last - 1 + speed.blend)
+            assert 0.0 <= speed.progress < 1.0
+            assert speed.progress == speed.blend
+        assert got == progress
+        steps = [after - before for before, after in itertools.pairwise(drawn)]
+        assert steps == pytest.approx([rate] * 3)
+
+    @pytest.mark.parametrize("rate", [1.0, 2.0, 3.0])
+    def test_整数の倍率では_混ぜずにいまの位置に描く(self, rate: float) -> None:
+        """等倍の見た目と、描画の重さの場面の描き方を変えない。"""
+        speed = GameSpeed(0.5)
+        speed.take(1)
+        assert speed.progress == 0.5
+        speed.set(rate)
+        for _ in range(3):
+            speed.take(1)
+            assert speed.blend == 1.0
+        # 持ち越した端数は残っている（倍率を変えても時間を捨てない）。
+        assert speed.progress == 0.5
+
     @pytest.mark.parametrize("rate", [0.25, 3.25, 1.1])
     def test_範囲と刻みの外の倍率は受け付けない(self, rate: float) -> None:
         """原型のつまみは 0.5〜3 を 0.25 刻み。"""

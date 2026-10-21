@@ -45,6 +45,13 @@ class Cpu:
     """何体目の CPU か（1から）。名札の「CPU1」の数（原型の `cpuIdx + 1`）。"""
     level: CpuLevelKey
     """強さ。"""
+    label: str | None = None
+    """原型の `label` の呼び方を、動物の名前でなくこれにする（`label_of`）。
+
+    通信対戦で抜けて CPU に替わったプレイヤーだけが持つ（人間だったときの「2P」の
+    まま。原型は抜けたプレイヤーを CPU にするとき `label` を書き換えない。L3793）。
+    ほかの CPU は None で、動物の名前で呼ぶ。
+    """
 
 
 Controller: TypeAlias = Human | Cpu
@@ -91,11 +98,14 @@ def label_of(roster: Roster, player: PlayerId, animal: Animal) -> str:
     """原型の `label` の呼び方。人間は「1P」、CPU は動物の名前（「うさぎ」）。
 
     原型は CPU の名前を動物の名前そのままにしている（L1160「渾名だと何の動物か分から
-    なくなる」・L1237・L1260）。
+    なくなる」・L1237・L1260）。通信対戦で抜けて CPU に替わったプレイヤーは、人間
+    だったときの「2P」のまま（`Cpu.label`。原型 L3793 は `label` を書き換えない）。
     """
     controller = controller_of(roster, player)
     match controller:
         case Human(label=label):
+            return label
+        case Cpu(label=str(label)):
             return label
         case Cpu():
             return animal_name(animal)
@@ -129,9 +139,11 @@ def lan_roster(
 
     人間は番号（「1P」…）。始めた時点でつながっていなかった枠は CPU で、CPU の番号は
     その枠どうしの中で前から数える（原型の `setupPlayersLan` の `cpuIdx`。L1268）。
-    途中で抜けて CPU に替わったプレイヤーは「CPU1」になる（原型は替わったプレイヤーの
-    `cpuIdx` を人間のときの 0 のまま CPU にする。L3793）。強さはどれも、試合で実際に
-    使う強さ（設定の枠ごとの強さ。`net/lan_cpu.py` と同じ値）。
+    途中で抜けて CPU に替わったプレイヤーは、名札の札が「CPU1」になる（原型は替わった
+    プレイヤーの `cpuIdx` を人間のときの 0 のまま CPU にする。L3793）が、入れ替わりの
+    通知（原型 L2354）での呼び方は人間だったときの「2P」のまま（`Cpu.label`。原型は
+    `label` を書き換えない）。強さはどれも、試合で実際に使う強さ（設定の枠ごとの強さ。
+    `net/lan_cpu.py` と同じ値）。
 
     Args:
         settings: 試合の設定（ホストが配ったもの）。プレイヤーの数と CPU の強さを読む。
@@ -147,7 +159,7 @@ def lan_roster(
             cpus += 1
             roster.append(Cpu(cpus, level))
         elif player in replaced:
-            roster.append(Cpu(1, level))
+            roster.append(Cpu(1, level, label=numbered_name(player)))
         else:
             roster.append(Human(numbered_name(player), local=player == local))
     return tuple(roster)

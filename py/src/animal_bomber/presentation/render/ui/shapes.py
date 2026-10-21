@@ -87,6 +87,7 @@ def rounded_box(
     border: Color | None = None,
     border_width: int = 0,
     bottom_border: int | None = None,
+    fill_alpha: int = 255,
 ) -> pygame.Surface:
     """角丸の箱（画素ごとの透明を持つ）。
 
@@ -99,6 +100,8 @@ def rounded_box(
         border_width: 枠の太さ（px）。
         bottom_border: 下の枠の太さ（px。原型の `border-bottom-width`）。省くと
             `border_width`。
+        fill_alpha: 枠の内側の塗りの不透明度（0〜255。原型の `rgba(…, .92)` の地）。
+            枠は不透明のまま、内側だけを透かす。既定の 255 は不透明。
     """
     width, height = max(1, size[0]), max(1, size[1])
     scale = SUPERSAMPLE
@@ -125,6 +128,18 @@ def rounded_box(
             painted.blit(vertical_gradient(inner.size, fill, bottom), (0, 0))
             painted.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
             big.blit(painted, inner.topleft)
+        if fill_alpha < 255:
+            # 内側の角丸の形だけ、不透明度を掛ける（枠の画素には 255 を掛けて
+            # 変えない）。
+            fade = pygame.Surface(inner.size, pygame.SRCALPHA)
+            fade.fill((255, 255, 255, 255))
+            pygame.draw.rect(
+                fade,
+                (255, 255, 255, max(0, fill_alpha)),
+                fade.get_rect(),
+                border_radius=inner_radius,
+            )
+            big.blit(fade, inner.topleft, special_flags=pygame.BLEND_RGBA_MULT)
     return pygame.transform.smoothscale(big, (width, height))
 
 

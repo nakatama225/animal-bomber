@@ -9,10 +9,31 @@
 `BGM.stop()`）。止めるのは `presentation/presenter.py` の `Presenter`。原型は、決着の
 update の倒れる音などのあと、勝ち・引き分け・優勝の音の直前に止めるので、イベントの音と
 同じ所で順を決める。
+
+## 曲の速さを変えたとき（原型の `applySpeed`）
+
+原型は刻みを1つずつ予約するので、速さを変えると、次の刻みから間隔が縮むだけで、曲は
+頭に戻らない。この版も頭に戻さない。鳴らし始めた時刻を控えておき、いまの1周の中の
+位置（1周の長さに対する割合。16 刻みのどこにいるか）を出して、新しい速さで焼いた1周を
+その位置から始まるように回した音で鳴らし直す（チャンネルは再生の位置を返さないので、
+時刻で数える）。1周は折り返して焼いてある（`fold`）ので、回した音を繰り返しても継ぎ目は
+同じ。
+
+原型と違う所が2つ残る（どちらも、焼いた1周を繰り返す作りのため）：
+
+- いま鳴っている刻みの残りも新しい速さで鳴る（原型は、予約済みの刻みを前の速さで
+  鳴らしきってから縮む。違いは先読みの 0.16 秒と刻み1つより短い）
+- 鳴らし直す所で、鳴っていた音符の残りが切れる（原型は予約した音を鳴らしきる）
+
+7通りの速さ（ゲーム速度 0.5〜2 倍に当たる 69〜276。2 倍より上は 276 のまま）は、曲を
+開くとき（`open_music`）に全部焼いておく。1周を焼くのに約 20 ms かかり、7通りで約
+0.15 秒、起動が延びる。初めてその速さになったときに焼くと、横の板のつまみを動かして
+いる間に、その分フレームが止まるため。
 """
 
 import random
-from collections.abc import Callable, Sequence
+import time
+from collections.abc import Callable, Iterable, Sequence
 from typing import Final, Protocol
 
 import numpy as np
@@ -22,8 +43,14 @@ from animal_bomber.domain.events import SimEvent
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.presentation.audio.bank import PCM_SIZE
 from animal_bomber.presentation.audio.oscillator import FloatArray
-from animal_bomber.presentation.audio.score import TEMPO, loop_frames, loop_voices
+from animal_bomber.presentation.audio.score import (
+    TEMPO,
+    loop_frames,
+    loop_voices,
+    tempo_for,
+)
 from animal_bomber.presentation.audio.synth import mix, to_pcm, white_noise
+from animal_bomber.presentation.menu.choices import SPEED_CHOICES
 
 MUSIC_CHANNEL: Final = 0
 """曲を鳴らすチャンネルの番号。効果音には使わせない（`pygame.mixer.set_reserved`）。"""
@@ -35,6 +62,9 @@ FADE_MS: Final = 160
 pygame のチャンネルは途中で止めると音符の途中で切れてプツッと鳴るので、原型の先読みと
 同じ長さで音量を下げて止める。
 """
+
+SPEED_TEMPOS: Final = tuple(sorted({tempo_for(speed) for speed in SPEED_CHOICES}))
+"""ゲーム速度のつまみで取りうる曲の速さ（69・104・138・173・207・242・276 の7通り）。"""
 
 
 class Music(Protocol):
@@ -66,11 +96,9 @@ class NullMusic:
 class LoopMusic:
     """1周ぶんに焼いた曲を、専用のチャンネルで繰り返す。
 
-    曲の速さ（`set_tempo`）を変えると、その速さで1周を焼き直して取っておく（1周を焼くのに
-    20〜40 ms かかる。同じ速さは2回目から取っておいた音を使う）。鳴っている最中に変えた
-    ときは、新しい速さの1周の頭から鳴らし直す。原型は次の刻みから速さが変わる（刻みを
-    1つずつ予約しているため）。この版は1周を焼いた音を繰り返すので、途中から速さを変え
-    られない。
+    曲の速さ（`set_tempo`）ごとに焼いた1周を取っておく（同じ速さは2回目から取っておいた
+    音を使う。`prepare` で先に焼いておける）。鳴っている最中に速さを変えたときは、頭に
+    戻さず、いまの1周の中の位置から新しい速さで鳴らし続ける（モジュールの説明）。
     """
 
     def __init__(
@@ -78,6 +106,7 @@ class LoopMusic:
         loop: pygame.mixer.Sound,
         channel: pygame.mixer.Channel,
         bake: Callable[[int], pygame.mixer.Sound] | None = None,
+        clock: Callable[[], float] = time.perf_counter,
     ) -> None:
         """焼いた1周と、鳴らすチャンネルを受け取る。
 
@@ -85,23 +114,44 @@ class LoopMusic:
             loop: 等倍（`TEMPO`）で焼いた1周。
             channel: 鳴らすチャンネル。
             bake: 曲の速さを受け取り、その速さの1周を焼く関数。省くと速さを変えない。
+            clock: いまの時刻（秒）を返す関数。鳴らし始めてからの時間で1周の中の位置を
+                数える（チャンネルは再生の位置を返さない）。テストでは偽の時計を渡す。
         """
         self._loops = {TEMPO: loop}
         self._tempo = TEMPO
         self._channel = channel
         self._bake = bake
+        self._clock = clock
         self._volume = 1.0
         self._playing = False
+        self._started = 0.0
+        """いま鳴らしている1周の頭を鳴らした（ことになる）時刻（秒）。"""
+        self._current: pygame.mixer.Sound | None = None
+        """いまチャンネルで鳴らしている音（1周の途中から始まるように回したものもある）。"""
 
     @property
     def tempo(self) -> int:
         """いまの曲の速さ（1分あたりの拍数）。"""
         return self._tempo
 
+    @property
+    def baked(self) -> tuple[int, ...]:
+        """焼いて取っておいた1周の速さ（小さい順）。"""
+        return tuple(sorted(self._loops))
+
+    def prepare(self, tempos: Iterable[int]) -> None:
+        """速さ `tempos` の1周を、まだ焼いていなければ焼いておく。
+
+        焼く関数が無ければ何もしない。
+        """
+        for tempo in tempos:
+            self._loop_for(tempo)
+
     def start(self) -> None:
         """頭から鳴らす。鳴っている最中なら、頭からやり直す。"""
         self._playing = True
-        self._channel.play(self._loops[self._tempo], loops=-1)
+        self._started = self._clock()
+        self._play(self._loops[self._tempo])
 
     def stop(self) -> None:
         """`FADE_MS` かけて音量を下げて止める。"""
@@ -117,19 +167,50 @@ class LoopMusic:
         self._volume = level
         for loop in self._loops.values():
             loop.set_volume(level)
+        if self._current is not None:
+            self._current.set_volume(level)
 
     def set_tempo(self, tempo: int) -> None:
-        """曲の速さを変える（クラスの説明）。焼く関数が無ければ何もしない。"""
-        if tempo == self._tempo or self._bake is None:
+        """曲の速さを変える（モジュールの説明）。焼く関数が無ければ何もしない。
+
+        鳴っている最中なら、いまの1周の中の位置（割合）を、新しい速さの1周の同じ割合の
+        所へ写して、そこから鳴らし続ける。止まっていれば、次に鳴らすときの速さだけを
+        変える（鳴らし始めはいつも頭から）。
+        """
+        if tempo == self._tempo:
             return
+        loop = self._loop_for(tempo)
+        if loop is None:
+            return
+        if self._playing:
+            now = self._clock()
+            length = self._loops[self._tempo].get_length()
+            phase = ((now - self._started) % length) / length if length > 0 else 0.0
+            samples = pygame.sndarray.array(loop)
+            frames = len(samples)
+            offset = round(phase * frames) % frames if frames > 0 else 0
+            sound = loop
+            if offset > 0:
+                sound = pygame.sndarray.make_sound(np.roll(samples, -offset, axis=0))
+                sound.set_volume(self._volume)
+            self._started = now - offset / frames * loop.get_length()
+            self._play(sound)
+        self._tempo = tempo
+
+    def _loop_for(self, tempo: int) -> pygame.mixer.Sound | None:
+        """速さ `tempo` の1周（無ければ焼いて取っておく）。焼けなければ None。"""
         loop = self._loops.get(tempo)
         if loop is None:
+            if self._bake is None:
+                return None
             loop = self._bake(tempo)
             loop.set_volume(self._volume)
             self._loops[tempo] = loop
-        self._tempo = tempo
-        if self._playing:
-            self._channel.play(loop, loops=-1)
+        return loop
+
+    def _play(self, sound: pygame.mixer.Sound) -> None:
+        self._current = sound
+        self._channel.play(sound, loops=-1)
 
 
 def fold(samples: FloatArray, length: int) -> FloatArray:
@@ -154,7 +235,10 @@ def bake_loop(sample_rate: int, noise: FloatArray, tempo: int = TEMPO) -> FloatA
 
 
 def open_music(noise_rng: random.Random | None = None) -> LoopMusic | NullMusic:
-    """1周ぶんを焼いた `LoopMusic` を返す。mixer が使えなければ `NullMusic`。
+    """曲を焼いた `LoopMusic` を返す。mixer が使えなければ `NullMusic`。
+
+    ゲーム速度で取りうる7通りの速さ（`SPEED_TEMPOS`）の1周を、ここで全部焼いておく
+    （モジュールの説明）。
 
     Args:
         noise_rng: ハイハットのノイズを作る乱数。省くと起動ごとに違うノイズになる。
@@ -172,7 +256,9 @@ def open_music(noise_rng: random.Random | None = None) -> LoopMusic | NullMusic:
         return pygame.mixer.Sound(buffer=pcm.tobytes())
 
     pygame.mixer.set_reserved(MUSIC_CHANNEL + 1)
-    return LoopMusic(bake(TEMPO), pygame.mixer.Channel(MUSIC_CHANNEL), bake)
+    music = LoopMusic(bake(TEMPO), pygame.mixer.Channel(MUSIC_CHANNEL), bake)
+    music.prepare(SPEED_TEMPOS)
+    return music
 
 
 class RoundMusic:

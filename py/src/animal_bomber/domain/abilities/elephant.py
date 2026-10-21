@@ -279,7 +279,9 @@ def _sweep_items(
         if len(charge.carried) < CARRY_LIMIT:
             charge.carried.append(item.kind)
         return []
-    events: list[SimEvent] = [ItemTaken(cell=cell, kind=item.kind, taker=player.id)]
+    events: list[SimEvent] = [
+        ItemTaken(cell=cell, kind=item.kind, taker=player.id, swept=True)
+    ]
     events.extend(apply_item(world, player, item.kind))
     return events
 

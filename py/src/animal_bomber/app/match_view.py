@@ -6,15 +6,20 @@
 帯は、出ている間だけ重ねる。どれも取っておいた絵を1〜2枚貼るだけ（幕のぼかしは、幕を
 出したときに1回だけ作る。`render/overlay/banner.py`）。
 
+幕の間（2フレーム目から）は、盤面と横の板を描かない。ぼかした絵が窓の全体を覆うので、
+ぼかした絵とカードだけを貼る。幕の間は描画の重さの場面（`tools/bench_match_scene.py`）の
+対象の外（py/AGENTS.md の「描画の重さ」）。幕が消えたフレームに窓の全体を塗り直す。
+
 試合の状態から何を描くか（横の板の中身・幕を出すか・ポーズ中か）は `Shell` が決めて
 渡す。ここは描く面と、描いたものの控え（横の板のスクロールと高さ・押せる所）だけを持つ。
 
 ## 窓の背景を塗り直す所
 
-窓の背景を塗り直すのは、塗り直しの印が立っているとき（`invalidate`。試合が始まった・
-幕や確認の画面を外した・試合の外の画面や「じゅんびちゅう」を描いた）と、横の板が低く
-なった次のフレーム（前の板の下の端が1フレーム残る）だけ。ふだんは、前のフレームの通知の
-下だけを塗り直す（通知は盤面と横の板の間のすき間にもかかるため。`note_toast`）。
+窓の背景を全部塗り直すのは、塗り直しの印が立っているとき（`invalidate`。試合が
+始まった・幕や確認の画面を外した・試合の外の画面や「じゅんびちゅう」を描いた）だけ。
+ふだんは、前のフレームの通知の下だけを塗り直す（通知は盤面と横の板の間のすき間にも
+かかるため。`note_toast`）。横の板が低くなったフレームは、そのフレームのうちに、
+前の板の下の端だった帯だけを塗る（`_fit_panel`）。
 """
 
 from collections.abc import Sequence
@@ -158,8 +163,14 @@ class MatchView:
         *,
         immediate: bool,
         paused: bool,
+        banner: BannerView | None = None,
+        blend: float = 1.0,
     ) -> None:
         """窓の背景（要るときだけ）・盤面・横の板・ポーズの幕を描く。
+
+        幕 `banner` の下の絵をもうぼかして持っているなら、何も描かない（このあとの
+        `draw_banner` がぼかした絵で窓の全体を覆う。幕を出した最初のフレームは描いて、
+        その絵をぼかす）。
 
         Args:
             world: 描く盤面。
@@ -168,8 +179,13 @@ class MatchView:
             now_ms: いまの時刻（ms）。
             immediate: 横の板を約 4 Hz を待たずに作り直すか。
             paused: ポーズ中か（ポーズの幕を重ねる）。
+            banner: このフレームに重ねる幕。出さないなら None。
+            blend: プレイヤーを描く位置を1つ前の tick の位置と混ぜる割合
+                （`draw_match_frame`）。
         """
         canvas = self._canvas
+        if self._banner.holds(banner, canvas.get_size()):
+            return
         if self._repaint:
             canvas.blit(self._background, (0, 0))
             self._repaint = False
@@ -186,6 +202,7 @@ class MatchView:
             panel_topleft=(self._panel_left, -self._panel_scroll),
             now_ms=now_ms,
             immediate=immediate,
+            blend=blend,
         )
         self._fit_panel()
         if paused:
@@ -197,7 +214,12 @@ class MatchView:
         groups: Sequence[MenuGroup],
         focus: tuple[int, int] | None,
     ) -> None:
-        """幕を重ねる（ボタンは `groups`、白い枠は `focus`）。"""
+        """幕を重ねる（ボタンは `groups`、白い枠は `focus`）。
+
+        塗り直しの印を立てる。幕の間は `draw` が何も描かずに戻るので、印は使われずに
+        残り、幕が消えたフレームの `draw` が窓の全体を塗り直す（すき間と横の板の下に、
+        ぼかした絵を残さない）。
+        """
         self._banner_hits = self._banner.draw(self._canvas, view, groups, focus)
         self._repaint = True
 
@@ -214,7 +236,12 @@ class MatchView:
     def _fit_panel(self) -> None:
         """出している横の板の高さを控え、スクロールの量を丸める。
 
-        板が低くなったら、次のフレームで窓の背景を塗り直す（前の板の下の端が残る）。
+        板が低くなったら、同じフレームのうちに、新しい板の下の端から前の板の下の端
+        までの帯を窓の背景で塗る（前の板の下の端を残さない。原型の DOM にも残らない）。
+        塗るのはこのフレームに板を貼った位置（丸める前のスクロールの量）で数える。
+        丸めたあとのスクロールの量は前の量以下なので、次のフレームの板は上の端が
+        窓の上の端より上のまま、下の端は塗った帯の上の端より下にしか来ない。窓の
+        全体を塗り直す必要は無い。
         """
         content = self._panel.content
         size = self._panel_size
@@ -222,7 +249,15 @@ class MatchView:
             return
         height = self._panel.height(content)
         if height < size.height:
-            self._repaint = True
+            scroll = self._panel_scroll
+            band = pygame.Rect(
+                self._panel_left,
+                height - scroll,
+                PANEL_WIDTH,
+                size.height - height,
+            ).clip(self._canvas.get_rect())
+            if band.w > 0 and band.h > 0:
+                self._canvas.blit(self._background, band, band)
         size.content = content
         size.height = height
         limit = max(0, height - self._canvas.get_height())

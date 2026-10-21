@@ -33,6 +33,12 @@ tick の update の頭で進めた経過時間で、同じ値になる（`views/
 原型は被弾した tick に 0.3 秒にして、次の tick の頭から 1/60 秒ずつ引き、0 より大きい
 間だけ体を揺らす。引き算の誤差で 0 に届くのが 1 tick 遅れるので、揺れを描くのは被弾した
 tick の絵を含めて 19 枚（`views/player.py` の `TrackedMotion.hurt_shake`）。
+
+## 1つ前の tick の位置
+
+ゲーム速度が整数でないときに、描く位置を前の tick の位置と混ぜるため、前の tick の
+終わりの控えの位置を `TrackedMotion.previous` に持たせる（`views/player.py` の
+`drawn_position`。混ぜる割合は `shell/loop.py` の `GameSpeed.blend`）。
 """
 
 from collections.abc import Sequence
@@ -97,7 +103,21 @@ class MotionTracker:
                 if step is not None:
                     walked += step
                     last = world.now
-            self._motions[player.id] = TrackedMotion(walked, last, Tick(shake))
+            self._motions[player.id] = TrackedMotion(
+                walked, last, Tick(shake), _previous(seen, player.id in moved)
+            )
+
+
+def _previous(seen: PlayerSnapshot | None, restarted: bool) -> Point | None:
+    """描く位置を混ぜるための、1つ前の tick の終わりの位置（`TrackedMotion.previous`）。
+
+    盤面にいなかった・控えが無い（ラウンドの最初の tick）・延長戦で開始位置へ移った
+    （`restarted`）なら None。TypeScript 版の `PositionHistory` も、延長戦と入れ替わりで
+    1つ前の位置を捨てる。
+    """
+    if seen is None or not seen.alive or restarted:
+        return None
+    return seen.position
 
 
 def _moved_from(events: Sequence[SimEvent]) -> dict[PlayerId, Point]:

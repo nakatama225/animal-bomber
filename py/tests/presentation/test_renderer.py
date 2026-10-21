@@ -446,6 +446,43 @@ def test_プレイヤーは_一覧の順でなく上にいる順に重ねる() -
     assert_same_frame(got, wanted, FADED)
 
 
+def test_割合を渡すと_前のtickと混ぜた位置に描き_重ねる順もその位置で決める() -> None:
+    """ゲーム速度が整数でない1台の試合（`shell/loop.py` の `GameSpeed.blend`）。
+
+    混ぜた位置にプレイヤーを置いた盤面を割合 1 で描いた絵と、画素が同じになる。1 番は
+    上から下へ歩いていて、混ぜた位置では 0 番より上（奥）、いまの位置では下（手前）に
+    いる。重ねる順をいまの位置や一覧の順で決めると、2体が重なった所の画素が違う。
+    """
+
+    def scene(second: Point) -> WorldState:
+        world = create_world(5, (Animal.RABBIT, Animal.ELEPHANT))
+        clear_board(world)
+        world.items.clear()
+        world.now = Tick(330)
+        world.players[0].position = Point(5.5, 5.5)
+        world.players[1].position = second
+        return world
+
+    def image(world: WorldState, visuals: FixedVisuals, blend: float) -> Image:
+        target = pygame.Surface(LAYOUT.surface_size)
+        Renderer(BakedArt(LAYOUT)).draw(target, world, visuals, blend)
+        return cast(Image, pygame.surfarray.array3d(target))
+
+    walking = FixedVisuals(
+        motions={
+            0: TrackedMotion(previous=Point(5.5, 5.5)),
+            1: TrackedMotion(previous=Point(5.5, 5.22)),
+        }
+    )
+    blended = image(scene(Point(5.5, 5.62)), walking, 0.5)
+    halfway = image(scene(Point(5.5, 5.42)), FixedVisuals(), 1.0)
+    assert np.array_equal(blended, halfway)
+    # 割合 1（既定）なら混ぜず、いまの位置に描く。
+    current = image(scene(Point(5.5, 5.62)), walking, 1.0)
+    assert not np.array_equal(blended, current)
+    assert np.array_equal(current, image(scene(Point(5.5, 5.62)), FixedVisuals(), 1.0))
+
+
 def test_知らない種類の盤面の物が来たら止まる() -> None:
     """盤面の物を描く輪は、知らない種類を黙って飛ばさない（`assert_never` が止める）。
 

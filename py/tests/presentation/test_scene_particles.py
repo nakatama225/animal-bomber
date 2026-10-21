@@ -294,14 +294,27 @@ class Test技:
         run(CASES["snot bomb"], events)
 
     def test_突進で吸い込んだ良いアイテムは_絵文字が上へ舞う(self) -> None:
-        """前の tick に突進していたプレイヤーが拾った（吸い込んだ）もので見分ける。"""
+        """拾った知らせの「吸い込んだ」の印（`ItemTaken.swept`）で見分ける。"""
         world = world_with(Animal.ELEPHANT)
         elephant = world.players[0]
         elephant.position = Cell(6, 5).center()
         elephant.action = Charge(Direction.RIGHT, Tick(100))
         before = snapshot_of(world)
-        taken: list[SimEvent] = [ItemTaken(Cell(6, 5), ItemKind.FIRE, 0)]
+        taken: list[SimEvent] = [ItemTaken(Cell(6, 5), ItemKind.FIRE, 0, swept=True)]
         run(CASES["chargeSweep fire"], taken, world, before)
+
+    def test_前のtickに突進していても_歩いて拾ったものは煙(self) -> None:
+        """突進が終わった tick に歩いて拾ったもの（印が無い）は、ふつうに拾った煙。
+
+        原型は突進が切れたフレームに pickupCheck で拾い、吸い込みの粒を出さない。
+        """
+        world = world_with(Animal.ELEPHANT)
+        elephant = world.players[0]
+        elephant.position = AT.center()
+        elephant.action = Charge(Direction.RIGHT, Tick(1))
+        before = snapshot_of(world)
+        elephant.action = None
+        run(CASES["puff #ffd23f 💣"], [ItemTaken(AT, ItemKind.BOMB, 0)], world, before)
 
     def test_突進が抱えた悪いアイテムには_そのマスに煙を出す(self) -> None:
         """ルールの層はイベントを出さない。

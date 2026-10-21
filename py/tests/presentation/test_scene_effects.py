@@ -147,14 +147,17 @@ class Test落ちたアイテム:
 
 
 class Test突進:
-    def test_前のtickに突進していたプレイヤーの_1つ目に拾ったものは吸い込み(
+    def test_吸い込んだ印のある取得は吸い込み_印の無い取得は煙(
         self,
     ) -> None:
-        """2つ目は、突進が終わったあとに歩いて拾ったもの（煙）。"""
+        """2つ目は、突進が終わったあとに歩いて拾ったもの（印が無いので煙）。
+
+        前の tick に突進していたかでは見分けない（`ItemTaken.swept`）。
+        """
         world, before = charging_world()
         field = apply(
             [
-                ItemTaken(Cell(6, 5), ItemKind.FIRE, 0),
+                ItemTaken(Cell(6, 5), ItemKind.FIRE, 0, swept=True),
                 ItemTaken(Cell(6, 6), ItemKind.SHOE, 0),
             ],
             world,

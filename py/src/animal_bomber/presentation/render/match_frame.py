@@ -76,11 +76,14 @@ def draw_match_frame(
     panel_topleft: tuple[int, int],
     now_ms: float,
     immediate: bool = False,
+    blend: float = 1.0,
 ) -> PanelHits:
     """盤面を盤面の四角で切って描き、横の板を貼る。横の板の押せる所を返す。
 
     盤面を切るのは、画面の揺れと粒子が、盤面と横の板の間のすき間へはみ出さないため。
-    横の板は、板の1枚と時計の数字の1枚を貼る（`panel/side_panel.py`）。
+    横の板は、板の1枚と時計の数字の1枚を貼る（`panel/side_panel.py`）。プレイヤーの
+    位置を1つ前の tick と混ぜる割合 `blend` は、そのまま `Renderer.draw` へ渡す
+    （貼る数は変わらない）。
 
     Args:
         target: 描く面（窓の大きさ。アルファの桁の無い面）。
@@ -93,9 +96,12 @@ def draw_match_frame(
         panel_topleft: 横の板を貼る位置（スクロールした分だけ上へずらした位置）。
         now_ms: いまの時刻（ms。横の板の作り直しの間隔と、時計の数字の明滅）。
         immediate: 横の板を約 4 Hz の間隔を待たずに作り直すか（`SidePanel.show`）。
+        blend: プレイヤーを描く位置を1つ前の tick の位置と混ぜる割合（`shell/loop.py`
+            の `GameSpeed.blend`。既定の 1 はいまの位置。描画の重さの場面は既定の
+            まま）。
     """
     target.set_clip(board_rect)
-    renderer.draw(target, world, visuals)
+    renderer.draw(target, world, visuals, blend)
     target.set_clip(None)
     panel.show(content, now_ms, immediate=immediate)
     return panel.draw(target, panel_topleft, now_ms)

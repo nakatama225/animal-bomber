@@ -19,7 +19,10 @@ TypeScript 版の写しには、振る舞いの中身を同じ形の文字列に
 - イベントの種類：`TechniqueRefused`（根元まで焼けた舌を出そうとした）・`ReachRestored`
   （焼けた舌が1マス戻った）。`event_row` は None を返し、`ts_event_rows` が外す
 - 項目：`Sprayed.washed`（流したうんこの数）・`EffectApplied.pushed_by`（押しつけた
-  プレイヤー）。`SuddenDeath.moved_from` と同じく行に入れない
+  プレイヤー）・`ItemTaken.swept`（体当たりで通り道のものを吸い込んだか）。
+  `SuddenDeath.moved_from` と同じく行に入れない。`ItemTaken.swept` は、体当たりが
+  終わった tick に歩いて拾ったものを、吸い込んだと通知しないために足した。
+  TypeScript 版は吸い込んだ通知を出さないので、この項目に当たるものが無い
 """
 
 from collections.abc import Iterable

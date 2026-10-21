@@ -59,7 +59,6 @@ from animal_bomber.domain.events import (
 )
 from animal_bomber.domain.query.board import player_by_id
 from animal_bomber.domain.state.effects import EffectKind
-from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng
 from animal_bomber.presentation.emoji import item_emoji
@@ -68,7 +67,6 @@ from animal_bomber.presentation.render.scene.clues import (
     carried_items,
     dropped_color,
     raises_dust,
-    was_charging,
 )
 from animal_bomber.presentation.render.scene.particles import (
     BAD_SMOKE,
@@ -189,7 +187,6 @@ class EffectField:
         `before` は前の tick の終わりの控え（ラウンドの最初の tick には無い）。
         """
         doused: list[Cell] = []
-        swept: list[PlayerId] = []
         for index, event in enumerate(events):
             match event:
                 case Exploded(count=count, cause=cause):
@@ -201,13 +198,13 @@ class EffectField:
                     color = dropped_color(world, events, index)
                     if color is not None:
                         self._puff(cell, color, item_emoji(kind))
-                case ItemTaken(cell=taken_at, kind=kind, taker=taker):
+                case ItemTaken(cell=taken_at, kind=kind, swept=swept):
                     if taken_at is None:
                         # 舌で引き寄せて効いたもの。原型も煙を出さない。
                         continue
                     cell = taken_at
-                    if was_charging(before, taker) and taker not in swept:
-                        swept.append(taker)
+                    if swept:
+                        # 突進が吸い込んだもの（原型の chargeSweep。L2814-2817）。
                         self.particles += scooped(cell, item_emoji(kind), self._rng)
                     else:
                         color = BAD_SMOKE if is_harmful(kind) else GOOD_SMOKE

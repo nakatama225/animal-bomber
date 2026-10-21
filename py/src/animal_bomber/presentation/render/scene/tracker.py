@@ -90,7 +90,12 @@ class SceneTracker:
         return [particle.look() for particle in self._effects.particles]
 
     def motion(self, player: PlayerId) -> TrackedMotion:
-        """プレイヤーの動きの値（歩いた距離・最後に動いた時刻・被弾の揺れ）。"""
+        """プレイヤーの動きの値（歩いた距離・最後に動いた時刻・被弾の揺れ・1つ前の位置）。
+
+        1つ前の位置は、最後に数えた tick の1つ前の tick の終わりの位置（ゲーム速度が
+        整数でないときに、描く位置を混ぜるのに使う。`scene/motion.py`）。盤面が止まって
+        いる間（決着のあとの待ち・ポーズで進めない間）は変わらない。
+        """
         return self._motions.motion(player)
 
     def slime(self, actor: SlimeBomb) -> tuple[tuple[float, float], bool]:

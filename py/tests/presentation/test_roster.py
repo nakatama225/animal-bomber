@@ -107,7 +107,26 @@ class Test通信対戦の名札:
         """
         replaced: tuple[PlayerId, ...] = (3,)
         roster = lan_roster(SETTINGS, humans=(0, 2, 3), local=0, replaced=replaced)
-        assert roster == (Human("1P", True), Cpu(1, EASY), Human("3P"), Cpu(1, NORMAL))
+        assert roster == (
+            Human("1P", True),
+            Cpu(1, EASY),
+            Human("3P"),
+            Cpu(1, NORMAL, label="4P"),
+        )
         assert tag_of(roster, 3) == "CPU1・ふつう"
         assert not is_cpu(roster, 2)
         assert is_cpu(roster, 3)
+
+    def test_抜けて替わったプレイヤーの呼び方は_人間だったときの番号のまま(
+        self,
+    ) -> None:
+        """原型は抜けたプレイヤーを CPU にするとき `label` を書き換えない（L3793）。
+
+        入れ替わりの通知（L2354）は「2P」のまま呼ぶ。始めからつながっていなかった枠の
+        CPU は、動物の名前で呼ぶ。
+        """
+        replaced: tuple[PlayerId, ...] = (2,)
+        roster = lan_roster(SETTINGS, humans=(0, 2), local=0, replaced=replaced)
+        assert label_of(roster, 2, Animal.FOX) == "3P"
+        assert label_of(roster, 1, Animal.FROG) == "かえる"
+        assert label_of(roster, 2, Animal.FOX) != "きつね"

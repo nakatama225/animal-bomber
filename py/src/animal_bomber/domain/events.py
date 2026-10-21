@@ -119,6 +119,15 @@ class ItemTaken:
     """
     kind: ItemKind
     taker: PlayerId
+    swept: bool = False
+    """体当たりで進む振る舞いが、通り道のアイテムを吸い込んだか。
+
+    画面の通知（「… を吸い込んだ！」。原型 L2818）と、上へ舞う絵文字の粒に使う。
+    同じ tick に、体当たりが終わってからふつうに歩いて拾ったものは False（原型は、
+    体当たりの最中に足元で取ったものにだけ出す）。前の tick の振る舞いからは、この2つを
+    見分けられないので、ここに載せる。TypeScript 版には無い（比べる行にも入れない。
+    `tests/ts_rows.py`）。
+    """
 
 
 @dataclass(frozen=True, slots=True)

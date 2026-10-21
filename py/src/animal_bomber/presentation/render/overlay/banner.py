@@ -9,10 +9,29 @@
 ぼかすと重いので、幕を出したとき（新しい `BannerView` を初めて描くとき）に、描く面に
 描いてあった盤面と横の板を1回だけぼかして暗くし、幕の間は使い回す。原型も幕の間は
 盤面を進めないので、止まった盤面が見えるのは同じ。⚠️ 幕を出した最初のフレームは、
-盤面と横の板を描き終えてから `draw` を呼ぶ（その絵をぼかす）。
+盤面と横の板を描き終えてから `draw` を呼ぶ（その絵をぼかす）。2フレーム目からは、
+ぼかした絵が窓の全体を覆うので、呼ぶ側は盤面と横の板を描かない（`holds`）。
 
-ぼかしは pygame の `gaussian_blur`（半径 6px）で寄せた。CSS の blur(3px) は標準偏差
-3px のぼかしで、pygame の半径との対応は検証していない（見た目で寄せた値）。
+ぼかしは pygame の `box_blur`（半径 4px。幅 9px の箱）を1回かける。CSS の blur(3px) は
+標準偏差 3px のガウスぼかしなので、numpy で作った標準偏差 3px のぼかし（3σ で打ち切り、
+端は端の画素を延ばす）を手本にして、マス 60 の描画の重さの場面の1フレーム
+（1708×1094）で候補を比べた（2026-10-21。負荷 4.4〜4.6 で、時間は中央値）。差は RGB の
+各桁の絶対値の差。
+
+| 候補 | 平均 | p99 | 最大 | 時間 |
+|---|---|---|---|---|
+| `gaussian_blur` 半径 6（前の作り方） | 5.63 | 32 | 85 | 182 ms |
+| `gaussian_blur` 半径 3 | 0.69 | 3 | 9 | 110 ms |
+| `box_blur` 半径 3・2・2 の3回 | 1.29 | 3 | 22 | 35 ms |
+| `box_blur` 半径 4 の1回（選んだもの） | 1.18 | 8 | 37 | 12 ms |
+| 1/2 に縮めて `box_blur` 半径 1 の2回で広げる | 2.63 | 16 | 44 | 8 ms |
+| 1/4 に縮めて `gaussian_blur` 半径 1 で広げる | 4.90 | 27 | 77 | 4 ms |
+
+選び方は「幕を出すフレームが1フレームの時間（16.67 ms）に収まる候補のうち、手本との
+平均の差がいちばん小さいもの」。縮めてから広げる形は速いが、縮めるときに柱の縁などの
+細かい所が混ざり、差が大きい。幕はこの上に不透明度 0.82 の暗い色を重ねるので、見える
+差はおよそ 0.18 倍（選んだものの平均で 0.2、p99 で 1.4）になる。前の作り方の半径 6 は、
+手本の倍ほどぼけていた（pygame の `gaussian_blur` の半径は、ほぼ標準偏差にあたる）。
 """
 
 from collections.abc import Hashable, Sequence
@@ -45,8 +64,8 @@ SHADE: Final = (15, 9, 6)
 SHADE_ALPHA: Final = round(0.82 * 255)
 """幕の下を暗くする不透明度（原型の 0.82）。"""
 
-BLUR_RADIUS: Final = 6
-"""幕の下のぼかしの半径（px。モジュールの説明）。"""
+BLUR_RADIUS: Final = 4
+"""幕の下のぼかしの箱の半径（px。幅 9px の箱で1回ぼかす。モジュールの説明）。"""
 
 CARD_MAX_WIDTH: Final = 520
 """幕のカードの幅の上限（px。原型の `.bcard{max-width:520px}`）。"""
@@ -118,6 +137,20 @@ class BannerOverlay:
             if chosen is not None and hit.item == chosen:
                 draw_focus(target, hit.rect, self._widgets.radius(hit.item))
         return placed
+
+    def holds(self, view: BannerView | None, size: tuple[int, int]) -> bool:
+        """幕 `view` の下の絵を、大きさ `size` でぼかして持っているか。
+
+        持っていれば、次の `draw` はぼかした絵で窓の全体を覆うので、呼ぶ側はその下に
+        盤面と横の板を描かなくてよい（モジュールの説明）。
+        """
+        backdrop = self._backdrop
+        return (
+            view is not None
+            and view is self._view
+            and backdrop is not None
+            and backdrop.get_size() == size
+        )
 
     def forget(self) -> None:
         """幕を外した（次に出す幕で、下の絵をぼかし直す）。"""
@@ -194,11 +227,19 @@ def _centered(target: pygame.Surface, image: pygame.Surface, top: int) -> int:
     return top + image.get_height()
 
 
+def blur(surface: pygame.Surface) -> pygame.Surface:
+    """原型の blur(3px)（標準偏差 3px のガウスぼかし）に寄せたぼかし（新しい面）。
+
+    幅 9px の箱で1回ぼかす（モジュールの説明の表）。端は端の画素を延ばす。
+    """
+    return pygame.transform.box_blur(surface, BLUR_RADIUS)
+
+
 def _blurred(target: pygame.Surface) -> pygame.Surface:
     """描く面をぼかして暗くした、不透明な絵（モジュールの説明）。"""
     shot = pygame.Surface(target.get_size())
     shot.blit(target, (0, 0))
-    blurred = pygame.transform.gaussian_blur(shot, BLUR_RADIUS)
+    blurred = blur(shot)
     shade = pygame.Surface(target.get_size())
     shade.fill(SHADE)
     shade.set_alpha(SHADE_ALPHA)

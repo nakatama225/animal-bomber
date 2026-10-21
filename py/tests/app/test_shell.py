@@ -15,11 +15,14 @@ TypeScript 版の `tests/ui/shell.test.ts`（本物の GameSession を回す通�
 - ゲーム速度で1回の押しが増えない（原型の更新履歴 1.6.2 の事故）
 """
 
+import itertools
+
 import pygame
 import pytest
 
 from animal_bomber.app.lan import LanMatch
 from animal_bomber.app.runner import LocalMatch
+from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.core.entity_id import EntityId
 from animal_bomber.domain.core.tick import TICKS_PER_SECOND, Tick
 from animal_bomber.domain.events import (
@@ -28,8 +31,9 @@ from animal_bomber.domain.events import (
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
+from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import OUT
+from animal_bomber.domain.state.player import OUT, speed_of
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.net.client import Playing
 from animal_bomber.presentation import notices
@@ -42,15 +46,17 @@ from animal_bomber.presentation.hud.banner import (
 )
 from animal_bomber.presentation.menu.choices import hp_for_hits
 from animal_bomber.presentation.menu.screens import LanView, LobbyView, MenuScreen
+from animal_bomber.presentation.render.layout import PANEL_WIDTH, fit_window
 from animal_bomber.presentation.render.loading import BACKGROUND
-from animal_bomber.presentation.render.panel.side_panel import thumb_center
+from animal_bomber.presentation.render.panel.side_panel import SidePanel, thumb_center
 from animal_bomber.presentation.render.renderer import Visuals
 from animal_bomber.presentation.render.screens.manual import MANUAL_BOX
 from animal_bomber.presentation.render.ui.shapes import page_background
+from animal_bomber.presentation.render.views.player import drawn_position
 from animal_bomber.shell.gamepad import PadButton
 from tests.net.fake_relay import FakeConnection, FakeRelay
 
-from .shell_driver import SEED, WINDOW, Driver, key_event
+from .shell_driver import PAINTER, SEED, WINDOW, Driver, key_event
 
 SOLO = "1人 vs CPU×3"
 DUO = "2人 vs CPU×2"
@@ -106,6 +112,38 @@ def scroll_panel_down(driver: Driver) -> None:
     driver.move_mouse((WINDOW.panel_origin[0] + 10, 300))
     driver.wheel(-50)
     driver.frame(ticks=0)
+
+
+def set_speed(driver: Driver, rate: float) -> None:
+    """横の板のつまみの `rate` の所を押して、ゲーム速度を変える。"""
+    hits = driver.shell.panel_hits
+    assert hits is not None and hits.speed is not None
+    driver.click_at((thumb_center(rate, hits.speed), hits.speed.centery))
+    assert driver.shell.speed.rate == rate
+
+
+def watch_drawn(driver: Driver) -> list[tuple[float, float]]:
+    """盤面を描くたびに、混ぜる割合と、1P を描く縦の位置を控える。
+
+    控えの list を返す。
+    """
+    renderer = driver.shell.renderer
+    draw = renderer.draw
+    drawn: list[tuple[float, float]] = []
+
+    def watched(
+        target: pygame.Surface,
+        world: WorldState,
+        visuals: Visuals,
+        blend: float = 1.0,
+    ) -> None:
+        first = world.players[0]
+        at = drawn_position(first.position, visuals.motion(first.id).previous, blend)
+        drawn.append((blend, at.y))
+        draw(target, world, visuals, blend)
+
+    renderer.draw = watched  # type: ignore[method-assign]
+    return drawn
 
 
 def leave_by_settings(driver: Driver) -> None:
@@ -426,6 +464,54 @@ class Testラウンドの幕:
         assert runner.world.players[0].hp == hp_for_hits(3)
         assert runner.world.players[1].hp == hp_for_hits(1)
 
+    def test_幕の下のぼかしは幕を出したとき1回だけ_幕の間は盤面を描かない(
+        self,
+    ) -> None:
+        """ぼかしは重い（マス 60 で約 12 ms）ので、幕を出したときに1回だけ作る。
+
+        幕の間はぼかした絵が窓の全体を覆うので、盤面（`Renderer.draw`）も描かない。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        renderer = driver.shell.renderer
+        draw = renderer.draw
+        drawn: list[int] = []
+
+        def counted(
+            target: pygame.Surface,
+            world: WorldState,
+            visuals: Visuals,
+            blend: float = 1.0,
+        ) -> None:
+            drawn.append(world.now)
+            draw(target, world, visuals, blend)
+
+        renderer.draw = counted  # type: ignore[method-assign]
+        finish_round(driver, runner)
+        assert len(drawn) == 1
+        driver.frames(5)
+        overlay = driver.shell._view._banner
+        assert overlay.backdrops == 1
+        assert len(drawn) == 1
+        assert labels(driver) == [NEXT_ROUND_BUTTON, SETUP_BUTTON]
+
+    def test_幕が消えたフレームに_窓の全体を塗り直す(self) -> None:
+        """盤面と横の板のすき間に、ぼかした絵を残さない。"""
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        canvas = driver.shell.canvas
+        background = page_background(canvas.get_size())
+        spot = (WINDOW.board.board_size[0] + 8, WINDOW.size[1] - 8)
+        assert canvas.get_at(spot) == background.get_at(spot)
+        finish_round(driver, runner)
+        driver.frames(3)
+        assert canvas.get_at(spot) != background.get_at(spot)
+        driver.click(NEXT_ROUND_BUTTON)
+        assert runner.match.round == 2
+        assert canvas.get_at(spot) == background.get_at(spot)
+
     def test_幕のボタンでは画面の操作の音を鳴らさない(self) -> None:
         driver = Driver()
         runner = start_local(driver)
@@ -657,6 +743,60 @@ class Testゲームの速さ:
         assert [bomb.owner for bomb in runner.world.bombs] == [0]
         assert runner.world.players[0].previous_input is PlayerInput.IDLE
 
+    def test_整数でない倍率では_描く位置を前のtickと混ぜ_1フレームの進みが揃う(
+        self,
+    ) -> None:
+        """原型は1フレームごとに経過時間 × 倍率をサブステップで進める（L4256-4275）。
+
+        0.75 倍で進める tick の数は 0・1・1・1 と揃わないが、描く位置は1フレームに
+        0.75 tick ぶんずつ進む。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        world = runner.world
+        for row in range(2, 6):
+            world.board.put(Cell(1, row), Tile.EMPTY)
+        drawn = watch_drawn(driver)
+        set_speed(driver, 0.75)
+        driver.down(pygame.KSCAN_S)
+        driver.frames(3)
+        drawn.clear()
+        driver.frames(8)
+        blends = [blend for blend, _ in drawn]
+        assert set(blends) == {0.0, 0.25, 0.5, 0.75}
+        walk = speed_of(world.players[0], Tile.EMPTY)
+        steps = [b[1] - a[1] for a, b in itertools.pairwise(drawn)]
+        assert steps == pytest.approx([0.75 * walk] * 7)
+
+    def test_止めている間は_描く位置が揺れない(self) -> None:
+        """ポーズの間は、ゲーム速度の端数を進めない（原型も止めている間は進めない）。"""
+        driver = Driver()
+        runner = start_local(driver)
+        drawn = watch_drawn(driver)
+        set_speed(driver, 0.5)
+        driver.down(pygame.KSCAN_S)
+        driver.frames(3)
+        driver.down(pygame.KSCAN_P)
+        assert runner.paused
+        drawn.clear()
+        driver.frames(5)
+        assert len(set(drawn)) == 1
+        assert drawn[0][0] < 1.0
+
+    @pytest.mark.parametrize("rate", [1.0, 2.0])
+    def test_整数の倍率では_混ぜずにいまの位置に描く(self, rate: float) -> None:
+        """等倍の見た目と、描画の重さの場面の描き方を変えない。"""
+        driver = Driver()
+        start_local(driver)
+        drawn = watch_drawn(driver)
+        set_speed(driver, 0.5)
+        driver.frame()
+        set_speed(driver, rate)
+        driver.down(pygame.KSCAN_S)
+        drawn.clear()
+        driver.frames(4)
+        assert [blend for blend, _ in drawn] == [1.0] * 4
+
     def test_つまみを動かすと倍率が変わる(self) -> None:
         driver = Driver()
         start_local(driver)
@@ -700,10 +840,13 @@ class Test盤面と横の板:
         clips: list[pygame.Rect] = []
 
         def watched(
-            target: pygame.Surface, world: WorldState, visuals: Visuals
+            target: pygame.Surface,
+            world: WorldState,
+            visuals: Visuals,
+            blend: float = 1.0,
         ) -> None:
             clips.append(target.get_clip())
-            draw(target, world, visuals)
+            draw(target, world, visuals, blend)
 
         renderer.draw = watched  # type: ignore[method-assign]
         driver.frame()
@@ -744,6 +887,54 @@ class Test盤面と横の板:
         driver.frame(ms=2000)
         driver.frame()
         assert canvas.get_at(spot) == background.get_at(spot)
+
+    def test_横の板が低くなったフレームに_前の板の下の端を残さない(self) -> None:
+        """原型の横の板は DOM なので、行が減っても前の板の下の端は残らない。
+
+        パッドを繋いだ1人の試合は、ポーズ中だけキーの案内に Select の行が出る。
+        ポーズをやめて板が低くなったそのフレームに、前の板の下の端だった帯が窓の
+        背景になっていることを見る。板の高さは書体で変わるので、同じ書体の
+        `SidePanel` で読む。窓は、ポーズ中の板より高く作る（板が窓の中で縮む）。
+        """
+        scout = Driver()
+        start_local(scout)
+        scout.pads.hold(1)
+        scout.frame()
+        scout.tap(pygame.KSCAN_P)
+        paused = scout.shell.panel_content
+        scout.tap(pygame.KSCAN_P)
+        playing = scout.shell.panel_content
+        assert paused is not None and playing is not None
+        tall, short = (
+            SidePanel(PAINTER).height(paused),
+            SidePanel(PAINTER).height(playing),
+        )
+        assert tall > short
+
+        window = fit_window(
+            900, tall + 100, panel_height=tall + 20, max_height=tall + 100
+        )
+        assert window.size[1] > tall
+        driver = Driver(window=window)
+        start_local(driver)
+        driver.pads.hold(1)
+        driver.frame()
+        driver.tap(pygame.KSCAN_P)
+        assert driver.shell.panel_content == paused
+        driver.down(pygame.KSCAN_P)
+        assert driver.shell.panel_content == playing
+        canvas = driver.shell.canvas
+        band = pygame.Rect(window.panel_origin[0], short, PANEL_WIDTH, tall - short)
+        background = page_background(canvas.get_size())
+
+        def band_matches() -> bool:
+            got = pygame.surfarray.array3d(canvas.subsurface(band))
+            wanted = pygame.surfarray.array3d(background.subsurface(band))
+            return bool((got == wanted).all())
+
+        assert band_matches()
+        driver.up(pygame.KSCAN_P)
+        assert band_matches()
 
     def test_横の板が窓より高ければ_板の上でだけホイールでスクロールする(
         self,
@@ -930,6 +1121,21 @@ def _now(lan: LanMatch) -> int:
 
 
 class Test通信対戦:
+    def test_1台の試合のゲーム速度が残っていても_描く位置を混ぜない(self) -> None:
+        """通信対戦にはゲーム速度が無い（ロックステップで全員が同じ速さで進む）。
+
+        ゲーム速度は試合をまたいで保つので、1台の試合で 0.5 倍にしたまま通信対戦を
+        始めても、位置を前の tick と混ぜない。
+        """
+        pair = LanPair()
+        pair.host.shell.speed.set(0.5)
+        pair.host.shell.speed.take(1)
+        assert pair.host.shell.speed.blend == 0.5
+        pair.start()
+        drawn = watch_drawn(pair.host)
+        pair.step(4)
+        assert [blend for blend, _ in drawn] == [1.0] * 4
+
     def test_ロビーでホストが選んだ設定がゲストへ届き_はじめるで同じ試合が始まる(
         self,
     ) -> None:

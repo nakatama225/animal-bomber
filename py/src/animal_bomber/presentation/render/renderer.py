@@ -125,8 +125,18 @@ class Renderer:
         """盤面を描く面の寸法。"""
         return self.art.layout
 
-    def draw(self, target: pygame.Surface, world: WorldState, visuals: Visuals) -> None:
+    def draw(
+        self,
+        target: pygame.Surface,
+        world: WorldState,
+        visuals: Visuals,
+        blend: float = 1.0,
+    ) -> None:
         """いまの盤面を `target`（描く面。アルファの桁の無い面）の左上 (0, 0) に描く。
+
+        `blend` は、プレイヤーを描く位置を1つ前の tick の位置と混ぜる割合（既定の 1 は
+        いまの位置。ゲーム速度が整数でない1台の試合だけ 1 より小さい。`views/player.py`
+        の `drawn_position`）。重ねる順（上にいる順）も、描く位置で決める。
 
         ⚠️ 画面の揺れでずらした盤面と粒子は、盤面の大きさ（`Layout.surface_size`）の
         外へはみ出して描くことがある。窓の大きさの面に描くときは、呼ぶ側が盤面の四角で
@@ -153,11 +163,19 @@ class Renderer:
         for blast in world.blasts:
             art.blasts.draw(target, blast, rng, offset)
         alpha = 1.0
-        on_board = [p for p in world.players if is_alive(p)]
         cpus = self.cpu_players
-        for player in sorted(on_board, key=lambda p: p.position.y):
-            motion = visuals.motion(player.id)
-            look = player_look(world, player, motion, cpu=player.id in cpus)
+        looks = [
+            player_look(
+                world,
+                player,
+                visuals.motion(player.id),
+                cpu=player.id in cpus,
+                blend=blend,
+            )
+            for player in world.players
+            if is_alive(player)
+        ]
+        for look in sorted(looks, key=lambda look: look.y):
             alpha = art.players.draw(target, look, now, rng, offset, alpha)
         # 盤面の物は、炎を全部描いてから粘膜爆弾を描く（原型の draw の順）ので、
         # 輪を2つに分ける。種類を足すと、どちらの `match` も型検査で失敗する。

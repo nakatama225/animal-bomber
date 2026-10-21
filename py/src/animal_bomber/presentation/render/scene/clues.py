@@ -9,16 +9,16 @@
   とくぎで撒いた（そのマスのアイテムが撒かれたもの）・突進が止まって撒いた（すぐ前の
   並びが「撒き散らした」の知らせ）は煙を出し、壊れたブロックから出たものは出さない
   （原型の destroySoft も出さない）
-- 拾ったアイテム（`ItemTaken`）は、突進で吸い込んだもの（前の tick に突進していた
-  プレイヤーの、その tick の1つ目）なら絵文字が上へ舞い、ふつうに拾ったものなら煙
 - 突進が抱えた悪いアイテムには、ルールの層がイベントを出さない。前の tick にあって
   消えたアイテムのうち、イベントで説明のつかない悪いアイテムで、突進しているプレイヤーの
   マスにあったもの
 - 通常技を出したイベント（`TechniqueUsed`）は、何の技かを運ばない。跳ぶ技（足元に
   土ぼこりを立て、位置が飛ぶ）は、技を出したプレイヤーの動物で見分ける
 
-⚠️ 見分け損ねうる、まれな重なり：突進が時間切れで止まった tick に歩いて拾ったもの
-（前の tick に突進していたので、1つ目なら吸い込んだものと見なす）。
+拾ったアイテム（`ItemTaken`）が突進で吸い込んだもの（絵文字が上へ舞う）か、
+ふつうに拾ったもの（煙）かは、イベントの項目（`ItemTaken.swept`）で決まるので、
+ここでは見分けない。前の tick に突進していたかで見分けると、突進が終わった tick に
+歩いて拾ったものまで吸い込んだものと見なす。
 """
 
 from collections.abc import Sequence
@@ -39,7 +39,6 @@ from animal_bomber.domain.events import (
 from animal_bomber.domain.query.board import item_at, player_by_id
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import POWER_UP_KINDS
-from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.presentation.emoji import item_emoji
 from animal_bomber.presentation.render.art.items import is_harmful
@@ -63,14 +62,6 @@ def raises_dust(animal: Animal) -> bool:
             return False
         case _:
             assert_never(animal)
-
-
-def was_charging(before: Snapshot | None, player: PlayerId) -> bool:
-    """そのプレイヤーが、前の tick の終わりに突進していたか。"""
-    if before is None:
-        return False
-    seen = before.players.get(player)
-    return seen is not None and seen.alive and seen.charge is not None
 
 
 def dropped_color(
