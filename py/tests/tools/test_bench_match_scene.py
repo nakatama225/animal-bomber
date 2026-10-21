@@ -16,17 +16,21 @@ import json, random, sys
 sys.path.insert(0, {str(TOOLS)!r})
 import pygame
 from bench_match_scene import MatchScene, MatchSceneSpec
+from animal_bomber.presentation.render.layout import PANEL_GAP, PANEL_WIDTH
 pygame.display.init()
 assert pygame.display.get_driver() == "dummy"
 out = {{}}
 for kind in ("square", "glow"):
     spec = MatchSceneSpec(26, kind)
     pygame.display.set_mode(spec.size)
+    panel_left = spec.board_size[0] + PANEL_GAP
     class Counting(pygame.Surface):
         def __init__(self, size):
             super().__init__(size)
             self.alpha_blits = self.faded_blits = self.shaken_boards = 0
             self.spinner_blits = 0
+            self.panels = []
+            self.on_panel = 0
         def blit(self, source, dest, area=None, special_flags=0):
             if source.get_masks()[3]:
                 self.alpha_blits += 1
@@ -39,21 +43,30 @@ for kind in ("square", "glow"):
                     self.shaken_boards += 1
                 else:
                     self.spinner_blits += 1
+            x = dest[0] if isinstance(dest, tuple) else dest.x
+            if x >= panel_left:
+                self.on_panel += 1
+                if source.get_width() == PANEL_WIDTH:
+                    self.panels.append([bool(source.get_masks()[3]),
+                                        source.get_alpha(), special_flags])
             return super().blit(source, dest, area, special_flags)
     scene = MatchScene(spec, random.Random(1))
     built = scene.renders
     frames = []
     shaken = []
     spinners = []
+    panels = []
     for frame in range(40):
         target = Counting(spec.size)
         scene.draw(target, frame)
         frames.append([target.alpha_blits, target.faded_blits])
         shaken.append(target.shaken_boards)
         spinners.append(target.spinner_blits)
+        panels.append([target.panels, target.on_panel])
     out[kind] = {{"frames": frames, "drawn": scene.renders - built,
                   "counts": scene.counts, "phases": scene.blast_phases,
-                  "shaken": shaken, "spinners": spinners}}
+                  "shaken": shaken, "spinners": spinners, "panels": panels,
+                  "panel_builds": scene.panel_builds}}
 print(json.dumps(out))
 """
 
@@ -77,6 +90,11 @@ def test_場面は_取っておいた絵を薄めずに貼り_測る間に絵を
     - 回りながら浮かぶ顔 4 個を、どのフレームにも貼っている。顔は、色に不透明度を掛けた
       形で貼った小さい絵（幅が描く先の半分以下）の数で数える（ほかに同じ形で貼るのは、
       揺れている間の盤面の1枚だけ）。上の下限は余りが大きく、顔が消えても下回らない
+    - 横の板を、どのフレームにも貼っている。板の位置に貼るのは、板の幅のアルファの桁の
+      無い1枚（薄めず、色に不透明度を掛けた形でもない）と、時計の数字の小さい1枚の
+      2枚だけ（板の中の箱や文を、毎フレーム1つずつ貼らない）
+    - 板の絵は、名札の中身が変わるたびに作り直す（場面はきつねのとくぎの回数を
+      15 フレームごとに変えるので、40 フレームで 0・15・30 フレーム目の3回）
     """
     completed = subprocess.run(
         [sys.executable, "-c", COUNTING],
@@ -110,3 +128,7 @@ def test_場面は_取っておいた絵を薄めずに貼り_測る間に絵を
         for alpha_blits, faded_blits in result["frames"]:
             assert faded_blits == 0
             assert alpha_blits >= least
+        for panel_blits, on_panel in result["panels"]:
+            assert panel_blits == [[False, None, 0]]
+            assert on_panel == 2
+        assert result["panel_builds"] == 3

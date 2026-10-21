@@ -303,6 +303,23 @@ class Test長押し:
         # 描く（溜まりはほぼ 1）。ルールの層は 90 tick 目に出す。
         assert held / 1.5 > 0.999
 
+    def test_CPUのプレイヤーには_長押しのゲージを出さない(self) -> None:
+        """原型の CPU は技を直に呼び、長押しの長さを増やさない（L4115-4118）。
+
+        この版の CPU は技のボタンを押した入力を返すので、盤面の長さは増える。同じ
+        盤面でも、CPU として描くならゲージを出さず、人間として描くなら出す。
+        """
+        world, fox = arena((Animal.FOX, Animal.RABBIT))
+        grant_special(fox, 1)
+        fox.action_fired = False
+        simulation.step(world, only_for(world, fox.id, PlayerInput.ACTION))
+        assert fox.action_held > 0
+        human = player_look(world, fox, TrackedMotion())
+        cpu = player_look(world, fox, TrackedMotion(), cpu=True)
+        assert gauge_progress(human) is not None
+        assert gauge_progress(cpu) is None
+        assert (cpu.cpu, human.cpu) == (True, False)
+
 
 class Test外周:
     def test_撃つ間隔の残りは原型の_negiCool_と同じ(self) -> None:

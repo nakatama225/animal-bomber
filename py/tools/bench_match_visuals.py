@@ -16,7 +16,7 @@ from animal_bomber.domain.state.actors import Foxfire, SlimeBomb
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.presentation.render.art.foxfires import TrailMark
 from animal_bomber.presentation.render.art.particles import ParticleLook
-from animal_bomber.presentation.render.layout import Layout
+from animal_bomber.presentation.render.layout import PANEL_GAP, PANEL_WIDTH, Layout
 from animal_bomber.presentation.render.views.player import TrackedMotion
 
 ParticleKind = Literal["square", "glow"]
@@ -56,9 +56,21 @@ class MatchSceneSpec:
     items: int = 20
 
     @property
-    def size(self) -> tuple[int, int]:
-        """描く面の大きさ（px。`Layout` と同じ。盤面の上の帯は無し）。"""
+    def board_size(self) -> tuple[int, int]:
+        """盤面の大きさ（px。`Layout` と同じ。盤面の上の帯は無し）。"""
         return Layout(self.tile).surface_size
+
+    @property
+    def size(self) -> tuple[int, int]:
+        """描く面（窓）の大きさ（px）。盤面の右に、すき間をあけて横の板を置く。
+
+        高さは盤面の高さ。⚠️ 遊ぶときの窓の高さは盤面と横の板の高いほう
+        （`layout.fit_window`）で、小さいマスでは横の板のほうが高い。盤面より下の行は
+        毎フレーム描かないので、場面には入れていない（窓の面へ貼る1回だけが、その分
+        小さく測れる。判定に使うマス 60 では盤面のほうが高い）。
+        """
+        width, height = self.board_size
+        return width + PANEL_GAP + PANEL_WIDTH, height
 
 
 def open_cells() -> list[Cell]:

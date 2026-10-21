@@ -96,6 +96,11 @@ class PlayerLook:
     """伸ばしている舌（原型の tongue）。"""
     digging: Tick | None = None
     """落とし穴を掘り終わるまでの残り（原型の digging.t）。掘っていなければ None。"""
+    cpu: bool = False
+    """CPU が操作しているプレイヤーか。
+
+    CPU には、とくぎの長押しのゲージを描かない（`gauge_progress`）。
+    """
 
     @property
     def marks(self) -> list[str]:
@@ -144,13 +149,13 @@ def gauge_progress(look: PlayerLook) -> float | None:
     とくぎを持っていて（印で見る。`PlayerLook.special`）、押していて、まだ出し終えていない
     ときだけ出す（原型の条件）。
 
-    ⚠️ CPU が技のボタンを押した tick にもゲージが1フレーム出る（チキンを持ったまま、
-    爆弾を一列に置く技を出したときなど）。原型の CPU は技を直に呼び、actHold を増やさ
-    ないので出ない。いまの Python 版は CPU を窓に出さない。CPU を窓に出す段階 10 で、
-    CPU のプレイヤーにはゲージを出さない形にする（docs/08 の「原型と違うまま残した
-    所」）。
+    CPU のプレイヤーには出さない（`PlayerLook.cpu`）。原型の CPU は技を直に呼び、
+    長押しの長さ（actHold）を増やさない（増やすのは人間の入力を読む humanUpdate
+    だけ）ので、ゲージが出ない。この版の CPU は人間と同じく技のボタンを押した入力を
+    返すので、ボタンを押した tick に長さが増える（チキンを持ったまま、爆弾を一列に置く
+    技を出したときなど）。描く側で CPU を見分けて、原型と同じく出さない。
     """
-    if not look.special or look.held <= 0 or look.fired:
+    if look.cpu or not look.special or look.held <= 0 or look.fired:
         return None
     return hold_progress(look.pose.animal, look.held)
 

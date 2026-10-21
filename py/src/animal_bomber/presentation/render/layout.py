@@ -13,6 +13,15 @@
 `window_layout`）。
 
 盤面の上に帯（ラウンドや勝ち数を出す所）を置けるよう、`band` のぶん下へずらせる。
+
+## 窓の寸法（`fit_window`）
+
+原型の試合の画面は、盤面の右に横の板（幅 238px）を、すき間 16px をあけて並べる
+（原型 L72-75）。1マスの大きさは、窓の幅から横の板などの分（`SIDE_RESERVE`）、高さから
+56px を引いた残りで決める（原型の fitBoard。L591-606）。窓の高さは、盤面と横の板の
+高いほう。⚠️ 横の板の高さは中身（名札の数・キーの案内の行）で変わるので、引数で受ける。
+上の帯（`band`）を使う今の窓の決め方（`fit_layout`）は、起動の層が `fit_window` に
+替えるまで残す。
 """
 
 import math
@@ -111,3 +120,72 @@ def fit_layout(width: int, height: int, band: int = 0) -> Layout:
     fit = min(width / (COLS + LANE * 2), available_height / (ROWS + LANE * 2))
     tile = max(TILE_MIN, min(TILE_MAX, math.floor(fit)))
     return Layout(tile, band)
+
+
+PANEL_WIDTH: Final = 238
+"""横の板の幅（px。原型の `#side{width:238px}`）。"""
+
+PANEL_GAP: Final = 16
+"""盤面と横の板の間（px。原型の `.stage{gap:16px}`）。"""
+
+SIDE_RESERVE: Final = PANEL_WIDTH + PANEL_GAP + 32 + 6 + 20
+"""窓の幅から、盤面に使えない分として引く幅（px。原型の `SIDE_W`。合わせて 312）。
+
+横の板 238・すき間 16・画面のまわりの余白 16×2・盤面の枠 3×2・スクロールバー 20。
+この版の窓は余白・枠・スクロールバーを持たないが、1マスの大きさを原型と同じに
+するため、原型と同じ幅を引く。
+"""
+
+HEIGHT_RESERVE: Final = 56
+"""窓の高さから、盤面に使えない分として引く高さ（px。原型の fitBoard の 56）。"""
+
+MIN_AVAILABLE_WIDTH: Final = 320
+"""引いたあとの幅の下限（px。原型の `Math.max(320, …)`）。"""
+
+MIN_AVAILABLE_HEIGHT: Final = 240
+"""引いたあとの高さの下限（px。原型の `Math.max(240, …)`）。"""
+
+
+def fit_tile(width: int, height: int) -> int:
+    """窓の大きさ（px）から決める1マスの大きさ（原型の fitBoard の TILE）。
+
+    原型の式のまま（窓の幅から `SIDE_RESERVE`、高さから `HEIGHT_RESERVE` を引き、
+    盤面とまわりの帯が入るいちばん大きいマス）。上限だけ原型の 96 でなく `TILE_MAX`
+    （モジュールの説明）。
+    """
+    available_width = max(MIN_AVAILABLE_WIDTH, width - SIDE_RESERVE)
+    available_height = max(MIN_AVAILABLE_HEIGHT, height - HEIGHT_RESERVE)
+    fit = min(available_width / (COLS + LANE * 2), available_height / (ROWS + LANE * 2))
+    return max(TILE_MIN, min(TILE_MAX, math.floor(fit)))
+
+
+@dataclass(frozen=True, slots=True)
+class WindowLayout:
+    """窓の中の並び：盤面を左上に、すき間をあけて右に横の板。"""
+
+    board: Layout
+    """盤面の寸法（上の帯は無し）。盤面は窓の左上 (0, 0) に置く。"""
+    panel_height: int
+    """横の板の高さ（px）。"""
+
+    @property
+    def panel_origin(self) -> tuple[int, int]:
+        """横の板の左上の位置（px）。"""
+        return self.board.board_size[0] + PANEL_GAP, 0
+
+    @property
+    def size(self) -> tuple[int, int]:
+        """窓の大きさ（px）。高さは盤面と横の板の高いほう。"""
+        width, height = self.board.board_size
+        return width + PANEL_GAP + PANEL_WIDTH, max(height, self.panel_height)
+
+
+def fit_window(width: int, height: int, panel_height: int) -> WindowLayout:
+    """画面の大きさ（px）に合わせた窓の並び（原型の fitBoard。モジュールの説明）。
+
+    Args:
+        width: 窓に使える幅（原型の `window.innerWidth`）。
+        height: 窓に使える高さ（原型の `window.innerHeight`）。
+        panel_height: 横の板の高さ（`panel/side_panel.py` の `panel_height`）。
+    """
+    return WindowLayout(Layout(fit_tile(width, height)), panel_height)

@@ -18,6 +18,7 @@ import pytest
 
 from animal_bomber.app.main import parse_args
 from animal_bomber.presentation.lan_status import WAIT_NOTICE_FRAMES
+from animal_bomber.presentation.render.loading import BACKGROUND
 
 DUMMY_ENV = {**os.environ, "SDL_VIDEODRIVER": "dummy", "SDL_AUDIODRIVER": "dummy"}
 
@@ -334,7 +335,8 @@ def test_じゅんびちゅうを出してから_出る動物の絵を描いて�
     loading = result["loading"]
     assert isinstance(loading, dict)
     assert loading["animals"] == ["rabbit", "elephant"]
-    assert loading["corner"] == [21, 14, 10]
+    # 窓の四隅は、起動の幕と同じ円形のグラデーションのいちばん外の色（#1a110d）。
+    assert loading["corner"] == list(BACKGROUND) == [26, 17, 13]
     assert loading["text"] > 0
     assert result["elapsed"] == 1
 

@@ -3,10 +3,10 @@
 - 試合が始まる前：盤面の代わりに、真ん中に数行（`LanScreen.draw_lobby`）
 - 試合が始まったあと：盤面の下の端に、1行の帯（`LanScreen.draw_notice`）
 
-文は日本語なので、日本語の字形を持つ書体を探して使う（`loading.py` の
-`japanese_font_path`）。⚠️ 見つからなければ pygame の既定の書体で描くので、四角に化ける
-（macOS には、探す書体のどれかがある）。ロビーの画面と書体の選び方は、段階 10 で
-作り直す。
+文は、画面の文を描く部品（`ui/typeset.py` の `TextPainter`）で描く。日本語は
+ヒラギノ丸ゴ（`ui/fonts.py`）、絵文字は色つきの絵文字の書体。⚠️ 日本語の書体が
+見つからなければ pygame の既定の書体で描くので、四角に化ける。ロビーの画面は、起動の
+層がロビーの画面（`screens/lobby.py`）に替えるまでの間のもの。
 """
 
 from collections.abc import Sequence
@@ -14,10 +14,11 @@ from typing import Final
 
 import pygame
 
-from animal_bomber.presentation.render.loading import (
-    BACKGROUND,
-    TEXT_COLOR,
-    japanese_font_path,
+from animal_bomber.presentation.render.loading import BACKGROUND, TEXT_COLOR
+from animal_bomber.presentation.render.ui.typeset import (
+    TextPainter,
+    TextStyle,
+    shared_painter,
 )
 
 NOTICE_BACKGROUND: Final = (0, 0, 0, 170)
@@ -25,22 +26,20 @@ NOTICE_BACKGROUND: Final = (0, 0, 0, 170)
 
 
 class LanScreen:
-    """通信対戦の文を描くもの（書体と、同じ文の絵を取っておく）。"""
+    """通信対戦の文を描くもの（同じ文の絵は `TextPainter` が取っておく）。"""
 
-    __slots__ = ("_font", "_images", "_line_height")
+    __slots__ = ("_line_height", "_painter", "_style")
 
-    def __init__(self, height: int) -> None:
-        """書体を用意する。
+    def __init__(self, height: int, painter: TextPainter | None = None) -> None:
+        """文の大きさを決める。
 
         Args:
             height: 描く面の高さ（px）。文字の大きさをこれに合わせる。
+            painter: 文を描くもの。省くと画面の文の共有のもの。
         """
-        if not pygame.font.get_init():
-            pygame.font.init()
-        size = max(14, height // 36)
-        self._font = pygame.font.Font(japanese_font_path(), size)
-        self._line_height = self._font.get_linesize()
-        self._images: dict[str, pygame.Surface] = {}
+        self._painter = shared_painter() if painter is None else painter
+        self._style = TextStyle(max(14, height // 36), TEXT_COLOR)
+        self._line_height = self._painter.normal_line(self._style)
 
     def draw_lobby(self, surface: pygame.Surface, lines: Sequence[str]) -> None:
         """`surface` を塗りつぶし、真ん中に `lines` を1行ずつ並べる。"""
@@ -49,7 +48,7 @@ class LanScreen:
         top = (height - self._line_height * len(lines)) // 2
         for index, line in enumerate(lines):
             image = self._image(line)
-            middle = top + self._line_height * index + image.get_height() // 2
+            middle = top + self._line_height * index + self._line_height // 2
             surface.blit(image, image.get_rect(center=(width // 2, middle)))
 
     def draw_notice(self, surface: pygame.Surface, text: str) -> None:
@@ -65,9 +64,5 @@ class LanScreen:
         surface.blit(image, (8, top))
 
     def _image(self, text: str) -> pygame.Surface:
-        """文の絵。同じ文は取っておいたものを使う（毎フレーム描き直さない）。"""
-        image = self._images.get(text)
-        if image is None:
-            image = self._font.render(text, True, TEXT_COLOR)
-            self._images[text] = image
-        return image
+        """文の絵（同じ文は `TextPainter` が取っておいたものを返す）。"""
+        return self._painter.render(text, self._style)

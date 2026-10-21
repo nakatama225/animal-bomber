@@ -4,16 +4,91 @@
 出したもの。
 """
 
+import math
+import re
+from pathlib import Path
+
 import pytest
 
 from animal_bomber.domain.rules.lane import LaneSide, lane_spot
 from animal_bomber.presentation.render.layout import (
+    HEIGHT_RESERVE,
+    MIN_AVAILABLE_HEIGHT,
+    MIN_AVAILABLE_WIDTH,
+    PANEL_GAP,
+    PANEL_WIDTH,
+    SIDE_RESERVE,
     TILE_MAX,
     TILE_MIN,
     Layout,
     fit_layout,
+    fit_tile,
+    fit_window,
     js_round,
 )
+
+LEGACY = Path(__file__).resolve().parents[3] / "legacy" / "animal-bomber.html"
+
+
+def legacy_tile(width: int, height: int) -> int:
+    """原型の fitBoard（L591-606）を、そのまま書き写した式（上限は原型の 96）。"""
+    side_w = 238 + 16 + 32 + 6 + 20
+    avail_w = max(320, width - side_w)
+    avail_h = max(240, height - 56)
+    t = min(avail_w / (23 + 0.62 * 2), avail_h / (17 + 0.62 * 2))
+    return max(26, min(96, math.floor(t)))
+
+
+@pytest.mark.parametrize(
+    ("window", "legacy", "tile"),
+    [
+        ((1024, 768), 29, 29),
+        ((1280, 800), 39, 39),
+        ((1440, 900), 46, 46),
+        ((1512, 982), 49, 49),  # 幅で決まる（1200 / 24.24 = 49.5）
+        ((1920, 1080), 56, 56),
+        ((2560, 1440), 75, TILE_MAX),  # 原型は 96 まで広げる。この版は 60 まで
+        ((500, 400), 26, TILE_MIN),  # 引いた残りは下限の 320×240、マス 13 → 26
+    ],
+)
+def test_窓の大きさから決めるマスは_原型の式と同じ(
+    window: tuple[int, int], legacy: int, tile: int
+) -> None:
+    """横の板の分（312px）と高さの 56px を引いて決める。上限だけ原型と違う。"""
+    assert legacy_tile(*window) == legacy
+    assert fit_tile(*window) == tile
+
+
+def test_窓の幅と高さから引く分は_原型の値() -> None:
+    """原型の `SIDE_W` の式・高さから引く 56・引いた残りの下限。
+
+    原型のファイルを読んで並べる。
+    """
+    text = LEGACY.read_text(encoding="utf-8")
+    assert "const SIDE_W = 238 + 16 + 32 + 6 + 20;" in text
+    assert "(window.innerHeight || 800)  - 56" in text
+    assert "Math.max(320, (window.innerWidth" in text
+    assert "Math.max(240, (window.innerHeight" in text
+    assert re.search(r"#side\{flex:0 0 238px;width:238px", text)
+    assert ".stage{display:flex;gap:16px" in text
+    assert SIDE_RESERVE == 312
+    assert (PANEL_WIDTH, PANEL_GAP, HEIGHT_RESERVE) == (238, 16, 56)
+    assert (MIN_AVAILABLE_WIDTH, MIN_AVAILABLE_HEIGHT) == (320, 240)
+
+
+def test_窓は盤面を左上に_すき間をあけて右に横の板() -> None:
+    """1440×900 ではマス 46。盤面 1115×839 の右に 16px あけて、幅 238px の板。"""
+    window = fit_window(1440, 900, panel_height=600)
+    assert window.board.tile == 46
+    assert window.board.board_size == (1115, 839)
+    assert window.panel_origin == (1115 + 16, 0)
+    assert window.size == (1115 + 16 + 238, 839)
+
+
+def test_横の板のほうが高ければ_窓の高さは横の板の高さ() -> None:
+    """原型はページが縦に流れる。窓は流れないので、高いほうに合わせる。"""
+    assert fit_window(1440, 900, panel_height=979).size == (1369, 979)
+    assert fit_window(1440, 900, panel_height=839).size == (1369, 839)
 
 
 @pytest.mark.parametrize(

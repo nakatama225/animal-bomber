@@ -52,13 +52,18 @@ def invulnerable_left(player: PlayerState, now: Tick) -> Tick:
 
 
 def player_look(
-    world: WorldState, player: PlayerState, motion: TrackedMotion
+    world: WorldState,
+    player: PlayerState,
+    motion: TrackedMotion,
+    *,
+    cpu: bool = False,
 ) -> PlayerLook:
     """盤面にいるプレイヤー1体の、描く関数の入力。
 
     盤面の時刻は描く時点（step のあと）の `world.now`。状態の残り（効果・掘る）は
     原型と同じく、残りの tick の数をそのまま秒に直して使う（原型も、かけた tick に
-    描く絵で、かけた長さちょうどになる）。
+    描く絵で、かけた長さちょうどになる）。`cpu` は CPU が操作しているプレイヤーか
+    （とくぎの長押しのゲージを描かない。`art/player.py` の `gauge_progress`）。
     """
     effects = player.effects
     tongue: TongueLook | None = None
@@ -96,4 +101,5 @@ def player_look(
         fired=player.action_fired,
         tongue=tongue,
         digging=digging,
+        cpu=cpu,
     )

@@ -19,12 +19,18 @@
   長押しのゲージを溜める。どれも状態の印を出す
 - 爆弾 8 個・アイテム 20 個（うんこはいつも消える前の点滅）・粘膜爆弾 1 個（残り回数が
   少なく、赤い輪を出す）・追いかける炎 1 本
+- 盤面の右の横の板（`panel/side_panel.py`）：時計は残り 30 秒より少なく、数字が
+  毎フレーム明滅する。ゲーム速度のつまみ（1.5×）・名札 4 枚・キーの案内（人間2人と
+  パッドの段）・ツールバー。きつねのとくぎの回数を 15 フレームごとに変え、名札の中身が
+  変わるたびに板の絵を作り直す形（原型の 4 Hz）を測る。かえるともぐらは CPU（ゲージを
+  描かないプレイヤーとして `Renderer` に渡す。2体とも長押しはしていない）
 
 外周の鍋と飛んでいる葱は描かない（4体とも盤面にいる場面のほうが重い。理由は
 `bench_render.py` の冒頭の「測っていないもの」）。
 
 場面で使う絵は、作るときに全部描いておく（試合の前に描いておく `BakedArt.prebuild` と、
-場面だけで出る状態の印の組み合わせ）。
+場面だけで出る状態の印の組み合わせ）。盤面は描く面の左上 (0, 0) に描き、横の板は
+その右に貼る（遊ぶときの窓の並び。`layout.WindowLayout`）。
 """
 
 import math
@@ -33,10 +39,12 @@ import time
 
 import pygame
 
+from animal_bomber.ai.levels import CpuLevelKey
 from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.core.entity_id import EntityId
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.items import ItemKind
+from animal_bomber.domain.rules.match import MatchConfig
 from animal_bomber.domain.rules.tuning import BLAST_DURATION, BOMB_FUSE, COLS, ROWS
 from animal_bomber.domain.state.actions import Dig, Tongue
 from animal_bomber.domain.state.actors import Foxfire, SlimeBomb
@@ -45,13 +53,26 @@ from animal_bomber.domain.state.bomb import Blast, Bomb
 from animal_bomber.domain.state.effects import EffectBag, EffectKind
 from animal_bomber.domain.state.item import Item
 from animal_bomber.domain.state.match import MatchState
+from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState, create_world
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng
+from animal_bomber.presentation.hud.key_help import KeyHelpSource, describe_key_help
+from animal_bomber.presentation.hud.roster import Cpu, Human, Roster
+from animal_bomber.presentation.hud.scoreboard import (
+    HudSource,
+    describe_clock,
+    describe_players,
+)
 from animal_bomber.presentation.render.art.player import BLINK_ALPHA
 from animal_bomber.presentation.render.art.player_marks import MAX_MARKS
 from animal_bomber.presentation.render.baked.art import BakedArt
-from animal_bomber.presentation.render.layout import Layout
+from animal_bomber.presentation.render.layout import PANEL_GAP, Layout
+from animal_bomber.presentation.render.panel.side_panel import (
+    PanelContent,
+    SidePanel,
+)
 from animal_bomber.presentation.render.renderer import Renderer
+from animal_bomber.presentation.render.ui.typeset import TextPainter
 from animal_bomber.presentation.render.views.player import TrackedMotion, player_look
 from bench_match_visuals import (
     CAST,
@@ -63,6 +84,29 @@ from bench_match_visuals import (
     open_cells,
 )
 
+CPU_PLAYERS: tuple[PlayerId, ...] = (1, 2)
+"""CPU が操作するプレイヤー（かえるともぐら）。"""
+
+ROSTER: Roster = (
+    Human("1P"),
+    Cpu(1, CpuLevelKey.NORMAL),
+    Cpu(2, CpuLevelKey.ONI),
+    Human("2P"),
+)
+"""名札とキーの案内に使う、誰が操作しているかの一覧（人間2人・CPU 2体）。"""
+
+TIME_LEFT_TICKS = 25 * 60
+"""時計の残り（tick）。30 秒より少なく、時計の数字が明滅する。"""
+
+GAME_SPEED = 1.5
+"""つまみの値（1 より大きく、つまみの箱の縁が黄色になる）。"""
+
+SPECIAL_EVERY = 15
+"""きつねのとくぎの回数を変える間隔（フレーム。原型の名札の作り直しの約 4 Hz）。"""
+
+FRAME_MS = 1000 / 60
+"""1 フレームの実時間（ms）。横の板の作り直しの間隔と明滅は、この時刻で数える。"""
+
 
 class MatchScene:
     """1 フレームずつ描ける場面。作る前に `pygame.display.set_mode` を済ませておく。"""
@@ -71,10 +115,13 @@ class MatchScene:
         self._spec = spec
         layout = Layout(spec.tile)
         self._art = BakedArt(layout)
-        self._renderer = Renderer(self._art, CosmeticRng(rng))
+        self._renderer = Renderer(self._art, CosmeticRng(rng), cpu_players=CPU_PLAYERS)
+        self._panel = SidePanel(TextPainter())
+        self._panel_left = layout.board_size[0] + PANEL_GAP
         self._cells = open_cells()
         self._world = self._build_world(rng)
         self._match = MatchState()
+        self._config = MatchConfig(seed=1, animals=CAST[: spec.players], wins_to_take=3)
         self._fire = next(a for a in self._world.actors if isinstance(a, Foxfire))
         self._slime = next(a for a in self._world.actors if isinstance(a, SlimeBomb))
         self.visuals = BenchVisuals(spec, rng)
@@ -93,6 +140,16 @@ class MatchScene:
             for side in range(6, 19):
                 self._art.particles.square(color, side)
         self._art.particles.text(SPINNER_FACE, 26)
+        # 横の板の名札は、とくぎの回数の3通りを描いておく（試合では、新しい文を初めて
+        # 描くフレームが出るが、場面ではその分は測らない）。描いておくのに使った時刻の
+        # あとから、測る時刻を数える（板の作り直しの間隔を、測る最初から守らせる）。
+        scratch = pygame.Surface(spec.size)
+        for frame in range(0, 3 * SPECIAL_EVERY, SPECIAL_EVERY):
+            self._pose(frame)
+            self._panel.show(self._panel_content(), frame * FRAME_MS)
+            self._panel.draw(scratch, (self._panel_left, 0), frame * FRAME_MS)
+        self._start_ms = 3 * SPECIAL_EVERY * FRAME_MS
+        self._panel_builds_before = self._panel.builds
         self.prebuild_ms = (time.perf_counter() - started) * 1000
 
     @property
@@ -125,11 +182,40 @@ class MatchScene:
         """場面を作ってから描いた絵の数（測る間に増えたら、先に描き損ねた絵がある）。"""
         return self._art.cache.renders
 
+    @property
+    def panel_builds(self) -> int:
+        """場面を作ってから、横の板の絵を作り直した回数（先に描いた分は数えない）。"""
+        return self._panel.builds - self._panel_builds_before
+
     def draw(self, target: pygame.Surface, frame: int) -> None:
-        """`frame` フレーム目を描く。"""
+        """`frame` フレーム目を描く（盤面を左上に、横の板をその右に）。"""
         self._pose(frame)
         self.visuals.advance(frame, self._fire, self._cells)
         self._renderer.draw(target, self._world, self._match, self.visuals)
+        now_ms = self._start_ms + frame * FRAME_MS
+        self._panel.show(self._panel_content(), now_ms)
+        self._panel.draw(target, (self._panel_left, 0), now_ms)
+
+    def _panel_content(self) -> PanelContent:
+        """いまの盤面から作る、横の板の中身。"""
+        world = self._world
+        source = HudSource(world, self._match, self._config, ROSTER, False)
+        keys = KeyHelpSource(
+            world,
+            ROSTER,
+            pad_connected=True,
+            pad_in_match=True,
+            paused=False,
+            can_pause=True,
+        )
+        return PanelContent(
+            clock=describe_clock(source),
+            cards=describe_players(source),
+            help_rows=describe_key_help(keys),
+            speed=GAME_SPEED,
+            paused=False,
+            can_pause=True,
+        )
 
     def _build_world(self, rng: random.Random) -> WorldState:
         spec = self._spec
@@ -171,6 +257,7 @@ class MatchScene:
         world = self._world
         now = Tick(frame)
         world.now = now
+        world.ends_at = Tick(TIME_LEFT_TICKS)
         for blast in world.blasts:
             blast.remaining = Tick(BLAST_DURATION - frame % BLAST_DURATION)
         for index, bomb in enumerate(world.bombs):
@@ -208,6 +295,9 @@ class MatchScene:
             fox.effects = _effects(EffectKind.REVERSE, EffectKind.NOBOMB)
             fox.action_held = Tick(1 + frame % 29)
             fox.action_fired = False
+            # 名札の「🦊狐火×n」だけが変わる（盤面の絵は、回数でなく持っている印で
+            # 描く）。
+            fox.special_charges = 2 + (frame // SPECIAL_EVERY) % 3
 
 
 def _effects(*kinds: EffectKind) -> EffectBag:

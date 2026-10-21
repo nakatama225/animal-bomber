@@ -214,6 +214,35 @@ class Test手本と同じ絵:
         assert used == used_by_hand == randoms
         assert_same_frame(got, wanted, FADED)
 
+    def test_CPUのプレイヤーには_長押しのゲージを描かず_手本も同じに描く(self) -> None:
+        """CPU の番号を渡すと、頭の上のゲージの所だけが、人間として描いた絵と違う。
+
+        手本の draw_frame にも同じ番号を渡し、画素で比べる（原型の CPU は長押しの長さが
+        0 のままなので、ゲージが出ない）。
+        """
+        world = create_world(5, (Animal.FOX, Animal.RABBIT))
+        world.now = Tick(330)
+        fox, rabbit = world.players
+        fox.position = Cell(5, 5).center()
+        rabbit.position = Cell(11, 9).center()
+        grant_special(fox, 1)
+        fox.action_held = Tick(12)
+        fox.action_fired = False
+        visuals = FixedVisuals()
+        art = BakedArt(LAYOUT)
+        human, _ = renderer_image(art, world, visuals, [])
+        cpu, _ = renderer_image(art, world, visuals, [], cpu_players={fox.id})
+        wanted, _ = direct_image(LAYOUT, world, visuals, [], cpu_players={fox.id})
+        assert_same_frame(cpu, wanted, FADED)
+        x, y = LAYOUT.px(fox.position.x), LAYOUT.py(fox.position.y)
+        gauge_y = round(y - LAYOUT.tile * 1.18)
+        half = round(LAYOUT.tile * 0.31) + 3
+        box = (slice(gauge_y - 3, gauge_y + 7), slice(round(x) - half, round(x) + half))
+        diff = np.abs(human - cpu).max(axis=2)
+        assert diff[box].max() > 50
+        diff[box] = 0
+        assert diff.max() == 0
+
     def test_揺れの向きを取り違えると_比べ方が見分ける(self) -> None:
         """横と縦の乱数を入れ替えて描いた絵は、差の幅を超える（比べ方が揺れを見ている）。"""
         world, visuals, randoms = ordinary()

@@ -28,6 +28,7 @@
 """
 
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -267,6 +268,38 @@ def test_原型と同じ命令の列を出す(case: dict[str, Any]) -> None:
     problem = mismatch(canvas.ops, case["ops"])
     assert problem is None, problem
     assert scripted.used == case["random"], "見た目の乱数を引いた値と回数が原型と違う"
+
+
+def test_CPUのプレイヤーは_長押しの長さが0の原型と同じ命令の列を出す() -> None:
+    """原型の CPU は長押しの長さ（actHold）を増やさない（増やすのは humanUpdate だけ）。
+
+    固定値のうちゲージを描くケース（チキンを持ち・押していて・まだ出していない）を、
+    CPU として描くと、長さを 0 にした原型の入力と同じ命令の列になる。人間として描く
+    命令の列とは違う（ゲージの分）。
+    """
+    gauge_cases = [
+        case
+        for case in CASES
+        if case["fn"] == "drawPlayer"
+        and case["inputs"]["player"]["chicken"] is not None
+        and case["inputs"]["player"]["actHold"] > 0
+        and not case["inputs"]["player"]["actFired"]
+    ]
+    assert gauge_cases
+    for case in gauge_cases:
+        inputs = case["inputs"]
+        look = player_look_from(inputs["player"])
+        layout, now = Layout(inputs["tile"]), Tick(inputs["elapsedTicks"])
+        drawn = []
+        for variant in (replace(look, cpu=True), replace(look, held=Tick(0)), look):
+            canvas = RecordingCanvas()
+            scripted = ScriptedRandom(FIXTURE["randomValues"])
+            draw_player(canvas, layout, variant, now, CosmeticRng(scripted))
+            drawn.append(canvas.ops)
+        cpu, idle, human = drawn
+        assert cpu == idle
+        assert cpu != human
+        assert mismatch(human, case["ops"]) is None
 
 
 def test_固定値の描く関数は_写したものか次の段のものだけ() -> None:

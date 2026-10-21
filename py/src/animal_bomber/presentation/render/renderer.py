@@ -32,7 +32,7 @@
 フレームをまたいでは写さない（docs/08 の「原型と違うまま残した所」）。
 """
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from typing import Protocol, assert_never
 
 import pygame
@@ -102,12 +102,23 @@ class Renderer:
     `art` は試合の前に描いておいた絵（`BakedArt.prebuild`）、`rng` は見た目の乱数
     （画面の揺れ・爆風のちらつき・被弾の揺れ）。`band` を省くと、帯の高さが
     `art.layout.band` の帯を作る（高さ 0 なら帯を描かない）。
+
+    `cpu_players` は CPU が操作しているプレイヤーの番号。そのプレイヤーには、とくぎの
+    長押しのゲージを描かない（原型の CPU は長押しの長さを増やさない。`art/player.py`
+    の `gauge_progress`）。省くと空（全員を人間として描く）。試合の途中で替わったとき
+    （通信対戦で抜けたプレイヤーを CPU が引き継いだ）は、属性に入れ直す。
     """
 
     def __init__(
-        self, art: BakedArt, rng: CosmeticRng | None = None, band: Band | None = None
+        self,
+        art: BakedArt,
+        rng: CosmeticRng | None = None,
+        band: Band | None = None,
+        cpu_players: Collection[PlayerId] = (),
     ) -> None:
         self.art = art
+        self.cpu_players: frozenset[PlayerId] = frozenset(cpu_players)
+        """CPU が操作しているプレイヤーの番号（クラスの説明）。"""
         self._rng = rng if rng is not None else CosmeticRng()
         layout = art.layout
         self._band = band
@@ -151,8 +162,10 @@ class Renderer:
             art.blasts.draw(target, blast, rng, offset)
         alpha = 1.0
         on_board = [p for p in world.players if is_alive(p)]
+        cpus = self.cpu_players
         for player in sorted(on_board, key=lambda p: p.position.y):
-            look = player_look(world, player, visuals.motion(player.id))
+            motion = visuals.motion(player.id)
+            look = player_look(world, player, motion, cpu=player.id in cpus)
             alpha = art.players.draw(target, look, now, rng, offset, alpha)
         # 盤面の物は、炎を全部描いてから粘膜爆弾を描く（原型の draw の順）ので、
         # 輪を2つに分ける。種類を足すと、どちらの `match` も型検査で失敗する。

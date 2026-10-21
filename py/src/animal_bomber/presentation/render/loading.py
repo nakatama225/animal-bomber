@@ -1,46 +1,57 @@
-"""試合の前に絵を描いておく間に出す、仮の画面（「じゅんびちゅう」）。
+"""試合の前に絵を描いておく間に出す画面（「じゅんびちゅう」）。
 
 試合の前に描いておく絵（`BakedArt.prebuild`）は、マス 60 で動物2匹なら 2.5 秒ほど
 （音を焼くのを含めて 3 秒ほど）、5匹なら 5 秒ほどかかる（README の Design Choice
-1.）。その間、窓が黒いままだと止まったように見えるので、1行だけ出す。
-読み込みの画面は段階 10 で作り直す。
+1.）。その間、窓が黒いままだと止まったように見えるので、1行だけ出す。原型には無い画面
+（原型は絵を先に描いておかない）。
 
-日本語の字形を持つ書体を探して使う。見つからなければ、英字で出す（pygame の既定の
-書体は日本語の字形を持たず、四角に化ける）。
+見た目は原型の起動の幕に寄せた。窓全体を起動の幕と同じ円形のグラデーションで塗り、
+真ん中に「じゅんびちゅう」を、ロゴの下の題（原型の `.logoSub`：黄・太字・字の間
+0.1em・ぼかさない影 3px）の見た目で出す。描いておく間は窓を回さないので、1回だけ描く。
+
+日本語の字形を持つ書体を探して使う（`ui/fonts.py`。ヒラギノ丸ゴを先頭に、ファイルの
+場所の一覧で探す）。見つからなければ、英字を pygame の既定の書体で出す（既定の書体は
+日本語の字形を持たず、四角に化ける）。
 """
 
+import math
 from typing import Final
 
 import pygame
 
-BACKGROUND: Final = (21, 14, 10)
-"""塗りつぶす色（盤面の背景の暗い塗り。原型の #150e0a）。"""
+from animal_bomber.presentation.render.ui.fonts import (
+    JAPANESE_FONTS,
+    japanese_font_path,
+)
+from animal_bomber.presentation.render.ui.shapes import splash_background
+from animal_bomber.presentation.render.ui.theme import (
+    ACCENT2,
+    SELECTED_SHADOW,
+    SPLASH_STOPS,
+)
+from animal_bomber.presentation.render.ui.typeset import TextPainter, shared_painter
+from animal_bomber.presentation.render.ui.widgets import css_style
 
-TEXT_COLOR: Final = (255, 210, 63)
+BACKGROUND: Final = SPLASH_STOPS[-1][1]
+"""窓の四隅の色（起動の幕のグラデーションのいちばん外の色。原型の #1a110d）。"""
+
+TEXT_COLOR: Final = ACCENT2
 """文字の色（原型の画面の文字の黄色 #ffd23f）。"""
 
-JAPANESE_FONTS: Final = (
-    "hiraginosans",
-    "hiraginokakugothicpron",
-    "hiraginosansgb",
-    "notosanscjkjp",
-    "yugothic",
-)
-"""日本語の字形を持つ書体の名前（`pygame.font.match_font` に渡す。上から順に探す）。"""
+TEXT_MIN: Final = 17
+"""字の大きさの下限（px。原型の `.logoSub` の `clamp(17px,2.6vw,26px)`）。"""
 
+TEXT_MAX: Final = 26
+"""字の大きさの上限（px）。"""
 
-def japanese_font_path() -> str | None:
-    """日本語の字形を持つ書体のファイル。無ければ None。
-
-    `JAPANESE_FONTS` を上から探す。通信対戦の文（`render/lan_screen.py`）も、この書体で
-    描く。⚠️ 見つからない環境では、日本語は四角に化ける（pygame の既定の書体は日本語の
-    字形を持たない）。
-    """
-    for name in JAPANESE_FONTS:
-        path = pygame.font.match_font(name)
-        if path is not None:
-            return path
-    return None
+__all__ = [
+    "BACKGROUND",
+    "JAPANESE_FONTS",
+    "TEXT_COLOR",
+    "draw_loading",
+    "japanese_font_path",
+    "loading_message",
+]
 
 
 def loading_message() -> tuple[str, str | None]:
@@ -51,13 +62,23 @@ def loading_message() -> tuple[str, str | None]:
     return "loading...", None
 
 
-def draw_loading(surface: pygame.Surface) -> None:
-    """`surface` を塗りつぶし、真ん中に「じゅんびちゅう」を出す。"""
+def draw_loading(surface: pygame.Surface, painter: TextPainter | None = None) -> None:
+    """`surface` を塗りつぶし、真ん中に「じゅんびちゅう」を出す。
+
+    Args:
+        surface: 描く面（窓の面か、窓と同じ大きさの面）。
+        painter: 文を描くもの。省くと画面の文の共有のもの（`shared_painter`）。
+    """
     if not pygame.font.get_init():
         pygame.font.init()
     text, path = loading_message()
     width, height = surface.get_size()
-    font = pygame.font.Font(path, max(16, height // 18))
-    image = font.render(text, True, TEXT_COLOR)
-    surface.fill(BACKGROUND)
+    size = max(TEXT_MIN, min(TEXT_MAX, math.floor(width * 0.026)))
+    surface.blit(splash_background((width, height)), (0, 0))
+    if path is None:
+        image = pygame.font.Font(None, size).render(text, True, TEXT_COLOR)
+    else:
+        style = css_style(size, TEXT_COLOR, 900, 0.1)
+        writer = shared_painter() if painter is None else painter
+        image = writer.shadowed(text, style, [(0, 3, SELECTED_SHADOW)])
     surface.blit(image, image.get_rect(center=(width // 2, height // 2)))

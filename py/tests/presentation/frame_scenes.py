@@ -18,7 +18,7 @@
 """
 
 import math
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -121,10 +121,17 @@ def snapped(layout: Layout, x: float, y: float) -> tuple[float, float]:
     return (ix - layout.origin_x) / layout.tile, (iy - layout.origin_y) / layout.tile
 
 
-def frame_scene(layout: Layout, world: WorldState, visuals: FixedVisuals) -> FrameScene:
+def frame_scene(
+    layout: Layout,
+    world: WorldState,
+    visuals: FixedVisuals,
+    cpu_players: Collection[PlayerId] = (),
+) -> FrameScene:
     """盤面と見た目だけの値から、手本の `draw_frame` に渡す1枚の絵の中身を作る。
 
-    外周の鍋と飛んでいる葱の位置は、整数の px に丸める（`snapped`）。
+    外周の鍋と飛んでいる葱の位置は、整数の px に丸める（`snapped`）。`cpu_players` は
+    CPU が操作しているプレイヤー（とくぎの長押しのゲージを描かない。`Renderer` と
+    同じ番号を渡す）。
 
     鍋と葱の絵の入力は、`Renderer` が使う `views/` の関数（`negibon_look`・
     `leek_look`）を通さずに、外周の位置の式（`lane_spot`）と葱の状態の項目から直に作る。
@@ -136,7 +143,9 @@ def frame_scene(layout: Layout, world: WorldState, visuals: FixedVisuals) -> Fra
     （L5446）で描く。撃つ間隔の残り（`lane_cooldown_left`）は `test_views.py` が見る。
     """
     players = [
-        player_look(world, player, visuals.motion(player.id))
+        player_look(
+            world, player, visuals.motion(player.id), cpu=player.id in cpu_players
+        )
         for player in world.players
         if is_alive(player)
     ]
@@ -190,23 +199,28 @@ def renderer_image(
     visuals: FixedVisuals,
     randoms: Sequence[float],
     match: MatchState | None = None,
+    cpu_players: Collection[PlayerId] = (),
 ) -> tuple[Image, list[float]]:
     """取っておいた絵を貼って描いた絵と、引いた見た目の乱数。"""
     scripted = ScriptedRandom(list(randoms))
-    renderer = Renderer(art, CosmeticRng(scripted))
+    renderer = Renderer(art, CosmeticRng(scripted), cpu_players=cpu_players)
     target = pygame.Surface(art.layout.surface_size)
     renderer.draw(target, world, match or MatchState(), visuals)
     return rgb(target), scripted.used
 
 
 def direct_image(
-    layout: Layout, world: WorldState, visuals: FixedVisuals, randoms: Sequence[float]
+    layout: Layout,
+    world: WorldState,
+    visuals: FixedVisuals,
+    randoms: Sequence[float],
+    cpu_players: Collection[PlayerId] = (),
 ) -> tuple[Image, list[float]]:
     """手本の `draw_frame` で、描く面の全体を取っておかずに描いた絵と、引いた乱数。"""
     scripted = ScriptedRandom(list(randoms))
     width, height = layout.surface_size
     canvas = SurfaceCanvas(width, height)
-    scene = frame_scene(layout, world, visuals)
+    scene = frame_scene(layout, world, visuals, cpu_players)
     draw_frame(canvas, layout, scene, CosmeticRng(scripted))
     target = pygame.Surface((width, height))
     target.blit(canvas.to_surface(), (0, 0))
