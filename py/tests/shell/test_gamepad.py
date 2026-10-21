@@ -9,12 +9,16 @@ import pytest
 
 from animal_bomber.domain.core.tick import MatchTick
 from animal_bomber.domain.input.player_input import PlayerInput
+from animal_bomber.presentation.menu.cursor import NavCommand
 from animal_bomber.shell.gamepad import (
+    MENU_BUTTONS,
     STICK_OFF,
     STICK_ON,
     GamepadSource,
     PadButton,
+    PadChoice,
     PadClaims,
+    PadMenuInput,
     PadSnapshot,
 )
 from tests.helpers import make_world
@@ -59,6 +63,10 @@ class Testボタン:
 
     def test_パッドが無ければ何も押していない(self) -> None:
         assert _read(GamepadSource(0, Pads())) is PlayerInput.IDLE
+
+    def test_StartとBackは試合の操作にしない(self) -> None:
+        for button in (PadButton.START, PadButton.BACK):
+            assert _read(GamepadSource(0, Pads(_pad(5, button)))) is PlayerInput.IDLE
 
 
 class Testスティック:
@@ -140,6 +148,123 @@ class Testパッドの選び方:
         pads.pads = [_pad(8, PadButton.B)]
         assert _read(first) is PlayerInput.IDLE
         assert _read(second) == PlayerInput.ACTION
+
+
+class Testつかむパッド:
+    def test_最初のパッドをつかみ_ほかのパッドが繋がっても移らない(self) -> None:
+        choice = PadChoice()
+        first = _pad(7)
+        assert choice.pick([first]) == first
+        assert choice.pick([_pad(2), first]) == first
+
+    def test_外れたら_次のパッドをつかむ(self) -> None:
+        choice = PadChoice()
+        choice.pick([_pad(7)])
+        assert choice.pick([]) is None
+        assert choice.pick([_pad(9), _pad(7)]) == _pad(9)
+
+    def test_メニューでつかんだパッドを_試合でもそのまま使う(self) -> None:
+        """試合の窓口がどの番号のプレイヤーでも、メニューでつかんだパッドを使う。
+
+        メニューのあとに別のパッドが先頭に点いても、そちらへ移らない。
+        """
+        pads = Pads(_pad(7, PadButton.B))
+        choice = PadChoice()
+        menu = PadMenuInput(pads, choice)
+        assert menu.poll() == {NavCommand.BACK}
+        pads.pads = [_pad(3, PadButton.A), _pad(7, PadButton.B)]
+        source = GamepadSource(2, pads, choice)
+        assert _read(source) == PlayerInput.ACTION
+        assert menu.poll() == frozenset()
+
+
+class Testメニューのパッド:
+    def test_ボタンとメニューの操作(self) -> None:
+        cases = {
+            PadButton.A: NavCommand.CONFIRM,
+            PadButton.B: NavCommand.BACK,
+            PadButton.START: NavCommand.START,
+            PadButton.BACK: NavCommand.SELECT,
+            PadButton.UP: NavCommand.UP,
+            PadButton.DOWN: NavCommand.DOWN,
+            PadButton.LEFT: NavCommand.LEFT,
+            PadButton.RIGHT: NavCommand.RIGHT,
+            PadButton.X: NavCommand.OTHER,
+            PadButton.Y: NavCommand.OTHER,
+            PadButton.L1: NavCommand.OTHER,
+            PadButton.R1: NavCommand.OTHER,
+        }
+        assert dict(MENU_BUTTONS) == cases
+        for button, command in cases.items():
+            menu = PadMenuInput(Pads(_pad(1, button)), PadChoice())
+            assert menu.poll() == {command}, button
+
+    def test_押し始めた回だけ返し_押したままなら返さない(self) -> None:
+        pads = Pads(_pad(1, PadButton.A))
+        menu = PadMenuInput(pads, PadChoice())
+        assert menu.poll() == {NavCommand.CONFIRM}
+        assert menu.poll() == frozenset()
+        pads.pads = [_pad(1)]
+        assert menu.poll() == frozenset()
+        pads.pads = [_pad(1, PadButton.A)]
+        assert menu.poll() == {NavCommand.CONFIRM}
+
+    def test_同じ回に押し始めたボタンは_まとめて返す(self) -> None:
+        pads = Pads(_pad(1, PadButton.A))
+        menu = PadMenuInput(pads, PadChoice())
+        menu.poll()
+        pads.pads = [_pad(1, PadButton.A, PadButton.DOWN, PadButton.START)]
+        assert menu.poll() == {NavCommand.DOWN, NavCommand.START}
+
+    def test_十字とスティックは同じ向きにまとめる(self) -> None:
+        """十字を離してもスティックを倒したままなら、押したまま（新しい押し始めにしない）。"""
+        pads = Pads(_pad(1, PadButton.UP))
+        menu = PadMenuInput(pads, PadChoice())
+        assert menu.poll() == {NavCommand.UP}
+        pads.pads = [_pad(1, PadButton.UP, y=-0.9)]
+        assert menu.poll() == frozenset()
+        pads.pads = [_pad(1, y=-0.9)]
+        assert menu.poll() == frozenset()
+        pads.pads = [_pad(1)]
+        assert menu.poll() == frozenset()
+        pads.pads = [_pad(1, y=-0.9)]
+        assert menu.poll() == {NavCommand.UP}
+
+    def test_スティックは戻りのしきい値まで倒したまま(self) -> None:
+        pads = Pads(_pad(1, x=STICK_ON))
+        menu = PadMenuInput(pads, PadChoice())
+        assert menu.poll() == {NavCommand.RIGHT}
+        pads.pads = [_pad(1, x=STICK_OFF)]
+        assert menu.poll() == frozenset()
+        pads.pads = [_pad(1, x=STICK_OFF - 0.01)]
+        assert menu.poll() == frozenset()
+        pads.pads = [_pad(1, x=STICK_OFF)]
+        assert menu.poll() == frozenset()
+        pads.pads = [_pad(1, x=STICK_ON)]
+        assert menu.poll() == {NavCommand.RIGHT}
+
+    def test_外れたら_全部離したことになる(self) -> None:
+        pads = Pads(_pad(1, PadButton.A, x=1.0))
+        menu = PadMenuInput(pads, PadChoice())
+        menu.poll()
+        assert menu.connected
+        pads.pads = []
+        assert menu.poll() == frozenset()
+        assert not menu.connected
+        pads.pads = [_pad(1, PadButton.A, x=STICK_OFF)]
+        assert menu.poll() == {NavCommand.CONFIRM}
+
+    def test_前の状態は_呼び続けるかぎり消さない(self) -> None:
+        """A を押したまま画面が替わっても、離すまで次の決定にしない。
+
+        消す口を持たないので、画面の流れの側からは消せない（`poll` だけが書く）。
+        """
+        pads = Pads(_pad(1, PadButton.A))
+        menu = PadMenuInput(pads, PadChoice())
+        assert menu.poll() == {NavCommand.CONFIRM}
+        for _ in range(5):
+            assert menu.poll() == frozenset()
+        assert not hasattr(menu, "reset")
 
 
 def test_実物の読み取りは_窓を開かずに呼べる() -> None:
@@ -260,3 +385,60 @@ def test_実物の読み取り_数が同じまま差し替えても_新しいパ
     """繋がっている数だけを見て開き直すと、差し替えた新しいパッドを読まない。"""
     result = _virtual_pads("swap")
     assert result == {"before": [IDLE, BOMB], "after": [ACTION, BOMB]}
+
+
+# SDL の仮想パッドを1台繋ぎ、Start（SDL のボタンの番号 6）と Back（4）を押して、
+# 実物の読み取りが返すボタンの名前を出す。窓は開かない。
+VIRTUAL_START_BACK = """
+import ctypes, json, sys
+from pathlib import Path
+import pygame
+from pygame._sdl2 import controller
+from animal_bomber.shell.gamepad import ControllerReader
+
+dylib = Path(pygame.__file__).parent / ".dylibs" / "libSDL2-2.0.0.dylib"
+if not dylib.exists():
+    print("SKIP")
+    sys.exit(0)
+SDL = ctypes.CDLL(str(dylib))
+SDL.SDL_JoystickAttachVirtual.argtypes = [ctypes.c_int] * 4
+SDL.SDL_JoystickOpen.argtypes = [ctypes.c_int]
+SDL.SDL_JoystickOpen.restype = ctypes.c_void_p
+SDL.SDL_JoystickSetVirtualButton.argtypes = [
+    ctypes.c_void_p, ctypes.c_int, ctypes.c_uint8,
+]
+pygame.display.init()
+controller.init()
+pygame.event.pump()
+if controller.get_count() > 0:
+    print("SKIP-REAL")
+    sys.exit(0)
+reader = ControllerReader()
+index = SDL.SDL_JoystickAttachVirtual(1, 6, 21, 0)
+pygame.event.pump()
+pad = SDL.SDL_JoystickOpen(index)
+for button in (6, 4):
+    SDL.SDL_JoystickSetVirtualButton(pad, button, 1)
+SDL.SDL_JoystickUpdate()
+pygame.event.pump()
+print(json.dumps(sorted(button.name for button in reader()[0].pressed)))
+"""
+
+
+def test_実物の読み取り_StartとBackを読む() -> None:
+    completed = subprocess.run(
+        [sys.executable, "-c", VIRTUAL_START_BACK],
+        env={**os.environ, "SDL_VIDEODRIVER": "dummy"},
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert completed.returncode == 0, completed.stderr
+    last = completed.stdout.splitlines()[-1]
+    if last == "SKIP":
+        pytest.skip(
+            "SDL のライブラリが pygame の中に見つからない（macOS の wheel でない）"
+        )
+    if last == "SKIP-REAL":
+        pytest.skip("実機のパッドが繋がっている（仮想パッドの割り当ての前提が崩れる）")
+    assert json.loads(last) == ["BACK", "START"]

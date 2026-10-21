@@ -82,6 +82,8 @@ def legacy_form(row: HelpRow) -> str:
                 out.append(f"<b>{span.text}</b>")
             case SpanKind.TEXT:
                 out.append(span.text)
+            case SpanKind.CODE:
+                raise AssertionError(f"キーの案内にコードの字は無い: {span.text}")
     return "".join(out)
 
 

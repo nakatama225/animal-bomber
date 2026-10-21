@@ -1,26 +1,66 @@
 """キーボードの操作を入力に変える窓口の検査。
 
-窓は開かず、pygame のイベントを作って渡す。
+窓は開かず、pygame のイベントを作って渡す。`Test原型の割り当て` は原型
+（`legacy/animal-bomber.html`）の `CONTROLS` と `KEY_TO_PAD` を読んで並べる。
 """
+
+import re
+from functools import cache
+from pathlib import Path
+from typing import Any
 
 import pygame
 import pytest
 
 from animal_bomber.domain.core.tick import MatchTick
 from animal_bomber.domain.input.player_input import PlayerInput
+from animal_bomber.presentation.menu.cursor import NavCommand
 from animal_bomber.shell.keyboard import (
+    MENU_KEYS,
+    PAUSE_KEY,
     PLAYER1_KEYS,
     PLAYER2_KEYS,
     SOLO_KEYS,
     KeyBinding,
     KeyboardSource,
     KeyboardWatcher,
+    is_erase_key,
+    nav_command_of,
+    typed_text,
 )
 from tests.helpers import make_world
 
+LEGACY = Path(__file__).resolve().parents[3] / "legacy" / "animal-bomber.html"
 
-def _down(scancode: int) -> pygame.event.Event:
-    return pygame.event.Event(pygame.KEYDOWN, scancode=scancode, key=0)
+CODE_NAMES = {
+    "ArrowUp": "UP",
+    "ArrowDown": "DOWN",
+    "ArrowLeft": "LEFT",
+    "ArrowRight": "RIGHT",
+    "Enter": "RETURN",
+    "ShiftLeft": "LSHIFT",
+    "ShiftRight": "RSHIFT",
+    "AltLeft": "LALT",
+    "AltRight": "RALT",
+}
+"""原型のキーの名前（`KeyboardEvent.code`）と、pygame の scancode の名前が違うもの。"""
+
+
+def scancode_of(code: str) -> int:
+    """原型のキーの名前を、pygame の scancode にする。"""
+    name = CODE_NAMES.get(code, code.removeprefix("Key")).upper()
+    value = getattr(pygame, f"KSCAN_{name}")
+    assert isinstance(value, int)
+    return value
+
+
+@cache
+def legacy_text() -> str:
+    return LEGACY.read_text(encoding="utf-8")
+
+
+def _down(scancode: int, **extra: Any) -> pygame.event.Event:
+    return pygame.event.Event(pygame.KEYDOWN, scancode=scancode, key=0, **extra)
 
 
 def _up(scancode: int) -> pygame.event.Event:
@@ -100,11 +140,180 @@ class Test割り当て:
         codes = [code for _, codes in binding.pairs() for code in codes]
         assert len(codes) == len(set(codes))
 
-    def test_1人の割り当てのキーは_2人のときも同じボタンに当たる(self) -> None:
+    def test_同じキーは_どの割り当てでも同じボタンに当たる(self) -> None:
         """1人で遊んでから2人で遊んでも、同じキーが別のボタンにならない。"""
-        first, second = dict(PLAYER1_KEYS.pairs()), dict(PLAYER2_KEYS.pairs())
-        for button, codes in SOLO_KEYS.pairs():
-            assert set(codes) <= set(first[button]) | set(second[button])
+        button_of: dict[int, PlayerInput] = {}
+        for binding in (SOLO_KEYS, PLAYER1_KEYS, PLAYER2_KEYS):
+            for button, codes in binding.pairs():
+                for code in codes:
+                    assert button_of.setdefault(code, button) == button, code
+
+    def test_片方の組にだけあるキー(self) -> None:
+        """原型の `CONTROLS` のとおり。Option は1人の組にも2人の組にもある。
+
+        1人のときだけ：爆弾の J と技の K。2人のときだけ：2P の技の M と N。
+        """
+        both = {
+            code
+            for binding in (PLAYER1_KEYS, PLAYER2_KEYS)
+            for _, codes in binding.pairs()
+            for code in codes
+        }
+        solo = {code for _, codes in SOLO_KEYS.pairs() for code in codes}
+        assert solo - both == {pygame.KSCAN_J, pygame.KSCAN_K}
+        assert both - solo == {pygame.KSCAN_M, pygame.KSCAN_N}
+        assert pygame.KSCAN_J in SOLO_KEYS.bomb
+        assert pygame.KSCAN_K in SOLO_KEYS.action
+        assert pygame.KSCAN_LALT in PLAYER1_KEYS.action
+        assert pygame.KSCAN_RALT in PLAYER2_KEYS.action
+
+    def test_技のキーの並び(self) -> None:
+        """原型の `CONTROLS`（L1139-1149）。"""
+        assert PLAYER1_KEYS.action == (
+            pygame.KSCAN_E,
+            pygame.KSCAN_Q,
+            pygame.KSCAN_X,
+            pygame.KSCAN_C,
+            pygame.KSCAN_R,
+            pygame.KSCAN_LSHIFT,
+            pygame.KSCAN_LALT,
+        )
+        assert PLAYER2_KEYS.action == (
+            pygame.KSCAN_RSHIFT,
+            pygame.KSCAN_PERIOD,
+            pygame.KSCAN_COMMA,
+            pygame.KSCAN_M,
+            pygame.KSCAN_N,
+            pygame.KSCAN_RALT,
+        )
+
+    @pytest.mark.parametrize(
+        ("binding", "code", "button"),
+        [
+            (SOLO_KEYS, pygame.KSCAN_J, PlayerInput.BOMB),
+            (SOLO_KEYS, pygame.KSCAN_K, PlayerInput.ACTION),
+            (SOLO_KEYS, pygame.KSCAN_RALT, PlayerInput.ACTION),
+            (PLAYER1_KEYS, pygame.KSCAN_X, PlayerInput.ACTION),
+            (PLAYER2_KEYS, pygame.KSCAN_N, PlayerInput.ACTION),
+        ],
+    )
+    def test_足したキーで_そのボタンを押せる(
+        self, binding: KeyBinding, code: int, button: PlayerInput
+    ) -> None:
+        watcher = KeyboardWatcher()
+        watcher.handle(_down(code))
+        assert _read(watcher, binding) == button
+
+
+class Test原型の割り当て:
+    def controls(self) -> dict[str, dict[str, tuple[int, ...]]]:
+        """原型の `CONTROLS`。組の名前 → ボタン → キー（パッドの名前は外す）。"""
+        text = legacy_text()
+        begin = text.index("const CONTROLS = {")
+        block = text[begin : text.index("\n};", begin)]
+        # 注記（/* … */ と // …）を外してから読む。
+        block = re.sub(r"/\*.*?\*/", "", block, flags=re.S)
+        block = re.sub(r"//[^\n]*", "", block)
+        found: dict[str, dict[str, tuple[int, ...]]] = {}
+        for name, body in re.findall(r"(solo|p1|p2):\{(.*?)\}", block, re.S):
+            found[name] = {
+                button: tuple(
+                    scancode_of(code)
+                    for code in re.findall(r"'([^']+)'", codes)
+                    if not code.startswith("Pad:")
+                )
+                for button, codes in re.findall(r"(\w+):\[(.*?)\]", body, re.S)
+            }
+        return found
+
+    def test_キーの割り当ては原型のCONTROLSと同じで_並びも同じ(self) -> None:
+        legacy = self.controls()
+        for name, binding in (
+            ("solo", SOLO_KEYS),
+            ("p1", PLAYER1_KEYS),
+            ("p2", PLAYER2_KEYS),
+        ):
+            assert legacy[name] == {
+                "up": binding.up,
+                "down": binding.down,
+                "left": binding.left,
+                "right": binding.right,
+                "bomb": binding.bomb,
+                "act": binding.action,
+            }, name
+
+    def test_Optionを主キーにしない注記は原型にある(self) -> None:
+        assert "⛔ option（Alt）は主キーにしない。" in legacy_text()
+
+    def test_メニューのキーは原型のKEY_TO_PADと同じ(self) -> None:
+        text = legacy_text()
+        begin = text.index("const KEY_TO_PAD = {")
+        block = text[begin : text.index("};", begin)]
+        pads = {
+            "Up": NavCommand.UP,
+            "Down": NavCommand.DOWN,
+            "Left": NavCommand.LEFT,
+            "Right": NavCommand.RIGHT,
+            "A": NavCommand.CONFIRM,
+            "B": NavCommand.BACK,
+        }
+        legacy = {
+            scancode_of(code): pads[pad]
+            for code, pad in re.findall(r"(\w+):'Pad:(\w+)'", block)
+        }
+        assert legacy == dict(MENU_KEYS)
+        assert len(legacy) == 8
+
+
+class Testメニューのキー:
+    def test_矢印で動かし_EnterとSpaceで決め_EscapeとBackspaceで戻る(self) -> None:
+        codes = [
+            pygame.KSCAN_UP,
+            pygame.KSCAN_DOWN,
+            pygame.KSCAN_LEFT,
+            pygame.KSCAN_RIGHT,
+            pygame.KSCAN_RETURN,
+            pygame.KSCAN_SPACE,
+            pygame.KSCAN_ESCAPE,
+            pygame.KSCAN_BACKSPACE,
+        ]
+        assert [nav_command_of(_down(code)) for code in codes] == [
+            NavCommand.UP,
+            NavCommand.DOWN,
+            NavCommand.LEFT,
+            NavCommand.RIGHT,
+            NavCommand.CONFIRM,
+            NavCommand.CONFIRM,
+            NavCommand.BACK,
+            NavCommand.BACK,
+        ]
+
+    def test_修飾キーを押していても数える(self) -> None:
+        """原型は修飾キーを見ない（TypeScript 版は数えない）。"""
+        for mod in (pygame.KMOD_LMETA, pygame.KMOD_LCTRL, pygame.KMOD_LALT):
+            event = _down(pygame.KSCAN_RETURN, mod=mod)
+            assert nav_command_of(event) is NavCommand.CONFIRM
+
+    def test_ほかのキーと_離したことは数えない(self) -> None:
+        assert nav_command_of(_down(pygame.KSCAN_W)) is None
+        assert nav_command_of(_down(pygame.KSCAN_P)) is None
+        assert nav_command_of(_up(pygame.KSCAN_RETURN)) is None
+
+    def test_Backspaceだけが字を消すキー(self) -> None:
+        assert is_erase_key(_down(pygame.KSCAN_BACKSPACE))
+        assert not is_erase_key(_down(pygame.KSCAN_ESCAPE))
+        assert not is_erase_key(_up(pygame.KSCAN_BACKSPACE))
+
+    def test_打った字は1字の見える字だけ(self) -> None:
+        assert typed_text(_down(pygame.KSCAN_A, unicode="a")) == "a"
+        assert typed_text(_down(pygame.KSCAN_PERIOD, unicode=".")) == "."
+        assert typed_text(_down(pygame.KSCAN_RETURN, unicode="\r")) == ""
+        assert typed_text(_down(pygame.KSCAN_A)) == ""
+        assert typed_text(_up(pygame.KSCAN_A)) == ""
+
+    def test_ポーズのキーはP(self) -> None:
+        """原型の `KeyP`（L3081）。"""
+        assert PAUSE_KEY == pygame.KSCAN_P
 
     def test_2人が同時に押しても_それぞれのボタンになる(self) -> None:
         watcher = KeyboardWatcher()

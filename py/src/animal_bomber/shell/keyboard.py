@@ -22,12 +22,20 @@ pygame のイベントを受けるのは `KeyboardWatcher` だけで、ルール
 見る（押してすぐ離した向きのキーでは動かない）。TypeScript 版は、どのキーも押されて
 いるかだけを見る。
 
-⚠️ 実機（窓を開いたキーボード）では確かめていない。テストは pygame のイベントを
+⚠️ 実機（窓を開いたキーボード）では確認していない。テストは pygame のイベントを
 作って渡す。
+
+## メニューのキー
+
+メニューの画面では、矢印で動かし、Enter と Space で決め、Escape と Backspace で戻る
+（原型の `KEY_TO_PAD`。L3186-3189）。原型と同じく、修飾キー（Command・Ctrl・Option）を
+押していても数える。押し続けたときの繰り返しは数えない（pygame は、
+`pygame.key.set_repeat` を呼ばなければ繰り返しを送らない）。
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Final, Protocol
 
 import pygame
 
@@ -35,16 +43,31 @@ from animal_bomber.domain.core.tick import MatchTick
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState
+from animal_bomber.presentation.menu.cursor import NavCommand
 
 
 @dataclass(frozen=True, slots=True)
 class KeyBinding:
     """どのキー（scancode）がどのボタンに当たるか。
 
-    1台のキーボードで2人が同時に触るので、1P は左側、2P は右側に固める（TypeScript 版と
-    同じ割り当て）。⛔ Option（Alt）を主のキーにしない。macOS は修飾キーを押している間、
-    ほかのキーを離したことを送らないことがあり、「たまに効かない」が起きる
-    （TypeScript 版の注記）。⛔ Command も使わない（cmd+Q で窓が閉じる）。
+    割り当ては原型の `CONTROLS`（L1119-1150）と同じ。1台のキーボードで2人が同時に
+    触るので、1P は左側、2P は右側に固まっているのが基本。そのうえで、移動をどちらの
+    手でやっても、もう片方の手で爆弾を押せるように、爆弾のキーを左右に1つずつ持たせる
+    （原型の注記。1P は Space（中央）と Z（左）、2P は Enter（右）と `/`（右下・
+    ひらがなの「め」））。
+
+    - ⛔ Option（Alt）は主のキーにしない。macOS は修飾キーを押している間、ほかのキーを
+      離したことを送らないことがあり、「たまに反応しない」が起きる（原型の注記
+      L1125-1126）。原型と同じく、技のキーの1つとしては入れてある（ほかの技のキーでも
+      出せる）
+    - ⛔ Command はどの組にも使わない（cmd+Q で窓が閉じる。原型はブラウザの cmd+W）
+    - ⛔ 1P を右側・2P を左側へ動かす作り替えはしない。1つのキーボードで手がぶつかる
+
+    ⚠️ 原型は、Option と Command を離したときに、ほかの押しているキーを全部捨て、
+    押したままのキーはブラウザのキーの繰り返しで戻す（離したことが届かなかったキーを
+    押しっぱなしにしないため。L3093-3098）。pygame は既定でキーの繰り返しを送らない
+    ので、捨てると押したままの向きが戻らず止まる。写していない（実機では確認して
+    いない）。
     """
 
     up: tuple[int, ...]
@@ -71,10 +94,34 @@ SOLO_KEYS = KeyBinding(
     down=(pygame.KSCAN_S, pygame.KSCAN_DOWN),
     left=(pygame.KSCAN_A, pygame.KSCAN_LEFT),
     right=(pygame.KSCAN_D, pygame.KSCAN_RIGHT),
-    bomb=(pygame.KSCAN_SPACE, pygame.KSCAN_RETURN, pygame.KSCAN_Z, pygame.KSCAN_SLASH),
-    action=(pygame.KSCAN_E, pygame.KSCAN_Q, pygame.KSCAN_LSHIFT, pygame.KSCAN_RSHIFT),
+    bomb=(
+        pygame.KSCAN_SPACE,
+        pygame.KSCAN_RETURN,
+        pygame.KSCAN_Z,
+        pygame.KSCAN_SLASH,
+        pygame.KSCAN_J,
+    ),
+    action=(
+        pygame.KSCAN_E,
+        pygame.KSCAN_Q,
+        pygame.KSCAN_X,
+        pygame.KSCAN_C,
+        pygame.KSCAN_R,
+        pygame.KSCAN_K,
+        pygame.KSCAN_LSHIFT,
+        pygame.KSCAN_RSHIFT,
+        pygame.KSCAN_PERIOD,
+        pygame.KSCAN_COMMA,
+        pygame.KSCAN_LALT,
+        pygame.KSCAN_RALT,
+    ),
 )
-"""1人で遊ぶときの割り当て。WASD と矢印の両方を受ける。"""
+"""1人で遊ぶときの割り当て（原型の `CONTROLS.solo`）。WASD と矢印の両方を受ける。
+
+爆弾の J と技の K は1人のときだけ（2人の組には無い。2P の技の M・N は逆に2人のとき
+だけ）。キーの案内（横の板とキャラ選び）は原型と同じく、割り当てた全部のキーを書かない
+（J と Option は書かない）。
+"""
 
 PLAYER1_KEYS = KeyBinding(
     up=(pygame.KSCAN_W,),
@@ -82,9 +129,17 @@ PLAYER1_KEYS = KeyBinding(
     left=(pygame.KSCAN_A,),
     right=(pygame.KSCAN_D,),
     bomb=(pygame.KSCAN_SPACE, pygame.KSCAN_Z),
-    action=(pygame.KSCAN_E, pygame.KSCAN_Q, pygame.KSCAN_LSHIFT),
+    action=(
+        pygame.KSCAN_E,
+        pygame.KSCAN_Q,
+        pygame.KSCAN_X,
+        pygame.KSCAN_C,
+        pygame.KSCAN_R,
+        pygame.KSCAN_LSHIFT,
+        pygame.KSCAN_LALT,
+    ),
 )
-"""2人で遊ぶときの、キーボードの左側を使うプレイヤー。"""
+"""2人で遊ぶときの、キーボードの左側を使うプレイヤー（原型の `CONTROLS.p1`）。"""
 
 PLAYER2_KEYS = KeyBinding(
     up=(pygame.KSCAN_UP,),
@@ -92,9 +147,66 @@ PLAYER2_KEYS = KeyBinding(
     left=(pygame.KSCAN_LEFT,),
     right=(pygame.KSCAN_RIGHT,),
     bomb=(pygame.KSCAN_RETURN, pygame.KSCAN_SLASH),
-    action=(pygame.KSCAN_PERIOD, pygame.KSCAN_COMMA, pygame.KSCAN_RSHIFT),
+    action=(
+        pygame.KSCAN_RSHIFT,
+        pygame.KSCAN_PERIOD,
+        pygame.KSCAN_COMMA,
+        pygame.KSCAN_M,
+        pygame.KSCAN_N,
+        pygame.KSCAN_RALT,
+    ),
 )
-"""2人で遊ぶときの、キーボードの右側を使うプレイヤー。"""
+"""2人で遊ぶときの、キーボードの右側を使うプレイヤー（原型の `CONTROLS.p2`）。"""
+
+MENU_KEYS: Final[Mapping[int, NavCommand]] = {
+    pygame.KSCAN_UP: NavCommand.UP,
+    pygame.KSCAN_DOWN: NavCommand.DOWN,
+    pygame.KSCAN_LEFT: NavCommand.LEFT,
+    pygame.KSCAN_RIGHT: NavCommand.RIGHT,
+    pygame.KSCAN_RETURN: NavCommand.CONFIRM,
+    pygame.KSCAN_SPACE: NavCommand.CONFIRM,
+    pygame.KSCAN_ESCAPE: NavCommand.BACK,
+    pygame.KSCAN_BACKSPACE: NavCommand.BACK,
+}
+"""メニューを動かすキーと、その操作（原型の `KEY_TO_PAD`。L3186-3189）。
+
+決定は Enter と Space。どちらも爆弾のキーなので、決定で「はじめる」を押すと、押した
+まま試合が始まる。ルールの層が、ラウンドの始まりに押していた爆弾のボタンを、一度
+離すまで受け付けない（`domain/state/world.py` の `HELD_AT_ROUND_START`）ので、開始位置に
+爆弾は置かれない。
+"""
+
+PAUSE_KEY: Final = pygame.KSCAN_P
+"""試合の最中のポーズのキー（原型の `KeyP`。L3081）。"""
+
+
+def nav_command_of(event: pygame.event.Event) -> NavCommand | None:
+    """キーを押したイベントを、メニューの操作にする。メニューのキーでなければ None。
+
+    修飾キーは見ない（モジュールの説明）。
+    """
+    if event.type != pygame.KEYDOWN:
+        return None
+    return MENU_KEYS.get(event.scancode)
+
+
+def is_erase_key(event: pygame.event.Event) -> bool:
+    """Backspace を押したイベントか（LAN の画面の欄の字を消すのに使う）。"""
+    return event.type == pygame.KEYDOWN and event.scancode == pygame.KSCAN_BACKSPACE
+
+
+def typed_text(event: pygame.event.Event) -> str:
+    """キーを押したイベントで打った字（LAN の画面の欄に入れる）。字でなければ空。
+
+    pygame は、文字の入力を止めていても（`pygame.key.stop_text_input`）、英数字のキーの
+    字を `unicode` に入れて送る。⚠️ 実機では確認していない。
+    """
+    if event.type != pygame.KEYDOWN:
+        return ""
+    text = getattr(event, "unicode", "")
+    if isinstance(text, str) and len(text) == 1 and text.isprintable():
+        return text
+    return ""
 
 
 class KeyStateReader(Protocol):

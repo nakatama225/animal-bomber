@@ -10,11 +10,16 @@ from animal_bomber.ai.levels import CPU_LEVELS, CpuLevelKey
 from animal_bomber.domain.rules.tuning import BLAST_DAMAGE, STARTING_HP
 from animal_bomber.presentation.menu.choices import (
     CPU_LEVEL_CHOICES,
+    DEFAULT_SPEED,
     HIT_CHOICES,
+    SOUND_CHOICES,
+    SPEED_CHOICES,
     TIME_CHOICES,
     WIN_CHOICES,
+    SoundSetting,
     assert_choice,
     format_seconds,
+    format_speed,
     hits_for_hp,
     hp_for_hits,
 )
@@ -64,6 +69,52 @@ class Test回数と体力:
         """突進の半分の減りで、半分だけ残った体力も1回ぶんと数える。"""
         assert hits_for_hp(3) == 2
         assert hits_for_hp(1) == 1
+
+
+class Test音の設定:
+    def test_3つの選択肢と字_曲だけの選択肢は無い(self) -> None:
+        """原型のチップ（L5778）。"""
+        assert [choice.label for choice in SOUND_CHOICES] == [
+            "BGM + 効果音",
+            "効果音だけ",
+            "無音",
+        ]
+        assert [(choice.music, choice.effects) for choice in SOUND_CHOICES] == [
+            (True, True),
+            (False, True),
+            (False, False),
+        ]
+
+    def test_既定は両方鳴らす(self) -> None:
+        assert SoundSetting("both") is SoundSetting.BOTH
+
+
+class Testゲーム速度:
+    def test_05から3まで025刻み(self) -> None:
+        """原型のつまみ（`min=0.5 max=3 step=0.25`）。"""
+        assert SPEED_CHOICES == (
+            0.5,
+            0.75,
+            1.0,
+            1.25,
+            1.5,
+            1.75,
+            2.0,
+            2.25,
+            2.5,
+            2.75,
+            3.0,
+        )
+        assert DEFAULT_SPEED == 1.0
+        assert DEFAULT_SPEED in SPEED_CHOICES
+
+    @pytest.mark.parametrize(
+        ("speed", "text"),
+        [(0.5, "0.5×"), (1.0, "1×"), (1.25, "1.25×"), (2.0, "2×"), (3.0, "3×")],
+    )
+    def test_倍率の字は_整数なら小数点を付けない(self, speed: float, text: str) -> None:
+        """原型の `${v}×`（JavaScript の数の書き方）。"""
+        assert format_speed(speed) == text
 
 
 class Test秒の書き方:

@@ -46,14 +46,20 @@ from animal_bomber.presentation.hud.roster import Human, Roster, controller_of
 
 
 class SpanKind(Enum):
-    """行の中の1区切りの種類。"""
+    """行の中の1区切りの種類。
+
+    キーの案内のほか、設定の画面の注記とマニュアル・更新履歴の文
+    （`menu/manual.py`・`menu/screens.py`）も同じ区切りで持つ。
+    """
 
     TEXT = "text"
     """ふつうの文。"""
     KEY = "key"
-    """キー1つ（原型の `<span class="k">`）。"""
+    """キー1つ（原型の `<span class="k">`。マニュアルでは `<kbd>`）。"""
     BOLD = "bold"
     """太字の文（原型の `<b>`）。"""
+    CODE = "code"
+    """プログラムの字（原型の `<code>`。更新履歴の 1.0.2 の1か所だけ）。"""
 
 
 @dataclass(frozen=True, slots=True)
