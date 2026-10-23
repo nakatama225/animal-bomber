@@ -243,7 +243,7 @@ AUTOBOMB_INTERVAL_SECONDS: Final = 0.5
 
 ⚠️ 毎 tick 置こうとしない。毎 tick だと、歩きながら隣り合うマスに続けて置き、爆発で
 手持ちが戻った次の tick に置き直す。原型は 0.5 秒に1回で、素の速さで歩くと1マス
-おきに並ぶ（TypeScript 版も 2ce8030 で合わせた）。
+おきに並ぶ（TypeScript 版も 85bf5f7 で合わせた）。
 """
 
 AUTOBOMB_INTERVAL: Final = seconds_to_ticks(AUTOBOMB_INTERVAL_SECONDS)
@@ -266,7 +266,7 @@ ROUND_INTERMISSION_SECONDS: Final = 2
 
 ⚠️ 決まった tick のうちに盤面を作り直すと、決着をつけた爆発も、倒れる瞬間も、画面に
 1度も描かれない（描く前に次の盤面へ切り替わる）。決着の場面を見せるために、前の盤面を
-止めたまま少し待つ（TypeScript 版は 42d1cda で修正した）。ラウンドの幕は、この待ちの
+止めたまま少し待つ（TypeScript 版は 546880b で修正した）。ラウンドの幕は、この待ちの
 間に重ねる。1台の試合は原型どおり幕をボタンで送るので、送るまで待ちを進めず、送ったら
 待ちを切り上げる（`app/session.py` の `start_next_round`）。通信対戦は、全員が同じ
 tick に次のラウンドへ進むため、この待ちが尽きたら幕を消す。

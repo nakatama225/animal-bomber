@@ -104,7 +104,7 @@ HELD_AT_ROUND_START: Final = PlayerInput.BOMB | PlayerInput.ACTION
 間も押し続けていれば、実際の試合でも起きる。原型も、決着の幕を Space で送った押下が次の
 ラウンドの最初に届いて同じことが起き、ラウンドの始まりに押下の記録を消していた
 （`legacy/animal-bomber.html` の startRound）。押したまま始まったボタンは、一度離して
-押し直すと効く（TypeScript 版は段階 11e の f20c8e1 で直した）。
+押し直すと効く（TypeScript 版は段階 11e の 41be1eb で直した）。
 
 技のボタンの長押し（とくぎ）は、`PlayerState.action_fired` の始めの値（True）が止める
 （原型の startRound も同じ）。

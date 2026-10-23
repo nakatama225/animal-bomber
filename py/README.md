@@ -45,7 +45,7 @@ pygame-ce は描画を CPU で行います。重い場面で、1 フレームに
 書き直すことになります。そこで絵を描き始める前に、いちばん重い場面を窓を開かずに描いて測り、
 pygame-ce で作り進めるかを決めました（作る前の Go/No-Go 判定）。描画の層はまだ無いので、
 代わりの絵で同じ数の場面を描きました（[tools/bench_scene.py](tools/bench_scene.py)。測るコードは
-段階 7 の前（10d3fb3）の `tools/bench_render.py`）。合格基準は [tools/bench_gate.py](tools/bench_gate.py)
+段階 7 の前（dc376c5）の `tools/bench_render.py`）。合格基準は [tools/bench_gate.py](tools/bench_gate.py)
 にあります。段階 7 で描画の層ができたので、その層を通して測り直しました（下の「描画の層を通して
 測り直した」。合格基準は変えていません）。
 
