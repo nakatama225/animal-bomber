@@ -3,13 +3,28 @@
 `app/shell.py` の `Shell` が持ち、試合の画面のフレームごとに `draw` を呼ぶ。盤面を
 切って描いて横の板を貼る所は、描画の重さの場面（`tools/bench_match_scene.py`）と同じ
 関数（`render/match_frame.py` の `draw_match_frame`）を呼ぶ。ポーズの幕・幕・案内の
-帯は、出ている間だけ重ねる。どれも取っておいた絵を1〜2枚貼るだけ（幕のぼかしは、幕を
+帯は、出ている間だけ重ねる。どれも取っておいた絵を数枚貼るだけ（幕のぼかしは、幕を
 出したときに1回だけ作る。`render/overlay/banner.py`）。
 
 幕の間（2フレーム目から）は、盤面と横の板を描かない。ぼかした絵が窓の全体を覆うので、
 ぼかした絵とカード（地と文）とボタンを貼る（ボタンはマウスが乗った見た目に替えられる
 ように、カードと別に貼る）。幕の間は描画の重さの場面（`tools/bench_match_scene.py`）の
 対象の外（py/AGENTS.md の「描画の重さ」）。幕が消えたフレームに窓の全体を塗り直す。
+
+## 幕の間の盤面の揺れ
+
+原型は幕の間も毎フレーム盤面を揺らす（揺れは update でしか減らない）。この版も、幕の間の
+フレームごとに、盤面と同じ見た目の乱数（`Renderer` に渡したもの。原型の `Math.random` と
+同じく1本）から揺れのずれを引き（`renderer.py` の `shake_shift`。揺れの幅は
+`SceneTracker` の値で、盤面を進めない幕の間は減らない）、幕がぼかした盤面をそのずれだけ
+ずらして貼る（`BannerOverlay.draw`）。幕を出したフレームは、先に揺れのずれを引いてから、
+揺れの幅を 0 として盤面を描き（`_Steady`。乱数を引く順は原型と同じく、画面の揺れ →
+爆風 → 被弾の揺れ）、幕は揺れていない盤面をぼかして取っておき、引いたずれで貼る。
+
+残り 30 秒から時計の数字が明滅している間は、幕の間も、そのフレームの明滅の数字と、
+幕を出したフレームに横の板を貼った位置から決めた数字の四角を幕へ渡す（幕は数字の
+まわりだけをぼかし直す。`render/overlay/banner.py` の「幕の間の時計の明滅」）。
+横の板をスクロールして数字が窓の外に隠れているときは渡さない（`_clock_under_banner`）。
 
 試合の状態から何を描くか（横の板の中身・幕を出すか・ポーズ中か）は `Shell` が決めて
 渡す。ここは描く面と、描いたものの控え（横の板のスクロールと高さ・押せる所）だけを持つ。
@@ -37,15 +52,26 @@ from typing import Final
 
 import pygame
 
+from animal_bomber.domain.core.coord import Point
+from animal_bomber.domain.core.tick import Tick
+from animal_bomber.domain.state.actors import Foxfire, Leek, SlimeBomb
+from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState
+from animal_bomber.presentation.cosmetic_rng import CosmeticRng
 from animal_bomber.presentation.hud.banner import BannerView
 from animal_bomber.presentation.menu.hover import NO_MOTION, Motions
 from animal_bomber.presentation.menu.items import MenuGroup
+from animal_bomber.presentation.render.art.foxfires import TrailMark
+from animal_bomber.presentation.render.art.particles import ParticleLook
 from animal_bomber.presentation.render.baked.art import BakedArt
 from animal_bomber.presentation.render.lan_screen import LanScreen
 from animal_bomber.presentation.render.layout import PANEL_WIDTH, WindowLayout
 from animal_bomber.presentation.render.match_frame import BoardFrame, draw_match_frame
-from animal_bomber.presentation.render.overlay.banner import BannerOverlay
+from animal_bomber.presentation.render.overlay.banner import (
+    BannerBoard,
+    BannerClock,
+    BannerOverlay,
+)
 from animal_bomber.presentation.render.overlay.pause import PauseOverlay
 from animal_bomber.presentation.render.panel.side_panel import (
     PanelContent,
@@ -53,12 +79,49 @@ from animal_bomber.presentation.render.panel.side_panel import (
     PanelTool,
     SidePanel,
 )
-from animal_bomber.presentation.render.renderer import Renderer, Visuals
+from animal_bomber.presentation.render.renderer import Renderer, Visuals, shake_shift
 from animal_bomber.presentation.render.ui.typeset import TextPainter
 from animal_bomber.presentation.render.ui.widgets import Hit, Widgets
+from animal_bomber.presentation.render.views.player import TrackedMotion
 
 PANEL_BACKDROP_EXTRA: Final = 1024
 """横の板の後ろの背景を、窓の高さより長く作る分（px。板が窓より高いときのため）。"""
+
+
+class _Steady:
+    """揺れの幅だけを 0 にして、ほかは `visuals` の値を読ませる（`Visuals` の形）。
+
+    幕を出したフレームに、揺れていない盤面を描くため（モジュールの説明の「幕の間の盤面の
+    揺れ」）。揺れの幅が 0 なので、`Renderer.draw` は揺れの乱数を引かない。
+    """
+
+    __slots__ = ("_visuals",)
+
+    def __init__(self, visuals: Visuals) -> None:
+        self._visuals = visuals
+
+    @property
+    def shake(self) -> float:
+        return 0.0
+
+    @property
+    def particles(self) -> Sequence[ParticleLook]:
+        return self._visuals.particles
+
+    def motion(self, player: PlayerId) -> TrackedMotion:
+        return self._visuals.motion(player)
+
+    def slime(self, actor: SlimeBomb) -> tuple[tuple[float, float], bool]:
+        return self._visuals.slime(actor)
+
+    def flown_before(self, actor: SlimeBomb) -> Tick | None:
+        return self._visuals.flown_before(actor)
+
+    def leek_before(self, actor: Leek) -> Point | None:
+        return self._visuals.leek_before(actor)
+
+    def trail(self, actor: Foxfire, now: float) -> tuple[TrailMark, ...]:
+        return self._visuals.trail(actor, now)
 
 
 @dataclass(slots=True)
@@ -94,10 +157,21 @@ class MatchView:
         self._board_rect = self._frame.board_rect
         self._panel_left = window.panel_origin[0]
         self._art = BakedArt(window.board)
-        self._renderer = Renderer(self._art)
+        self._rng = CosmeticRng()
+        """見た目の乱数（盤面の絵と、幕の間の盤面の揺れが分け合う1本）。"""
+        self._renderer = Renderer(self._art, self._rng)
         self._panel = SidePanel(painter, panel_backdrop(self._background, window))
         self._pause = PauseOverlay(painter)
         self._banner = BannerOverlay(widgets)
+        self._banner_board = BannerBoard(
+            self._board_rect, self._renderer.background, self._frame.corners
+        )
+        self._banner_shake = (0, 0)
+        """このフレームに幕のぼかした盤面をずらす、画面の揺れのずれ（px）。"""
+        self._banner_clock: BannerClock | None = None
+        """このフレームに幕の下で描き直す時計の数字（明滅していないなら None）。"""
+        self._banner_panel = (0, 0)
+        """幕を出したフレームに横の板を貼った位置（幕の間の時計の数字の位置を決める）。"""
         self._texts = LanScreen(self._board_rect.h, painter)
         self._panel_scroll = 0
         self._panel_size = _PanelSize()
@@ -188,9 +262,13 @@ class MatchView:
     ) -> None:
         """窓の背景（要るときだけ）・盤面・横の板・ポーズの幕を描く。
 
-        幕 `banner` の下の絵をもうぼかして持っているなら、何も描かない（このあとの
-        `draw_banner` がぼかした絵で窓の全体を覆う。幕を出した最初のフレームは描いて、
-        その絵をぼかす）。
+        幕 `banner` の下の絵をもうぼかして持っているなら、揺れのずれと明滅する時計の
+        数字を決めるだけで何も描かない（このあとの `draw_banner` がぼかした絵で窓の
+        全体を覆い、ぼかした盤面をそのずれだけずらし、時計の数字のまわりをぼかし直す）。
+        幕を出した最初のフレームは、揺れのずれを引いてから、盤面を揺らさずに描き、その
+        絵をぼかす（モジュールの説明の「幕の間の盤面の揺れ」）。
+        ポーズの幕は、盤面を描いたときの揺れのずれだけずらして重ねる（原型も揺れの内側で
+        描く。`render/overlay/pause.py`）。
 
         Args:
             world: 描く盤面。
@@ -207,12 +285,18 @@ class MatchView:
         canvas = self._canvas
         self._bannered = False
         if self._banner.holds(banner, canvas.get_size()):
+            self._banner_shake = shake_shift(visuals.shake, self._rng)
+            self._banner_clock = self._clock_under_banner(now_ms)
             return
+        if banner is not None:
+            self._banner_shake = shake_shift(visuals.shake, self._rng)
+            visuals = _Steady(visuals)
         if self._repaint:
             canvas.blit(self._background, (0, 0))
             self._repaint = False
         elif self._toast_rect is not None:
             canvas.blit(self._background, self._toast_rect, self._toast_rect)
+        panel_topleft = (self._panel_left, -self._panel_scroll)
         self._panel_hits = draw_match_frame(
             canvas,
             frame=self._frame,
@@ -221,15 +305,18 @@ class MatchView:
             visuals=visuals,
             panel=self._panel,
             content=content,
-            panel_topleft=(self._panel_left, -self._panel_scroll),
+            panel_topleft=panel_topleft,
             now_ms=now_ms,
             immediate=immediate,
             blend=blend,
             hovered_tool=hovered_tool,
         )
+        if banner is not None:
+            self._banner_panel = panel_topleft
+            self._banner_clock = self._clock_under_banner(now_ms)
         self._fit_panel()
         if paused:
-            self._pause.draw(canvas, self._board_rect)
+            self._pause.draw(canvas, self._board_rect, self._renderer.shaken)
             self._frame.cover(canvas)
 
     def draw_banner(
@@ -246,7 +333,14 @@ class MatchView:
         ぼかした絵を残さない）。
         """
         self._banner_hits = self._banner.draw(
-            self._canvas, view, groups, focus, motions=motions
+            self._canvas,
+            view,
+            groups,
+            focus,
+            motions=motions,
+            board=self._banner_board,
+            shake=self._banner_shake,
+            clock=self._banner_clock,
         )
         self._bannered = True
         self._repaint = True
@@ -266,6 +360,27 @@ class MatchView:
         self._texts.draw_notice(self._canvas.subsurface(self._board_rect), notice)
         if not self._bannered:
             self._frame.cover(self._canvas)
+
+    def _clock_under_banner(self, now_ms: float) -> BannerClock | None:
+        """幕の下で描き直す `now_ms` の時計の数字（明滅しない・見えないなら None）。
+
+        数字の位置は、幕を出したフレームに横の板を貼った位置で決める（幕の下のぼかした
+        板は、幕を出したフレームの位置のまま）。幕を出したフレームに板が低くなって
+        スクロールの量を丸めても、丸める前の、板を貼った位置で決める。幕の間は板を
+        スクロールしない（`app/shell.py` の `Shell._wheel`）。
+
+        横の板をスクロールして、数字の四角が窓の上の外に出ているときは None を返す
+        （幕は窓の中の絵だけをぼかすので、窓の外の数字は幕の下に見えない。原型も
+        ページごとスクロールし、幕の `backdrop-filter` は画面に見えている所だけを
+        ぼかす）。
+        """
+        content = self._panel.content
+        if content is None or not content.clock.warn:
+            return None
+        image, rect = self._panel.digits(self._banner_panel, now_ms)
+        if not rect.colliderect(self._canvas.get_rect()):
+            return None
+        return BannerClock(image, rect)
 
     def _fit_panel(self) -> None:
         """出している横の板の高さを控え、スクロールの量を丸める。

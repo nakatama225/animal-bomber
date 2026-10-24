@@ -80,7 +80,7 @@ def drawn_time(now: Tick, blend: float) -> float:
     残りにする（`drawn_left`。爆弾は `art/bombs.py` の `bomb_look` の `behind`。長押しの
     長さは `drawn_held`）。爆風の縮み・粘膜爆弾の着地のあとの形・溶けるうんこ・跳び
     上がりの進みは tick のまま（取っておく絵を tick ごとに持つため。docs/11 の「原型に
-    合わせる作業が残っている所」）。
+    合わせない所」の「ゲーム速度が整数でないときの、絵を tick ごとに取っておく値」）。
     """
     if blend >= 1.0:
         return now

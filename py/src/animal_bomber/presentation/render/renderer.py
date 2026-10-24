@@ -16,7 +16,9 @@
 原型と同じく、揺れが 0.2 を超えていれば、描くたびに見た目の乱数を横・縦の順に2つ引いて
 ずらす（決着のあとの待ちの間も、止まった揺れの幅のまま揺らす）。ずれは整数の px に丸めて
 貼る（丸めのずれは 0.5px まで。取っておいた絵はマスの左上からの小数のずれが同じ所に
-貼るので、整数でずらせば絵は変わらない）。
+貼るので、整数でずらせば絵は変わらない。`shake_shift`）。使ったずれは
+`Renderer.shaken` に残す（原型のポーズの幕は揺れた canvas の中に描くので、同じずれで
+重ねる。`app/match_view.py`）。
 
 ## 落とし穴の、不透明度の戻し忘れ
 
@@ -134,6 +136,8 @@ class Renderer:
         self.art = art
         self.cpu_players: frozenset[PlayerId] = frozenset(cpu_players)
         """CPU が操作しているプレイヤーの番号（クラスの説明）。"""
+        self.shaken: tuple[int, int] = (0, 0)
+        """最後に描いたフレームの、画面の揺れのずれ（px。揺らさなかったら (0, 0)）。"""
         self._rng = rng if rng is not None else CosmeticRng()
         layout = art.layout
         self._background = background(layout)
@@ -143,6 +147,11 @@ class Renderer:
     def layout(self) -> Layout:
         """盤面を描く面の寸法。"""
         return self.art.layout
+
+    @property
+    def background(self) -> pygame.Surface:
+        """盤面の背景（揺らさない縦のグラデーション。盤面の大きさ。書き換えない）。"""
+        return self._background
 
     def draw(
         self,
@@ -179,8 +188,8 @@ class Renderer:
         art, rng, now = self.art, self._rng, world.now
         at = drawn_time(now, blend)
         behind = now - at
-        moved = shake_offset(visuals.shake, rng)
-        shake = (0, 0) if moved is None else (snap(moved[0]), snap(moved[1]))
+        shake = shake_shift(visuals.shake, rng)
+        self.shaken = shake
         # 揺れのずれに盤面の左上の位置を足した、絵を貼るときのずれ。揺れているかは
         # 揺れのずれだけで決める（足したずれで決めると、`origin` が (0, 0) でないとき
         # 毎フレーム揺れているほうの道を通る）。
@@ -277,6 +286,18 @@ class Renderer:
                     assert_never(actor)
         for particle in visuals.particles:
             art.particles.draw(target, drawn_particle(particle, blend), offset)
+
+
+def shake_shift(shake: float, rng: CosmeticRng) -> tuple[int, int]:
+    """画面の揺れの幅 `shake`（px）から、このフレームのずれ（整数の px）を引く。
+
+    揺れが 0.2 を超えていれば、見た目の乱数を横・縦の順に2つ引き（`art/frame.py` の
+    `shake_offset`）、いちばん近い整数の px に丸める（モジュールの説明の「画面の
+    揺れ」）。揺れが小さければ乱数を引かずに (0, 0)。幕の間の盤面の揺れ
+    （`app/match_view.py`）も、この関数で同じ乱数から引く。
+    """
+    moved = shake_offset(shake, rng)
+    return (0, 0) if moved is None else (snap(moved[0]), snap(moved[1]))
 
 
 def background(layout: Layout) -> pygame.Surface:

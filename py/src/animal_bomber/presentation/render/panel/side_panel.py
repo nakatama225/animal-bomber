@@ -374,7 +374,6 @@ class SidePanel:
         content = self._content
         if content is None:
             raise ValueError("横の板の中身を、先に show で渡す")
-        self._note_warn(content.clock, now_ms)
         key = _body_key(content)
         if self._built is None or key != self._key:
             self._built = self._build(content)
@@ -383,9 +382,8 @@ class SidePanel:
         built = self._built
         x, y = topleft
         target.blit(built.body, topleft)
-        digits = self._digits_image(content.clock, now_ms)
-        left = x + (PANEL_WIDTH - digits.get_width()) // 2
-        target.blit(digits, (left, y + built.digits_top))
+        digits, spot = self.digits(topleft, now_ms)
+        target.blit(digits, spot)
         for tool, label, rect in built.tools:
             if tool is hovered:
                 target.blit(self._tool_image(label, rect.size, ACCENT), rect.move(x, y))
@@ -394,6 +392,27 @@ class SidePanel:
             pause=None if built.pause is None else built.pause.move(x, y),
             settings=built.settings.move(x, y),
         )
+
+    def digits(
+        self, topleft: tuple[int, int], now_ms: float
+    ) -> tuple[pygame.Surface, pygame.Rect]:
+        """時計の数字の絵と、板を `topleft` に貼ったときに数字を貼る四角。
+
+        `draw` が貼るものと同じ（`now_ms` の明滅の不透明度の絵）。幕の間は板を描かず、
+        明滅する数字だけをこれで描き直す（`overlay/banner.py` の「幕の間の時計の
+        明滅」）。
+
+        Raises:
+            ValueError: まだ板を描いていないとき（先に `draw` を呼ぶ）。
+        """
+        content = self._content
+        built = self._built
+        if content is None or built is None:
+            raise ValueError("時計の数字の位置は、板を描いてから読む")
+        self._note_warn(content.clock, now_ms)
+        image = self._digits_image(content.clock, now_ms)
+        left = topleft[0] + (PANEL_WIDTH - image.get_width()) // 2
+        return image, image.get_rect(topleft=(left, topleft[1] + built.digits_top))
 
     def _note_warn(self, clock: ClockView, now_ms: float) -> None:
         """残り 30 秒の明滅を始めた実時間を控える（明滅を出さない時計なら忘れる）。

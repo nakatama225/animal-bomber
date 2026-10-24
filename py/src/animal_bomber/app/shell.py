@@ -659,14 +659,18 @@ class Shell:
     def _wheel(self, amount: float) -> None:
         """ホイールを回した。マウスの位置の、長い箱・横の板・ページのどれかを動かす。
 
-        上へ回す（`amount` が正）と、上を見る（スクロールの量が減る）。
+        上へ回す（`amount` が正）と、上を見る（スクロールの量が減る）。幕が出ている間は
+        横の板を動かさない（幕の下の絵は、幕を出したフレームに1回だけぼかして使い回す
+        ので、板を動かしても幕の下は動かず、幕を外した最初のフレームで板が新しい位置へ
+        飛ぶ。原型は幕の下でページがスクロールする。`docs/11-画面と設定.md` の表の
+        「幕の間のホイール」）。
         """
         delta = round(-amount * WHEEL_PX)
         if delta == 0:
             return
         x, y = self._mouse
         if self._game is not None:
-            if x >= self._panel_left:
+            if x >= self._panel_left and self._game.shown is None:
                 self._view.scroll_panel(delta)
             return
         drawn = self._menu_drawn
@@ -1023,7 +1027,9 @@ class Shell:
         else:
             self._draw_menu(motions)
         canvas = self._canvas
-        self._view.note_toast(self._toasts.draw(canvas, self._toast.view(now_ms)))
+        toast = self._toast.view(now_ms)
+        # 折り返す幅は、原型のブラウザの窓とみなす幅（画面の 9 割）で決める。
+        self._view.note_toast(self._toasts.draw(canvas, toast, self._window.page_width))
         dialog = flow.dialog_view()
         self._dialog_hits = ()
         if dialog is not None:

@@ -5,6 +5,11 @@
 （盤面の中）だが、この版は盤面の絵（`Renderer`）の外で、盤面の四角に重ねる
 （`art/frame.py` の説明）。
 
+原型はこの幕を画面の揺れ（`ctx.translate`）の内側で描く（L4539-4574）。ポーズの間は
+update を呼ばないので、揺れが 0.2 を超えたまま止めると、盤面と一緒に幕と字も揺れ、
+ずれた側の端の帯は暗くならない。この版も、盤面を描いたときと同じずれ（`Renderer.shaken`）
+だけずらし、盤面の四角で切って重ねる。
+
 原型の `system-ui` は、この版では画面の既定の書体（SF。`ui/fonts.py`）で描き、日本語は
 文字の書体で補う。SF は太さを軸で持つ書体で、pygame では軸を選べないので、太さは
 太字の描き方で寄せる。
@@ -51,18 +56,31 @@ class PauseOverlay:
         self._painter = painter
         self._shade: pygame.Surface | None = None
 
-    def draw(self, target: pygame.Surface, board: pygame.Rect) -> None:
-        """盤面の四角 `board` に、ポーズの幕を重ねる。"""
+    def draw(
+        self,
+        target: pygame.Surface,
+        board: pygame.Rect,
+        shake: tuple[int, int] = (0, 0),
+    ) -> None:
+        """盤面の四角 `board` に、ポーズの幕を重ねる。
+
+        `shake` は、盤面を描いたときの画面の揺れのずれ（px。モジュールの説明）。幕と字を
+        そのずれだけずらし、盤面の四角の外には描かない。
+        """
         shade = self._shade
         if shade is None or shade.get_size() != board.size:
             shade = pygame.Surface(board.size)
             shade.fill(SHADE)
             shade.set_alpha(SHADE_ALPHA)
             self._shade = shade
-        target.blit(shade, board.topleft)
+        moved = board.move(shake)
+        clip = target.get_clip()
+        target.set_clip(board.clip(clip))
+        target.blit(shade, moved.topleft)
         painter = self._painter
         title = painter.render(TITLE_TEXT, TITLE)
         hint = painter.render(HINT_TEXT, HINT)
-        cx, cy = board.center
+        cx, cy = moved.center
         target.blit(title, title.get_rect(center=(cx, cy)))
         target.blit(hint, hint.get_rect(center=(cx, cy + HINT_DROP)))
+        target.set_clip(clip)

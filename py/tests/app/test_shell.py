@@ -17,14 +17,18 @@ TypeScript 版の `tests/ui/shell.test.ts`（本物の GameSession を回す通�
 
 import itertools
 from collections.abc import Sequence
+from dataclasses import replace
+from typing import cast
 
 import numpy as np
 import pygame
 import pytest
 
 from animal_bomber.app.lan import LanMatch
+from animal_bomber.app.main import window_layout
 from animal_bomber.app.runner import LocalMatch
-from animal_bomber.domain.core.coord import Cell
+from animal_bomber.app.shell import WHEEL_PX
+from animal_bomber.domain.core.coord import Cell, Point
 from animal_bomber.domain.core.entity_id import EntityId
 from animal_bomber.domain.core.tick import TICKS_PER_SECOND, Tick
 from animal_bomber.domain.events import (
@@ -34,10 +38,17 @@ from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.rules.tuning import LANE_SPEED, LEEK_SPEED
+from animal_bomber.domain.state.actors import Foxfire, Leek, SlimeBomb
 from animal_bomber.domain.state.board import Tile
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import OUT, Negibon, speed_of
+from animal_bomber.domain.state.player import (
+    OUT,
+    PLAYER_IDS,
+    Negibon,
+    PlayerId,
+    speed_of,
+)
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.net.client import Playing
 from animal_bomber.presentation import notices
@@ -57,12 +68,29 @@ from animal_bomber.presentation.menu.choices import hp_for_hits
 from animal_bomber.presentation.menu.hover import NO_MOTION, Motions
 from animal_bomber.presentation.menu.items import MenuGroup
 from animal_bomber.presentation.menu.screens import LanView, LobbyView, MenuScreen
+from animal_bomber.presentation.render.art.foxfires import TrailMark
 from animal_bomber.presentation.render.art.negibons import LeekLook, NegibonLook
+from animal_bomber.presentation.render.art.particles import ParticleLook
 from animal_bomber.presentation.render.art.player import PlayerLook
 from animal_bomber.presentation.render.layout import PANEL_WIDTH, fit_window
 from animal_bomber.presentation.render.loading import BACKGROUND, TEXT_COLOR
-from animal_bomber.presentation.render.panel.side_panel import SidePanel, thumb_center
-from animal_bomber.presentation.render.renderer import Visuals
+from animal_bomber.presentation.render.overlay.banner import (
+    BLUR_RADIUS,
+    SHADE,
+    SHADE_ALPHA,
+    BannerBoard,
+    BannerClock,
+    blur,
+)
+from animal_bomber.presentation.render.overlay.toast import PAD_Y as TOAST_PAD_Y
+from animal_bomber.presentation.render.overlay.toast import TEXT as TOAST_TEXT
+from animal_bomber.presentation.render.overlay.toast import wrap_width
+from animal_bomber.presentation.render.panel.side_panel import (
+    WARN_PULSE_MS,
+    SidePanel,
+    thumb_center,
+)
+from animal_bomber.presentation.render.renderer import Renderer, Visuals
 from animal_bomber.presentation.render.screens.manual import MANUAL_BOX
 from animal_bomber.presentation.render.ui.shapes import (
     page_background,
@@ -70,6 +98,7 @@ from animal_bomber.presentation.render.ui.shapes import (
 )
 from animal_bomber.presentation.render.ui.theme import (
     ACCENT,
+    BORDER,
     GO_TOP,
     LINE,
     WHITE,
@@ -77,11 +106,14 @@ from animal_bomber.presentation.render.ui.theme import (
 )
 from animal_bomber.presentation.render.ui.typeset import TextStyle
 from animal_bomber.presentation.render.ui.widgets import Hit, focused_item
-from animal_bomber.presentation.render.views.player import drawn_position
+from animal_bomber.presentation.render.views.player import (
+    TrackedMotion,
+    drawn_position,
+)
 from animal_bomber.shell.gamepad import PadButton
 from tests.net.fake_relay import FakeConnection, FakeRelay
 
-from .shell_driver import PAINTER, SEED, WINDOW, Driver, key_event
+from .shell_driver import FRAME_MS, PAINTER, SEED, WINDOW, Driver, key_event
 
 Offset = tuple[int, int]
 """画面の揺れなどで全体をずらす px（取っておいた絵を貼る関数の引数）。"""
@@ -231,6 +263,116 @@ def frame_colors(surface: pygame.Surface) -> list[tuple[int, ...]]:
             y = board.bottom - 5 if bottom else board.top + 4
             spots.append((x, y))
     return [tuple(surface.get_at(spot))[:3] for spot in spots]
+
+
+def script_view_rng(
+    monkeypatch: pytest.MonkeyPatch, driver: Driver, values: Sequence[float]
+) -> list[float]:
+    """盤面の絵と幕の揺れが分け合う見た目の乱数に、値の列を引かせる。
+
+    分け合う乱数は `MatchView` の1本。引いた値の list を返す（用意した値を使い切ったら
+    0.5 を返して控える。引いた数の違いは、返した list を比べて見る）。ほかの見た目の
+    乱数（`SceneTracker` の粒子など）は差し替えない。
+    """
+    shared = driver.shell._view._rng
+    original = CosmeticRng.random
+    queue = list(values)
+    used: list[float] = []
+
+    def scripted(self: CosmeticRng) -> float:
+        if self is not shared:
+            return original(self)
+        value = queue.pop(0) if queue else 0.5
+        used.append(value)
+        return value
+
+    monkeypatch.setattr(CosmeticRng, "random", scripted)
+    return used
+
+
+def set_shake(driver: Driver, shake: float) -> None:
+    """画面の揺れの幅（`SceneTracker` の値）を置く。
+
+    揺れは見た目だけの値なので、試合の状態を変えずに、被弾で残る揺れの場面を作れる。
+    """
+    scene = driver.shell.scene
+    assert scene is not None
+    scene._effects.shake = shake
+
+
+def darkened(surface: pygame.Surface) -> np.ndarray:
+    """幕の下と同じく、ぼかして幕の暗さを重ねた絵の画素（`[x, y]` の RGB）。"""
+    shot = pygame.Surface(surface.get_size())
+    shot.blit(surface, (0, 0))
+    blurred = blur(shot)
+    shade = pygame.Surface(surface.get_size())
+    shade.fill(SHADE)
+    shade.set_alpha(SHADE_ALPHA)
+    blurred.blit(shade, (0, 0))
+    return pygame.surfarray.array3d(blurred)
+
+
+def capture_banner_target(driver: Driver) -> list[pygame.Surface]:
+    """幕を重ねる前の描く面（幕がぼかす元）を、幕を描くたびに写して控える。"""
+    overlay = driver.shell._view._banner
+    draw = overlay.draw
+    shots: list[pygame.Surface] = []
+
+    def captured(
+        target: pygame.Surface,
+        view: BannerView,
+        groups: Sequence[MenuGroup],
+        focus: tuple[int, int] | None,
+        motions: Motions = NO_MOTION,
+        *,
+        board: BannerBoard | None = None,
+        shake: Offset = (0, 0),
+        clock: BannerClock | None = None,
+    ) -> tuple[Hit, ...]:
+        shots.append(target.copy())
+        return draw(
+            target, view, groups, focus, motions, board=board, shake=shake, clock=clock
+        )
+
+    overlay.draw = captured  # type: ignore[method-assign]
+    return shots
+
+
+class MarkedVisuals:
+    """目印の値を返す見た目の値（`Visuals` の形）。聞かれた引数を順に控える。
+
+    プレイヤーの動きはプレイヤーごとに別の目印、ほかは種類ごとに1つの目印を返す。
+    """
+
+    shake = 6.0
+
+    def __init__(self) -> None:
+        self.particles: list[ParticleLook] = []
+        self.motions = {player: cast(TrackedMotion, object()) for player in PLAYER_IDS}
+        self.marks: dict[str, object] = {
+            name: object() for name in ("slime", "flown", "leek", "trail")
+        }
+        self.asked: list[tuple[str, object]] = []
+
+    def motion(self, player: PlayerId) -> TrackedMotion:
+        self.asked.append(("motion", player))
+        return self.motions[player]
+
+    def slime(self, actor: SlimeBomb) -> tuple[tuple[float, float], bool]:
+        self.asked.append(("slime", actor))
+        return cast(tuple[tuple[float, float], bool], self.marks["slime"])
+
+    def flown_before(self, actor: SlimeBomb) -> Tick | None:
+        self.asked.append(("flown", actor))
+        return cast(Tick, self.marks["flown"])
+
+    def leek_before(self, actor: Leek) -> Point | None:
+        self.asked.append(("leek", actor))
+        return cast(Point, self.marks["leek"])
+
+    def trail(self, actor: Foxfire, now: float) -> tuple[TrailMark, ...]:
+        self.asked.append(("trail", (actor, now)))
+        return cast(tuple[TrailMark, ...], self.marks["trail"])
 
 
 def notice_text_pixels(driver: Driver) -> int:
@@ -748,26 +890,516 @@ class Testラウンドの幕:
         runner = start_local(driver)
         driver.frame()
         overlay = driver.shell._view._banner
-        draw = overlay.draw
-        shots: list[pygame.Surface] = []
-
-        def captured(
-            target: pygame.Surface,
-            view: BannerView,
-            groups: Sequence[MenuGroup],
-            focus: tuple[int, int] | None,
-            motions: Motions = NO_MOTION,
-        ) -> tuple[Hit, ...]:
-            if not shots:
-                shots.append(target.copy())
-            return draw(target, view, groups, focus, motions)
-
-        overlay.draw = captured  # type: ignore[method-assign]
+        shots = capture_banner_target(driver)
         finish_round(driver, runner)
         assert overlay.backdrops == 1
         (shot,) = shots
         assert frame_colors(shot) == [LINE] * 8
         assert all(color != LINE for color in frame_colors(driver.shell.canvas))
+
+    @pytest.mark.parametrize("final", [False, True], ids=["ラウンドの幕", "優勝の幕"])
+    def test_揺れが残ったまま決まった幕の間も_描くたびに乱数を2つ引いて盤面だけをずらす(
+        self, monkeypatch: pytest.MonkeyPatch, final: bool
+    ) -> None:
+        """原型は幕の間も draw を呼び、揺れは update でしか減らない。
+
+        原型の L4403-4405・L4541。被弾の揺れ 6 は、決める tick で1回減って約 5.37 に
+        なる。乱数 0.5 はずれ 0、0 は横 −3px、0.999 は横 +3px。幕を出したフレーム
+        （ずれ 0）の絵を基準にして、盤面の中はその絵をずらした絵になり、盤面の四角の外
+        （枠・すき間・横の板・カード）と四隅（枠の内側の角丸の外）は動かない。ずれて空いた
+        盤面の右の 3 列には、盤面の背景（`Renderer.background`）をぼかして暗くした色が
+        見える（原型の背景は揺らす前に塗る。L4533-4537）。ずれが 0 に戻れば、基準の絵と
+        同じ。どのフレームも引くのは揺れの2つだけ（幕を出したフレームは、盤面を揺らさずに
+        描いてぼかすので、盤面の絵は揺れの乱数を引かない）。盤面の絵を描くのは幕を出した
+        フレームだけ。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        set_shake(driver, 6.0)
+        values = [0.5, 0.5, 0.0, 0.5, 0.999, 0.5, 0.5, 0.5]
+        used = script_view_rng(monkeypatch, driver, values)
+        if final:
+            finish_match(driver, runner)
+        else:
+            finish_round(driver, runner)
+        scene = driver.shell.scene
+        assert scene is not None and 5 < scene.shake < 6
+        canvas = driver.shell.canvas
+        shots = [canvas.copy()]
+        renderer = driver.shell.renderer
+        draw = renderer.draw
+        drawn: list[int] = []
+
+        def counted(
+            target: pygame.Surface,
+            world: WorldState,
+            visuals: Visuals,
+            blend: float = 1.0,
+            *,
+            origin: Offset = (0, 0),
+        ) -> None:
+            drawn.append(world.now)
+            draw(target, world, visuals, blend, origin=origin)
+
+        renderer.draw = counted  # type: ignore[method-assign]
+        for _ in range(3):
+            driver.frame()
+            shots.append(canvas.copy())
+        assert used == values
+        assert drawn == []
+        still, left, right, back = (pygame.surfarray.array3d(shot) for shot in shots)
+        board = pygame.Rect(WINDOW.board_rect)
+        band = slice(board.top + 8, board.top + 70)
+        inner = slice(board.left + 12, board.right - 12)
+        assert np.array_equal(
+            left[board.left + 12 : board.right - 15, band],
+            still[board.left + 15 : board.right - 12, band],
+        )
+        assert np.array_equal(
+            right[board.left + 15 : board.right - 12, band],
+            still[board.left + 12 : board.right - 15, band],
+        )
+        assert not np.array_equal(left[inner, band], still[inner, band])
+        under = darkened(renderer.background)
+        rows = slice(board.top + 20, board.top + 70)
+        gap = slice(board.right - 3, board.right)
+        assert np.array_equal(left[gap, rows], under[board.w - 3 :, 20:70])
+        assert not np.array_equal(still[gap, rows], under[board.w - 3 :, 20:70])
+        assert np.array_equal(back, still)
+        outside = np.ones(still.shape[:2], dtype=bool)
+        outside[board.left : board.right, board.top : board.bottom] = False
+        for shot, image in zip(shots[1:3], (left, right), strict=True):
+            assert np.array_equal(image[outside], still[outside])
+            assert frame_colors(shot) == frame_colors(shots[0])
+
+    def test_幕を出したフレームが揺れていても_ぼかすのは揺らさずに描いた盤面(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """幕を出したフレームは、揺れのずれを先に引き、盤面を揺らさずに描いてぼかす。
+
+        乱数 0 と 0.5 で、幕を出したフレームのずれは横 −3px・縦 0。次のフレームはずれ 0
+        なので、ぼかした盤面をずらさずに貼る（揺らして描いてからぼかすと、揺れが絵に
+        焼き付き、ずれ 0 のフレームも幕を出したフレームと同じ絵になる）。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        set_shake(driver, 6.0)
+        values = [0.0, 0.5, 0.5, 0.5]
+        used = script_view_rng(monkeypatch, driver, values)
+        finish_round(driver, runner)
+        canvas = driver.shell.canvas
+        first = pygame.surfarray.array3d(canvas)
+        driver.frame()
+        second = pygame.surfarray.array3d(canvas)
+        assert used == values
+        board = pygame.Rect(WINDOW.board_rect)
+        band = slice(board.top + 8, board.top + 70)
+        assert np.array_equal(
+            first[board.left + 12 : board.right - 15, band],
+            second[board.left + 15 : board.right - 12, band],
+        )
+        inner = slice(board.left + 12, board.right - 12)
+        assert not np.array_equal(first[inner, band], second[inner, band])
+
+    def test_爆風で決まった幕は_揺れの2つを引いてから_揺らさずに盤面を描く(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """原型の draw は、揺れの2つ（L4540-4541）を爆風の芯（L4747）より先に引く。
+
+        1P の爆弾を 2P（CPU）の足元へ移して導火線を 1 tick にし、ほかの CPU を退場
+        させる。次の tick に爆風で 2P が倒れてラウンドが決まり、爆発と被弾の揺れ・
+        爆風・粒子が残ったまま幕を出す。分け合う乱数の先頭の2つ（0 と 0.5）が幕を
+        出したフレームのずれ（横 −3px）になり、盤面を描き始めたときに引いてあるのは
+        その2つだけで、描き終えたときは爆風のマスの数だけ多い。幕がぼかす盤面は、
+        同じ盤面と見た目の値を、揺れだけ 0 にして描いた絵と同じ。この場面の絵に出る
+        見た目の値は爆風の粒子で、炎の跡は無く（炎の跡を残す動物は退場させてある）、
+        プレイヤーごとの動きの違いも絵には出ない。粒子のほかの見た目の値をそのまま
+        読むことは、test_幕を出したフレームに盤面を描くものへ渡す見た目の値は_揺れの幅だけが0
+        で確認する。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        world = runner.world
+        space_down = key_event(pygame.KSCAN_SPACE)
+        space_up = key_event(pygame.KSCAN_SPACE, pygame.KEYUP)
+        driver.frame(space_down, space_up)
+        (bomb,) = world.bombs
+        bomb.cell = world.players[1].position.cell()
+        bomb.fuse = Tick(1)
+        for player in world.players[2:]:
+            player.life = OUT
+        values = [0.0, 0.5] + [0.5] * 64
+        used = script_view_rng(monkeypatch, driver, values)
+        renderer = driver.shell.renderer
+        draw = renderer.draw
+        counts: list[tuple[int, int]] = []
+
+        def counted(
+            target: pygame.Surface,
+            world: WorldState,
+            visuals: Visuals,
+            blend: float = 1.0,
+            *,
+            origin: Offset = (0, 0),
+        ) -> None:
+            before = len(used)
+            draw(target, world, visuals, blend, origin=origin)
+            counts.append((before, len(used)))
+
+        renderer.draw = counted  # type: ignore[method-assign]
+        shots = capture_banner_target(driver)
+        driver.frame()
+        assert runner.between_rounds
+        scene = driver.shell.scene
+        assert scene is not None and scene.shake > 3
+        assert world.blasts and scene.particles
+        assert counts == [(2, 2 + len(world.blasts))]
+        assert driver.shell._view._banner_shake == (-3, 0)
+        canvas = driver.shell.canvas
+        first = pygame.surfarray.array3d(canvas)
+        driver.frame()
+        second = pygame.surfarray.array3d(canvas)
+        board = pygame.Rect(WINDOW.board_rect)
+        band = slice(board.top + 8, board.top + 70)
+        assert np.array_equal(
+            first[board.left + 12 : board.right - 15, band],
+            second[board.left + 15 : board.right - 12, band],
+        )
+        inner = slice(board.left + 12, board.right - 12)
+        assert not np.array_equal(first[inner, band], second[inner, band])
+        # 揺れだけ 0 にして、同じ盤面と見た目の値を描いた絵と比べる。
+        shot = shots[0]
+        set_shake(driver, 0.0)
+
+        class Half(CosmeticRng):
+            def random(self) -> float:
+                return 0.5
+
+        reference = shot.copy()
+        reference.set_clip(board)
+        Renderer(driver.shell._view.art, Half(), renderer.cpu_players).draw(
+            reference, world, scene, origin=board.topleft
+        )
+        reference.set_clip(None)
+        corners = np.zeros(first.shape[:2], dtype=bool)
+        corners[board.left : board.right, board.top : board.bottom] = True
+        for x in (board.left, board.right - 12):
+            for y in (board.top, board.bottom - 12):
+                corners[x : x + 12, y : y + 12] = False
+        got = pygame.surfarray.array3d(shot)
+        want = pygame.surfarray.array3d(reference)
+        assert np.array_equal(got[corners], want[corners])
+
+    @pytest.mark.parametrize(
+        "notches", [0, 1], ids=["スクロールなし", "数字の上が窓の外"]
+    )
+    def test_残り30秒からの明滅は_幕の間も_ぼかした時計の数字のまわりだけ描き直す(
+        self, notches: int
+    ) -> None:
+        """原型の時計の明滅は、幕の間も進み、幕がぼかし直す（L79-80・L5547・L139-141）。
+
+        原型の明滅は CSS のアニメーションなので update を待たずに進み、幕の
+        `backdrop-filter` は毎フレームぼかし直す。残り 20 秒で決めた幕の間、時計の
+        数字のまわり（ぼかしの半径ぶん広げた四角）だけが明滅の不透明度で替わり、ほかは
+        幕を出したフレームの絵のまま。替わった所は、幕を出したフレームのぼかす前の面に、
+        そのフレームの不透明度の数字を貼って窓の全体をぼかして暗くした絵と同じ画素
+        （数字のまわりだけをぼかし直しても、継ぎ目が出ない）。横の板を1目盛り
+        スクロールした場面では、数字の上の端が窓の上の外に出て、写す四角と貼る所が
+        どちらも窓の上の端で切れる。そこも同じ画素（2つのぼかしは、どちらも窓の端の
+        画素を延ばす）。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        driver.move_mouse((WINDOW.panel_origin[0] + 10, 300))
+        driver.wheel(-notches)
+        assert driver.shell.panel_scroll == notches * WHEEL_PX
+        world = runner.world
+        world.ends_at = Tick(world.now + 20 * TICKS_PER_SECOND)
+        shots = capture_banner_target(driver)
+        finish_round(driver, runner)
+        content = driver.shell._view.panel_content
+        assert content is not None and content.clock.warn
+        canvas = driver.shell.canvas
+        window = canvas.get_rect()
+        # 幕を出したフレームの数字の四角には、ぼかす前の面に板が貼った数字がある。
+        shown = driver.shell._view._banner_clock
+        assert shown is not None
+        if notches:
+            assert shown.rect.top < 0 < shown.rect.bottom
+        else:
+            assert window.contains(shown.rect)
+        seen = shown.rect.clip(window)
+        assert np.array_equal(
+            pygame.surfarray.array3d(shots[0].subsurface(seen)),
+            pygame.surfarray.array3d(
+                shown.image.subsurface(seen.move(-shown.rect.x, -shown.rect.y))
+            ),
+        )
+        still = pygame.surfarray.array3d(canvas)
+        driver.frame(ms=WARN_PULSE_MS / 2)
+        dim = pygame.surfarray.array3d(canvas)
+        clock = driver.shell._view._banner_clock
+        assert clock is not None and clock.rect == shown.rect
+        assert clock.image is not shown.image
+        spot = clock.rect.inflate(2 * BLUR_RADIUS, 2 * BLUR_RADIUS).clip(window)
+        changed = np.any(dim != still, axis=2)
+        xs, ys = np.nonzero(changed)
+        assert xs.size > 0
+        assert spot.left <= xs.min() and xs.max() < spot.right
+        assert spot.top <= ys.min() and ys.max() < spot.bottom
+        source = shots[0].copy()
+        source.blit(clock.image, clock.rect)
+        want = darkened(source)
+        inside = (slice(spot.left, spot.right), slice(spot.top, spot.bottom))
+        assert np.array_equal(dim[inside], want[inside])
+
+    def test_時計が窓の外に隠れるまで板をスクロールした幕も_時計を描き直さずに描く(
+        self,
+    ) -> None:
+        """数字の四角が窓に重ならなければ、幕へ数字を渡さない（窓の外の数字は見えない）。
+
+        原型はページごとスクロールし、幕の `backdrop-filter` は画面に見えている所だけを
+        ぼかすので、隠れた時計の明滅は見えないだけで、止まる所は無い。横の板を下の端
+        までスクロールしてから残り 20 秒で決めた幕を出し、明滅の周期の半分ずつ3フレーム
+        回す。幕を描くたびに数字を渡さず（渡すと、窓の外の四角を写そうとして例外で
+        止まる）、幕の間の絵は幕を出したフレームのまま。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        scroll_panel_down(driver)
+        world = runner.world
+        world.ends_at = Tick(world.now + 20 * TICKS_PER_SECOND)
+        overlay = driver.shell._view._banner
+        draw = overlay.draw
+        passed: list[BannerClock | None] = []
+
+        def checked(
+            target: pygame.Surface,
+            view: BannerView,
+            groups: Sequence[MenuGroup],
+            focus: tuple[int, int] | None,
+            motions: Motions = NO_MOTION,
+            *,
+            board: BannerBoard | None = None,
+            shake: Offset = (0, 0),
+            clock: BannerClock | None = None,
+        ) -> tuple[Hit, ...]:
+            # 幕に描かせる前に確認する（数字を渡したまま描かせると、例外で止まって
+            # この確認に届かない）。
+            assert clock is None
+            passed.append(clock)
+            return draw(
+                target,
+                view,
+                groups,
+                focus,
+                motions,
+                board=board,
+                shake=shake,
+                clock=clock,
+            )
+
+        overlay.draw = checked  # type: ignore[method-assign]
+        finish_round(driver, runner)
+        view = driver.shell._view
+        content = view.panel_content
+        assert content is not None and content.clock.warn
+        # 板を貼った位置の数字の四角は、窓の上の外にある。
+        _, digits = view._panel.digits(view._banner_panel, driver.now)
+        assert digits.bottom <= 0
+        canvas = driver.shell.canvas
+        still = pygame.surfarray.array3d(canvas)
+        for _ in range(3):
+            driver.frame(ms=WARN_PULSE_MS / 2)
+        assert passed == [None] * 4
+        assert np.array_equal(pygame.surfarray.array3d(canvas), still)
+
+    def test_幕を出したフレームに板が低くなっても_時計は板を貼った位置で描き直す(
+        self,
+    ) -> None:
+        """幕の下のぼかした板は、幕を出したフレームに板を貼った位置のまま。
+
+        幕を出したフレームに板が低くなると、スクロールの量は新しい板の高さで丸めるが、
+        そのフレームの板は丸める前の位置に貼ってある。幕の間に描き直す数字も、丸める
+        前の位置（`MatchView._clock_under_banner`）。名札とつまみの段を外し、時計を
+        残り 20 秒の明滅にした中身で板を低くする。数字の四角は、板の左上を (0, 0) に
+        貼ったときの四角を、板を貼った位置だけずらしたもの（板のスクロールの量だけ
+        上へ動く）。描き直した画素も、その四角のまわりだけにある。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        world = runner.world
+        view = driver.shell._view
+        scene = driver.shell.scene
+        assert scene is not None
+        tall = view.panel_content
+        assert tall is not None
+        clock_view = replace(tall.clock, time="0:20", warn=True)
+        short = replace(tall, clock=clock_view, speed=None, cards=())
+        scroll = 40
+        view.scroll_panel(scroll)
+        assert view.panel_scroll == scroll
+        banner = BannerView(
+            emoji="🏆",
+            title="1P のかち",
+            summary="あと 1 勝",
+            board="1 - 0",
+            note=None,
+            button=NEXT_ROUND_BUTTON,
+            final=False,
+        )
+        now = driver.now + FRAME_MS
+        view.draw(world, scene, short, now, immediate=True, paused=False, banner=banner)
+        assert view.panel_scroll < scroll
+        alone = SidePanel(PAINTER)
+        alone.show(short, world.now, immediate=True)
+        alone.draw(pygame.Surface((PANEL_WIDTH, alone.height(short))), (0, 0), now)
+        _, origin = alone.digits((0, 0), now)
+        expected = origin.move(WINDOW.panel_origin[0], -scroll)
+        first = view._banner_clock
+        assert first is not None and first.rect == expected
+        view.draw_banner(banner, (), None)
+        canvas = driver.shell.canvas
+        still = pygame.surfarray.array3d(canvas)
+        later = now + WARN_PULSE_MS / 2
+        view.draw(
+            world, scene, short, later, immediate=False, paused=False, banner=banner
+        )
+        clock = view._banner_clock
+        assert clock is not None and clock.rect == expected
+        view.draw_banner(banner, (), None)
+        changed = np.any(pygame.surfarray.array3d(canvas) != still, axis=2)
+        xs, ys = np.nonzero(changed)
+        assert xs.size > 0
+        spot = expected.inflate(2 * BLUR_RADIUS, 2 * BLUR_RADIUS)
+        spot = spot.clip(canvas.get_rect())
+        assert spot.left <= xs.min() and xs.max() < spot.right
+        assert spot.top <= ys.min() and ys.max() < spot.bottom
+
+    def test_幕を出したフレームに盤面を描くものへ渡す見た目の値は_揺れの幅だけが0(
+        self,
+    ) -> None:
+        """幕を出したフレームは、揺れの幅だけを 0 にした見た目の値で盤面を描く。
+
+        ほかの値（粒子・プレイヤーの動き・粘膜爆弾・飛ぶ葱・炎の跡）は、渡された値を
+        そのまま読む。どれも試合を進めないと作れない値なので、目印の値を返す見た目の
+        値を渡し、盤面を描くもの（`Renderer.draw`）が受け取った値から読み出して、
+        目印と引数がそのまま通ることを確認する。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        view = driver.shell._view
+        content = view.panel_content
+        assert content is not None
+        received: list[Visuals] = []
+
+        def kept(
+            target: pygame.Surface,
+            world: WorldState,
+            visuals: Visuals,
+            blend: float = 1.0,
+            *,
+            origin: Offset = (0, 0),
+        ) -> None:
+            received.append(visuals)
+
+        driver.shell.renderer.draw = kept  # type: ignore[method-assign]
+        marked = MarkedVisuals()
+        banner = BannerView(
+            emoji="🏆",
+            title="1P のかち",
+            summary="あと 1 勝",
+            board="1 - 0",
+            note=None,
+            button=NEXT_ROUND_BUTTON,
+            final=False,
+        )
+        view.draw(
+            runner.world,
+            marked,
+            content,
+            driver.now + FRAME_MS,
+            immediate=True,
+            paused=False,
+            banner=banner,
+        )
+        (steady,) = received
+        assert steady.shake == 0.0
+        assert steady.particles is marked.particles
+        for player in PLAYER_IDS[1:3]:
+            assert steady.motion(player) is marked.motions[player]
+        slime = cast(SlimeBomb, object())
+        leek = cast(Leek, object())
+        fire = cast(Foxfire, object())
+        assert steady.slime(slime) is marked.marks["slime"]
+        assert steady.flown_before(slime) is marked.marks["flown"]
+        assert steady.leek_before(leek) is marked.marks["leek"]
+        assert steady.trail(fire, 2.5) is marked.marks["trail"]
+        assert marked.asked == [
+            ("motion", 1),
+            ("motion", 2),
+            ("slime", slime),
+            ("flown", slime),
+            ("leek", leek),
+            ("trail", (fire, 2.5)),
+        ]
+
+    def test_幕の間は_横の板の上でホイールを回しても板を動かさない(self) -> None:
+        """幕の下の絵は、幕を出したフレームに1回だけぼかして使い回す。
+
+        幕の間に板を動かすと、幕の下の絵は動かず、幕を外した最初のフレームで板が新しい
+        位置へ飛ぶので、幕の間は動かさない（原型は幕の下でページがスクロールする。
+        `docs/11-画面と設定.md` の表の「幕の間のホイール」）。幕を外したあとの板は幕を
+        出す前の位置で、同じ操作で動く。マウスは横の板の右の端（幕のカードの外）に置く。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        hits = driver.shell.panel_hits
+        assert hits is not None
+        settings = hits.settings
+        finish_round(driver, runner)
+        canvas = driver.shell.canvas
+        still = pygame.surfarray.array3d(canvas)
+        on_panel = (WINDOW.size[0] - 10, 300)
+        driver.move_mouse(on_panel)
+        driver.wheel(-1)
+        assert driver.shell.panel_scroll == 0
+        driver.frame()
+        assert np.array_equal(pygame.surfarray.array3d(canvas), still)
+        driver.click(NEXT_ROUND_BUTTON)
+        assert runner.match.round == 2
+        hits = driver.shell.panel_hits
+        assert hits is not None and hits.settings == settings
+        driver.move_mouse(on_panel)
+        driver.wheel(-1)
+        assert driver.shell.panel_scroll == WHEEL_PX
+
+    def test_揺れが小さいまま決まった幕は_乱数を引かず_幕を出したフレームの絵のまま(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """揺れが 0.2 以下なら原型も揺らさない（L4540）。
+
+        ここは退場で決めたラウンド（爆発も被弾も無いので揺れは 0）。時間切れで決まった
+        ラウンドも、直前に爆発や被弾が無く揺れが 0.2 以下まで減っていれば、この形になる
+        （原型も揺れは update でしか減らないので、直前の爆発の揺れは幕の間も残る）。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        used = script_view_rng(monkeypatch, driver, [])
+        finish_round(driver, runner)
+        canvas = driver.shell.canvas
+        still = pygame.surfarray.array3d(canvas)
+        driver.frames(3)
+        assert used == []
+        assert np.array_equal(pygame.surfarray.array3d(canvas), still)
 
     def test_幕が消えたフレームに_窓の全体を塗り直す(self) -> None:
         """盤面と横の板のすき間に、ぼかした絵を残さない。"""
@@ -1044,6 +1676,36 @@ class Testポーズ:
         driver.up(pygame.KSCAN_P)
         driver.frames(2)
         assert frame_colors(driver.shell.canvas) == [LINE] * 8
+
+    def test_揺れが残ったままポーズすると_ポーズの幕も盤面と同じずれで重ねる(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """原型はポーズの幕を揺れの内側で描く（L4539-4574）。ポーズの間は揺れが減らない。
+
+        乱数を 0 にすると、揺れ 6 のずれは横・縦とも −3px。盤面の右の端の 3 列には、
+        盤面を左へずらした後ろの背景が見え、幕も左へずれるので暗くならない。その左の列は
+        暗い。四隅は枠の色のまま。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frames(3)
+        driver.tap(pygame.KSCAN_P)
+        assert runner.paused
+        set_shake(driver, 6.0)
+        used = script_view_rng(monkeypatch, driver, [0.0, 0.0])
+        driver.frame()
+        assert used == [0.0, 0.0]
+        canvas = driver.shell.canvas
+        background = driver.shell.renderer.background
+        board = pygame.Rect(WINDOW.board_rect)
+        y = board.centery
+        for x in range(board.right - 3, board.right):
+            seen = canvas.get_at((x, y))
+            assert seen == background.get_at((x - board.left, y - board.top))
+        lit = background.get_at((board.right - 4 - board.left, y - board.top))
+        dark = canvas.get_at((board.right - 4, y))
+        assert all(dark[i] < lit[i] for i in range(3))
+        assert frame_colors(canvas) == [LINE] * 8
 
     def test_ポーズの間に押した爆弾のキーは_再開しても置かない(self) -> None:
         """原型も毎フレーム押した瞬間を忘れる（ポーズの間も）。"""
@@ -1459,6 +2121,37 @@ class Test盤面と横の板:
         driver.frame(ms=2000)
         driver.frame()
         assert canvas.get_at(spot) == background.get_at(spot)
+
+    @pytest.mark.parametrize(
+        ("screen", "lines"),
+        [((1024, 768), 2), ((1440, 900), 1), ((1280, 600), 1)],
+        ids=["1024x768", "1440x900", "1280x600"],
+    )
+    def test_通知は_原型の窓とみなす画面の9割の半分から40pxを引いた幅で折り返す(
+        self, screen: tuple[int, int], lines: int
+    ) -> None:
+        """原型の `.toast`（L151-154）は幅を持たず `left:50%`（`overlay/toast.py`）。
+
+        延長戦の通知（時間切れ）は、1024×768（9 割 921px。折り返す幅 420px）で2行、
+        1440×900（1296px。608px）で1行。1280×600 は 9 割が 1152px（536px）で1行だが、
+        窓は 890px（405px）しかなく、窓の幅で決めると2行になる（窓の幅でなく、画面の
+        9 割で決めることを見分ける）。
+        """
+        window = window_layout(screen, PAINTER)
+        assert window.page_width is not None
+        text = notices.sudden_death(SuddenDeathReason.TIME_UP)
+        width = PAINTER.width(text, TOAST_TEXT)
+        assert (width > wrap_width(window.page_width)) == (lines == 2)
+        if screen == (1280, 600):
+            assert width > wrap_width(window.size[0])
+        driver = Driver(window=window)
+        driver.skip_splash()
+        driver.shell.toast.show(text, driver.now)
+        driver.frame(ticks=0)
+        rect = driver.shell._view._toast_rect
+        assert rect is not None
+        line = PAINTER.normal_line(TOAST_TEXT)
+        assert rect.height == lines * line + 2 * (TOAST_PAD_Y + BORDER)
 
     def test_横の板が低くなったフレームに_前の板の下の端を残さない(self) -> None:
         """原型の横の板は DOM なので、行が減っても前の板の下の端は残らない。

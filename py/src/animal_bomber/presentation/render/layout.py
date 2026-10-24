@@ -187,6 +187,14 @@ class WindowLayout:
     """横の板の高さ（px）。"""
     max_height: int | None = None
     """窓の高さの上限（px。モジュールの説明）。None なら上限を置かない。"""
+    page_width: int | None = None
+    """原型のブラウザの窓の中の幅とみなす幅（px。`fit_window` に渡した幅）。
+
+    この版の窓は、画面のまわりの余白とスクロールバーを持たない（`SIDE_RESERVE`）ので、
+    窓の幅は原型の `window.innerWidth` とは違う。原型の窓の幅で決まる見た目（通知を
+    折り返す幅。`overlay/toast.py`）は、この幅で決める。None（`fit_window` を通さずに
+    作った並び）なら、窓の幅とみなす。
+    """
 
     @property
     def panel_origin(self) -> tuple[int, int]:
@@ -233,9 +241,12 @@ def fit_window(
     """画面の大きさ（px）に合わせた窓の並び（原型の fitBoard。モジュールの説明）。
 
     Args:
-        width: 窓に使える幅（原型の `window.innerWidth`）。
+        width: 窓に使える幅（原型の `window.innerWidth`。`WindowLayout.page_width` に
+            持たせる）。
         height: 窓に使える高さ（原型の `window.innerHeight`）。
         panel_height: 横の板の高さ（`panel/side_panel.py` の `SidePanel.height`）。
         max_height: 窓の高さの上限。省くと上限を置かない。
     """
-    return WindowLayout(Layout(fit_tile(width, height)), panel_height, max_height)
+    return WindowLayout(
+        Layout(fit_tile(width, height)), panel_height, max_height, page_width=width
+    )

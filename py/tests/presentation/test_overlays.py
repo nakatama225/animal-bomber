@@ -9,6 +9,8 @@ import numpy as np
 import pygame
 import pytest
 
+from animal_bomber.domain.events import SuddenDeathReason
+from animal_bomber.presentation import notices
 from animal_bomber.presentation.hud.banner import BannerView
 from animal_bomber.presentation.hud.toast import ToastView
 from animal_bomber.presentation.menu.hover import (
@@ -23,17 +25,29 @@ from animal_bomber.presentation.menu.screens import (
     banner_groups,
     dialog_view,
 )
+from animal_bomber.presentation.render.match_frame import BoardFrame
 from animal_bomber.presentation.render.overlay import banner as banner_module
 from animal_bomber.presentation.render.overlay import dialog as dialog_module
-from animal_bomber.presentation.render.overlay.banner import BannerOverlay, blur
+from animal_bomber.presentation.render.overlay.banner import (
+    BLUR_RADIUS,
+    SHADE,
+    SHADE_ALPHA,
+    BannerBoard,
+    BannerClock,
+    BannerOverlay,
+    blur,
+)
 from animal_bomber.presentation.render.overlay.dialog import DialogOverlay
 from animal_bomber.presentation.render.overlay.pause import PauseOverlay
 from animal_bomber.presentation.render.overlay.toast import (
     FILL,
     FILL_ALPHA,
     PAD_X,
+    PAD_Y,
+    TEXT,
     TOP,
     ToastOverlay,
+    wrap_width,
 )
 from animal_bomber.presentation.render.ui.shapes import rounded_box
 from animal_bomber.presentation.render.ui.theme import (
@@ -138,6 +152,69 @@ ROUND = BannerView(
     button="つぎのラウンド ▶",
     final=False,
 )
+
+WIDE = (1400, 900)
+"""盤面を揺らす幕の検査の窓（カードとその影が、左上の盤面にかからない大きさ）。"""
+
+SHAKE_BOARD = pygame.Rect(3, 3, 240, 180)
+"""盤面を揺らす幕の検査の、盤面の四角（枠の内側。`blocks` の絵を置く）。"""
+
+BOARD_BACKGROUND = (35, 24, 16)
+"""盤面を揺らす幕の検査の、盤面の背景の色（1色）。"""
+
+
+def shaking_scene() -> tuple[pygame.Surface, BannerBoard]:
+    """枠を焼いた窓に `blocks` の盤面を描いた面と、その盤面（背景は1色）。"""
+    page = pygame.Surface(WIDE)
+    page.fill((60, 40, 30))
+    frame = BoardFrame(page, SHAKE_BOARD)
+    target = frame.background.copy()
+    target.blit(blocks(), SHAKE_BOARD.topleft)
+    frame.cover(target)
+    background = pygame.Surface(SHAKE_BOARD.size)
+    background.fill(BOARD_BACKGROUND)
+    return target, BannerBoard(SHAKE_BOARD, background, frame.corners)
+
+
+def shaded(color: tuple[int, int, int]) -> tuple[int, int, int]:
+    """1色の面をぼかして、幕の暗さを重ねた色（1色の面はぼかしても同じ色）。"""
+    surface = pygame.Surface((1, 1))
+    surface.fill(color)
+    shade = pygame.Surface((1, 1))
+    shade.fill(SHADE)
+    shade.set_alpha(SHADE_ALPHA)
+    surface.blit(shade, (0, 0))
+    red, green, blue, _ = surface.get_at((0, 0))
+    return red, green, blue
+
+
+def darkened(surface: pygame.Surface) -> np.ndarray:
+    """幕の下と同じく、面の全体をぼかして幕の暗さを重ねた画素（`[y, x]` の RGB）。"""
+    blurred = blur(surface)
+    shade = pygame.Surface(surface.get_size())
+    shade.fill(SHADE)
+    shade.set_alpha(SHADE_ALPHA)
+    blurred.blit(shade, (0, 0))
+    return rgb(blurred)
+
+
+def digits_like(color: tuple[int, int, int]) -> pygame.Surface:
+    """時計の数字の代わりの絵（96×37。`color` の地に白い四角を2つ置く）。"""
+    image = pygame.Surface((96, 37))
+    image.fill(color)
+    image.fill((250, 250, 250), (8, 6, 20, 25))
+    image.fill((250, 250, 250), (60, 6, 20, 25))
+    return image
+
+
+def corner_spots(rect: pygame.Rect) -> list[tuple[int, int]]:
+    """盤面の四隅の、枠の内側の角丸（11px）の外の点（角から横 1px・縦 4px 内側）。"""
+    return [
+        (rect.left + 1, rect.top + 4),
+        (rect.right - 2, rect.top + 4),
+        (rect.left + 1, rect.bottom - 5),
+        (rect.right - 2, rect.bottom - 5),
+    ]
 
 
 class Test幕:
@@ -342,6 +419,111 @@ class Test幕:
         assert tuple(image[rect.top - 2 - 2 - 3, rect.centerx]) == WHITE
         assert tuple(image[rect.top - 2 - 2 - 4, rect.centerx]) != WHITE
 
+    def test_揺れのずれを渡すと_ぼかした盤面だけをずらし_後ろにぼかした背景を貼る(
+        self,
+    ) -> None:
+        """原型は幕の間も盤面を揺らし（L4540-4541）、背景は揺らす前に塗る（L4533-4537）。
+
+        幕を出したフレーム（ずれ 0）の絵を基準にして、次のフレームに横 −3px・縦 +2px の
+        ずれを渡す。盤面の中は基準の絵をそのままずらした絵になり、ずれて空いた右の
+        3 列と上の 2 行には、ぼかして暗くした背景（1色）が見える。盤面の四角の外（枠・
+        カード）と四隅（枠の内側の角丸の外。原型の canvas の CSS は揺れない。L73-74）は
+        動かない。
+        """
+        target, board = shaking_scene()
+        overlay = BannerOverlay(WIDGETS)
+        groups = banner_groups(ROUND.button, True)
+        overlay.draw(target, ROUND, groups, None, board=board)
+        still = rgb(target)
+        shot = target.copy()
+        overlay.draw(shot, ROUND, groups, None, board=board, shake=(-3, 2))
+        assert shot.get_clip() == shot.get_rect()
+        moved = rgb(shot)
+        rect = SHAKE_BOARD
+        rows = slice(rect.top + 14, rect.bottom - 12)
+        inner = slice(rect.left + 12, rect.right - 15)
+        assert np.array_equal(
+            moved[rows, inner],
+            still[rect.top + 12 : rect.bottom - 14, rect.left + 15 : rect.right - 12],
+        )
+        assert not np.array_equal(moved[rows, inner], still[rows, inner])
+        under = np.array(shaded(BOARD_BACKGROUND))
+        assert np.all(moved[rows, rect.right - 3 : rect.right] == under)
+        top = (slice(rect.top, rect.top + 2), slice(rect.left + 12, rect.right - 12))
+        assert np.all(moved[top] == under)
+        assert not np.all(still[rows, rect.right - 3 : rect.right] == under)
+        outside = np.ones(still.shape[:2], dtype=bool)
+        outside[rect.top : rect.bottom, rect.left : rect.right] = False
+        assert np.array_equal(moved[outside], still[outside])
+        for x, y in corner_spots(rect):
+            assert tuple(moved[y, x]) == tuple(still[y, x])
+        # 四隅の絵の、角丸の内側（左上の角から 8px）は、ずらした盤面が見える。
+        inside = (rect.top + 8, rect.left + 8)
+        assert tuple(moved[inside]) == tuple(still[inside[0] - 2, inside[1] + 3])
+        assert tuple(moved[inside]) != tuple(still[inside])
+
+    def test_ぼかした盤面は_幕を出したフレームの絵から取り_次の幕で取り直す(
+        self,
+    ) -> None:
+        """次の幕では、その幕を出したフレームの盤面（左右を返した絵）をずらして貼る。
+
+        前の幕でも、ずらしたフレームを描いておく（前の幕の盤面の写しを作らせる）。
+        """
+        target, board = shaking_scene()
+        overlay = BannerOverlay(WIDGETS)
+        groups = banner_groups(ROUND.button, True)
+        overlay.draw(target.copy(), ROUND, groups, None, board=board)
+        overlay.draw(target.copy(), ROUND, groups, None, board=board, shake=(-3, 0))
+        later = replace(ROUND, emoji="🤝", title="ラウンド2　ひきわけ")
+        flipped = target.copy()
+        flipped.blit(pygame.transform.flip(blocks(), True, False), SHAKE_BOARD.topleft)
+        first = flipped.copy()
+        overlay.draw(first, later, groups, None, board=board)
+        shot = flipped.copy()
+        overlay.draw(shot, later, groups, None, board=board, shake=(-3, 0))
+        rect = SHAKE_BOARD
+        rows = slice(rect.top + 14, rect.bottom - 12)
+        assert np.array_equal(
+            rgb(shot)[rows, rect.left + 12 : rect.right - 15],
+            rgb(first)[rows, rect.left + 15 : rect.right - 12],
+        )
+
+    def test_時計の数字を渡すと_幕の間は数字のまわりを_全体をぼかした絵と同じにする(
+        self,
+    ) -> None:
+        """原型の幕は毎フレームぼかし直すので、明滅する時計の数字もぼけて替わる（L79-80）。
+
+        市松模様の上に数字の代わりの絵を置いて幕を出し、次のフレームに別の数字を渡す。
+        数字の四角をぼかしの半径ずつ広げた所は、ぼかす前の面に次の数字を貼って面の全体を
+        ぼかして暗くした絵と同じ画素（まわりが一様でなくても継ぎ目が出ない）で、その外は
+        幕を出したフレームの絵のまま。数字を渡さないフレームは描き直さない。
+        """
+        rect = pygame.Rect(740, 40, 96, 37)
+        target = checkered()
+        target.blit(digits_like((200, 60, 60)), rect)
+        source = target.copy()
+        overlay = BannerOverlay(WIDGETS)
+        groups = banner_groups(ROUND.button, True)
+        clock = BannerClock(digits_like((200, 60, 60)), rect)
+        overlay.draw(target, ROUND, groups, None, clock=clock)
+        still = rgb(target)
+        dim = digits_like((90, 30, 30))
+        shot = target.copy()
+        overlay.draw(shot, ROUND, groups, None, clock=BannerClock(dim, rect))
+        moved = rgb(shot)
+        source.blit(dim, rect)
+        want = darkened(source)
+        spot = rect.inflate(2 * BLUR_RADIUS, 2 * BLUR_RADIUS)
+        inside = (slice(spot.top, spot.bottom), slice(spot.left, spot.right))
+        assert np.array_equal(moved[inside], want[inside])
+        assert not np.array_equal(moved[inside], still[inside])
+        outside = np.ones(still.shape[:2], dtype=bool)
+        outside[inside] = False
+        assert np.array_equal(moved[outside], still[outside])
+        plain = target.copy()
+        overlay.draw(plain, ROUND, groups, None)
+        assert np.array_equal(rgb(plain), still)
+
 
 def test_ポーズの幕は_盤面の四角だけを暗くして_PAUSEを出す() -> None:
     board = pygame.Rect(0, 0, 600, 500)
@@ -358,6 +540,37 @@ def test_ポーズの幕は_盤面の四角だけを暗くして_PAUSEを出す(
     rows = np.nonzero(text.any(axis=1))[0]
     assert rows.size > 0
     assert abs(int(rows.mean()) - 250) < 20
+
+
+def test_ポーズの幕は_揺れのずれだけずらし_盤面の四角の外には描かない() -> None:
+    """原型はポーズの幕を画面の揺れの内側で描く（L4539-4574）。
+
+    横 −3px・縦 +2px ずらすと、盤面の四角の右の 3 列と上の 2 行は暗くならず、字も同じ
+    だけずれる。盤面の四角の外には描かない。
+    """
+    board = pygame.Rect(40, 30, 600, 500)
+    plain = checkered()
+    PauseOverlay(PAINTER).draw(plain, board)
+    target = checkered()
+    before = rgb(target)
+    PauseOverlay(PAINTER).draw(target, board, (-3, 2))
+    assert target.get_clip() == target.get_rect()
+    after = rgb(target)
+    outside = np.ones(before.shape[:2], dtype=bool)
+    outside[board.top : board.bottom, board.left : board.right] = False
+    assert np.array_equal(after[outside], before[outside])
+    right = (slice(board.top + 2, board.bottom), slice(board.right - 3, board.right))
+    assert np.array_equal(after[right], before[right])
+    top = (slice(board.top, board.top + 2), slice(board.left, board.right))
+    assert np.array_equal(after[top], before[top])
+    dark = (slice(board.top + 2, board.top + 200), slice(board.left, board.right - 3))
+    assert after[dark].max() < 120
+    ys, xs = np.nonzero(np.all(after == np.array(ACCENT2), axis=2))
+    ys0, xs0 = np.nonzero(np.all(rgb(plain) == np.array(ACCENT2), axis=2))
+    assert ys.size > 0
+    assert sorted(zip(ys.tolist(), xs.tolist(), strict=True)) == sorted(
+        zip((ys0 + 2).tolist(), (xs0 - 3).tolist(), strict=True)
+    )
 
 
 class Test通知:
@@ -440,6 +653,51 @@ class Test通知:
         for opacity in (0.2, 0.5, 0.9):
             overlay.draw(Watching(SIZE), ToastView("サドンデス", opacity))
         assert alphas and all(alpha in (None, 255) for alpha in alphas)
+
+    def test_窓の半分から余白と枠を引いた幅を超える文は_折り返して箱を窓の半分にする(
+        self,
+    ) -> None:
+        """原型の `.toast`（L151-154）は幅を持たず `left:50%`（モジュールの説明）。
+
+        延長戦の通知（時間切れ）を、1024×768 の画面の 9 割（921px。折り返す幅 420px）
+        では2行、1440×900 の 9 割（1296px。608px）では1行で出す。折り返した箱の幅は窓の
+        半分（折り返す幅＋左右の余白と枠）。窓の幅を渡さなければ、描く面の幅で決める。
+        """
+        text = notices.sudden_death(SuddenDeathReason.TIME_UP)
+        width = PAINTER.width(text, TEXT)
+        line = PAINTER.normal_line(TEXT)
+        edge = 2 * (PAD_Y + BORDER)
+        assert wrap_width(921) == 420 < width <= wrap_width(1296) == 608
+        page = checkered()
+        narrow = ToastOverlay(PAINTER).draw(page, ToastView(text, 1.0), 921)
+        assert narrow is not None
+        assert narrow.size == (921 // 2, 2 * line + edge)
+        assert narrow.top == TOP
+        assert abs(narrow.centerx - SIZE[0] // 2) <= 1
+        # 2行の字は、上下の余白と枠の内側の2行ぶんの帯に収まり、どちらの行にも字がある。
+        box = rgb(page)[narrow.top : narrow.bottom, narrow.left : narrow.right]
+        ys, xs = np.nonzero(np.all(box == np.array(INK), axis=2))
+        inset_y, inset_x = PAD_Y + BORDER, PAD_X + BORDER
+        assert inset_y <= ys.min() and ys.max() < narrow.height - inset_y
+        assert inset_x <= xs.min() and xs.max() < narrow.width - inset_x
+        assert (ys < inset_y + line).any() and (ys >= inset_y + line).any()
+        wide = ToastOverlay(PAINTER).draw(checkered(), ToastView(text, 1.0), 1296)
+        assert wide is not None
+        assert wide.size == (width + 2 * (PAD_X + BORDER), line + edge)
+        own = ToastOverlay(PAINTER).draw(checkered((921, 300)), ToastView(text, 1.0))
+        assert own is not None
+        assert own.size == narrow.size
+
+    def test_同じ文でも_折り返す幅が違えば_別の絵と別の薄めた写しを貼る(self) -> None:
+        text = notices.sudden_death(SuddenDeathReason.TIME_UP)
+        overlay = ToastOverlay(PAINTER)
+        for opacity in (1.0, 0.5):
+            narrow = overlay.draw(checkered(), ToastView(text, opacity), 921)
+            wide = overlay.draw(checkered(), ToastView(text, opacity), 1296)
+            again = overlay.draw(checkered(), ToastView(text, opacity), 921)
+            assert narrow is not None and wide is not None
+            assert narrow.height > wide.height
+            assert again == narrow
 
 
 def test_確認の画面は_やめるを左に_もう1つを右に並べる() -> None:

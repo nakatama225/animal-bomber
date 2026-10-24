@@ -13,9 +13,9 @@
 原型は幕の下を `rgba(15,9,6,.82)` で暗くし、3px ぼかす（`backdrop-filter`）。毎フレーム
 ぼかすと重いので、幕を出したとき（新しい `BannerView` を初めて描くとき）に、描く面に
 描いてあった盤面と横の板を1回だけぼかして暗くし、幕の間は使い回す。原型も幕の間は
-盤面を進めないので、止まった盤面が見えるのは同じ。⚠️ 幕を出した最初のフレームは、
-盤面と横の板を描き終えてから `draw` を呼ぶ（その絵をぼかす）。2フレーム目からは、
-ぼかした絵が窓の全体を覆うので、呼ぶ側は盤面と横の板を描かない（`holds`）。
+盤面を進めない。⚠️ 幕を出した最初のフレームは、盤面と横の板を描き終えてから `draw` を
+呼ぶ（その絵をぼかす）。2フレーム目からは、ぼかした絵が窓の全体を覆うので、呼ぶ側は
+盤面と横の板を描かない（`holds`）。
 
 ぼかしは pygame の `box_blur`（半径 4px。幅 9px の箱）を1回かける。原型の blur(3px)
 （標準偏差 3px のガウスぼかし）を手本にして候補を比べ、ぼかし1回が1フレームの時間
@@ -24,9 +24,68 @@
 幕では1フレームを超える（1フレームほど遅れる）。候補ごとの差と時間・手本の作り方・
 選び方の経緯・幕を出すフレームの全体を測った数と条件は README の Design Choice 1.
 （「横の板を足して測り直した（段階 10）」の幕の段落）にある。
+
+## 幕の間の盤面の揺れ
+
+原型は幕の間も毎フレーム draw を呼び、揺れが 0.2 を超えていれば盤面を揺らす（揺れは
+update でしか減らないので、爆発や被弾の揺れが残ったまま決まったラウンドでは、幕の間
+ずっと揺れる。L4403-4405・L4540-4541）。背景（縦のグラデーション）は揺らす前に塗り、
+盤面の枠と角丸は canvas の CSS なので揺れない（L4533-4537・L73-74）。この版は
+ぼかし直さずに写す。幕を出したフレームに、呼ぶ側は揺らさずに盤面を描いておく
+（`app/match_view.py`）。揺れのずれが (0, 0) でないフレームが来たら、ぼかした絵の盤面の
+四角を写して取っておき、ぼかした絵を貼ってから、盤面の四角に、ぼかして暗くした背景
+（`BannerBoard.background` をぼかしたもの。初めて要るときに1回だけ作り、幕ごとには
+作り直さない）を貼り、その上にぼかした盤面をずれ（`shake`）だけずらして、盤面の四角で
+切って貼り、最後に盤面の四隅（枠の内側の角丸の外）を、ぼかした絵から切り出した形で
+貼り直す。
+ずれが (0, 0) のフレームは、ぼかした絵を貼るだけと同じ絵になるので、ぼかした絵
+だけを貼る（揺れが 0.2 以下で決まった幕は、幕を出したフレームの絵のまま。盤面の
+写しも作らない。時間切れで決まったラウンドも、直前の爆発や被弾の揺れが残って
+いれば揺れる）。
+
+⚠️ ずらしたぼかした盤面と後ろのぼかした背景の境目と、背景と枠の境目はぼけない。
+また、ぼかした盤面の写しは、ぼかした窓の全体から切り出すので、縁の数 px には枠の
+色がぼけて混ざっていて、ずらすと一緒に動く。原型は揺らした盤面を描いてから窓の
+全体をぼかすので、境目はぼけ、枠の色は揺れない枠の側に残る。1024×768 の画面の
+9 割で作った窓（マス 26）で、原型の順（揺らして描いてから窓の全体をぼかして暗く
+する）と比べた差は、幕の暗さを重ねたあとの 0〜255 の段で、揺れのずれ (−3, 3) と
+(3, −3) のとき盤面の四角の縁から 8px 以内の帯で最大 5〜6 段・それより内側は 2 段
+以内、ずれ ±5px（揺れの幅の上限 10 のとき）のとき縁から 10px 以内の帯で最大 6 段・
+それより内側は 2 段以内だった。暗さを重ねる前の段で数えると、縁の帯の最大は 25〜30
+段になる。同じ物差しで並べると、ぼかしを箱のぼかしにしたことで手本のガウスぼかしと
+既に持つ差（README の Design Choice 1.）は、暗さを重ねる前で p99 8 段・最大 37 段、
+重ねたあとで p99 約 1.4 段・最大 約 7 段（37 段の 0.18 倍）なので、縁の帯の差の
+最大は、その最大と同じほど。合わせていないのは、合わせるには、縁の帯を
+毎フレームぼかし直すのに加えて、四隅の絵の下に隠れた盤面の絵を別に持つことになる
+ため（`render/match_frame.py` の `draw_match_frame` は四隅を貼ってから返す。時間は
+測っていない）。写しを別にぼかし直す形は、写しの縁の枠の色を消すが、境目がぼけない
+ことは残る。
+原型の draw は幕の間も、爆風の白い芯（L4747）と被弾で揺れるプレイヤー（L4807）の
+見た目の乱数を引くが、この版は幕の間それらを描かないので引かない（見た目の乱数は
+試合と同期しないので、引く数はほかに作用しない。`docs/11-画面と設定.md` の表の
+「幕の下のぼかし」）。
+
+## 幕の間の時計の明滅
+
+原型は残り 30 秒から時計の数字を CSS のアニメーションで明滅させる（L79-80・
+L5547）。アニメーションは update を待たずに進み、幕の `backdrop-filter`
+（L139-141）は毎フレームぼかし直すので、残り 30 秒以下で決まったラウンドでは、幕の
+間もぼかした数字が明滅する。この版も、明滅している間（呼ぶ側が `clock` を渡す間）
+は、幕を出したフレームに数字の四角のまわり（ぼかしの半径の2倍ずつ広げた四角）を、
+ぼかす前の絵として写しておき、幕の間のフレームごとに、その写しにそのフレームの
+数字（`SidePanel.digits`）を貼ってぼかして暗くし、数字の四角をぼかしの半径ずつ
+広げた所だけを、ぼかした絵の上（カードの下）に貼る。貼る所は写した四角の端から
+ぼかしの半径より内側なので、窓の全体をぼかした絵と同じ画素になり、継ぎ目は出ない。
+横の板をスクロールして数字の上の端が窓の上の外に出ているときは、写した四角と貼る
+所がどちらも窓の上の端で切れて、貼る所の上の端は写した四角の端からぼかしの半径より
+内側にならないが、2つのぼかし（写した四角だけのぼかしと窓の全体のぼかし）は、
+どちらも窓の端の画素を延ばすので、そこも同じ画素になる。数字の四角が窓に重ならない
+ほどスクロールしているとき（呼ぶ側が `clock` を渡さない。`app/match_view.py` の
+`MatchView._clock_under_banner`）と、明滅していない幕では写さず、貼らない。
 """
 
 from collections.abc import Hashable, Sequence
+from dataclasses import dataclass
 from typing import Final
 
 import pygame
@@ -90,6 +149,65 @@ BOARD: Final = css_style(16, DIM, 400, 0.06)
 BOARD_LINE: Final = round(16 * 1.6)
 """勝ち数の行の高さ（16px の字に line-height 1.6）。"""
 
+Corners = tuple[tuple[pygame.Surface, tuple[int, int]], ...]
+"""盤面の四隅の絵と貼る位置（`render/match_frame.py` の `BoardFrame.corners`）。"""
+
+
+@dataclass(frozen=True, slots=True)
+class BannerBoard:
+    """幕の下で揺らす盤面（モジュールの説明の「幕の間の盤面の揺れ」）。"""
+
+    rect: pygame.Rect
+    """窓の中の盤面の四角（枠の内側。`layout.WindowLayout.board_rect`）。"""
+    background: pygame.Surface
+    """盤面の背景（揺らさない縦のグラデーション。盤面の大きさ。`Renderer.background`）。"""
+    corners: Corners
+    """盤面の四隅の絵と貼る位置。絵の不透明度（枠の内側の角丸の外が不透明）だけを使う。"""
+
+
+@dataclass(frozen=True, slots=True)
+class BannerClock:
+    """幕の下で明滅する時計の数字（モジュールの説明の「幕の間の時計の明滅」）。"""
+
+    image: pygame.Surface
+    """このフレームの明滅の不透明度で描いた数字（不透明な絵。`SidePanel.digits`）。"""
+    rect: pygame.Rect
+    """窓の中の、数字を貼る四角。"""
+
+
+@dataclass(frozen=True, slots=True)
+class _ClockUnder:
+    """幕を出したフレームに、ぼかす前の描く面から写した、時計の数字のまわり。"""
+
+    area: pygame.Rect
+    """写した四角（数字の四角を、ぼかしの半径の2倍ずつ広げて窓で切ったもの）。"""
+    image: pygame.Surface
+    """写した絵（ぼかす前）。"""
+
+
+@dataclass(frozen=True, slots=True)
+class _SteadyBoard:
+    """幕を出したときにぼかした盤面と、揺れのずれだけずらして貼る手順。"""
+
+    rect: pygame.Rect
+    image: pygame.Surface
+    """ぼかして暗くした盤面（ぼかした絵の盤面の四角の写し）。"""
+    under: pygame.Surface
+    """ぼかして暗くした盤面の背景（ずらした盤面の後ろに見える）。"""
+    corners: Corners
+    """盤面の四隅の、ぼかした絵から切り出した形（角丸の外だけ不透明）。"""
+
+    def blit(self, target: pygame.Surface, shake: tuple[int, int]) -> None:
+        """背景を貼り、盤面を `shake` だけずらして四角で切って貼り、四隅を貼り直す。"""
+        rect = self.rect
+        target.blit(self.under, rect.topleft)
+        clip = target.get_clip()
+        target.set_clip(rect.clip(clip))
+        target.blit(self.image, (rect.x + shake[0], rect.y + shake[1]))
+        target.set_clip(clip)
+        for piece, spot in self.corners:
+            target.blit(piece, spot)
+
 
 class BannerOverlay:
     """幕を描くもの（ぼかした下の絵と、カードの絵を取っておく）。"""
@@ -98,6 +216,14 @@ class BannerOverlay:
         self._widgets = widgets
         self._view: BannerView | None = None
         self._backdrop: pygame.Surface | None = None
+        self._board: BannerBoard | None = None
+        """下の絵をぼかしたフレームに受け取った、幕の下で揺らす盤面。"""
+        self._steady: _SteadyBoard | None = None
+        """ずらして貼る盤面（ずれが (0, 0) でないフレームが来たときに作る）。"""
+        self._under: tuple[pygame.Surface, pygame.Surface] | None = None
+        """ぼかす前の盤面の背景と、それをぼかして暗くした絵（幕ごとには作り直さない）。"""
+        self._clock: _ClockUnder | None = None
+        """下の絵をぼかしたフレームに写した、明滅する時計の数字のまわり（ぼかす前）。"""
         self._cards: dict[Hashable, tuple[Shadowed, list[Hit]]] = {}
         self.backdrops = 0
         """下の絵をぼかして作った回数（幕を出すたびに1回）。"""
@@ -109,6 +235,10 @@ class BannerOverlay:
         groups: Sequence[MenuGroup],
         focus: tuple[int, int] | None,
         motions: Motions = NO_MOTION,
+        *,
+        board: BannerBoard | None = None,
+        shake: tuple[int, int] = (0, 0),
+        clock: BannerClock | None = None,
     ) -> tuple[Hit, ...]:
         """幕を `target` に重ね、ボタンの四角を返す（モジュールの説明）。
 
@@ -118,15 +248,37 @@ class BannerOverlay:
             groups: 幕のボタンのグループ（`MenuFlow.groups()`）。
             focus: カーソルの位置（`MenuFlow.focus()`）。
             motions: ボタンごとの、マウスが乗った見た目・押している見た目への進み。
+            board: 幕の下で揺らす盤面。None なら揺らさない。読むのは下の絵をぼかす
+                フレームだけ（そのフレームの `target` の盤面は、揺らさずに描いておく）。
+            shake: このフレームの、画面の揺れのずれ（px。`Renderer` と同じ見た目の
+                乱数から引いたもの）。
+            clock: このフレームの時計の数字（残り 30 秒からの明滅の間だけ渡す）。None
+                なら時計を描き直さない。下の絵をぼかすフレームには、`target` に描いて
+                ある数字と同じものを渡す（そのまわりを、ぼかす前の絵として写しておく）。
+                数字の四角は `target` に重なっていること（重ならないなら None を渡す）。
         """
         size = target.get_size()
         backdrop = self._backdrop
+        fresh = False
         if view is not self._view or backdrop is None or backdrop.get_size() != size:
+            fresh = True
+            self._clock = None if clock is None else _clock_under(target, clock.rect)
             backdrop = _blurred(target)
             self._backdrop = backdrop
             self._view = view
+            self._board = board
+            self._steady = None
             self.backdrops += 1
         target.blit(backdrop, (0, 0))
+        if self._board is not None and shake != (0, 0):
+            steady = self._steady
+            if steady is None:
+                steady = self._steady_board(backdrop, self._board)
+                self._steady = steady
+            steady.blit(target, shake)
+        if clock is not None and self._clock is not None and not fresh:
+            # ぼかしたフレームは、ぼかした絵が同じ数字をぼかしたものなので描き直さない。
+            _blit_clock(target, self._clock, clock)
         card, hits = self._card(view, tuple(groups), size[0])
         width, height = card.size
         left = (size[0] - width) // 2
@@ -159,6 +311,29 @@ class BannerOverlay:
         """幕を外した（次に出す幕で、下の絵をぼかし直す）。"""
         self._view = None
         self._backdrop = None
+        self._board = None
+        self._steady = None
+        self._clock = None
+
+    def _steady_board(
+        self, backdrop: pygame.Surface, board: BannerBoard
+    ) -> _SteadyBoard:
+        """ぼかした絵 `backdrop` から、揺れのずれだけずらして貼る盤面を作る。"""
+        rect = pygame.Rect(board.rect)
+        image = backdrop.subsurface(rect).copy()
+        under = self._under
+        if under is None or under[0] is not board.background:
+            under = (board.background, _blurred(board.background))
+            self._under = under
+        corners = []
+        for shape, spot in board.corners:
+            piece = pygame.Surface(shape.get_size(), pygame.SRCALPHA)
+            piece.blit(backdrop, (0, 0), pygame.Rect(spot, shape.get_size()))
+            alphas = pygame.surfarray.pixels_alpha(piece)
+            alphas[...] = pygame.surfarray.array_alpha(shape)
+            del alphas  # 画素の配列を手放す（持っている間は、この絵を貼れない）
+            corners.append((piece, spot))
+        return _SteadyBoard(rect, image, under[1], tuple(corners))
 
     def _card(
         self, view: BannerView, groups: tuple[MenuGroup, ...], window: int
@@ -252,3 +427,28 @@ def _blurred(target: pygame.Surface) -> pygame.Surface:
     shade.set_alpha(SHADE_ALPHA)
     blurred.blit(shade, (0, 0))
     return blurred
+
+
+def _clock_under(target: pygame.Surface, rect: pygame.Rect) -> _ClockUnder:
+    """ぼかす前の `target` から、時計の数字の四角 `rect` のまわりを写す。
+
+    ぼかしの半径の2倍ずつ広げる（モジュールの説明の「幕の間の時計の明滅」）。
+    """
+    area = rect.inflate(4 * BLUR_RADIUS, 4 * BLUR_RADIUS).clip(target.get_rect())
+    return _ClockUnder(area, target.subsurface(area).copy())
+
+
+def _blit_clock(target: pygame.Surface, under: _ClockUnder, clock: BannerClock) -> None:
+    """写したまわりに `clock` の数字を貼り、ぼかして暗くし、数字のまわりだけ貼る。
+
+    貼るのは数字の四角をぼかしの半径ずつ広げた所（写した四角の端からぼかしの半径より
+    内側なので、窓の全体をぼかした絵と同じ画素になる。窓の端で切れた所は、2つの
+    ぼかしがどちらも窓の端の画素を延ばすので、同じ画素になる。モジュールの説明の
+    「幕の間の時計の明滅」）。
+    """
+    area = under.area
+    region = under.image.copy()
+    region.blit(clock.image, (clock.rect.x - area.x, clock.rect.y - area.y))
+    blurred = _blurred(region)
+    spot = clock.rect.inflate(2 * BLUR_RADIUS, 2 * BLUR_RADIUS).clip(area)
+    target.blit(blurred, spot, spot.move(-area.x, -area.y))
