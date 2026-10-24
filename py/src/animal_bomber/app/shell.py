@@ -927,7 +927,8 @@ class Shell:
             immediate=immediate,
             paused=paused,
             banner=game.banner.current(world),
-            # 位置を前の tick と混ぜるのは1台の試合だけ（通信対戦はゲーム速度が無い）。
+            # 描く値（位置と時刻）を前の tick と混ぜるのは1台の試合だけ（通信対戦は
+            # ゲーム速度が無い）。
             blend=self._speed.blend if local is not None else 1.0,
         )
         notice = game.runner.notice()

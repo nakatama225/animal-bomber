@@ -99,37 +99,56 @@ class Particle:
     spin: bool = False
     """絵文字を回しながら浮かべるか（原型の spin）。"""
 
-    def look(self) -> ParticleLook:
-        """描く関数の入力（`render/art/particles.py`）。"""
+    def look(self, previous: "Particle | None" = None) -> ParticleLook:
+        """描く関数の入力（`render/art/particles.py`）。
+
+        `previous` は、この粒子の1つ前の tick の終わりの値（ゲーム速度が整数でない
+        ときに混ぜる。生まれた tick は生まれたときの値。None なら持たない）。
+        """
+        before = None if previous is None else (previous.x, previous.y, previous.life)
         return ParticleLook(
-            self.x, self.y, self.life, self.color, self.size, self.text, self.spin
+            self.x,
+            self.y,
+            self.life,
+            self.color,
+            self.size,
+            self.text,
+            self.spin,
+            before,
         )
+
+
+def stepped(p: Particle) -> Particle | None:
+    """1 tick 進めた粒子1つ。寿命が尽きたら None。
+
+    縦の位置は、重力を足す前の縦の速さで進める（原型と同じ順）。
+    """
+    life = p.life - DT
+    if life <= 0:
+        return None
+    return Particle(
+        p.x + p.vx * DT,
+        p.y + p.vy * DT,
+        p.vx,
+        p.vy + GRAVITY * DT,
+        life,
+        p.color,
+        p.size,
+        p.text,
+        p.spin,
+    )
 
 
 def advanced(particles: Sequence[Particle]) -> list[Particle]:
     """1 tick 進めた粒子（原型の update の粒子の輪）。寿命の尽きたものは除く。
 
     並びは変えない（原型も後ろから見て消すだけなので、残ったものの順は変わらない）。
-    縦の位置は、重力を足す前の縦の速さで進める（原型と同じ順）。
     """
     moved = []
     for p in particles:
-        life = p.life - DT
-        if life <= 0:
-            continue
-        moved.append(
-            Particle(
-                p.x + p.vx * DT,
-                p.y + p.vy * DT,
-                p.vx,
-                p.vy + GRAVITY * DT,
-                life,
-                p.color,
-                p.size,
-                p.text,
-                p.spin,
-            )
-        )
+        after = stepped(p)
+        if after is not None:
+            moved.append(after)
     return moved
 
 

@@ -65,8 +65,12 @@ class PlayerLook:
     """位置の横（マス。原型の cx）。"""
     y: float
     """位置の縦（マス。原型の cy）。"""
-    invulnerable: Tick = Tick(0)
-    """被弾のあとの無敵の残り（原型の invuln）。点滅に使う。"""
+    invulnerable: float = 0.0
+    """被弾のあとの無敵の残り（tick。原型の invuln）。点滅に使う。
+
+    ゲーム速度が整数でないときは、描く時刻の残り（小数。`views/player.py` の
+    `drawn_left`）。
+    """
     hurt_shake: Tick = Tick(0)
     """被弾の揺れの残り（原型の hurtFlash）。
 
@@ -77,8 +81,11 @@ class PlayerLook:
 
     ⚠️ 原型の drawPlayer の中の変数 digging はこの意味で、穴掘り（p.digging）ではない。
     """
-    pitfall: Tick = Tick(0)
-    """落とし穴にはまって動けない残り（原型の effects.pitfall）。"""
+    pitfall: float = 0.0
+    """落とし穴にはまって動けない残り（tick。原型の effects.pitfall）。
+
+    ゲーム速度が整数でないときは、描く時刻の残り（`invulnerable` と同じ）。
+    """
     effects: tuple[EffectKind, ...] = ()
     """かかっている状態（状態の印に使う）。"""
     special: bool = False
@@ -88,14 +95,20 @@ class PlayerLook:
     L4813・溜めのゲージ L4823 も chicken を見る）。回数だけが残って印が外れているとき
     （原型では外周から戻ったとき）は、とくぎを出せないので描かない。
     """
-    held: Tick = Tick(0)
-    """技のボタンを押し続けている長さ（原型の actHold）。"""
+    held: float = 0.0
+    """技のボタンを押し続けている長さ（tick。原型の actHold）。
+
+    ゲーム速度が整数でないときは、描く時刻の長さ（`views/player.py` の `drawn_held`）。
+    """
     fired: bool = True
     """いまの押し方で、とくぎを出そうとし終えたか（原型の actFired）。"""
     tongue: TongueLook | None = None
     """伸ばしている舌（原型の tongue）。"""
-    digging: Tick | None = None
-    """落とし穴を掘り終わるまでの残り（原型の digging.t）。掘っていなければ None。"""
+    digging: float | None = None
+    """落とし穴を掘り終わるまでの残り（tick。原型の digging.t）。掘っていなければ None。
+
+    ゲーム速度が整数でないときは、描く時刻の残り（`invulnerable` と同じ）。
+    """
     cpu: bool = False
     """CPU が操作しているプレイヤーか。
 
@@ -116,7 +129,7 @@ class PlayerLook:
         )
 
 
-def is_blinking_off(invulnerable: Tick) -> bool:
+def is_blinking_off(invulnerable: float) -> bool:
     """無敵の点滅で、いま薄くなっているか（原型の floor(invuln × 14) % 2 === 0）。
 
     ⚠️ 残りがちょうど 0.5 秒の絵だけ、原型と逆の向きになる。原型の残りは 1.25 秒から
@@ -161,10 +174,11 @@ def gauge_progress(look: PlayerLook) -> float | None:
 
 
 def draw_player(
-    canvas: Canvas, layout: Layout, look: PlayerLook, now: Tick, rng: CosmeticRng
+    canvas: Canvas, layout: Layout, look: PlayerLook, now: float, rng: CosmeticRng
 ) -> None:
     """プレイヤーを描く（原型の drawPlayer）。
 
+    `now` は描く時刻（盤面の時刻。tick の間の小数もとる。体の動きと掘る身ぶりに使う）。
     被弾の揺れの間は、見た目の乱数を2つ引く。
     """
     tile = layout.tile
@@ -234,7 +248,7 @@ def draw_footprint(
 
 
 def draw_pitfall(
-    canvas: Canvas, tile: float, look: PlayerLook, now: Tick, x: float, y: float
+    canvas: Canvas, tile: float, look: PlayerLook, now: float, x: float, y: float
 ) -> None:
     """落とし穴にはまっている姿。穴の縁で下半分を隠して、上半身だけ出す。
 

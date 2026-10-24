@@ -34,7 +34,6 @@ from typing import Final
 import pygame
 
 from animal_bomber.domain.core.coord import Direction
-from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.tuning import LEEK_COOLDOWN, LEEK_FIRST_COOLDOWN
 from animal_bomber.presentation.render.art.negibons import (
@@ -75,8 +74,11 @@ SHAPE_MARGIN: Final = 6
 """
 
 
-def band_level(tile: int, cooldown: Tick) -> int:
-    """撃つ間隔の帯の長さを、`BAND_STEP` の何段ぶんに丸めるか（いちばん近い段）。"""
+def band_level(tile: int, cooldown: float) -> int:
+    """撃つ間隔の帯の長さを、`BAND_STEP` の何段ぶんに丸めるか（いちばん近い段）。
+
+    `cooldown` は撃てるまでの残り（tick。ゲーム速度が整数でないときは小数もとる）。
+    """
     return gauge_level(tile * BAND_WIDTH * band_ratio(cooldown))
 
 

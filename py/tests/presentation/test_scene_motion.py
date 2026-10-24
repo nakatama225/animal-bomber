@@ -26,14 +26,20 @@ from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.rules.tuning import MAX_SPEED
-from animal_bomber.domain.state.actors import Foxfire, SlimeBomb
+from animal_bomber.domain.state.actions import Tongue
+from animal_bomber.domain.state.actors import Foxfire, Leek, SlimeBomb
 from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import ALIVE
+from animal_bomber.domain.state.player import ALIVE, Negibon
 from animal_bomber.domain.systems.blast import add_blast
 from animal_bomber.domain.systems.negibon import send_to_lane
+from animal_bomber.presentation.cosmetic_rng import CosmeticRng
+from animal_bomber.presentation.render.art.animals.frog import tongue_reach
 from animal_bomber.presentation.render.scene.actors import TRAIL_TICKS
+from animal_bomber.presentation.render.scene.effects import EffectField
 from animal_bomber.presentation.render.scene.motion import HURT_FRAMES
+from animal_bomber.presentation.render.scene.particles import Particle
+from animal_bomber.presentation.render.views.actions import tongue_look
 from tests.helpers import grant_special, idle, only_for
 
 from .scene_helpers import arena, speed_now, started, step
@@ -219,6 +225,176 @@ class Test1つ前のtickの位置:
         assert tracker.motion(rabbit.id).previous == Cell(5, 13).center()
 
 
+class Test外周と葱と粘膜爆弾と粒子と歩いた距離の1つ前のtickの値:
+    """ゲーム速度が整数でないときに、描く値を混ぜるのに使う（原型は毎フレーム動く）。"""
+
+    def test_外周の位置は_1つ前のtickも外周にいたときだけ持つ(self) -> None:
+        """盤面から外周へ回った tick・外周から戻った tick は持たない。
+
+        どちらも、1つ前の tick に同じ場所（外周）にいない。
+        """
+        world = arena((Animal.RABBIT, Animal.FOX))
+        rabbit = world.players[0]
+        tracker = started(world)
+        rabbit.life = Negibon(along=3.0, ready_at=Tick(0))
+        right = only_for(world, rabbit.id, PlayerInput.RIGHT)
+        step(world, tracker, right)
+        assert tracker.motion(rabbit.id).previous_along is None
+        life = rabbit.life
+        assert isinstance(life, Negibon) and life.along > 3.0
+        first = life.along
+        step(world, tracker, right)
+        assert tracker.motion(rabbit.id).previous_along == first
+        assert isinstance(rabbit.life, Negibon) and rabbit.life.along > first
+        held = rabbit.life.along
+        for _ in range(3):
+            tracker.observe(world, [])
+        assert tracker.motion(rabbit.id).previous_along == first
+        rabbit.life = ALIVE
+        rabbit.position = Cell(5, 13).center()
+        step(world, tracker, idle(world))
+        assert tracker.motion(rabbit.id).previous_along is None
+        assert held != first
+
+    def test_歩いた距離は_1つ前のtickの終わりの値を持つ(self) -> None:
+        world = arena((Animal.RABBIT, Animal.FOX))
+        rabbit = world.players[0]
+        tracker = started(world)
+        right = only_for(world, rabbit.id, PlayerInput.RIGHT)
+        step(world, tracker, right)
+        first = tracker.motion(rabbit.id)
+        assert first.previous_walked == 0.0 and first.walked > 0
+        step(world, tracker, right)
+        second = tracker.motion(rabbit.id)
+        assert second.previous_walked == first.walked
+        assert second.walked > first.walked
+
+    def test_葱は_撃ったtickは持たず_次のtickから1つ前の位置を持つ(self) -> None:
+        world = arena((Animal.RABBIT, Animal.FOX))
+        tracker = started(world)
+        leek = Leek(Point(5.5, 7.5), Direction.RIGHT, 1)
+        world.actors.append(leek)
+        step(world, tracker, idle(world))
+        assert leek in world.actors
+        assert tracker.leek_before(leek) is None
+        held = leek.position
+        step(world, tracker, idle(world))
+        assert leek in world.actors
+        assert tracker.leek_before(leek) == held != leek.position
+
+    def test_粘膜爆弾は_投げたtickは持たず_次のtickから1つ前の飛んだtickを持つ(
+        self,
+    ) -> None:
+        world = arena((Animal.FROG, Animal.RABBIT))
+        frog = world.players[0]
+        frog.facing = Direction.RIGHT
+        grant_special(frog, 1)
+        tracker = started(world)
+        step(world, tracker, only_for(world, frog.id, PlayerInput.SPECIAL))
+        [slime] = [a for a in world.actors if isinstance(a, SlimeBomb)]
+        assert tracker.flown_before(slime) is None
+        held = slime.flown
+        step(world, tracker, idle(world))
+        assert tracker.flown_before(slime) == held
+        assert slime.flown == held + 1
+
+    def test_粒子は_生まれたtickは生まれたときの値を_次のtickから1つ前の値を持つ(
+        self,
+    ) -> None:
+        """寿命で消えた炎の煙（`Test画面の揺れと粒子` と同じ場面）。
+
+        原型は粒子を出した update のうちに1回進める（L4398-4402）ので、生まれたときの
+        値（煙の絵文字はマスの真ん中・寿命 0.6 秒）が、生まれた tick の初めの時刻の値に
+        あたる。1つ前の値を持たないと、ゲーム速度が整数でないときに生まれた粒子が止まって
+        見える。
+        """
+        world = arena((Animal.FOX, Animal.RABBIT))
+        world.actors.append(
+            Foxfire(cell=Cell(5, 13), owner=0, elapsed=Tick(90), steps=8)
+        )
+        tracker = started(world)
+        step(world, tracker, idle(world))
+        smoke = [p for p in tracker.particles if p.text == "\N{DASH SYMBOL}"]
+        assert [p.previous for p in smoke] == [(5.5, 13.5, 0.6)]
+        born = smoke[0]
+        assert born.life == pytest.approx(0.6 - 1 / 60)
+        step(world, tracker, idle(world))
+        [moved] = [p for p in tracker.particles if p.text == "\N{DASH SYMBOL}"]
+        assert moved.previous == (born.x, born.y, born.life)
+        assert moved.y < born.y
+
+    def test_同じtickに消える粒子と生まれる粒子があっても_1つ前の値の並びがずれない(
+        self,
+    ) -> None:
+        """寿命の尽きた粒子を除いたあとも、残った粒子と生まれた粒子の1つ前の値が揃う。
+
+        残った粒子は1つ前の tick の終わりの値、生まれた粒子は生まれたときの値。
+        """
+        field = EffectField(CosmeticRng())
+        short = Particle(1.0, 1.0, 0.0, 0.0, 1.5 / 60, "#a2703f", 4.0)
+        long = Particle(3.0, 3.0, 6.0, 0.0, 1.0, "#a2703f", 4.0)
+        field.particles += [short, long]
+        field.advance()
+        kept = field.particles[1]
+        newborn = Particle(7.0, 7.0, 0.0, 0.0, 1.0, "#a2703f", 4.0)
+        field.particles.append(newborn)
+        field.advance()
+        looks = field.looks()
+        assert len(looks) == 2
+        assert looks[0].previous == (kept.x, kept.y, kept.life)
+        assert looks[1].previous == (7.0, 7.0, 1.0)
+        assert looks[1].x == 7.0 and looks[1].life == pytest.approx(1 - 1 / 60)
+        third = Particle(9.0, 9.0, 0.0, 0.0, 1.0, "#a2703f", 4.0)
+        field.particles.append(third)
+        field.advance()
+        assert [look.previous for look in field.looks()][2] == (9.0, 9.0, 1.0)
+
+    def test_舌先までの長さは_伸ばし始めたtickは持たず_次のtickから1つ前の値を持つ(
+        self,
+    ) -> None:
+        world = arena((Animal.FROG, Animal.RABBIT))
+        frog = world.players[0]
+        frog.facing = Direction.RIGHT
+        tracker = started(world)
+        step(world, tracker, only_for(world, frog.id, PlayerInput.ACTION))
+        assert isinstance(frog.action, Tongue)
+        assert tracker.motion(frog.id).previous_reach is None
+        held = tongue_reach(tongue_look(frog.action))
+        step(world, tracker, idle(world))
+        assert isinstance(frog.action, Tongue)
+        assert tracker.motion(frog.id).previous_reach == held
+        assert tongue_reach(tongue_look(frog.action)) > held
+
+    def test_新しいラウンドの盤面では_1つ前の値を忘れる(self) -> None:
+        """新しい盤面では、葱の1つ前の位置と、前の盤面の粒子を忘れる。
+
+        新しい盤面の最初の tick に生まれた粒子は、生まれたときの値を持つ（前の盤面の
+        粒子の値を持たない）。
+        """
+        world = arena((Animal.RABBIT, Animal.FOX))
+        world.actors.append(
+            Foxfire(cell=Cell(5, 13), owner=0, elapsed=Tick(80), steps=8)
+        )
+        tracker = started(world)
+        leek = Leek(Point(5.5, 7.5), Direction.RIGHT, 1)
+        world.actors.append(leek)
+        for _ in range(12):
+            step(world, tracker, idle(world))
+        assert tracker.leek_before(leek) is not None
+        assert any(p.previous is not None for p in tracker.particles)
+        fresh = arena((Animal.FOX, Animal.RABBIT))
+        fresh.actors += [
+            leek,
+            Foxfire(cell=Cell(9, 13), owner=0, elapsed=Tick(90), steps=8),
+        ]
+        tracker.observe(fresh, [])
+        assert tracker.leek_before(leek) is None
+        assert tracker.particles == []
+        step(fresh, tracker, idle(fresh))
+        smoke = [p for p in tracker.particles if p.text == "\N{DASH SYMBOL}"]
+        assert [p.previous for p in smoke] == [(9.5, 13.5, 0.6)]
+
+
 class Test被弾の揺れ:
     def test_被弾したtickの絵を含めて19枚揺らし_止まった盤面では減らない(self) -> None:
         """原型の hurtFlash。
@@ -353,6 +529,34 @@ class Test炎の通った跡:
                 assert mark.alpha == pytest.approx(alpha)
         assert len(cells) >= 4
         assert TRAIL_TICKS == 30
+
+    def test_描く時刻がtickの間なら_その時刻の濃さで_足したtickより前は濃さ1(
+        self,
+    ) -> None:
+        """ゲーム速度が整数でないときの描く時刻（`views/player.py` の `drawn_time`）。
+
+        跡を足した tick の絵を、1つ前の tick から半分進んだ時刻で描くと、跡はまだ
+        足していない時刻になる。炎は混ぜずにいまのマスに描くので、跡は足したときの
+        濃さ 1 で出す（1 より濃くしない）。
+        """
+        world = arena((Animal.FOX, Animal.RABBIT))
+        fox, rabbit = world.players
+        fox.position = Cell(3, 13).center()
+        rabbit.position = Cell(15, 13).center()
+        grant_special(fox, 1)
+        tracker = started(world)
+        step(world, tracker, only_for(world, fox.id, PlayerInput.SPECIAL))
+        [fire] = [a for a in world.actors if isinstance(a, Foxfire)]
+        for _ in range(60):
+            if tracker.trail(fire, world.now):
+                break
+            step(world, tracker, idle(world))
+        [mark] = tracker.trail(fire, world.now)
+        assert mark.alpha == 1.0
+        [early] = tracker.trail(fire, world.now - 0.5)
+        assert early.alpha == 1.0
+        [later] = tracker.trail(fire, world.now + 7.5)
+        assert later.alpha == pytest.approx(1 - 7.5 / 30)
 
     def test_寿命で消えた炎のマスに_煙を出す(self) -> None:
         world = arena((Animal.FOX, Animal.RABBIT))

@@ -38,6 +38,7 @@ from typing import Protocol, assert_never
 
 import pygame
 
+from animal_bomber.domain.core.coord import Point
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.state.actors import (
     BurntTongue,
@@ -64,9 +65,18 @@ from animal_bomber.presentation.render.baked.board import BoardLayer
 from animal_bomber.presentation.render.baked.techniques import snap
 from animal_bomber.presentation.render.canvas.surface import SurfaceCanvas
 from animal_bomber.presentation.render.layout import Layout
-from animal_bomber.presentation.render.views.actors import leek_look, slime_look
+from animal_bomber.presentation.render.views.actors import (
+    drawn_flown,
+    leek_look,
+    slime_look,
+)
 from animal_bomber.presentation.render.views.lane import negibon_look
-from animal_bomber.presentation.render.views.player import TrackedMotion, player_look
+from animal_bomber.presentation.render.views.particles import drawn_particle
+from animal_bomber.presentation.render.views.player import (
+    TrackedMotion,
+    drawn_time,
+    player_look,
+)
 
 
 class Visuals(Protocol):
@@ -90,8 +100,16 @@ class Visuals(Protocol):
         """粘膜爆弾を投げた位置（マス）と、着地してから跳ねたか。"""
         ...
 
-    def trail(self, actor: Foxfire, now: Tick) -> tuple[TrailMark, ...]:
-        """炎の通った跡。"""
+    def flown_before(self, actor: SlimeBomb) -> Tick | None:
+        """粘膜爆弾の、1つ前の tick の終わりの投げてからの tick（無ければ None）。"""
+        ...
+
+    def leek_before(self, actor: Leek) -> Point | None:
+        """飛んでいる葱の、1つ前の tick の終わりの位置（無ければ None）。"""
+        ...
+
+    def trail(self, actor: Foxfire, now: float) -> tuple[TrailMark, ...]:
+        """炎の通った跡。濃さは描く時刻 `now` のもの。"""
         ...
 
 
@@ -135,15 +153,24 @@ class Renderer:
     ) -> None:
         """いまの盤面を `target`（描く面。アルファの桁の無い面）の左上 (0, 0) に描く。
 
-        `blend` は、プレイヤーを描く位置を1つ前の tick の位置と混ぜる割合（既定の 1 は
-        いまの位置。ゲーム速度が整数でない1台の試合だけ 1 より小さい。`views/player.py`
-        の `drawn_position`）。重ねる順（上にいる順）も、描く位置で決める。
+        `blend` は、描く値を1つ前の tick の値と混ぜる割合（既定の 1 はいまの値。ゲーム
+        速度が整数でない1台の試合だけ 1 より小さい。`shell/loop.py` の
+        `GameSpeed.blend`）。混ぜるのは、盤面にいるプレイヤーの位置と歩いた距離と
+        舌先までの長さ（`views/player.py` の `drawn_position`・`player_look`）・外周の
+        鍋の位置（`views/lane.py` の `drawn_along`）・飛んでいる葱の位置・粘膜爆弾の
+        飛ぶ間（`views/actors.py`）・粒子（`views/particles.py`）と、時刻で決まる絵に
+        渡す描く時刻（`views/player.py` の `drawn_time`）。残りの tick の数か期限で
+        持つ値（爆弾の導火線・無敵・ゲージ・撃つ間隔）も描く時刻の値にする（爆弾には
+        描く時刻が盤面の時刻より何 tick 前かを渡す）。炎の位置は混ぜない（原型も
+        マス単位で動く）。重ねる順（上にいる順）も、描く位置で決める。
 
         ⚠️ 画面の揺れでずらした盤面と粒子は、盤面の大きさ（`Layout.surface_size`）の
         外へはみ出して描くことがある。窓の大きさの面に描くときは、呼ぶ側が盤面の四角で
         切っておく（`target.set_clip`。原型の canvas も盤面の外を描かない）。
         """
         art, rng, now = self.art, self._rng, world.now
+        at = drawn_time(now, blend)
+        behind = now - at
         moved = shake_offset(visuals.shake, rng)
         offset = (0, 0) if moved is None else (snap(moved[0]), snap(moved[1]))
         board = self._board
@@ -158,9 +185,9 @@ class Renderer:
                 special_flags=pygame.BLEND_PREMULTIPLIED,
             )
         for item in world.items:
-            art.items.draw(target, item, now, offset)
+            art.items.draw(target, item, at, offset)
         for bomb in world.bombs:
-            art.bombs.draw(target, bomb, now, offset)
+            art.bombs.draw(target, bomb, at, offset, behind)
         for blast in world.blasts:
             art.blasts.draw(target, blast, rng, offset)
         alpha = 1.0
@@ -177,15 +204,15 @@ class Renderer:
             if is_alive(player)
         ]
         for look in sorted(looks, key=lambda look: look.y):
-            alpha = art.players.draw(target, look, now, rng, offset, alpha)
+            alpha = art.players.draw(target, look, at, rng, offset, alpha)
         # 盤面の物は、炎を全部描いてから粘膜爆弾を描く（原型の draw の順）ので、
         # 輪を2つに分ける。種類を足すと、どちらの `match` も型検査で失敗する。
         # 描くかどうかと、どの輪で描くかを決めてから、扱いを書く。
         for actor in world.actors:
             match actor:
                 case Foxfire():
-                    fire = FoxfireLook(actor.cell, visuals.trail(actor, now))
-                    art.foxfires.draw(target, fire, now, offset, alpha)
+                    fire = FoxfireLook(actor.cell, visuals.trail(actor, at))
+                    art.foxfires.draw(target, fire, at, offset, alpha)
                 case SlimeBomb():
                     pass  # 次の輪で描く
                 case Pit() | Scatter() | BurntTongue():
@@ -200,8 +227,9 @@ class Renderer:
             match actor:
                 case SlimeBomb():
                     origin, hopped = visuals.slime(actor)
-                    slime = slime_look(actor, origin, hopped)
-                    art.slimes.draw(target, slime, now, offset)
+                    flown = drawn_flown(actor.flown, visuals.flown_before(actor), blend)
+                    slime = slime_look(actor, origin, hopped, flown)
+                    art.slimes.draw(target, slime, at, offset)
                 case Foxfire():
                     pass  # 前の輪で描いた
                 case Pit() | Scatter() | BurntTongue():
@@ -217,7 +245,8 @@ class Renderer:
             life = player.life
             match life:
                 case Negibon():
-                    lane = negibon_look(player, life, now)
+                    previous = visuals.motion(player.id).previous_along
+                    lane = negibon_look(player, life, now, previous, blend)
                     art.negibons.draw(target, lane, offset)
                 case Alive() | Out():
                     pass
@@ -226,7 +255,8 @@ class Renderer:
         for actor in world.actors:
             match actor:
                 case Leek():
-                    art.negibons.draw_leek(target, leek_look(actor), offset, alpha)
+                    leek = leek_look(actor, visuals.leek_before(actor), blend)
+                    art.negibons.draw_leek(target, leek, offset, alpha)
                 case Foxfire() | SlimeBomb():
                     pass  # 前の輪で描いた
                 case Pit() | Scatter() | BurntTongue():
@@ -234,7 +264,7 @@ class Renderer:
                 case _:
                     assert_never(actor)
         for particle in visuals.particles:
-            art.particles.draw(target, particle, offset)
+            art.particles.draw(target, drawn_particle(particle, blend), offset)
 
 
 def background(layout: Layout) -> pygame.Surface:

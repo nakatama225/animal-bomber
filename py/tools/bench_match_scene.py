@@ -110,7 +110,10 @@ SPECIAL_EVERY = 15
 """きつねのとくぎの回数を変える間隔（フレーム。原型の名札の作り直しの約 4 Hz）。"""
 
 FRAME_MS = 1000 / 60
-"""1 フレームの実時間（ms）。横の板の作り直しの間隔と明滅は、この時刻で数える。"""
+"""1 フレームの実時間（ms）。時計の数字の明滅は、この時刻で数える。
+
+横の板の作り直しの区切りは、盤面の時刻（1フレームに 1 tick 進める）で数える。
+"""
 
 
 class MatchScene:
@@ -147,12 +150,14 @@ class MatchScene:
                 self._art.particles.square(color, side)
         self._art.particles.text(SPINNER_FACE, 26)
         # 横の板の名札は、とくぎの回数の3通りを描いておく（試合では、新しい文を初めて
-        # 描くフレームが出るが、場面ではその分は測らない）。描いておくのに使った時刻の
-        # あとから、測る時刻を数える（板の作り直しの間隔を、測る最初から守らせる）。
+        # 描くフレームが出るが、場面ではその分は測らない）。板の作り直しの区切りは
+        # 盤面の時刻で数える（`SidePanel.show`）。場面は1フレームに盤面の時刻を 1 tick
+        # 進めるので、区切り（15 tick）ごとに中身を替えれば、測る間も区切りごとに
+        # 作り直す。明滅の実時間は、描いておくのに使った時刻のあとから数える。
         scratch = pygame.Surface(spec.size)
         for frame in range(0, 3 * SPECIAL_EVERY, SPECIAL_EVERY):
             self._pose(frame)
-            self._panel.show(self._panel_content(), frame * FRAME_MS)
+            self._panel.show(self._panel_content(), self._world.now)
             self._panel.draw(scratch, (self._panel_left, 0), frame * FRAME_MS)
         self._start_ms = 3 * SPECIAL_EVERY * FRAME_MS
         self._panel_builds_before = self._panel.builds

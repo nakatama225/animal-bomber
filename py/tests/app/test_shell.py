@@ -32,14 +32,17 @@ from animal_bomber.domain.events import (
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
+from animal_bomber.domain.rules.tuning import LANE_SPEED, LEEK_SPEED
 from animal_bomber.domain.state.board import Tile
+from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
-from animal_bomber.domain.state.player import OUT, speed_of
+from animal_bomber.domain.state.player import OUT, Negibon, speed_of
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.net.client import Playing
 from animal_bomber.presentation import notices
 from animal_bomber.presentation.audio.score import TEMPO, tempo_for
 from animal_bomber.presentation.audio.sounds import SoundName
+from animal_bomber.presentation.cosmetic_rng import CosmeticRng
 from animal_bomber.presentation.hud.banner import (
     AGAIN_BUTTON,
     NEXT_ROUND_BUTTON,
@@ -49,6 +52,8 @@ from animal_bomber.presentation.hud.scoreboard import CardLook
 from animal_bomber.presentation.lan_status import WAIT_NOTICE_FRAMES
 from animal_bomber.presentation.menu.choices import hp_for_hits
 from animal_bomber.presentation.menu.screens import LanView, LobbyView, MenuScreen
+from animal_bomber.presentation.render.art.negibons import LeekLook, NegibonLook
+from animal_bomber.presentation.render.art.player import PlayerLook
 from animal_bomber.presentation.render.layout import PANEL_WIDTH, fit_window
 from animal_bomber.presentation.render.loading import BACKGROUND, TEXT_COLOR
 from animal_bomber.presentation.render.panel.side_panel import SidePanel, thumb_center
@@ -64,6 +69,9 @@ from animal_bomber.shell.gamepad import PadButton
 from tests.net.fake_relay import FakeConnection, FakeRelay
 
 from .shell_driver import PAINTER, SEED, WINDOW, Driver, key_event
+
+Offset = tuple[int, int]
+"""画面の揺れなどで全体をずらす px（取っておいた絵を貼る関数の引数）。"""
 
 SOLO = "1人 vs CPU×3"
 DUO = "2人 vs CPU×2"
@@ -927,6 +935,36 @@ class Testゲームの速さ:
         driver.frames(6)
         assert runner.world.now == now + 3
 
+    @pytest.mark.parametrize(("rate", "every"), [(3.0, 5), (0.5, 30)])
+    def test_横の板は_盤面の時刻の15tickごとに作り直し_実時間の間隔は倍率で変わる(
+        self, rate: float, every: int
+    ) -> None:
+        """原型は試合の時間で 0.25 秒ごとに名札を作り直す（L4406）。
+
+        原型の式は `G.elapsed%0.25<dt`。落とし穴の残り秒（小数1桁）は 6 tick ごとに
+        替わるので、区切りごとに中身が
+        替わる。3 倍は1フレームに 3 tick 進むので 5 フレームごと、0.5 倍は 30 フレーム
+        ごと。実時間の 250 ms で数えると、どの倍率でも 15 フレームごとになる。
+        """
+        driver = Driver()
+        runner = start_local(driver, VERSUS)
+        driver.frame()
+        set_speed(driver, rate)
+        runner.world.players[0].effects.add(EffectKind.PITFALL, Tick(180), Tick(180))
+        driver.frame()
+        changed: list[int] = []
+        before = driver.shell.panel_content
+        for frame in range(every * 4 + 1):
+            driver.frame()
+            content = driver.shell.panel_content
+            if content != before:
+                changed.append(frame)
+            before = content
+        assert len(changed) >= 4
+        assert [b - a for a, b in itertools.pairwise(changed)] == [every] * (
+            len(changed) - 1
+        )
+
     def test_2倍でも_押してすぐ離した爆弾のキーは1tickぶんだけ押したことにする(
         self,
     ) -> None:
@@ -971,6 +1009,86 @@ class Testゲームの速さ:
         walk = speed_of(world.players[0], Tile.EMPTY)
         steps = [b[1] - a[1] for a, b in itertools.pairwise(drawn)]
         assert steps == pytest.approx([0.75 * walk] * 7)
+
+    def test_整数でない倍率では_外周の鍋と飛ぶ葱と描く時刻も_1フレームの進みが揃う(
+        self,
+    ) -> None:
+        """原型は外周（L2250）も葱（L2291-2300）も時刻（G.elapsed）も毎フレーム進める。
+
+        0.5 倍で進める tick は2フレームに1回だが、外周の鍋と飛ぶ葱を描く位置と、時刻で
+        決まる絵に渡す時刻は、1フレームに半 tick ぶんずつ進む（盤面にいるプレイヤーと
+        同じ割合で混ぜる）。葱は撃ったフレームから測る（撃った tick は撃った位置と
+        混ぜる。原型も撃った update のうちに進める。L2288-2300）。
+
+        鍋は、テストが 1P を盤面から外周へ直に移すので、移したあと最初の tick は1つ前の
+        外周の位置を持たない（盤面から外周へ回った tick と同じく混ぜない）。その tick を
+        描くフレームを捨ててから測る。試合で外周へ回った tick には鍋は動かない（原型も
+        動かさない：外周を動かす negiMove は入力の段、外周へ回すのは被弾の段）。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        world = runner.world
+        set_speed(driver, 0.5)
+        world.players[0].life = Negibon(along=3.0, ready_at=Tick(0))
+        art = driver.shell.renderer.art
+        pots: list[float] = []
+        leeks: list[float] = []
+        times: list[float] = []
+        draw_pot, draw_leek, draw_player = (
+            art.negibons.draw,
+            art.negibons.draw_leek,
+            art.players.draw,
+        )
+
+        def pot(
+            target: pygame.Surface, look: NegibonLook, offset: Offset = (0, 0)
+        ) -> None:
+            if look.animal is world.players[0].animal:
+                pots.append(look.x)
+            draw_pot(target, look, offset)
+
+        def leek(
+            target: pygame.Surface,
+            look: LeekLook,
+            offset: Offset = (0, 0),
+            start: float = 1.0,
+        ) -> None:
+            leeks.append(look.y)
+            draw_leek(target, look, offset, start)
+
+        def player(
+            target: pygame.Surface,
+            look: PlayerLook,
+            now: float,
+            rng: CosmeticRng,
+            offset: Offset = (0, 0),
+            start: float = 1.0,
+        ) -> float:
+            if not times or times[-1] != now:
+                times.append(now)
+            return draw_player(target, look, now, rng, offset, start)
+
+        art.negibons.draw = pot  # type: ignore[method-assign]
+        art.negibons.draw_leek = leek  # type: ignore[method-assign]
+        art.players.draw = player  # type: ignore[method-assign]
+        driver.down(pygame.KSCAN_D)
+        driver.frames(3)
+        pots.clear()
+        times.clear()
+        driver.frames(8)
+        walked, timed = list(pots), list(times)
+        driver.up(pygame.KSCAN_D)
+        assert [b - a for a, b in itertools.pairwise(walked)] == pytest.approx(
+            [0.5 * LANE_SPEED] * 7
+        )
+        assert [b - a for a, b in itertools.pairwise(timed)] == [0.5] * 7
+        assert leeks == []
+        driver.tap(pygame.KSCAN_SPACE)
+        driver.frames(8)
+        assert len(leeks) >= 9
+        assert [b - a for a, b in itertools.pairwise(leeks)] == pytest.approx(
+            [0.5 * LEEK_SPEED] * (len(leeks) - 1)
+        )
 
     def test_止めている間は_描く位置が揺れない(self) -> None:
         """ポーズの間は、ゲーム速度の端数を進めない（原型も止めている間は進めない）。"""
@@ -1107,10 +1225,10 @@ class Test盤面と横の板:
     def test_決着したら_約4Hzを待たずに名札を作り直す(self) -> None:
         """決着のイベントで横の板の作り直しの印を立てる（`refreshes_panel` の配線）。
 
-        原型も決着で `renderCards` を呼ぶ（L4510）。立てないと、前の作り直しから
-        250 ms 以内に決まったラウンドでは古い名札のままぼかし、幕の間は横の板を描かない
-        ので、幕を外すまで古い名札が残る。イベントの種類ごとの抜けは
-        `test_scoreboard.py` が見る。
+        原型も決着で `renderCards` を呼ぶ（L4510）。立てないと、決着のあとは盤面の
+        時刻が進まず、作り直しの区切り（15 tick）を越えないので、古い名札のままぼかし、
+        幕の間は横の板を描かないので、幕を外すまで古い名札が残る。イベントの種類ごとの
+        抜けは `test_scoreboard.py` が見る。
         """
         driver = Driver()
         runner = start_local(driver)

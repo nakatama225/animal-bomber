@@ -13,9 +13,13 @@
 """
 
 import math
+from dataclasses import replace
 
 import pytest
 
+from animal_bomber.domain.abilities.elephant import MELT_TICKS
+from animal_bomber.domain.abilities.mole import DIG_TIME, HOLD_TIME
+from animal_bomber.domain.abilities.rabbit import SCATTER_TIME
 from animal_bomber.domain.core.coord import Cell, Direction, Point
 from animal_bomber.domain.core.entity_id import EntityId
 from animal_bomber.domain.core.tick import Tick
@@ -23,16 +27,27 @@ from animal_bomber.domain.events import Moment, TechniqueMoment
 from animal_bomber.domain.input.player_input import PlayerInput
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
+from animal_bomber.domain.rules.lane import lane_spot
+from animal_bomber.domain.rules.tuning import BOMB_FUSE, LEEK_FIRST_COOLDOWN
+from animal_bomber.domain.state.actions import Dig
 from animal_bomber.domain.state.actors import Leek, Pit, SlimeBomb
 from animal_bomber.domain.state.board import Tile
+from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
 from animal_bomber.domain.state.player import Negibon, PlayerState
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.domain.systems import simulation
 from animal_bomber.domain.systems.blast import add_blast
 from animal_bomber.presentation.animal_text import special_emoji
-from animal_bomber.presentation.render.art.animals.frog import tongue_reach
+from animal_bomber.presentation.render.art.animals.frog import (
+    TONGUE_STEP,
+    TongueLook,
+    tongue_reach,
+)
 from animal_bomber.presentation.render.art.animals.mole import dig_progress
+from animal_bomber.presentation.render.art.bombs import bomb_look
+from animal_bomber.presentation.render.art.items import item_look
+from animal_bomber.presentation.render.art.particles import ParticleLook
 from animal_bomber.presentation.render.art.player import (
     PlayerLook,
     gauge_progress,
@@ -40,11 +55,24 @@ from animal_bomber.presentation.render.art.player import (
 )
 from animal_bomber.presentation.render.art.slimes import SlimeLook, slime_shape
 from animal_bomber.presentation.render.art.timing import seconds
-from animal_bomber.presentation.render.views.actors import slime_look
-from animal_bomber.presentation.render.views.lane import lane_cooldown_left
+from animal_bomber.presentation.render.views.actions import drawn_tongue
+from animal_bomber.presentation.render.views.actors import (
+    drawn_flown,
+    leek_look,
+    slime_look,
+)
+from animal_bomber.presentation.render.views.lane import (
+    drawn_along,
+    lane_cooldown_left,
+    negibon_look,
+)
+from animal_bomber.presentation.render.views.particles import drawn_particle
 from animal_bomber.presentation.render.views.player import (
     TrackedMotion,
+    drawn_held,
+    drawn_left,
     drawn_position,
+    drawn_time,
     invulnerable_left,
     player_look,
 )
@@ -368,7 +396,7 @@ class Test外周:
         assert sum(1 for actor in world.actors if isinstance(actor, Leek)) == 1
 
 
-def cooldown_of(world: WorldState, player: PlayerState) -> Tick:
+def cooldown_of(world: WorldState, player: PlayerState) -> float:
     """外周にいるプレイヤーの、撃つ間隔の残り（描く時点の値）。"""
     life = player.life
     assert isinstance(life, Negibon), "外周にいない"
@@ -412,7 +440,7 @@ class Test描く位置を前のtickと混ぜる:
         before = Point(4.0 - 0.36, 5.5)
         assert drawn_position(now, before, 0.5).x == pytest.approx(4.0 - 0.18)
 
-    def test_描く関数の入力の位置だけを混ぜ_ブロックの中かはいまの位置で決める(
+    def test_描く位置は混ぜ_ブロックの中かはいまの位置で決める(
         self,
     ) -> None:
         world, rabbit = arena((Animal.RABBIT, Animal.FOX))
@@ -426,3 +454,336 @@ class Test描く位置を前のtickと混ぜる:
         assert look.in_block
         assert player_look(world, rabbit, motion).y == 12.1
         assert player_look(world, rabbit, motion, blend=1.0).y == 12.1
+
+    def test_歩いた距離も混ぜ_脚の振りの位相を毎フレーム進める(self) -> None:
+        """原型は walk を毎フレーム速さ × 経過時間 × 倍率ずつ足す。"""
+        world, rabbit = arena((Animal.RABBIT, Animal.FOX))
+        motion = TrackedMotion(walked=2.0, previous_walked=1.8)
+        assert player_look(world, rabbit, motion, blend=0.25).pose.walked == (
+            pytest.approx(1.85)
+        )
+        assert player_look(world, rabbit, motion, blend=1.0).pose.walked == 2.0
+        fresh = TrackedMotion(walked=2.0)
+        assert player_look(world, rabbit, fresh, blend=0.25).pose.walked == 2.0
+
+
+class Test時刻と外周と葱と粒子を前のtickと混ぜる:
+    """ゲーム速度が整数でないときに、位置と同じ割合で混ぜる（原型は毎フレーム動く）。"""
+
+    def test_描く時刻は_1つ前のtickから割合だけ進んだ時刻(self) -> None:
+        assert drawn_time(Tick(330), 0.25) == 329.25
+        assert drawn_time(Tick(330), 0.0) == 329
+        assert drawn_time(Tick(330), 1.0) == 330
+
+    def test_ラウンドの最初のtickを進める前は_0より小さい時刻をそのまま返す(
+        self,
+    ) -> None:
+        """0 で止めると、次のフレームの時刻 0 と並んで、時刻で決まる絵が1枚止まる。"""
+        assert drawn_time(Tick(0), 0.5) == -0.5
+        assert drawn_time(Tick(1), 0.0) == 0
+
+    @pytest.mark.parametrize(
+        ("previous", "along", "wanted"),
+        [
+            (8.25, 8.5, 8.375),
+            (71.875, 0.125, 0.0),  # 0 の前後で折り返す（短いほうの向きへ +0.25）
+            (0.125, 71.875, 0.0),  # 逆回り（-0.25）
+            (71.75, 0.0, 71.875),
+        ],
+    )
+    def test_外周の位置は_折り返しをまたいでも短いほうの向きで混ぜる(
+        self, previous: float, along: float, wanted: float
+    ) -> None:
+        assert drawn_along(along, previous, 0.5) == wanted
+
+    def test_外周の位置は_前の位置が無いか割合1か瞬間移動なら_いまの位置(
+        self,
+    ) -> None:
+        assert drawn_along(8.5, None, 0.5) == 8.5
+        assert drawn_along(8.5, 8.25, 1.0) == 8.5
+        assert drawn_along(8.5, 30.0, 0.5) == 8.5
+
+    def test_外周の鍋の位置と向きは_混ぜた位置から出す(self) -> None:
+        world, rabbit = arena((Animal.RABBIT, Animal.FOX))
+        life = Negibon(along=0.125, ready_at=Tick(0))
+        look = negibon_look(rabbit, life, world.now, 71.875, 0.5)
+        spot = lane_spot(0.0)
+        assert (look.x, look.y, look.facing) == (
+            spot.position.x,
+            spot.position.y,
+            spot.facing,
+        )
+        current = negibon_look(rabbit, life, world.now)
+        assert (current.x, current.y) == (
+            lane_spot(0.125).position.x,
+            lane_spot(0.125).position.y,
+        )
+
+    def test_葱は_撃ったtickは撃った位置と_次からは前の位置と混ぜる(self) -> None:
+        """原型は撃った update のうちに葱を進める（fireNegi のあとの updateNegis）。
+
+        撃った tick（1つ前の位置が無い）は、飛んだ距離だけ戻した撃った位置と混ぜる。
+        飛んだ距離が 1 tick に動ける距離より長い葱（数え始める前から飛んでいた）は
+        混ぜない。
+        """
+        shot = Leek(Point(9.875, 0.125), Direction.DOWN, 1, travelled=0.25)
+        born = leek_look(shot, None, 0.5)
+        assert (born.x, born.y, born.facing) == (9.875, 0.0, Direction.DOWN)
+        assert leek_look(shot, None, 0.0).y == -0.125
+        assert leek_look(shot, None, 1.0).y == 0.125
+        flying = Leek(Point(9.875, 0.125), Direction.DOWN, 1, travelled=3.0)
+        mixed = leek_look(flying, Point(9.875, -0.125), 0.5)
+        assert (mixed.x, mixed.y, mixed.facing) == (9.875, 0.0, Direction.DOWN)
+        assert leek_look(flying, Point(9.875, -0.125), 1.0).y == 0.125
+        assert leek_look(flying, None, 0.5).y == 0.125
+
+    def test_撃ったtickの葱は_ルールの層が進める前の撃った位置から混ぜる(self) -> None:
+        """実際に外周から撃った葱で、撃った tick に描く位置が毎フレーム進む。
+
+        撃った tick の終わりの位置から1回ぶん戻した位置が、割合 0 の位置になる。
+        """
+        world, rabbit = arena((Animal.RABBIT, Animal.FOX))
+        rabbit.life = Negibon(along=8.5, ready_at=Tick(0))
+        simulation.step(world, only_for(world, rabbit.id, PlayerInput.BOMB))
+        [shot] = [actor for actor in world.actors if isinstance(actor, Leek)]
+        start = lane_spot(8.5).position
+        dx, dy = shot.facing.delta
+        step_x, step_y = shot.position.x - start.x, shot.position.y - start.y
+        flown = shot.travelled
+        assert (step_x, step_y) == pytest.approx((dx * flown, dy * flown))
+        assert shot.travelled > 0
+        drawn = [leek_look(shot, None, blend) for blend in (0.0, 0.5, 1.0)]
+        assert [(look.x, look.y) for look in drawn] == pytest.approx(
+            [
+                (start.x, start.y),
+                (start.x + step_x / 2, start.y + step_y / 2),
+                (shot.position.x, shot.position.y),
+            ]
+        )
+
+    def test_粘膜爆弾の飛ぶ間は_flownから1を引いて割合を足す(self) -> None:
+        """投げた tick（1つ前の値が無い）も、飛んでいる間は「flown − 1 + 割合」。
+
+        ルールの層も原型も投げた tick のうちに1つ進めるので、投げた tick の終わりの
+        flown は 1。0 より下にはしない。着地したあとは flown が増えないので、混ぜても
+        同じ値（1つ前の値が無くても同じ）。
+        """
+        assert drawn_flown(Tick(10), Tick(9), 0.25) == 9.25
+        assert drawn_flown(Tick(1), None, 0.0) == 0
+        assert drawn_flown(Tick(1), None, 0.25) == 0.25
+        assert drawn_flown(Tick(1), None, 0.5) == 0.5
+        assert drawn_flown(Tick(0), None, 0.25) == 0
+        assert drawn_flown(Tick(21), Tick(21), 0.25) == 21
+        assert drawn_flown(Tick(21), None, 0.25) == 21
+        assert drawn_flown(Tick(10), Tick(9), 1.0) == 10
+        assert drawn_flown(Tick(1), None, 1.0) == 1
+
+    def test_投げたtickの粘膜爆弾は_ルールの層の飛んだtickが1(self) -> None:
+        """「flown − 1 + 割合」が投げた tick の初めの時刻の値になる前提を確認する。"""
+        world, frog = arena((Animal.FROG, Animal.RABBIT))
+        frog.facing = Direction.RIGHT
+        grant_special(frog, 1)
+        simulation.step(world, only_for(world, frog.id, PlayerInput.SPECIAL))
+        [slime] = [actor for actor in world.actors if isinstance(actor, SlimeBomb)]
+        assert slime.flown == 1
+
+    def test_着地したtickを混ぜた値が原型の着地の時刻を越えたら_着地した形にする(
+        self,
+    ) -> None:
+        """原型は飛んでからの秒が 0.34 秒（20.4 tick）に届いたら着地する。"""
+        slime = SlimeBomb(
+            Cell(5, 5), 0, 3, flown=Tick(21), timer=Tick(20), interval=Tick(20)
+        )
+        flying = slime_look(
+            slime, (3.5, 5.5), False, drawn_flown(Tick(21), Tick(20), 0.25)
+        )
+        assert flying.flying and flying.flight == seconds(20.25)
+        landed = slime_look(
+            slime, (3.5, 5.5), False, drawn_flown(Tick(21), Tick(20), 0.5)
+        )
+        assert not landed.flying
+        assert slime_look(slime, (3.5, 5.5), False).flying is False
+
+    def test_粒子は_位置と寿命の残りを混ぜ_1つ前の値が無ければいまの値(self) -> None:
+        """1つ前の値が無い粒子は、混ぜずにいまの値に描く。
+
+        生まれた tick の粒子の1つ前の値は、生まれたときの値（`test_scene_motion.py`）。
+        """
+        born = ParticleLook(3.25, 9.25, 0.375, "#a2703f", 6.0)
+        assert drawn_particle(born, 0.5) == born
+        moving = replace(born, previous=(3.0, 9.0, 0.4375))
+        mixed = drawn_particle(moving, 0.5)
+        assert (mixed.x, mixed.y, mixed.life) == (3.125, 9.125, 0.40625)
+        assert drawn_particle(moving, 1.0) == moving
+
+
+class Test残りの数を描く時刻のものにする:
+    """ゲーム速度が整数でないとき、残りの tick の数で決まる絵も毎フレーム進める。
+
+    原型は、無敵（invuln）・状態の残り（effects）・撃つ間隔（negiCool）・爆弾の導火線
+    （b.timer）を毎フレーム経過時間 × 倍率ずつ減らし、長押し（actHold）を増やす
+    （L4297・L4313・L4334・L4376）。描く時刻は1つ前の tick から割合だけ進んだ時刻
+    なので、残りは `1 − 割合` だけ多く、長押しは短い。
+    """
+
+    def test_残りは_1から割合を引いたぶん多く_長押しは短い(self) -> None:
+        assert drawn_left(30, 0.25) == 30.75
+        assert drawn_left(30, 0.0) == 31
+        assert drawn_left(30, 1.0) == 30
+        assert drawn_held(30, 0.25) == 29.25
+        assert drawn_held(1, 0.0) == 0
+        assert drawn_held(30, 1.0) == 30
+
+    def test_終わった残りと_残りを決めたtickには足さない(self) -> None:
+        """終わったあと（0）に足すと絵が残り、決めた tick に足すと端より長くなる。"""
+        assert drawn_left(0, 0.25) == 0
+        assert drawn_held(0, 0.25) == 0
+        assert drawn_left(180, 0.25, 180) == 180
+        assert drawn_left(179, 0.25, 180) == 179.75
+        assert drawn_left(211, 0.25, 210) == 211
+
+    def test_プレイヤーの無敵と落とし穴と掘る身ぶりと撒く身ぶりと長押しの値(
+        self,
+    ) -> None:
+        world, mole = arena((Animal.MOLE, Animal.RABBIT))
+        mole.invulnerable_until = Tick(world.now + 30)
+        mole.effects.add(EffectKind.PITFALL, Tick(90), HOLD_TIME)
+        mole.effects.add(EffectKind.SCATTERING, Tick(60), SCATTER_TIME)
+        mole.action = Dig(cell=mole.position.cell(), remaining=Tick(45))
+        mole.action_held = Tick(20)
+        whole = player_look(world, mole, TrackedMotion())
+        quarter = player_look(world, mole, TrackedMotion(), blend=0.25)
+        assert (whole.invulnerable, quarter.invulnerable) == (31, 31.75)
+        assert (whole.pitfall, quarter.pitfall) == (90, 90.75)
+        assert (whole.digging, quarter.digging) == (45, 45.75)
+        assert (whole.pose.scatter_left, quarter.pose.scatter_left) == (60, 60.75)
+        assert (whole.held, quarter.held) == (20, 19.25)
+
+    def test_無敵が切れたtickでも_描く時刻が切れる前なら点滅を続ける(self) -> None:
+        """無敵は期限で持つので、描く時刻の残りを期限から出す。
+
+        原型は invuln を毎フレーム減らし、0 になるまで点滅させる（L4297・L4764）。
+        切れた tick（tick の残りが 0）を割合 0.25 で描くと、残りは 0.75 tick。
+        """
+        world, rabbit = arena((Animal.RABBIT, Animal.FOX))
+        world.now = Tick(300)
+        rabbit.invulnerable_until = Tick(world.now - 1)
+        whole = player_look(world, rabbit, TrackedMotion())
+        quarter = player_look(world, rabbit, TrackedMotion(), blend=0.25)
+        assert (whole.invulnerable, quarter.invulnerable) == (0, 0.75)
+        assert player_look(world, rabbit, TrackedMotion(), blend=0.0).invulnerable == 1
+        rabbit.invulnerable_until = Tick(world.now - 2)
+        assert player_look(world, rabbit, TrackedMotion(), blend=0.25).invulnerable == 0
+
+    def test_プレイヤーの残りを決めたtickと_かかっていない状態は_そのまま(
+        self,
+    ) -> None:
+        """残りを決めた tick と、かかっていない状態は、描く時刻の値にしない。
+
+        残りを決めた tick は、落とし穴にはまった tick・掘り始めた tick・撒き始めた
+        tick。跳び上がりの残りは、どの tick も tick のまま（docs/11 の「原型に合わせる
+        作業が残っている所」）。
+        """
+        world, mole = arena((Animal.MOLE, Animal.RABBIT))
+        mole.effects.add(EffectKind.PITFALL, HOLD_TIME, HOLD_TIME)
+        mole.effects.add(EffectKind.SCATTERING, SCATTER_TIME, SCATTER_TIME)
+        mole.effects.add(EffectKind.LEAP, Tick(30), Tick(60))
+        mole.action = Dig(cell=mole.position.cell(), remaining=DIG_TIME)
+        quarter = player_look(world, mole, TrackedMotion(), blend=0.25)
+        assert quarter.pitfall == HOLD_TIME
+        assert quarter.pose.scatter_left == SCATTER_TIME
+        assert quarter.digging == DIG_TIME
+        assert quarter.pose.leap_left == 30
+        assert (quarter.invulnerable, quarter.held) == (0, 0)
+
+    def test_撃つ間隔の残りも_描く時刻のもので_外周へ回った直後の長さで止める(
+        self,
+    ) -> None:
+        world, rabbit = arena((Animal.RABBIT, Animal.FOX))
+        shot = Negibon(along=8.5, ready_at=Tick(world.now + 89))
+        assert negibon_look(rabbit, shot, world.now).cooldown == 90
+        assert negibon_look(rabbit, shot, world.now, None, 0.25).cooldown == 90.75
+        entered = Negibon(along=8.5, ready_at=Tick(world.now + LEEK_FIRST_COOLDOWN - 1))
+        cooldown = negibon_look(rabbit, entered, world.now, None, 0.25).cooldown
+        assert cooldown == LEEK_FIRST_COOLDOWN
+        ready = Negibon(along=8.5, ready_at=Tick(world.now - 5))
+        assert negibon_look(rabbit, ready, world.now, None, 0.25).cooldown == 0
+        # 撃てるようになった tick（tick の残りが 0）も、描く時刻が撃てるようになる前なら
+        # 短い帯（期限から出す）。
+        just = Negibon(along=8.5, ready_at=Tick(world.now - 1))
+        assert negibon_look(rabbit, just, world.now).cooldown == 0
+        assert negibon_look(rabbit, just, world.now, None, 0.25).cooldown == 0.75
+
+    def test_舌先までの長さは_1つ前のtickの長さと混ぜる(self) -> None:
+        """原型は舌先までの長さ（prog）を毎フレーム経過時間 × 倍率ずつ伸び縮みさせる。
+
+        1つ前の長さが無い（伸ばし始めた tick）・割合 1 なら、いまの長さ。
+        """
+        look = TongueLook(Direction.RIGHT, 2, False, TONGUE_STEP / 2)
+        assert tongue_reach(look) == 2.5
+        mixed = drawn_tongue(look, 2.25, 0.5)
+        assert tongue_reach(mixed) == 2.375
+        assert (mixed.length, mixed.returning, mixed.direction) == (
+            2,
+            False,
+            Direction.RIGHT,
+        )
+        assert tongue_reach(drawn_tongue(look, None, 0.5)) == 2.5
+        assert tongue_reach(drawn_tongue(look, 2.25, 1.0)) == 2.5
+        world, frog = arena((Animal.FROG, Animal.RABBIT))
+        frog.facing = Direction.RIGHT
+        simulation.step(world, only_for(world, frog.id, PlayerInput.ACTION))
+        for _ in range(5):
+            simulation.step(world, idle(world))
+        current = look_of(world, frog).tongue
+        assert current is not None
+        reach = tongue_reach(current)
+        motion = TrackedMotion(previous_reach=reach - 0.125)
+        blended = player_look(world, frog, motion, blend=0.5).tongue
+        assert blended is not None
+        assert tongue_reach(blended) == pytest.approx(reach - 0.0625)
+        assert player_look(world, frog, TrackedMotion(), blend=0.5).tongue == (
+            look_of(world, frog).tongue
+        )
+
+    def test_爆弾は_割合0のフレームで_1つ前のtickの絵と同じ値になる(self) -> None:
+        """導火線の残りも描く時刻のものにする。
+
+        原型は経過時間（G.elapsed）と導火線の残り（b.timer）を同じ dt で進める
+        （L4287・L4376）。割合 0 の描く時刻は1つ前の tick の時刻なので、脈打ち・
+        赤い光・熱・火花のどれも、1つ前の tick を整数の倍率で描いた値と同じになる。
+        導火線の残りを tick のままにすると、爆発までの進みで決まる脈の周波数が時刻と
+        食い違い、同じにならない。
+        """
+        world, rabbit = arena((Animal.RABBIT, Animal.FOX))
+        world.now = Tick(3600)
+        simulation.step(world, only_for(world, rabbit.id, PlayerInput.BOMB))
+        [bomb] = world.bombs
+        for _ in range(BOMB_FUSE - 2):
+            before = bomb_look(bomb, world.now)
+            simulation.step(world, idle(world))
+            at = drawn_time(world.now, 0.0)
+            assert bomb_look(bomb, at, world.now - at) == before
+            assert bomb_look(bomb, at) != before
+
+    def test_溶けるうんこの溶けた割合は_tickの間の時刻では1つ前のtickの割合(
+        self,
+    ) -> None:
+        """溶けた割合は、溶けきるまでの残りを tick の数に切り上げて出す。
+
+        溶けている間の絵は、溶けた割合ごとに取っておくので、tick の整数の割合だけを
+        使う（`art/items.py` の `item_look`）。切り捨てると、いまの tick の割合になる。
+        """
+        poop = Item(
+            EntityId(7),
+            Cell(3, 3),
+            ItemKind.POOP,
+            expires_at=Tick(400),
+            melting_until=Tick(113),
+        )
+        now = 100
+        assert 113 - now < MELT_TICKS
+        earlier = item_look(poop, now - 1).melt
+        assert item_look(poop, now - 0.5).melt == earlier
+        assert item_look(poop, now - 0.25).melt == earlier
+        assert item_look(poop, now).melt != earlier

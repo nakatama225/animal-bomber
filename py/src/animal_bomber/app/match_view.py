@@ -177,10 +177,10 @@ class MatchView:
             visuals: 見た目だけの値（`SceneTracker`）。
             content: 横の板の中身（`render/match_frame.py` の `panel_content`）。
             now_ms: いまの時刻（ms）。
-            immediate: 横の板を約 4 Hz を待たずに作り直すか。
+            immediate: 横の板を、盤面の時刻の区切り（15 tick）を待たずに作り直すか。
             paused: ポーズ中か（ポーズの幕を重ねる）。
             banner: このフレームに重ねる幕。出さないなら None。
-            blend: プレイヤーを描く位置を1つ前の tick の位置と混ぜる割合
+            blend: 描く値（位置と時刻）を1つ前の tick の値と混ぜる割合
                 （`draw_match_frame`）。
         """
         canvas = self._canvas

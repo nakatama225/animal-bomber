@@ -8,7 +8,6 @@ import math
 from typing import Final
 
 from animal_bomber.domain.abilities.mole import DIG_TIME
-from animal_bomber.domain.core.tick import Tick
 from animal_bomber.presentation.render.art.animals.eye import (
     EyeOptions,
     HeadMode,
@@ -27,16 +26,20 @@ SPRAY_FROM: Final = 0.85
 """掻き出す手の振り（-1〜1）の大きさがこれを超えると、土くれが飛び散る（原型の値）。"""
 
 
-def dig_progress(remaining: Tick) -> float:
+def dig_progress(remaining: float) -> float:
     """掘り終わるまでの進み（0→1。原型の k = 1 − D.t / PIT_DIG）。
 
-    `remaining` は掘り終わるまでの残り（`Dig.remaining`。原型の D.t）。
+    `remaining` は掘り終わるまでの残り（tick。`Dig.remaining`。原型の D.t。ゲーム速度が
+    整数でないときは描く時刻の残りで、小数もとる）。
     """
     return 1 - (seconds(remaining) / PIT_DIG)
 
 
-def dig_swing(now: Tick) -> float:
-    """掻き出す手の振り（-1〜1。原型の sin(G.elapsed × 17)）。"""
+def dig_swing(now: float) -> float:
+    """掻き出す手の振り（-1〜1。原型の sin(G.elapsed × 17)）。
+
+    `now` は描く時刻（盤面の時刻。tick の間の小数もとる）。
+    """
     return math.sin(seconds(now) * 17)
 
 
@@ -107,7 +110,7 @@ def head_mole(
 
 
 def draw_digging(
-    canvas: Canvas, tile: float, x: float, y: float, remaining: Tick, now: Tick
+    canvas: Canvas, tile: float, x: float, y: float, remaining: float, now: float
 ) -> None:
     """落とし穴を掘る身ぶりを描く（原型の drawDigging）。
 

@@ -23,7 +23,6 @@ from typing import Final, assert_never
 from animal_bomber.domain.abilities.elephant import MELT_TICKS
 from animal_bomber.domain.abilities.rabbit import SCATTERED_LIFETIME
 from animal_bomber.domain.core.coord import Cell
-from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.items import POOP_LIFETIME, ItemKind
 from animal_bomber.domain.state.item import Item
 from animal_bomber.presentation.emoji import item_emoji
@@ -77,8 +76,14 @@ class ItemLook:
     """溶けた割合（0〜1。原型の meltK）。0 なら溶けていない。"""
 
 
-def item_look(item: Item, now: Tick) -> ItemLook:
-    """アイテムといまの盤面の時刻から、見た目の値を出す（原型と同じ式）。
+def item_look(item: Item, now: float) -> ItemLook:
+    """アイテムと描く時刻 `now` から、見た目の値を出す（原型と同じ式）。
+
+    `now` は盤面の時刻（tick の間の小数もとる）。溶けた割合だけは、溶けきるまでの
+    残りを tick の数に切り上げて出す
+    （`now` が整数なら同じ値。小数の時刻では1つ前の tick の割合になる）。溶けている間の
+    絵は、溶けた割合を丸めずに tick ごとに取っておく（`baked/items.py` の `quantized`）
+    ので、小数の割合にすると取っておく絵が増え続ける。
 
     Raises:
         ValueError: うんこなのに消える時刻を持っていないとき（ルールの層は、うんこに
@@ -101,7 +106,8 @@ def item_look(item: Item, now: Tick) -> ItemLook:
     # 鼻水で流されてる間は、下へずり落ちながら薄く潰れて消える
     melt = 0.0
     if item.melting_until is not None:
-        melt = 1 - max(0.0, seconds(item.melting_until - now)) / SNOT_MELT
+        left = math.ceil(item.melting_until - now)
+        melt = max(0.0, 1 - max(0.0, seconds(left)) / SNOT_MELT)
         alpha *= 1 - melt * 0.9
     if item.scattered_by is not None:
         tone = ItemTone.SCATTERED
@@ -112,7 +118,7 @@ def item_look(item: Item, now: Tick) -> ItemLook:
     return ItemLook(tone, item_emoji(item.kind), bob, pulse, alpha, melt)
 
 
-def draw_item(canvas: Canvas, layout: Layout, item: Item, now: Tick) -> None:
+def draw_item(canvas: Canvas, layout: Layout, item: Item, now: float) -> None:
     """アイテムを描く（原型の drawItem）。"""
     draw_item_look(canvas, layout, item.cell, item_look(item, now))
 

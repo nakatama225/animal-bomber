@@ -19,11 +19,12 @@
 
 import math
 from collections.abc import Collection, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 import pygame
 
+from animal_bomber.domain.core.coord import Point
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.lane import lane_spot
 from animal_bomber.domain.state.actors import Foxfire, Leek, SlimeBomb
@@ -34,6 +35,7 @@ from animal_bomber.presentation.render.art.foxfires import FoxfireLook, TrailMar
 from animal_bomber.presentation.render.art.frame import FrameScene, draw_frame
 from animal_bomber.presentation.render.art.negibons import LeekLook, NegibonLook
 from animal_bomber.presentation.render.art.particles import ParticleLook
+from animal_bomber.presentation.render.art.player import PlayerLook
 from animal_bomber.presentation.render.baked.art import BakedArt
 from animal_bomber.presentation.render.canvas.surface import SurfaceCanvas
 from animal_bomber.presentation.render.layout import Layout
@@ -90,6 +92,13 @@ class FixedVisuals:
         default_factory=list
     )
     trails: list[tuple[Foxfire, tuple[TrailMark, ...]]] = field(default_factory=list)
+    flowns: list[tuple[SlimeBomb, Tick]] = field(default_factory=list)
+    """粘膜爆弾の、1つ前の tick の終わりの投げてからの tick。
+
+    無いものは None を返す。
+    """
+    leeks: list[tuple[Leek, Point]] = field(default_factory=list)
+    """飛んでいる葱の、1つ前の tick の終わりの位置（無いものは None を返す）。"""
 
     def motion(self, player: PlayerId) -> TrackedMotion:
         return self.motions.get(player, TrackedMotion())
@@ -100,7 +109,19 @@ class FixedVisuals:
                 return origin, hopped
         raise KeyError("場面に無い粘膜爆弾")
 
-    def trail(self, actor: Foxfire, now: Tick) -> tuple[TrailMark, ...]:
+    def flown_before(self, actor: SlimeBomb) -> Tick | None:
+        for slime, flown in self.flowns:
+            if slime is actor:
+                return flown
+        return None
+
+    def leek_before(self, actor: Leek) -> Point | None:
+        for leek, position in self.leeks:
+            if leek is actor:
+                return position
+        return None
+
+    def trail(self, actor: Foxfire, now: float) -> tuple[TrailMark, ...]:
         for fire, marks in self.trails:
             if fire is actor:
                 return marks
@@ -125,12 +146,15 @@ def frame_scene(
     world: WorldState,
     visuals: FixedVisuals,
     cpu_players: Collection[PlayerId] = (),
+    now: float | None = None,
 ) -> FrameScene:
     """盤面と見た目だけの値から、手本の `draw_frame` に渡す1枚の絵の中身を作る。
 
     外周の鍋と飛んでいる葱の位置は、整数の px に丸める（`snapped`）。`cpu_players` は
     CPU が操作しているプレイヤー（とくぎの長押しのゲージを描かない。`Renderer` と
-    同じ番号を渡す）。
+    同じ番号を渡す）。`now` は描く時刻（省くと盤面の時刻。`Renderer` に割合を渡して
+    描いた絵と、tick の間の時刻で比べるときに渡す）。描く時刻が盤面の時刻より前なら、
+    爆弾の導火線・プレイヤーの残りの数・撃つ間隔の残りにその差を足す（`left_at`）。
 
     鍋と葱の絵の入力は、`Renderer` が使う `views/` の関数（`negibon_look`・
     `leek_look`）を通さずに、外周の位置の式（`lane_spot`）と葱の状態の項目から直に作る。
@@ -141,9 +165,14 @@ def frame_scene(
     外周の位置を negiPos に通した位置と向き（L5416-5417・L5437）、葱の位置と飛ぶ向き
     （L5446）で描く。撃つ間隔の残り（`lane_cooldown_left`）は `test_views.py` が見る。
     """
+    at = world.now if now is None else now
+    behind = world.now - at
     players = [
-        player_look(
-            world, player, visuals.motion(player.id), cpu=player.id in cpu_players
+        left_at(
+            player_look(
+                world, player, visuals.motion(player.id), cpu=player.id in cpu_players
+            ),
+            behind,
         )
         for player in world.players
         if is_alive(player)
@@ -153,7 +182,9 @@ def frame_scene(
         if isinstance(player.life, Negibon):
             spot = lane_spot(player.life.along)
             x, y = snapped(layout, spot.position.x, spot.position.y)
-            cooldown = lane_cooldown_left(player.life, world.now)
+            cooldown: float = lane_cooldown_left(player.life, world.now)
+            if cooldown > 0:
+                cooldown += behind
             negibons.append(NegibonLook(player.animal, x, y, spot.facing, cooldown))
     leeks = []
     for actor in world.actors:
@@ -161,7 +192,7 @@ def frame_scene(
             x, y = snapped(layout, actor.position.x, actor.position.y)
             leeks.append(LeekLook(x, y, actor.facing))
     foxfires = [
-        FoxfireLook(actor.cell, visuals.trail(actor, world.now))
+        FoxfireLook(actor.cell, visuals.trail(actor, at))
         for actor in world.actors
         if isinstance(actor, Foxfire)
     ]
@@ -176,13 +207,39 @@ def frame_scene(
         bombs=world.bombs,
         blasts=world.blasts,
         players=players,
-        now=world.now,
+        now=at,
         foxfires=foxfires,
         slimes=slimes,
         negibons=negibons,
         leeks=leeks,
         particles=visuals.particles,
         shake=visuals.shake,
+        behind=behind,
+    )
+
+
+def left_at(look: PlayerLook, behind: float) -> PlayerLook:
+    """描く時刻が盤面の時刻より `behind` tick 前のときの、残りの数と長押しの長さ。
+
+    `Renderer` が使う `views/player.py` の `drawn_left`・`drawn_held` を通さずに、残り
+    （かかっているものだけ）に足し、長押しから引く。場面は、残りを決めた tick を含まない
+    （決めた tick の扱いは `test_views.py` が見る）。
+    """
+    if behind == 0:
+        return look
+
+    def plus(left: float) -> float:
+        return left + behind if left > 0 else left
+
+    digging = None if look.digging is None else plus(look.digging)
+    pose = replace(look.pose, scatter_left=plus(look.pose.scatter_left))
+    return replace(
+        look,
+        pose=pose,
+        invulnerable=plus(look.invulnerable),
+        pitfall=plus(look.pitfall),
+        digging=digging,
+        held=look.held - behind if look.held > 0 else look.held,
     )
 
 
@@ -198,12 +255,16 @@ def renderer_image(
     visuals: FixedVisuals,
     randoms: Sequence[float],
     cpu_players: Collection[PlayerId] = (),
+    blend: float = 1.0,
 ) -> tuple[Image, list[float]]:
-    """取っておいた絵を貼って描いた絵と、引いた見た目の乱数。"""
+    """取っておいた絵を貼って描いた絵と、引いた見た目の乱数。
+
+    `blend` は描く値を1つ前の tick と混ぜる割合（`Renderer.draw`）。
+    """
     scripted = ScriptedRandom(list(randoms))
     renderer = Renderer(art, CosmeticRng(scripted), cpu_players=cpu_players)
     target = pygame.Surface(art.layout.surface_size)
-    renderer.draw(target, world, visuals)
+    renderer.draw(target, world, visuals, blend)
     return rgb(target), scripted.used
 
 
@@ -213,12 +274,16 @@ def direct_image(
     visuals: FixedVisuals,
     randoms: Sequence[float],
     cpu_players: Collection[PlayerId] = (),
+    now: float | None = None,
 ) -> tuple[Image, list[float]]:
-    """手本の `draw_frame` で、描く面の全体を取っておかずに描いた絵と、引いた乱数。"""
+    """手本の `draw_frame` で、描く面の全体を取っておかずに描いた絵と、引いた乱数。
+
+    `now` は描く時刻（`frame_scene`）。
+    """
     scripted = ScriptedRandom(list(randoms))
     width, height = layout.surface_size
     canvas = SurfaceCanvas(width, height)
-    scene = frame_scene(layout, world, visuals, cpu_players)
+    scene = frame_scene(layout, world, visuals, cpu_players, now)
     draw_frame(canvas, layout, scene, CosmeticRng(scripted))
     target = pygame.Surface((width, height))
     target.blit(canvas.to_surface(), (0, 0))

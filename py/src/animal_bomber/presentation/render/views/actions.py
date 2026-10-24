@@ -1,11 +1,18 @@
 """プレイヤーを乗っ取る振る舞いの状態から、その絵の入力を作る（舌）。
 
-掘る身ぶりは、掘り終わるまでの残り（`Dig.remaining`）をそのまま渡す（原型の D.t に
-あたる。`render/art/animals/mole.py` の `dig_progress`）。
+掘る身ぶりは、掘り終わるまでの残り（`Dig.remaining`）を渡す（原型の D.t にあたる。
+`render/art/animals/mole.py` の `dig_progress`。ゲーム速度が整数でないときは、描く
+時刻の残りにする。`views/player.py` の `drawn_left`）。
 """
 
+from dataclasses import replace
+
 from animal_bomber.domain.state.actions import Tongue
-from animal_bomber.presentation.render.art.animals.frog import TONGUE_STEP, TongueLook
+from animal_bomber.presentation.render.art.animals.frog import (
+    TONGUE_STEP,
+    TongueLook,
+    tongue_reach,
+)
 from animal_bomber.presentation.render.art.timing import seconds
 
 
@@ -32,3 +39,18 @@ def tongue_look(tongue: Tongue) -> TongueLook:
         since_step=since,
         caught=tongue.caught,
     )
+
+
+def drawn_tongue(look: TongueLook, previous: float | None, blend: float) -> TongueLook:
+    """描く舌（舌先までの長さを、1つ前の tick の長さ `previous` と割合で混ぜる）。
+
+    原型は舌先までの長さ（prog）を毎フレーム経過時間 × 倍率ずつ伸び縮みさせるので、
+    0.5 倍でも毎フレーム動く。長さは、1マス動く所をまたいでも続けて変わるので、混ぜる
+    のは長さだけでよい（伸びる・戻るが替わる tick だけは、山の頂上を結んだ直線になる）。
+    1つ前の長さが無い（伸ばし始めた tick と、数え始める前）・割合が 1 以上なら、いまの
+    舌のまま。
+    """
+    if previous is None or blend >= 1.0:
+        return look
+    reach = tongue_reach(look)
+    return replace(look, reach=previous + (reach - previous) * blend)

@@ -8,11 +8,11 @@ import random
 from dataclasses import dataclass
 from typing import Literal
 
-from animal_bomber.domain.core.coord import Cell
+from animal_bomber.domain.core.coord import Cell, Point
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.tuning import COLS, ROWS
-from animal_bomber.domain.state.actors import Foxfire, SlimeBomb
+from animal_bomber.domain.state.actors import Foxfire, Leek, SlimeBomb
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.presentation.render.art.foxfires import TrailMark
 from animal_bomber.presentation.render.art.particles import ParticleLook
@@ -119,7 +119,14 @@ class BenchVisuals:
     def slime(self, actor: SlimeBomb) -> tuple[tuple[float, float], bool]:
         return self._slime_origin, True
 
-    def trail(self, actor: Foxfire, now: Tick) -> tuple[TrailMark, ...]:
+    def flown_before(self, actor: SlimeBomb) -> Tick | None:
+        # 場面は試合を進めない（混ぜる割合も既定の 1 のまま描く）。
+        return None
+
+    def leek_before(self, actor: Leek) -> Point | None:
+        return None
+
+    def trail(self, actor: Foxfire, now: float) -> tuple[TrailMark, ...]:
         return self._trail
 
     def advance(self, frame: int, fire: Foxfire, cells: list[Cell]) -> None:

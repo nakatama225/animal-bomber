@@ -24,7 +24,6 @@ from typing import Final
 
 import pygame
 
-from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng
 from animal_bomber.presentation.render.art.player import (
@@ -90,7 +89,7 @@ class PlayerSprites:
         self,
         target: pygame.Surface,
         look: PlayerLook,
-        now: Tick,
+        now: float,
         rng: CosmeticRng,
         offset: tuple[int, int] = (0, 0),
         start: float = 1.0,

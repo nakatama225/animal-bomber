@@ -12,13 +12,21 @@
 
 盤面が別の実体に替わったら（`GameSession` が次のラウンドの盤面を作った）、粒子・揺れ・
 歩いた距離などを全部捨てる（原型の startRound も粒子と揺れを捨て、walk を 0 に戻す）。
+
+## 1つ前の tick の値
+
+ゲーム速度が整数でないときに描く値を混ぜるため、最後に数えた tick の1つ前の tick の
+終わりの値を読めるようにする（プレイヤーの位置・外周の位置・歩いた距離・舌先までの
+長さは `motion`、葱は `leek_before`、粘膜爆弾は `flown_before`、粒子は `particles` の
+`ParticleLook.previous`）。盤面が止まっている間は変わらない。
 """
 
 from collections.abc import Sequence
 
+from animal_bomber.domain.core.coord import Point
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import SimEvent
-from animal_bomber.domain.state.actors import Foxfire, SlimeBomb
+from animal_bomber.domain.state.actors import Foxfire, Leek, SlimeBomb
 from animal_bomber.domain.state.player import PlayerId
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng
@@ -45,6 +53,11 @@ class SceneTracker:
         self._motions = MotionTracker()
         self._actors = ActorTracker()
         self._before: Snapshot | None = None
+        self._previous: Snapshot | None = None
+        """最後に数えた tick の1つ前の tick の終わりの控え。
+
+        描く値を混ぜるのに使う。
+        """
         self._world: WorldState | None = None
 
     def observe(self, world: WorldState, events: Sequence[SimEvent]) -> None:
@@ -67,6 +80,7 @@ class SceneTracker:
                 cell, FOXFIRE_SMOKE, "\N{DASH SYMBOL}", self._rng
             )
         self._effects.advance()
+        self._previous = before
         self._before = snapshot_of(world)
 
     def _forget(self, world: WorldState) -> None:
@@ -76,6 +90,7 @@ class SceneTracker:
         self._motions.reset()
         self._actors.reset()
         self._before = None
+        self._previous = None
 
     # ------------------------------------------------------------ 描く側が読む値
 
@@ -86,15 +101,16 @@ class SceneTracker:
 
     @property
     def particles(self) -> list[ParticleLook]:
-        """粒子（出た順。描く順）。"""
-        return [particle.look() for particle in self._effects.particles]
+        """粒子（出た順。描く順。1つ前の tick の終わりの値つき）。"""
+        return self._effects.looks()
 
     def motion(self, player: PlayerId) -> TrackedMotion:
-        """プレイヤーの動きの値（歩いた距離・最後に動いた時刻・被弾の揺れ・1つ前の位置）。
+        """プレイヤーの動きの値（歩いた距離・最後に動いた時刻・被弾の揺れ・1つ前の値）。
 
-        1つ前の位置は、最後に数えた tick の1つ前の tick の終わりの位置（ゲーム速度が
-        整数でないときに、描く位置を混ぜるのに使う。`scene/motion.py`）。盤面が止まって
-        いる間（決着のあとの待ち・ポーズで進めない間）は変わらない。
+        1つ前の値（盤面の位置・外周の位置・歩いた距離・舌先までの長さ）は、最後に
+        数えた tick の1つ前の tick の終わりの値（ゲーム速度が整数でないときに、描く値を
+        混ぜるのに使う。`scene/motion.py`）。盤面が止まっている間（決着のあとの待ち・
+        ポーズで進めない間）は変わらない。
         """
         return self._motions.motion(player)
 
@@ -102,6 +118,24 @@ class SceneTracker:
         """粘膜爆弾を投げた位置（マス）と、着地してから跳ねたか。"""
         return self._actors.slime(actor)
 
-    def trail(self, actor: Foxfire, now: Tick) -> tuple[TrailMark, ...]:
-        """炎の通った跡。濃さは盤面の時刻 `now` のもの。"""
+    def flown_before(self, actor: SlimeBomb) -> Tick | None:
+        """粘膜爆弾の、1つ前の tick の終わりの投げてからの tick。
+
+        投げた tick（1つ前の tick に無かった）と、数え始める前は None（描く側が状態から
+        出す。`views/actors.py` の `drawn_flown`）。
+        """
+        seen = None if self._previous is None else self._previous.actor(actor)
+        return None if seen is None else seen.flown
+
+    def leek_before(self, actor: Leek) -> Point | None:
+        """飛んでいる葱の、1つ前の tick の終わりの位置。
+
+        撃った tick と、数え始める前は None（描く側が状態から出す。`views/actors.py` の
+        `leek_look`）。
+        """
+        seen = None if self._previous is None else self._previous.actor(actor)
+        return None if seen is None else seen.position
+
+    def trail(self, actor: Foxfire, now: float) -> tuple[TrailMark, ...]:
+        """炎の通った跡。濃さは描く時刻 `now` のもの（`scene/actors.py`）。"""
         return self._actors.trail(actor, now)

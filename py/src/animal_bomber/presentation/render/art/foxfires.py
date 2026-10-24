@@ -12,7 +12,6 @@ import math
 from dataclasses import dataclass
 
 from animal_bomber.domain.core.coord import Cell
-from animal_bomber.domain.core.tick import Tick
 from animal_bomber.presentation.render.art.timing import FULL_TURN, seconds
 from animal_bomber.presentation.render.canvas.protocol import Canvas
 from animal_bomber.presentation.render.layout import Layout
@@ -40,23 +39,24 @@ class FoxfireLook:
     """
 
 
-def flame_flicker(now: Tick) -> float:
+def flame_flicker(now: float) -> float:
     """火の玉の大きさの揺れ（0.7〜1.0）。
 
-    原型の fl = 0.85 ＋ 0.15 sin(G.elapsed × 22)。
+    原型の fl = 0.85 ＋ 0.15 sin(G.elapsed × 22)。`now` は描く時刻（盤面の時刻。
+    tick の間の小数もとる）。
     """
     return 0.85 + 0.15 * math.sin(seconds(now) * 22)
 
 
-def core_width(tile: float, now: Tick) -> float:
+def core_width(tile: float, now: float) -> float:
     """ゆらぐ芯の太さの目安（px）。
 
-    原型の w = マス ×（0.1 ＋ 0.05 sin(G.elapsed × 30)）。
+    原型の w = マス ×（0.1 ＋ 0.05 sin(G.elapsed × 30)）。`now` は描く時刻。
     """
     return tile * (0.1 + 0.05 * math.sin(seconds(now) * 30))
 
 
-def draw_foxfire(canvas: Canvas, layout: Layout, look: FoxfireLook, now: Tick) -> None:
+def draw_foxfire(canvas: Canvas, layout: Layout, look: FoxfireLook, now: float) -> None:
     """追いかける炎を1つ描く（原型の drawFoxfires の繰り返しの中身）。"""
     # 通った跡（ニョキっと伸びた胴体）
     for mark in look.trail:

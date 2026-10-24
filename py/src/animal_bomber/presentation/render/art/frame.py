@@ -17,7 +17,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.state.board import Board
 from animal_bomber.domain.state.bomb import Blast, Bomb
 from animal_bomber.domain.state.item import Item
@@ -57,7 +56,8 @@ class FrameScene:
     bombs: Sequence[Bomb]
     blasts: Sequence[Blast]
     players: Sequence[PlayerLook]
-    now: Tick
+    now: float
+    """描く時刻（盤面の時刻。ゲーム速度が整数でないときは tick の間の小数）。"""
     foxfires: Sequence[FoxfireLook] = ()
     slimes: Sequence[SlimeLook] = ()
     negibons: Sequence[NegibonLook] = ()
@@ -67,6 +67,12 @@ class FrameScene:
     particles: Sequence[ParticleLook] = ()
     shake: float = 0.0
     """画面の揺れの幅（px。原型の shakeAmt）。"""
+    behind: float = 0.0
+    """描く時刻 `now` が盤面の時刻より何 tick 前か（爆弾の導火線の残りに足す）。
+
+    ゲーム速度が整数でないときの `world.now − now`。整数の倍率では 0
+    （`art/bombs.py` の `bomb_look`）。
+    """
 
 
 def shake_offset(shake: float, rng: CosmeticRng) -> tuple[float, float] | None:
@@ -100,7 +106,7 @@ def draw_frame(
     for item in scene.items:
         draw_item(canvas, layout, item, scene.now)
     for bomb in scene.bombs:
-        draw_bomb(canvas, layout, bomb, scene.now)
+        draw_bomb(canvas, layout, bomb, scene.now, scene.behind)
     for blast in scene.blasts:
         draw_blast(canvas, layout, blast, rng)
     # プレイヤーは上にいる順（手前のプレイヤーが後ろのプレイヤーに重なる）。同じ高さ

@@ -14,7 +14,6 @@ from dataclasses import dataclass
 from typing import Final
 
 from animal_bomber.domain.core.coord import Cell
-from animal_bomber.domain.core.tick import Tick
 from animal_bomber.presentation.render.art.timing import FULL_TURN, seconds
 from animal_bomber.presentation.render.canvas.protocol import Canvas
 from animal_bomber.presentation.render.layout import Layout
@@ -100,8 +99,11 @@ def slime_size(tile: float, squash: float) -> tuple[float, float]:
     return tile * 0.42 / squash, tile * 0.36 * squash
 
 
-def warning_alpha(now: Tick) -> float:
-    """赤い輪の点滅の不透明度（原型の 0.45 ＋ 0.45 × |sin(G.elapsed × 14)|）。"""
+def warning_alpha(now: float) -> float:
+    """赤い輪の点滅の不透明度（原型の 0.45 ＋ 0.45 × |sin(G.elapsed × 14)|）。
+
+    `now` は描く時刻（盤面の時刻。tick の間の小数もとる）。
+    """
     return 0.45 + 0.45 * abs(math.sin(seconds(now) * 14))
 
 
@@ -110,7 +112,7 @@ def warns(look: SlimeLook) -> bool:
     return not look.flying and look.hops_left <= WARN_HOPS
 
 
-def draw_slime(canvas: Canvas, layout: Layout, look: SlimeLook, now: Tick) -> None:
+def draw_slime(canvas: Canvas, layout: Layout, look: SlimeLook, now: float) -> None:
     """粘膜爆弾を1つ描く（原型の drawSlimes の繰り返しの中身）。"""
     tile = layout.tile
     shape = slime_shape(look, tile)

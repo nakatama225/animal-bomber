@@ -24,7 +24,6 @@ from typing import Final
 import pygame
 
 from animal_bomber.domain.core.coord import Direction
-from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.presentation.render.art.animals.body import (
     BodyMotion,
@@ -117,7 +116,7 @@ class BodySprites:
         self,
         target: pygame.Surface,
         pose: BodyPose,
-        now: Tick,
+        now: float,
         x: float,
         y: float,
         alpha: float = 1.0,
@@ -134,7 +133,7 @@ class BodySprites:
         self,
         target: pygame.Surface,
         pose: BodyPose,
-        now: Tick,
+        now: float,
         x: float,
         y: float,
         alpha: float = 1.0,

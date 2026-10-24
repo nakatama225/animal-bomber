@@ -19,7 +19,6 @@ import pygame
 
 from animal_bomber.domain.abilities.elephant import MELT_TICKS
 from animal_bomber.domain.core.coord import Cell
-from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.state.item import Item
 from animal_bomber.presentation.emoji import item_emoji
@@ -101,7 +100,7 @@ class ItemSprites:
         self,
         target: pygame.Surface,
         item: Item,
-        now: Tick,
+        now: float,
         offset: tuple[int, int] = (0, 0),
     ) -> None:
         """アイテムを `target` に貼る（`offset` は画面の揺れなどで全体をずらす px）。"""

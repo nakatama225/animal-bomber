@@ -8,17 +8,30 @@
   いちばん大きいマス（60）の両方で見る
 """
 
+import math
+
 import numpy as np
 import pygame
 import pytest
 
+from animal_bomber.domain.abilities.elephant import MELT_TICKS
+from animal_bomber.domain.abilities.frog import SLIME_FLY_TICKS
+from animal_bomber.domain.abilities.mole import DIG_TIME, HOLD_TIME
+from animal_bomber.domain.abilities.rabbit import SCATTER_TIME
 from animal_bomber.domain.core.coord import Cell, Direction
+from animal_bomber.domain.core.entity_id import EntityId
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.items import ItemKind
 from animal_bomber.domain.rules.lane import lane_spot
-from animal_bomber.domain.rules.tuning import LEEK_FIRST_COOLDOWN
+from animal_bomber.domain.rules.tuning import (
+    BOMB_FUSE,
+    INVULNERABLE,
+    LEEK_FIRST_COOLDOWN,
+)
 from animal_bomber.domain.state.actors import SlimeBomb
+from animal_bomber.domain.state.bomb import Bomb
+from animal_bomber.domain.state.item import Item
 from animal_bomber.presentation.animal_text import special_emoji
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng
 from animal_bomber.presentation.render.art.animals.body import BodyMotion, BodyPose
@@ -28,7 +41,7 @@ from animal_bomber.presentation.render.art.negibons import LeekLook, NegibonLook
 from animal_bomber.presentation.render.art.player import PlayerLook
 from animal_bomber.presentation.render.baked.art import BakedArt
 from animal_bomber.presentation.render.layout import Layout
-from animal_bomber.presentation.render.views.actors import slime_look
+from animal_bomber.presentation.render.views.actors import drawn_flown, slime_look
 
 
 def test_先に描いておけば_試合でよく出る姿と技は描き直さない() -> None:
@@ -91,6 +104,121 @@ def test_先に描いておけば_試合でよく出る姿と技は描き直さ�
             art.negibons.draw(surface, lane)
     for facing in Direction:
         art.negibons.draw_leek(surface, LeekLook(5.3, 6.7, facing))
+    assert art.cache.renders == before
+
+
+def test_tickの間の描く時刻と混ぜた飛ぶ間で描いても_先に描いた絵で足りる() -> None:
+    """ゲーム速度が整数でないときは、描く時刻が 1/4 tick 刻みの小数になる。
+
+    時刻で決まる絵（爆弾・アイテム・点滅するうんこ・溶けるうんこ・体・掘る身ぶり・
+    炎・粘膜爆弾の赤い輪）は段に丸めた位相ごとに取っておくので、絵の数は増えない。
+    溶けるうんこの溶けた割合は、残りを tick に切り上げて出す（`art/items.py` の
+    `item_look`）。粘膜爆弾の飛ぶ間は、1つ前の tick と混ぜた 1/4 tick 刻みの形も先に
+    描いておく（`views/actors.py` の `drawn_flown`）。
+    """
+    layout = Layout(26)
+    art = BakedArt(layout)
+    art.prebuild(list(Animal))
+    before = art.cache.renders
+    surface = pygame.Surface(layout.surface_size)
+    rng = CosmeticRng()
+    for quarter in range(1, 240 * 4, 3):
+        now = quarter / 4
+        tick = Tick(math.floor(now))
+        for animal in Animal:
+            for facing in Direction:
+                pose = BodyPose(animal, facing, now * 0.075, tick)
+                art.players.draw(surface, PlayerLook(pose, 3.5, 5.5), now, rng)
+        art.digs.draw(surface, 100.3, 100.7, Tick(45), now)
+        trail = (TrailMark(Cell(5, 5), 0.5),)
+        art.foxfires.draw(surface, FoxfireLook(Cell(7, 5), trail), now)
+        for index, kind in enumerate(ItemKind):
+            expires = Tick(tick + 60) if kind is ItemKind.POOP else None
+            item = Item(EntityId(index), Cell(1 + index, 3), kind, expires_at=expires)
+            art.items.draw(surface, item, now)
+        melting = Item(
+            EntityId(99),
+            Cell(9, 3),
+            ItemKind.POOP,
+            expires_at=Tick(tick + 300),
+            melting_until=Tick(tick + quarter % MELT_TICKS),
+        )
+        art.items.draw(surface, melting, now)
+        for fuse in (BOMB_FUSE, BOMB_FUSE // 2, 5):
+            art.bombs.draw(
+                surface, Bomb(EntityId(50), Cell(5, 9), 0, 2, Tick(fuse)), now
+            )
+        landed = SlimeBomb(
+            Cell(5, 5), 0, 2, flown=Tick(21), timer=Tick(10), interval=Tick(20)
+        )
+        art.slimes.draw(surface, slime_look(landed, (0, 0), True), now)
+    for previous in range(SLIME_FLY_TICKS):
+        for blend in (0.25, 0.5, 0.75):
+            flown = drawn_flown(Tick(previous + 1), Tick(previous), blend)
+            slime = SlimeBomb(Cell(5, 5), 0, 2, flown=Tick(previous + 1))
+            look = slime_look(slime, (3.5, 5.5), False, flown)
+            art.slimes.draw(surface, look, previous + blend)
+    assert art.cache.renders == before
+
+
+QUARTERS = (0.25, 0.5, 0.75)
+"""ゲーム速度が整数でないときに、残りの数に足す・長押しから引く端数（`1 − 割合`）。"""
+
+
+def test_描く時刻の残りの数で描いても_整数の残りで描く絵で足りる() -> None:
+    """ゲーム速度が整数でないときは、残りの数が 1/4 tick 刻みの小数になる。
+
+    爆弾の導火線・無敵・落とし穴と掘る身ぶりのゲージ・長押し・撒く身ぶり・撃つ間隔
+    （`views/player.py` の `drawn_left`・`drawn_held`）。どれも段に丸めて取っておくか、
+    絵に関わらない（無敵は薄くするかどうかだけ）ので、整数の残りで描く絵のほかに描く
+    絵は無い。撒く身ぶりの体は先に描いておかない（試合で初めて要ったときに描く）ので、
+    整数の残りでひととおり描いてから数える。
+    """
+    layout = Layout(26)
+    art = BakedArt(layout)
+    art.prebuild(list(Animal))
+    surface = pygame.Surface(layout.surface_size)
+    rng = CosmeticRng()
+    now = 100.0
+
+    def scattering(left: float, facing: Direction) -> PlayerLook:
+        pose = BodyPose(Animal.RABBIT, facing, 0.0, None, scatter_left=left)
+        return PlayerLook(pose, 3.5, 5.5)
+
+    for left in range(1, SCATTER_TIME + 1):
+        for facing in Direction:
+            art.players.draw(surface, scattering(left, facing), now, rng)
+    before = art.cache.renders
+    for part in QUARTERS:
+        for left in range(SCATTER_TIME):
+            for facing in Direction:
+                art.players.draw(surface, scattering(left + part, facing), now, rng)
+        for fuse in range(1, BOMB_FUSE):
+            bomb = Bomb(EntityId(50), Cell(5, 9), 0, 2, Tick(fuse))
+            art.bombs.draw(surface, bomb, now, (0, 0), part)
+        for animal in Animal:
+            walking = BodyPose(animal, Direction.DOWN, 1.3, Tick(100))
+            still = BodyPose(animal, Direction.DOWN, 0.0, None)
+            for left in range(INVULNERABLE + 1):
+                look = PlayerLook(walking, 3.5, 5.5, invulnerable=left + part)
+                art.players.draw(surface, look, now, rng)
+            for held in range(1, 31):
+                look = PlayerLook(
+                    walking, 3.5, 5.5, special=True, held=held - part, fired=False
+                )
+                art.players.draw(surface, look, now, rng)
+            if animal is not Animal.MOLE:
+                for left in range(HOLD_TIME):
+                    look = PlayerLook(still, 3.5, 5.5, pitfall=left + part)
+                    art.players.draw(surface, look, now, rng)
+        for left in range(DIG_TIME):
+            art.digs.draw(surface, 100.3, 100.7, left + part, now)
+        for left in range(LEEK_FIRST_COOLDOWN):
+            spot = lane_spot(left * 0.37)
+            lane = NegibonLook(
+                Animal.FROG, spot.position.x, spot.position.y, spot.facing, left + part
+            )
+            art.negibons.draw(surface, lane)
     assert art.cache.renders == before
 
 

@@ -19,7 +19,6 @@ from dataclasses import dataclass
 from typing import Final
 
 from animal_bomber.domain.core.coord import Direction
-from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.domain.rules.tuning import LEEK_COOLDOWN
 from animal_bomber.presentation.animal_text import animal_emoji
@@ -56,10 +55,11 @@ class NegibonLook:
     """鍋の中心の縦の位置（マス）。"""
     facing: Direction
     """撃つ向き（いつも盤面の内側）。"""
-    cooldown: Tick
+    cooldown: float
     """次に撃てるまでの残り（原型の negiCool にあたる tick の数）。0 なら撃てる。
 
-    外周へ回った直後は撃つ間隔より長い（3.5 秒）。
+    外周へ回った直後は撃つ間隔より長い（3.5 秒）。ゲーム速度が整数でないときは、描く
+    時刻の残り（小数。`views/player.py` の `drawn_left`）。
     """
 
 
@@ -75,7 +75,7 @@ class LeekLook:
     """飛ぶ向き。"""
 
 
-def band_ratio(cooldown: Tick) -> float:
+def band_ratio(cooldown: float) -> float:
     """撃つ間隔の帯の長さの割合（原型の negiCool / NEGI_COOL）。
 
     ⚠️ 1 で止めない（TypeScript 版は止める）。原型は止めないので、外周へ回った直後

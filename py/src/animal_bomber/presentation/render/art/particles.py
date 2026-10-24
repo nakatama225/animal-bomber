@@ -32,6 +32,13 @@ class ParticleLook:
     """絵文字（原型の txt）。None なら四角い粒。"""
     spin: bool = False
     """絵文字を回しながら浮かべるか（原型の spin）。"""
+    previous: tuple[float, float, float] | None = None
+    """1つ前の tick の終わりの、位置の横・縦と寿命の残り。
+
+    ゲーム速度が整数でないときに、描く値を混ぜる（`views/particles.py` の
+    `drawn_particle`）。描く関数は読まない。生まれた tick の粒子は、生まれたときの値
+    （`scene/effects.py` の `EffectField.advance`）。None ならいまの値に描く。
+    """
 
 
 def particle_alpha(life: float) -> float:

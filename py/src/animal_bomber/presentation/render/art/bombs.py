@@ -15,7 +15,6 @@ from dataclasses import dataclass
 from typing import Final
 
 from animal_bomber.domain.core.coord import Cell
-from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.rules.tuning import BOMB_FUSE_SECONDS
 from animal_bomber.domain.state.bomb import Bomb
 from animal_bomber.presentation.render.art.timing import FULL_TURN, seconds
@@ -43,8 +42,15 @@ class BombLook:
     """火花の大きさの揺れ（0〜1）。"""
 
 
-def bomb_look(bomb: Bomb, now: Tick) -> BombLook:
-    """爆弾といまの盤面の時刻から、見た目の値を出す（原型と同じ式）。
+def bomb_look(bomb: Bomb, now: float, behind: float = 0.0) -> BombLook:
+    """爆弾と描く時刻 `now`（盤面の時刻。tick の間の小数もとる）から、見た目の値を出す。
+
+    式は原型と同じ。`behind` は、描く時刻が盤面の時刻（`world.now`）より何 tick 前か
+    （ゲーム速度が整数でないときの `world.now − now`。整数の倍率では 0）。導火線の残り
+    （`fuse`）にそのぶんを足して、描く時刻の残りにする。原型は経過時間（G.elapsed）と
+    導火線の残り（b.timer）を同じ dt で進める（L4287・L4376）ので、時刻だけを描く時刻に
+    すると、爆発までの進み（k）で決まる脈の周波数・赤い光・熱が、時刻と食い違う
+    （0.5 倍では、tick をまたぐフレームだけ脈の位相が大きく跳ぶ）。
 
     ⚠️ 脈打ちの位相は、原型と同じくラウンドの経過時間（G.elapsed）に、爆発が近づくほど
     上がる周波数を掛けて作る。TypeScript 版は置いてからの時間に直した（経過時間が長いと
@@ -52,7 +58,7 @@ def bomb_look(bomb: Bomb, now: Tick) -> BombLook:
     原型に合わせる。
     """
     elapsed = seconds(now)
-    k = 1 - (seconds(bomb.fuse) / BOMB_FUSE_SECONDS)  # 0→1
+    k = 1 - (seconds(bomb.fuse + behind) / BOMB_FUSE_SECONDS)  # 0→1
     pulse = 1 + math.sin(elapsed * (9 + k * 26)) * 0.13 * (0.5 + k)
     aura = None
     if k > AURA_FROM:
@@ -64,9 +70,11 @@ def bomb_look(bomb: Bomb, now: Tick) -> BombLook:
     return BombLook(pulse, aura, heat, spark)
 
 
-def draw_bomb(canvas: Canvas, layout: Layout, bomb: Bomb, now: Tick) -> None:
-    """爆弾を描く（原型の drawBomb）。"""
-    draw_bomb_look(canvas, layout, bomb.cell, bomb_look(bomb, now))
+def draw_bomb(
+    canvas: Canvas, layout: Layout, bomb: Bomb, now: float, behind: float = 0.0
+) -> None:
+    """爆弾を描く（原型の drawBomb）。`behind` は `bomb_look` の説明。"""
+    draw_bomb_look(canvas, layout, bomb.cell, bomb_look(bomb, now, behind))
 
 
 def draw_bomb_look(canvas: Canvas, layout: Layout, cell: Cell, look: BombLook) -> None:

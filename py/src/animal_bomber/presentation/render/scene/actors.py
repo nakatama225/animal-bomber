@@ -98,12 +98,17 @@ class ActorTracker:
                 return slime.origin, slime.hopped
         return (actor.cell.col + 0.5, actor.cell.row + 0.5), False
 
-    def trail(self, actor: Foxfire, now: Tick) -> tuple[TrailMark, ...]:
-        """炎の通った跡（古いものから）。濃さは盤面の時刻 `now` のもの。"""
+    def trail(self, actor: Foxfire, now: float) -> tuple[TrailMark, ...]:
+        """炎の通った跡（古いものから）。濃さは描く時刻 `now` のもの。
+
+        描く時刻は、ゲーム速度が整数でないとき tick の間の小数で、跡を足した tick より
+        前になりうる（`views/player.py` の `drawn_time`）。そのときは足したときの濃さ
+        1 で止める（炎はマス単位で動き、混ぜずにいまのマスに描くので、跡も出したまま）。
+        """
         for trail in self._trails:
             if trail.actor is actor:
                 return tuple(
-                    TrailMark(mark.cell, 1 - (now - mark.born) / TRAIL_TICKS)
+                    TrailMark(mark.cell, min(1.0, 1 - (now - mark.born) / TRAIL_TICKS))
                     for mark in trail.marks
                 )
         return ()
@@ -142,7 +147,8 @@ class ActorTracker:
                     pass
                 case Leek():
                     # 数える値は無い。葱の絵は位置と飛ぶ向きだけで描け、どちらも試合の
-                    # 状態にある（原型の葱も、見た目だけの値を持たない）。
+                    # 状態にある（原型の葱も、見た目だけの値を持たない）。描く位置を
+                    # 混ぜる1つ前の位置は、控え（`snapshot.py`）から読む。
                     pass
                 case _:
                     assert_never(actor)

@@ -53,8 +53,12 @@ class BodyPose:
     """歩いた距離の合計（マス。原型の walk）。脚の振りの位相に使う。"""
     last_moved_at: Tick | None
     """最後に動いた盤面の時刻（原型の lastMoveAt）。動いていなければ None。"""
-    scatter_left: Tick = Tick(0)
-    """うんこを撒いている身ぶりの残り（`EffectKind.SCATTERING`。原型の poro）。"""
+    scatter_left: float = 0.0
+    """うんこを撒いている身ぶりの残り（tick。`EffectKind.SCATTERING`。原型の poro）。
+
+    ゲーム速度が整数でないときは、描く時刻の残り（小数。`views/player.py` の
+    `drawn_left`）。
+    """
     leap_left: Tick = Tick(0)
     """跳び上がっている残り（`EffectKind.LEAP`。原型の effects.foxLeap）。"""
 
@@ -71,8 +75,13 @@ class BodyMotion:
     """跳び上がりの進み（0→1）。跳んでいなければ None。"""
 
 
-def body_motion(pose: BodyPose, now: Tick) -> BodyMotion:
-    """入力といまの盤面の時刻から、動きの値を出す（原型と同じ式）。"""
+def body_motion(pose: BodyPose, now: float) -> BodyMotion:
+    """入力と描く時刻 `now`（盤面の時刻。tick の間の小数もとる）から、動きの値を出す。
+
+    式は原型と同じ。時刻で決まるのは、止まっているかの見分けと撒く身ぶりの震え。
+    脚の振りの位相は歩いた距離で決まる（ゲーム速度が整数でないときは、描く側が
+    歩いた距離を1つ前の tick と混ぜて渡す。`views/player.py` の `player_look`）。
+    """
     elapsed = seconds(now)
     # 歩行位相。止まってる間は脚を動かさない。
     # ⚠️ 原型は `p.lastMoveAt||-9` と書くので、時刻 0 に動いたことは「動いていない」に
@@ -93,7 +102,7 @@ def body_motion(pose: BodyPose, now: Tick) -> BodyMotion:
     return BodyMotion(swing, scatter, leap)
 
 
-def draw_animal_body(canvas: Canvas, tile: float, pose: BodyPose, now: Tick) -> None:
+def draw_animal_body(canvas: Canvas, tile: float, pose: BodyPose, now: float) -> None:
     """体を描く（原型の drawAnimalBody）。"""
     draw_body_motion(canvas, tile, pose.animal, pose.facing, body_motion(pose, now))
 

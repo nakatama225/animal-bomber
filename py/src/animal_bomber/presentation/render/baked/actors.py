@@ -3,8 +3,10 @@
 ## 粘膜爆弾
 
 形（縦の伸び縮みの倍率と浮いている高さ）は、投げてからの tick（飛んでいる間）か、着地・
-跳ねてからの tick（着地したあと）と、跳ねたかどうかだけで決まる。どちらも tick の整数
-なので、とりうる形は 70 ほどしかない。形ごとに1枚ずつ取っておく（丸めない）。影と体は
+跳ねてからの tick（着地したあと）と、跳ねたかどうかだけで決まる。着地したあとは tick の
+整数、飛んでいる間は 1/4 tick 刻み（ゲーム速度が整数でないときに、1つ前の tick と混ぜた
+値。`views/actors.py` の `drawn_flown`）なので、とりうる形は 130 ほどしかない。形ごとに
+1枚ずつ取っておく（丸めない）。影と体は
 1枚にまとめ、影の中心（地面の位置）を原点にして描く。地面の位置は、飛んでいる間は投げた
 位置から着地するマスへ続けて動くので、整数の px に丸めて貼る（ずれは 0.5px まで）。
 残り回数が少ないときの赤い輪は、塗る命令1つなので、薄めた写しを貼る。
@@ -24,6 +26,7 @@ from animal_bomber.domain.abilities.frog import HOP_INTERVAL_MAX, SLIME_FLY_TICK
 from animal_bomber.domain.core.coord import Cell
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.state.actors import SlimeBomb
+from animal_bomber.presentation.menu.choices import SPEED_PARTS
 from animal_bomber.presentation.render.art.foxfires import (
     FoxfireLook,
     core_width,
@@ -87,7 +90,7 @@ class SlimeSprites:
         self,
         target: pygame.Surface,
         look: SlimeLook,
-        now: Tick,
+        now: float,
         offset: tuple[int, int] = (0, 0),
     ) -> None:
         """粘膜爆弾を `target` に貼る（`offset` は画面の揺れなどで全体をずらす px）。"""
@@ -135,15 +138,17 @@ class SlimeSprites:
     def prebuild(self) -> None:
         """とりうる形の全部を描いておく（ルールの層の状態から写せる値の全部）。
 
-        飛んでいる間（投げてからの tick）と、着地・跳ねてからの tick（区切りの長さの上限
-        まで）を、跳ねたあとと着地しただけのそれぞれについて写して描く。残り回数は形に
-        関わらないので、赤い輪も同じ形ごとに描いておく。
+        飛んでいる間（投げてからの tick。1つ前の tick と混ぜた 1/`SPEED_PARTS` tick
+        刻みの値も）と、着地・跳ねてからの tick（区切りの長さの上限まで）を、跳ねた
+        あとと着地しただけのそれぞれについて写して描く。残り回数は形に関わらないので、
+        赤い輪も同じ形ごとに描いておく。
         """
         tile = self._layout.tile
         origin = (0.0, 0.0)
         shapes = []
-        for flown in range(SLIME_FLY_TICKS):
-            look = slime_look(_slime(Tick(flown), Tick(0), Tick(0)), origin, False)
+        flying = _slime(Tick(0), Tick(0), Tick(0))
+        for step in range(SLIME_FLY_TICKS * SPEED_PARTS):
+            look = slime_look(flying, origin, False, step / SPEED_PARTS)
             shapes.append(slime_shape(look, tile))
         for since in range(HOP_INTERVAL_MAX + 1):
             for hopped in (False, True):
@@ -178,7 +183,7 @@ class FoxfireSprites:
         self,
         target: pygame.Surface,
         look: FoxfireLook,
-        now: Tick,
+        now: float,
         offset: tuple[int, int] = (0, 0),
         start: float = 1.0,
     ) -> None:

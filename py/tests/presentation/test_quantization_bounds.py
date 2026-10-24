@@ -63,8 +63,12 @@ from animal_bomber.presentation.render.sprites import level_value, quantize
 TILE = 60
 """上限を決めたマスの大きさ（描く面の上限。py/AGENTS.md）。"""
 
-TICKS = range(0, 3600, 7)
-"""見る盤面の時刻（1分ぶんを 7 tick おきに）。"""
+TIMES = tuple(quarter / 4 for quarter in range(0, 3600 * 4, 7))
+"""見る描く時刻（1分ぶんを 7/4 tick おきに）。
+
+ゲーム速度が整数でないときの描く時刻は 1/4 tick 刻みの小数（`views/player.py` の
+`drawn_time`）なので、tick の整数だけでなく、その間の時刻でも上限を確認する。
+"""
 
 CELLS = [Cell(col, row) for col in range(1, 22, 5) for row in range(1, 16, 4)]
 """見るマス（揺れと脈打ちの位相はマスの位置でずれる）。"""
@@ -77,8 +81,8 @@ def test_札の枠の色のずれは_255段のうち2段まで() -> None:
     worst = 0.0
     for cell in CELLS:
         item = Item(EntityId(0), cell, ItemKind.FIRE)
-        for now in TICKS:
-            look = item_look(item, Tick(now))
+        for now in TIMES:
+            look = item_look(item, now)
             rounded = quantized(look)
             worst = max(worst, abs(rounded.pulse - look.pulse) * 0.3 * 255)
     assert worst <= 1.92 + EPSILON
@@ -89,8 +93,8 @@ def test_絵文字の揺れのずれは_0_25pxまで() -> None:
     worst = 0.0
     for cell in CELLS:
         item = Item(EntityId(0), cell, ItemKind.SHOE)
-        for now in TICKS:
-            look = item_look(item, Tick(now))
+        for now in TIMES:
+            look = item_look(item, now)
             worst = max(worst, abs(quantized(look).bob - look.bob))
     assert worst <= 0.25 + EPSILON
 
@@ -105,8 +109,8 @@ def test_爆弾の脈打ちのずれは_赤い光の半径で0_30px_火花の外
     worst = 0.0
     for fuse in range(1, BOMB_FUSE + 1, 3):
         bomb = Bomb(EntityId(0), Cell(3, 3), 0, 1, Tick(fuse))
-        for now in TICKS:
-            pulse = bomb_look(bomb, Tick(now)).pulse
+        for now in TIMES:
+            pulse = bomb_look(bomb, now).pulse
             low, high = 1 - PULSE_SWING, 1 + PULSE_SWING
             assert low - EPSILON <= pulse <= high + EPSILON
             level = quantize(pulse, low, high, SCALE_LEVELS)
@@ -120,8 +124,8 @@ def test_火花の半径のずれは_0_125pxまで() -> None:
     """火花の外の円の半径はマスの 0.07＋0.05×揺れ 倍（原型の drawBomb）。"""
     worst = 0.0
     bomb = Bomb(EntityId(0), Cell(3, 3), 0, 1, Tick(BOMB_FUSE))
-    for now in TICKS:
-        spark = bomb_look(bomb, Tick(now)).spark
+    for now in TIMES:
+        spark = bomb_look(bomb, now).spark
         rounded = level_value(quantize(spark, 0, 1, SPARK_LEVELS), 0, 1, SPARK_LEVELS)
         worst = max(worst, abs(rounded - spark) * TILE * 0.05)
     assert worst <= 0.125 + EPSILON
@@ -172,12 +176,13 @@ def test_火の玉と芯の大きさのずれは_0_25pxまで() -> None:
     """火の玉の半径はマスの 0.6 × 揺れ 倍、芯の縦の半径は太さの 1.15 倍（原型の値）。"""
     worst_flame = worst_core = 0.0
     low, high = (value * TILE for value in CORE_RANGE)
-    for now in range(3600):
-        flicker = flame_flicker(Tick(now))
+    for quarter in range(3600 * 4):
+        now = quarter / 4
+        flicker = flame_flicker(now)
         level = quantize(flicker, *FLAME_RANGE, FLAME_LEVELS)
         rounded = level_value(level, *FLAME_RANGE, FLAME_LEVELS)
         worst_flame = max(worst_flame, abs(rounded - flicker) * TILE * 0.6)
-        width = core_width(TILE, Tick(now))
+        width = core_width(TILE, now)
         rounded_width = level_value(
             quantize(width, low, high, CORE_LEVELS), low, high, CORE_LEVELS
         )

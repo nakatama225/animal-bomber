@@ -25,7 +25,8 @@ from animal_bomber.presentation.hud.scoreboard import (
 from animal_bomber.presentation.menu.choices import SPEED_CHOICES, format_speed
 from animal_bomber.presentation.render.layout import PANEL_WIDTH
 from animal_bomber.presentation.render.panel.side_panel import (
-    REFRESH_MS,
+    REFRESH_TICKS,
+    WARN_PULSE_MS,
     PanelContent,
     SidePanel,
     pulse_opacity,
@@ -73,7 +74,7 @@ def drawn(
 ) -> pygame.Surface:
     surface = pygame.Surface((PANEL_WIDTH + 40, panel.height(content) + 40))
     surface.fill((0, 0, 0))
-    panel.show(content, now_ms, immediate=True)
+    panel.show(content, Tick(0), immediate=True)
     panel.draw(surface, (20, 20), now_ms)
     return surface
 
@@ -83,7 +84,7 @@ class Test押せる所:
         panel = SidePanel(PAINTER)
         content = content_of(make_world())
         surface = pygame.Surface((PANEL_WIDTH + 40, panel.height(content) + 40))
-        panel.show(content, 0.0)
+        panel.show(content, Tick(0))
         hits = panel.draw(surface, (20, 20), 0.0)
         assert hits.speed is not None and hits.pause is not None
         area = pygame.Rect(20, 20, PANEL_WIDTH, panel.height(content))
@@ -103,7 +104,7 @@ class Test押せる所:
         shown = content_of(make_world())
         hidden = content_of(make_world(), speed=None, can_pause=False)
         surface = pygame.Surface((PANEL_WIDTH, 2000))
-        panel.show(hidden, 0.0)
+        panel.show(hidden, Tick(0))
         hits = panel.draw(surface, (0, 0), 0.0)
         assert hits.speed is None and hits.pause is None
         assert hits.settings.width == PANEL_WIDTH
@@ -115,37 +116,126 @@ class Test作り直し:
         panel = SidePanel(PAINTER)
         world = make_world()
         surface = pygame.Surface((PANEL_WIDTH, 2000))
-        for frame in range(5):
-            panel.show(content_of(world), frame * 16.7)
+        for frame in range(40):
+            panel.show(content_of(world), Tick(frame))
             panel.draw(surface, (0, 0), frame * 16.7)
         assert panel.builds == 1
 
-    def test_新しい中身は_前に受け取ってから250ms経ってから出す(self) -> None:
-        """原型の名札は約 4 Hz で作り直す。被弾などは `immediate` ですぐ出す。"""
+    def test_新しい中身は_盤面の時刻が15tickの区切りを越えたフレームに出す(
+        self,
+    ) -> None:
+        """原型は試合の時間で 0.25 秒ごとに名札を作り直す（`G.elapsed%0.25<dt`）。
+
+        区切りは盤面の時刻（ラウンドの頭で 0）の 15 tick ごと。実時間は数えないので、
+        同じ区切りの間は何フレーム経っても前の中身のまま。被弾などは `immediate` で
+        すぐ出す。
+        """
+        assert REFRESH_TICKS == 15
         panel = SidePanel(PAINTER)
         world = make_world()
         surface = pygame.Surface((PANEL_WIDTH, 2000))
         first = content_of(world)
-        panel.show(first, 0.0)
+        panel.show(first, Tick(0))
         panel.draw(surface, (0, 0), 0.0)
         world.players[3].has_special = True
         second = content_of(world)
-        panel.show(second, 100.0)
-        panel.draw(surface, (0, 0), 100.0)
+        for frame, now in enumerate(range(3, 15)):
+            panel.show(second, Tick(now))
+            panel.draw(surface, (0, 0), 1000.0 + frame * 500)
         assert (panel.content, panel.builds) == (first, 1)
-        panel.draw(surface, (0, 0), REFRESH_MS - 1)
-        assert panel.builds == 1
-        panel.draw(surface, (0, 0), REFRESH_MS)
+        panel.show(second, Tick(15))
+        panel.draw(surface, (0, 0), 9000.0)
         assert (panel.content, panel.builds) == (second, 2)
         world.players[3].has_special = False
-        panel.show(content_of(world), REFRESH_MS + 10, immediate=True)
-        panel.draw(surface, (0, 0), REFRESH_MS + 10)
+        panel.show(content_of(world), Tick(16), immediate=True)
+        panel.draw(surface, (0, 0), 9010.0)
         assert panel.builds == 3
+
+    def test_区切りを越えたら_同じ中身でも受け取ったことにする(self) -> None:
+        """原型は区切りごとに、中身が替わっていなくても作り直す。
+
+        区切りの tick（15）に同じ中身を受け取ったら、その直後に替わった中身は、
+        次の区切り（30）まで出ない。前に替わった中身を受け取ったとき（14）から数えると、
+        16 で出てしまう。
+        """
+        panel = SidePanel(PAINTER)
+        world = make_world()
+        surface = pygame.Surface((PANEL_WIDTH, 2000))
+        first = content_of(world)
+        panel.show(first, Tick(14), immediate=True)
+        panel.draw(surface, (0, 0), 0.0)
+        panel.show(first, Tick(15))
+        panel.draw(surface, (0, 0), 16.7)
+        world.players[3].has_special = True
+        second = content_of(world)
+        for now in range(16, 30):
+            panel.show(second, Tick(now))
+            panel.draw(surface, (0, 0), now * 16.7)
+            assert panel.content == first
+        panel.show(second, Tick(30))
+        panel.draw(surface, (0, 0), 30 * 16.7)
+        assert panel.content == second
+
+    def test_区切りのtickにすぐ作り直したら_次の区切りまで新しい中身を受け取らない(
+        self,
+    ) -> None:
+        """すぐ作り直しても、区切りは盤面の時刻で決まるまま変わらない。
+
+        原型のすぐ作り直す呼び出し（renderCards）は、0.25 秒の区切り
+        （`G.elapsed%0.25<dt`。L4406）を動かさない。区切りの tick（15）に
+        すぐ作り直したら、そのあとに替わった中身は、次の区切り（30）まで出ない。
+        """
+        panel = SidePanel(PAINTER)
+        world = make_world()
+        surface = pygame.Surface((PANEL_WIDTH, 2000))
+        panel.show(content_of(world), Tick(14))
+        panel.draw(surface, (0, 0), 0.0)
+        world.players[3].has_special = True
+        urgent = content_of(world)
+        panel.show(urgent, Tick(15), immediate=True)
+        panel.draw(surface, (0, 0), 16.7)
+        assert panel.content == urgent
+        later = content_of(world, paused=True)
+        for now in range(16, 30):
+            panel.show(later, Tick(now))
+            panel.draw(surface, (0, 0), now * 16.7)
+            assert panel.content == urgent
+        panel.show(later, Tick(30))
+        panel.draw(surface, (0, 0), 30 * 16.7)
+        assert panel.content == later
+
+    def test_盤面の時刻が進まない間は_新しい中身を受け取らない(self) -> None:
+        """ポーズと幕の間（原型も update を回さないので作り直さない）。
+
+        実時間がいくら経っても、同じ盤面の時刻のままなら前の中身のまま。
+        """
+        panel = SidePanel(PAINTER)
+        world = make_world()
+        surface = pygame.Surface((PANEL_WIDTH, 2000))
+        first = content_of(world)
+        panel.show(first, Tick(20))
+        panel.draw(surface, (0, 0), 0.0)
+        second = content_of(world, paused=True)
+        for frame in range(120):
+            panel.show(second, Tick(20))
+            panel.draw(surface, (0, 0), frame * 16.7)
+        assert (panel.content, panel.builds) == (first, 1)
+
+    def test_ラウンドが替わって時刻が0に戻っても_区切りが変われば受け取る(self) -> None:
+        panel = SidePanel(PAINTER)
+        world = make_world()
+        surface = pygame.Surface((PANEL_WIDTH, 2000))
+        panel.show(content_of(world), Tick(50))
+        panel.draw(surface, (0, 0), 0.0)
+        fresh = content_of(make_world(180))
+        panel.show(fresh, Tick(0))
+        panel.draw(surface, (0, 0), 16.7)
+        assert panel.content == fresh
 
     def test_時計の数字だけが変わっても_板は作り直さず数字の絵だけ替える(self) -> None:
         panel = SidePanel(PAINTER)
         before = rgb(drawn(panel, content_of(make_world(150))))
-        after = rgb(drawn(panel, content_of(make_world(149)), REFRESH_MS))
+        after = rgb(drawn(panel, content_of(make_world(149)), 250.0))
         assert panel.builds == 1
         changed = np.nonzero(np.abs(before - after).max(axis=2))
         assert changed[0].size > 0
@@ -174,6 +264,23 @@ class Test見た目:
         assert np.all(faint == np.array(NG), axis=2).sum() == 0
         assert np.abs(faint - bright).max() > 50
         assert panel.builds == 1
+
+    def test_明滅をやめた時計のあとに_また明滅するときは_明るい数字から数え直す(
+        self,
+    ) -> None:
+        """明滅しない時計を受け取ったら、明滅の始まりを忘れる。
+
+        原型の明滅は CSS のアニメーションで、`.warn` を外して付け直すと最初から
+        始まる。1000 ms に明滅を始め、5000 ms に止み、9750 ms にまた明滅する。忘れずに
+        1000 ms から数えると、9750 ms は周期の半ば（350 ms。いちばん薄い）になる。
+        """
+        panel = SidePanel(PAINTER)
+        warn = content_of(make_world(30))
+        calm = content_of(make_world(31))
+        drawn(panel, warn, 1000.0)
+        drawn(panel, calm, 5000.0)
+        again = rgb(drawn(panel, warn, 1000.0 + 12 * WARN_PULSE_MS + 350.0))
+        assert np.all(again == np.array(NG), axis=2).sum() > 20
 
     def test_退場したプレイヤーの名札は_白黒にして薄くする(self) -> None:
         """原型の `.pcard.dead{opacity:.38;filter:grayscale(1)}`。"""

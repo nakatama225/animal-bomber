@@ -34,11 +34,14 @@ tick の update の頭で進めた経過時間で、同じ値になる（`views/
 間だけ体を揺らす。引き算の誤差で 0 に届くのが 1 tick 遅れるので、揺れを描くのは被弾した
 tick の絵を含めて 19 枚（`views/player.py` の `TrackedMotion.hurt_shake`）。
 
-## 1つ前の tick の位置
+## 1つ前の tick の位置と歩いた距離
 
 ゲーム速度が整数でないときに、描く位置を前の tick の位置と混ぜるため、前の tick の
-終わりの控えの位置を `TrackedMotion.previous` に持たせる（`views/player.py` の
-`drawn_position`。混ぜる割合は `shell/loop.py` の `GameSpeed.blend`）。
+終わりの控えの位置を `TrackedMotion.previous` に、外周の位置を `previous_along` に、
+歩いた距離を `previous_walked` に、舌先までの長さを `previous_reach` に持たせる
+（`views/player.py` の `drawn_position` と `player_look`・`views/lane.py` の
+`drawn_along`・`views/actions.py` の `drawn_tongue`。混ぜる割合は `shell/loop.py` の
+`GameSpeed.blend`）。
 """
 
 from collections.abc import Sequence
@@ -49,8 +52,14 @@ from animal_bomber.domain.core.coord import Point
 from animal_bomber.domain.core.tick import Tick
 from animal_bomber.domain.events import PlayerHurt, SimEvent, SuddenDeath, TechniqueUsed
 from animal_bomber.domain.rules.tuning import MAX_SPEED
+from animal_bomber.domain.state.actions import Tongue
 from animal_bomber.domain.state.effects import EffectBag, EffectKind
-from animal_bomber.domain.state.player import PlayerId, PlayerState, speed_of
+from animal_bomber.domain.state.player import (
+    Negibon,
+    PlayerId,
+    PlayerState,
+    speed_of,
+)
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.presentation.render.scene.clues import raises_dust
 from animal_bomber.presentation.render.scene.snapshot import PlayerSnapshot, Snapshot
@@ -104,8 +113,36 @@ class MotionTracker:
                     walked += step
                     last = world.now
             self._motions[player.id] = TrackedMotion(
-                walked, last, Tick(shake), _previous(seen, player.id in moved)
+                walked,
+                last,
+                Tick(shake),
+                _previous(seen, player.id in moved),
+                _previous_along(seen, player),
+                motion.walked,
+                _previous_reach(seen, player),
             )
+
+
+def _previous_reach(seen: PlayerSnapshot | None, player: PlayerState) -> float | None:
+    """舌の長さを混ぜるための、1つ前の tick の終わりの舌先までの長さ。
+
+    1つ前の tick に舌を伸ばしていなかった（伸ばし始めた tick・控えが無い）か、いま
+    伸ばしていないなら None。
+    """
+    if seen is None or seen.reach is None or not isinstance(player.action, Tongue):
+        return None
+    return seen.reach
+
+
+def _previous_along(seen: PlayerSnapshot | None, player: PlayerState) -> float | None:
+    """外周の鍋を描く位置を混ぜるための、1つ前の tick の終わりの外周の位置。
+
+    1つ前の tick に外周にいなかった（盤面から外周へ回った tick・控えが無い）か、いま
+    外周にいない（外周から戻った tick・延長戦で外周が閉じた tick）なら None。
+    """
+    if seen is None or seen.along is None or not isinstance(player.life, Negibon):
+        return None
+    return seen.along
 
 
 def _previous(seen: PlayerSnapshot | None, restarted: bool) -> Point | None:

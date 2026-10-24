@@ -11,11 +11,20 @@
 - 板の絵は、中身（`PanelContent`）のうち時計の数字を除いた所が変わったときだけ
   作り直す（`builds` が作り直した回数）。時計の数字は別の小さい絵にして毎フレーム貼る
   （残り 30 秒からの明滅で、不透明度が毎フレーム変わる）
-- 原型は名札を約 4 Hz で作り直す（`G.elapsed%0.25<dt`。落とし穴の残り秒もその粒で
-  変わって見える）。`show` は、前に受け取ってから 250 ms 経つまでは新しい中身を
-  控えておき、経ったら出す。被弾やポーズの切り替えのように原型がすぐ作り直す所は、
-  `immediate=True` で渡す
-- 時刻は呼ぶ側がミリ秒で渡す（実時間。原型も明滅は CSS のアニメーションで数える）
+- 原型は名札と時計を、試合の時間で 0.25 秒ごとに作り直す（`G.elapsed%0.25<dt`。
+  L4406。`G.elapsed` はラウンドの頭で 0 の、倍率を掛けた経過時間）。`show` は盤面の
+  時刻（`world.now`）を受け取り、15 tick（`REFRESH_TICKS`）の区切りを越えたフレームに
+  だけ、そのとき渡された中身を受け取る。中身が前と同じでも、区切りを越えたら受け取った
+  ことにする（原型も区切りごとに作り直すので、次に替わった中身は次の区切りまで出ない）。
+  被弾やポーズの切り替えのように原型がすぐ作り直す所は、`immediate=True` で渡す
+- 盤面の時刻で数えるので、ゲーム速度を変えると実時間の間隔も原型と同じく変わる（3 倍で
+  約 83 ms、0.5 倍で 500 ms）。倍率で変わって見えるのは、横の板の中身が 0.25 秒より
+  細かく替わる場面の、落とし穴の残り秒の刻み（と、そのときの時計の間隔）。何も起きて
+  いない場面では、残り秒が替わる時刻が区切りと重なるので、実時間で数えても同じ間隔に
+  なる。ポーズと幕の間は盤面の時刻が進まないので作り直さない（原型も update を
+  回さない。すぐ作り直す印はそのまま受け取る）
+- 時計の数字の明滅だけは実時間のミリ秒で数える（原型も CSS のアニメーションで数える。
+  `draw` の `now_ms`）
 
 ## 貼り方（描画の重さ）
 
@@ -37,6 +46,7 @@ from typing import Final
 
 import pygame
 
+from animal_bomber.domain.core.tick import Tick
 from animal_bomber.presentation.hud.key_help import HelpRow, SpanKind
 from animal_bomber.presentation.hud.scoreboard import (
     CLOCK_CAPTION,
@@ -97,8 +107,8 @@ PAD_X: Final = 11
 INNER_WIDTH: Final = PANEL_WIDTH - 2 * (BORDER + PAD_X)
 """名札・つまみ・キーの案内の箱の中身の幅（px。212）。"""
 
-REFRESH_MS: Final = 250
-"""中身を作り直す間隔の下限（ms。原型の約 4 Hz。モジュールの説明）。"""
+REFRESH_TICKS: Final = 15
+"""中身を作り直す盤面の時刻の区切り（tick。原型の 0.25 秒 × 60。モジュールの説明）。"""
 
 WARN_PULSE_MS: Final = 700
 """残り 30 秒からの時計の数字の明滅の周期（ms。原型の `animation:pulse .7s`）。"""
@@ -263,8 +273,11 @@ class SidePanel:
         self._painter = painter
         self._backdrop = backdrop
         self._content: PanelContent | None = None
-        self._pending: PanelContent | None = None
-        self._accepted_ms = -math.inf
+        self._slot: int | None = None
+        """最後に受け取ったときの、盤面の時刻の区切りの番号。
+
+        盤面の時刻 ÷ `REFRESH_TICKS` の商。まだ受け取っていなければ None。
+        """
         self._key: _BodyKey | None = None
         self._built: _Built | None = None
         self._cards: dict[tuple[PlayerCard, int], pygame.Surface] = {}
@@ -276,7 +289,7 @@ class SidePanel:
 
     @property
     def content(self) -> PanelContent | None:
-        """いま出している中身（控えている新しい中身は含まない）。"""
+        """いま出している中身（最後に受け取った中身）。"""
         return self._content
 
     def height(self, content: PanelContent) -> int:
@@ -296,32 +309,36 @@ class SidePanel:
         return total
 
     def show(
-        self, content: PanelContent, now_ms: float, *, immediate: bool = False
+        self, content: PanelContent, now: Tick, *, immediate: bool = False
     ) -> None:
-        """出す中身を渡す（モジュールの説明の 4 Hz）。同じ中身なら何もしない。"""
-        if content == self._content:
-            self._pending = None
-            return
-        due = now_ms - self._accepted_ms >= REFRESH_MS
-        if immediate or self._content is None or due:
-            self._accept(content, now_ms)
-        else:
-            self._pending = content
+        """出す中身と、盤面の時刻 `now`（`world.now`）を渡す。
+
+        前に受け取ったときから区切り（`REFRESH_TICKS`）が変わっていれば、中身が前と
+        同じでも受け取る（モジュールの説明）。区切りが同じなら、`immediate` のときだけ
+        受け取る。`immediate` で受け取ったときも区切りの番号を控えるので、次に受け取る
+        のは次の区切り（原型のすぐ作り直す呼び出しも、盤面の時刻で決まる区切りを動かさ
+        ない）。ラウンドが替わって盤面の時刻が 0 に戻っても、区切りの番号が前と同じで
+        なければ受け取る。
+        """
+        slot = now // REFRESH_TICKS
+        if immediate or self._content is None or slot != self._slot:
+            self._content = content
+            self._slot = slot
 
     def draw(
         self, target: pygame.Surface, topleft: tuple[int, int], now_ms: float
     ) -> PanelHits:
         """板を `target` の `topleft` に貼り、押せる所を返す。
 
+        `now_ms` は実時間（ms。時計の数字の明滅だけに使う）。
+
         Raises:
             ValueError: まだ中身を受け取っていないとき（先に `show` を呼ぶ）。
         """
-        pending = self._pending
-        if pending is not None and now_ms - self._accepted_ms >= REFRESH_MS:
-            self._accept(pending, now_ms)
         content = self._content
         if content is None:
             raise ValueError("横の板の中身を、先に show で渡す")
+        self._note_warn(content.clock, now_ms)
         key = _body_key(content)
         if self._built is None or key != self._key:
             self._built = self._build(content)
@@ -339,15 +356,15 @@ class SidePanel:
             settings=built.settings.move(x, y),
         )
 
-    def _accept(self, content: PanelContent, now_ms: float) -> None:
-        clock = content.clock
-        if clock.warn and (self._content is None or not self._content.clock.warn):
-            self._warn_since = now_ms
+    def _note_warn(self, clock: ClockView, now_ms: float) -> None:
+        """残り 30 秒の明滅を始めた実時間を控える（明滅を出さない時計なら忘れる）。
+
+        受け取った中身の時計が明滅を始めた最初のフレームの時刻から数える。
+        """
         if not clock.warn:
             self._warn_since = None
-        self._content = content
-        self._pending = None
-        self._accepted_ms = now_ms
+        elif self._warn_since is None:
+            self._warn_since = now_ms
 
     # 寸法
 

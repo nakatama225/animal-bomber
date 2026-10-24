@@ -63,6 +63,7 @@ from animal_bomber.domain.state.world import WorldState
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng
 from animal_bomber.presentation.emoji import item_emoji
 from animal_bomber.presentation.render.art.items import is_harmful
+from animal_bomber.presentation.render.art.particles import ParticleLook
 from animal_bomber.presentation.render.scene.clues import (
     carried_items,
     dropped_color,
@@ -82,13 +83,13 @@ from animal_bomber.presentation.render.scene.particles import (
     TONGUE_SMOKE,
     WATER_SMOKE,
     Particle,
-    advanced,
     debris,
     hop_dust,
     knocked_out,
     puff,
     scooped,
     splash,
+    stepped,
 )
 from animal_bomber.presentation.render.scene.snapshot import Snapshot
 
@@ -160,7 +161,9 @@ def exploded_shake(count: int, cause: ExplosionCause) -> float:
 class EffectField:
     """粒子と画面の揺れ。
 
-    1 tick ぶんのイベントで足し（`apply`）、1 tick ずつ進める（`advance`）。
+    1 tick ぶんのイベントで足し（`apply`）、1 tick ずつ進める（`advance`）。粒子は
+    1 tick ぶん進める前の値も覚えておく（`looks`。ゲーム速度が整数でないときに、
+    描く値を混ぜる）。
     """
 
     def __init__(self, rng: CosmeticRng) -> None:
@@ -168,16 +171,51 @@ class EffectField:
         self.particles: list[Particle] = []
         self.shake = 0.0
         """画面の揺れの幅（px。原型の shakeAmt）。"""
+        self._before: list[Particle] = []
+        """`particles` の頭から同じ並びの、最後に進める前の値。
+
+        1つ前の tick の終わりの値にあたる。その tick に生まれた粒子は、生まれたときの
+        値（`advance` の説明）。
+        """
 
     def reset(self) -> None:
         """粒子と揺れを捨てる（ラウンドの始まり。原型の startRound）。"""
         self.particles = []
         self.shake = 0.0
+        self._before = []
 
     def advance(self) -> None:
-        """1 tick 進める（原型の update の最後。粒子を動かし、揺れを減らす）。"""
-        self.particles = advanced(self.particles)
+        """1 tick 進める（原型の update の最後。粒子を動かし、揺れを減らす）。
+
+        動かす粒子の、動かす前の値を1つ前の tick の終わりの値として覚える。この tick に
+        足した粒子（`apply` のあと）も、生まれたときの値を覚える：原型は粒子を出した
+        update のうちに粒子の輪で1回進める（L4398-4402）ので、生まれたときの値は、その
+        tick の初めの時刻の値にあたる。覚えないと、ゲーム速度が整数でないときに、
+        生まれた粒子が進んだあとの値のまま止まって見える（0.5 倍で3フレーム）。
+        """
+        moved: list[Particle] = []
+        before: list[Particle] = []
+        for particle in self.particles:
+            after = stepped(particle)
+            if after is None:
+                continue
+            moved.append(after)
+            before.append(particle)
+        self.particles = moved
+        self._before = before
         self.shake = max(0.0, self.shake - SHAKE_DECAY * DT)
+
+    def looks(self) -> list[ParticleLook]:
+        """粒子の描く関数の入力（出た順。進める前の値つき）。
+
+        最後に進めたあとに足した粒子（`advance` より後に `apply` で足したもの）は、
+        進める前の値を持たない（いまの値に描く）。
+        """
+        before = self._before
+        return [
+            particle.look(before[index] if index < len(before) else None)
+            for index, particle in enumerate(self.particles)
+        ]
 
     def apply(
         self, world: WorldState, events: Sequence[SimEvent], before: Snapshot | None

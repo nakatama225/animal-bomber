@@ -11,7 +11,9 @@
 場面にする（マス 50 なら盤面の左上が 31px で、マスの中央が整数の px になる）。
 """
 
-from collections.abc import Iterator
+import math
+from collections.abc import Callable, Iterator
+from dataclasses import replace
 from typing import cast
 
 import numpy as np
@@ -30,10 +32,13 @@ from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
 from animal_bomber.domain.state.player import OUT, Negibon
 from animal_bomber.domain.state.world import WorldState, create_world, hash_world
+from animal_bomber.presentation.render.art.animals.body import WALK_FREQUENCY
 from animal_bomber.presentation.render.art.blasts import progress_of
 from animal_bomber.presentation.render.art.foxfires import TrailMark
 from animal_bomber.presentation.render.art.particles import ParticleLook
 from animal_bomber.presentation.render.art.player import is_blinking_off
+from animal_bomber.presentation.render.art.slimes import SlimeLook
+from animal_bomber.presentation.render.art.timing import seconds
 from animal_bomber.presentation.render.baked import (
     actors,
     bombs,
@@ -481,6 +486,198 @@ def test_割合を渡すと_前のtickと混ぜた位置に描き_重ねる順�
     current = image(scene(Point(5.5, 5.62)), walking, 1.0)
     assert not np.array_equal(blended, current)
     assert np.array_equal(current, image(scene(Point(5.5, 5.62)), FixedVisuals(), 1.0))
+
+
+@pytest.mark.usefixtures("fine_levels")
+def test_割合を渡すと_時刻で決まる絵と脚の振りを_1つ前のtickから進めて描く() -> None:
+    """描く時刻は `now − 1 + 割合`（`views/player.py` の `drawn_time`）。
+
+    原型は毎フレーム経過時間 × 倍率で進めるので、爆弾の脈・アイテムの揺れ・うんこの
+    点滅・炎の揺らぎ・粘膜爆弾の赤い輪・掘る手の振り・止まっているかの見分けは、0.5 倍
+    でも毎フレーム動く。導火線の残り（爆発までの進み）と、掘る身ぶりの残り（穴の
+    大きさとゲージ）・無敵の残りも同じ dt で減るので、描く時刻のもの（0.5 tick 多い）
+    にする。手本の `draw_frame` を、tick の間の時刻（329.5）と、その時刻の残りと、歩いた
+    距離を混ぜた値で描いた絵と同じになる（手本の残りは `frame_scenes.py` の `left_at`
+    が足す）。割合 1 で描いた絵とは違う。導火線の残りは脈の周波数に出るので、この絵で
+    見分けられる。掘る身ぶりと無敵の残りの 0.5 tick ぶんは、この場面の絵では見分け
+    られない（段に丸めて取っておく・点滅は薄いかどうかだけ）ので、値は
+    `test_views.py` の `Test残りの数を描く時刻のものにする` が見る。
+
+    歩いた距離は、混ぜた値で脚の振りがちょうど 0 になる所にする（体の絵は脚の振りを
+    段に丸めて取っておくので、段の間の値では手本と画素が少し違う）。
+    """
+    world, visuals, randoms = ordinary()
+    rabbit = world.players[0]
+    still = math.pi / WALK_FREQUENCY
+    walking = replace(
+        visuals,
+        motions={
+            **visuals.motions,
+            rabbit.id: TrackedMotion(
+                walked=still + 0.1, last_moved_at=Tick(330), previous_walked=still - 0.1
+            ),
+        },
+    )
+    halfway = replace(
+        visuals,
+        motions={
+            **visuals.motions,
+            rabbit.id: TrackedMotion(walked=still, last_moved_at=Tick(330)),
+        },
+    )
+    art = BakedArt(LAYOUT)
+    got, used = renderer_image(art, world, walking, randoms, blend=0.5)
+    wanted, used_by_hand = direct_image(LAYOUT, world, halfway, randoms, now=329.5)
+    assert used == used_by_hand == randoms
+    assert_same_frame(got, wanted, FADED)
+    current, _ = renderer_image(art, world, walking, randoms)
+    assert frame_mismatches(got, current, FADED) != (0, 0)
+
+
+TIMED_PARTS = ("items", "bombs", "players", "foxfires", "slimes")
+"""描く時刻を受け取る、取っておいた絵の部品（`BakedArt` の属性の名前）。"""
+
+
+@pytest.mark.parametrize(("blend", "wanted"), [(0.25, 329.25), (1.0, 330)])
+def test_割合を渡すと_描く関数とすべての時刻の口に_描く時刻を渡す(
+    blend: float, wanted: float, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """アイテム・爆弾・プレイヤー・炎とその跡・粘膜爆弾を、同じ描く時刻で描く。
+
+    盤面の時刻 330・割合 0.25 なら 329.25。割合 1 なら 330 のまま。爆弾には、描く時刻が
+    盤面の時刻より何 tick 前か（導火線の残りに足す。0.75 と 0）も渡す。
+    """
+    world, visuals, _ = ordinary()
+    art = BakedArt(LAYOUT)
+    seen: dict[str, set[float]] = {}
+    behinds: list[object] = []
+
+    def spy(name: str, draw: Callable[..., object]) -> Callable[..., object]:
+        def watched(*args: object, **kwargs: object) -> object:
+            now = args[2]
+            assert isinstance(now, float | int)
+            seen.setdefault(name, set()).add(now)
+            if name == "bombs":
+                behinds.append(args[4] if len(args) > 4 else kwargs.get("behind", 0))
+            return draw(*args, **kwargs)
+
+        return watched
+
+    for name in TIMED_PARTS:
+        part = getattr(art, name)
+        monkeypatch.setattr(part, "draw", spy(name, part.draw))
+    trails: list[float] = []
+    trail = visuals.trail
+
+    def watched_trail(actor: Foxfire, now: float) -> tuple[TrailMark, ...]:
+        trails.append(now)
+        return trail(actor, now)
+
+    monkeypatch.setattr(visuals, "trail", watched_trail)
+    target = pygame.Surface(LAYOUT.surface_size)
+    Renderer(art).draw(target, world, visuals, blend)
+    assert seen == {name: {wanted} for name in TIMED_PARTS}
+    assert trails == [wanted]
+    assert behinds == [330 - wanted] * len(world.bombs)
+
+
+def test_割合を渡すと_粘膜爆弾の飛ぶ間を_1つ前のtickの値と混ぜて描く() -> None:
+    """原型は飛ぶ間を毎フレーム経過時間で進める（L2955-2957・L5349-5353）。
+
+    投げてから 10 tick（1つ前の tick は 9）を割合 0.5 で描くと 9.5 tick の形。1つ前の
+    値が無い（投げた tick）飛んでいる間も、9.5 tick の形（「flown − 1 + 割合」）。
+    着地した tick（21。1つ前の tick は 20）を割合 0.25 で描くと、まだ飛んでいる
+    20.25 tick の形。1つ前の値を渡さないと、着地した形（飛ぶ間 0）になる。
+    """
+    world = create_world(5, (Animal.FROG, Animal.RABBIT))
+    clear_board(world)
+    world.items.clear()
+    world.now = Tick(330)
+    slime = SlimeBomb(Cell(5, 5), 0, hops_left=4, flown=Tick(10))
+    landed = SlimeBomb(
+        Cell(9, 5), 0, hops_left=4, flown=Tick(21), timer=Tick(20), interval=Tick(20)
+    )
+    art = BakedArt(LAYOUT)
+    flights: list[float] = []
+    draw = art.slimes.draw
+
+    def watched(
+        target: pygame.Surface,
+        look: SlimeLook,
+        now: float,
+        offset: tuple[int, int] = (0, 0),
+    ) -> None:
+        flights.append(look.flight)
+        draw(target, look, now, offset)
+
+    art.slimes.draw = watched  # type: ignore[method-assign]
+    target = pygame.Surface(LAYOUT.surface_size)
+    world.actors = [slime]
+    for flowns in ([(slime, Tick(9))], []):
+        visuals = FixedVisuals(slimes=[(slime, (3.5, 5.5), False)], flowns=flowns)
+        Renderer(art).draw(target, world, visuals, 0.5)
+    world.actors = [landed]
+    for flowns in ([(landed, Tick(20))], []):
+        visuals = FixedVisuals(slimes=[(landed, (7.5, 5.5), False)], flowns=flowns)
+        Renderer(art).draw(target, world, visuals, 0.25)
+    assert flights == [seconds(9.5), seconds(9.5), seconds(20.25), 0.0]
+
+
+def lane_scene(
+    frog_along: float, mole_along: float, leek: Point, particle: tuple[float, float]
+) -> tuple[WorldState, Leek, ParticleLook]:
+    """外周の鍋2つ（`frog_along` と `mole_along`）・葱1本・粒子1つの盤面。
+
+    時刻で決まる絵（アイテム・爆弾）は置かない（割合を渡すと描く時刻も変わるので、
+    位置だけを比べる）。
+    """
+    world = create_world(5, (Animal.RABBIT, Animal.ELEPHANT, Animal.FROG, Animal.MOLE))
+    clear_board(world)
+    world.items.clear()
+    world.now = Tick(330)
+    rabbit, elephant, frog, mole = world.players
+    rabbit.position = Cell(5, 5).center()
+    elephant.position = Cell(9, 9).center()
+    frog.life = Negibon(along=frog_along, ready_at=Tick(world.now + 89))
+    mole.life = Negibon(along=mole_along, ready_at=Tick(world.now - 5))
+    shot = Leek(leek, Direction.DOWN, frog.id)
+    world.actors = [shot]
+    look = ParticleLook(particle[0], particle[1], 0.9, "#a2703f", 6.0)
+    return world, shot, look
+
+
+def test_割合を渡すと_外周の鍋と葱と粒子を_1つ前のtickの値と混ぜた位置に描く() -> None:
+    """原型は外周（L2250）も葱（L2291-2300）も粒子（L4398-4402）も毎フレーム進める。
+
+    混ぜた位置に置いた盤面を割合 1 で描いた絵と、画素が同じになる。外周の位置は 0 の
+    前後で折り返すので、71.875 から 0.125 へ進んだ鍋は、短いほうの向きへ +0.25 として
+    混ぜ、0 に描く（折り返しを考えずに差を取ると、1 tick に動ける距離より大きい差に
+    なり、混ぜずにいまの位置に描く）。粒子は寿命の残りも混ぜる（残り 0.5 秒からは
+    寿命で薄れるので、濃さも混ぜた値になる）。値は2進数で割り切れるものにしてある。
+    """
+
+    def image(world: WorldState, visuals: FixedVisuals, blend: float) -> Image:
+        target = pygame.Surface(LAYOUT.surface_size)
+        Renderer(BakedArt(LAYOUT)).draw(target, world, visuals, blend)
+        return cast(Image, pygame.surfarray.array3d(target))
+
+    world, shot, look = lane_scene(8.5, 0.125, Point(9.875, 0.125), (3.25, 9.25))
+    mixing = FixedVisuals(
+        particles=[replace(look, life=0.375, previous=(3.0, 9.0, 0.4375))],
+        motions={
+            2: TrackedMotion(previous_along=8.25),
+            3: TrackedMotion(previous_along=71.875),
+        },
+        leeks=[(shot, Point(9.875, -0.125))],
+    )
+    blended = image(world, mixing, 0.5)
+    middle, _, half_look = lane_scene(8.375, 0.0, Point(9.875, 0.0), (3.125, 9.125))
+    halfway = image(
+        middle, FixedVisuals(particles=[replace(half_look, life=0.40625)]), 1.0
+    )
+    assert np.array_equal(blended, halfway)
+    current = image(world, mixing, 1.0)
+    assert not np.array_equal(blended, current)
 
 
 def test_知らない種類の盤面の物が来たら止まる() -> None:

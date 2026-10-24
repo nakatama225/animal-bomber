@@ -32,7 +32,7 @@ from animal_bomber.presentation.render.match_frame import (
     panel_content,
 )
 from animal_bomber.presentation.render.panel.side_panel import (
-    REFRESH_MS,
+    REFRESH_TICKS,
     PanelContent,
     PanelHits,
     SidePanel,
@@ -182,8 +182,10 @@ class Test盤面と横の板を描く:
         *,
         top: int = 0,
         immediate: bool = False,
+        now: int = 0,
     ) -> PanelHits:
         world = make_world()
+        world.now = Tick(now)
         scene: Visuals = SceneTracker()
         return draw_match_frame(
             target,
@@ -226,16 +228,29 @@ class Test盤面と横の板を描く:
         assert flat.settings.x >= PANEL_LEFT
         assert scrolled.settings == flat.settings.move(0, -30)
 
-    def test_すぐ作り直す印が無ければ_約4Hzの間は前の中身のまま(self) -> None:
+    def test_すぐ作り直す印が無ければ_同じ区切りの間は前の中身のまま(self) -> None:
+        """実時間がいくら経っても、盤面の時刻が同じ区切りの間は替えない。"""
         renderer = Renderer(BakedArt(LAYOUT))
         target = pygame.Surface((PANEL_LEFT + PANEL_WIDTH, 1200))
         panel = SidePanel(PAINTER)
         first = content_of(make_world(150), speed=1.0)
         second = content_of(make_world(150), speed=None)
-        panel.show(first, 0.0)
-        hits = self.draw(target, renderer, panel, second, REFRESH_MS / 2)
+        panel.show(first, Tick(0))
+        hits = self.draw(target, renderer, panel, second, 5000.0, now=REFRESH_TICKS - 1)
         assert panel.content == first
         assert hits.speed is not None
+
+    def test_盤面の時刻が区切りを越えたら_新しい中身を貼る(self) -> None:
+        """横の板へ渡す時刻は盤面の時刻（`world.now`。原型の試合の時間）。"""
+        renderer = Renderer(BakedArt(LAYOUT))
+        target = pygame.Surface((PANEL_LEFT + PANEL_WIDTH, 1200))
+        panel = SidePanel(PAINTER)
+        first = content_of(make_world(150), speed=1.0)
+        second = content_of(make_world(150), speed=None)
+        panel.show(first, Tick(0))
+        hits = self.draw(target, renderer, panel, second, 0.0, now=REFRESH_TICKS)
+        assert panel.content == second
+        assert hits.speed is None
 
     def test_すぐ作り直す印があれば_その場で新しい中身を貼る(self) -> None:
         """新しい中身を受け取ってから貼る（貼ったあとに受け取ると、前の板の押せる所を返す）。"""
@@ -244,9 +259,7 @@ class Test盤面と横の板を描く:
         panel = SidePanel(PAINTER)
         first = content_of(make_world(150), speed=1.0)
         second = content_of(make_world(150), speed=None)
-        panel.show(first, 0.0)
-        hits = self.draw(
-            target, renderer, panel, second, REFRESH_MS / 2, immediate=True
-        )
+        panel.show(first, Tick(0))
+        hits = self.draw(target, renderer, panel, second, 0.0, immediate=True)
         assert panel.content == second
         assert hits.speed is None

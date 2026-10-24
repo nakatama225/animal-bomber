@@ -42,14 +42,23 @@ class TongueLook:
     """最後に1マス動いてからの秒（原型の t。0 以上 `TONGUE_STEP` 未満）。"""
     caught: ItemKind | None = None
     """掴んだアイテム（原型の item）。舌先にくっついて運ばれる。"""
+    reach: float | None = None
+    """描く舌先までの長さ（マス）を決めて渡すときの値。None なら len と t から出す。
+
+    ゲーム速度が整数でないときに、1つ前の tick の長さと混ぜた値を渡す
+    （`views/actions.py` の `drawn_tongue`）。
+    """
 
 
 def tongue_reach(look: TongueLook) -> float:
     """舌先までの長さ（マス）。次の1マスへ向けて、なめらかに伸び縮みさせる。
 
     原型の prog = len ＋（伸ばしている間は t / TONGUE_STEP、戻している間は
-    −t / TONGUE_STEP）を 0 で止めたもの。
+    −t / TONGUE_STEP）を 0 で止めたもの。長さを決めて渡されていれば（`reach`）、
+    その値。
     """
+    if look.reach is not None:
+        return look.reach
     step = look.since_step / TONGUE_STEP
     prog = look.length + (-step if look.returning else step)
     return max(0, prog)

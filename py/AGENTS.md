@@ -86,9 +86,18 @@ uv run tools/verify.sh   # ruff → ruff format --check → mypy --strict → li
   （`tests/presentation/test_quantization_bounds.py`）と、取っておいた絵の検査（`test_baked*.py`）も
   直します。段の数は、先にずれの上限を決めてから出します（定数の docstring に上限を書く）
 - 試合の状態に無い見た目だけの値（粒子・画面の揺れ・歩いた距離・被弾の揺れ・粘膜爆弾を投げた
-  位置・炎の通った跡）は、`render/scene/` の `SceneTracker` が 1 tick ごとに数えます。盤面が進んだ
-  tick にだけ進め、ラウンドが替わったら忘れます。ルールの層に、見た目のためだけの値を足さないで
-  ください（足すなら、見分けに要るイベントを足します。`domain/events.py` の決まり）
+  位置・炎の通った跡・1つ前の tick の値）は、`render/scene/` の `SceneTracker` が 1 tick ごとに
+  数えます。1つ前の tick の値は、ゲーム速度が整数でないときに描く値を混ぜるためのもので、盤面に
+  いるプレイヤーの位置・外周の位置・歩いた距離・舌先までの長さ（`TrackedMotion`）・飛ぶ葱の位置
+  （`leek_before`）・粘膜爆弾の飛んだ tick（`flown_before`）・粒子の位置と寿命（`ParticleLook.previous`）
+  です。盤面が進んだ tick にだけ進め、ラウンドが替わったら忘れます。ルールの層に、見た目のためだけの
+  値を足さないでください（足すなら、見分けに要るイベントを足します。`domain/events.py` の決まり）
+- 描く関数の時刻の引数（`now`）は、盤面の時刻の tick の数を小数で受け取ります。ゲーム速度が整数で
+  ないときは、1つ前の tick から割合だけ進んだ時刻（`render/views/player.py` の `drawn_time`）を渡す
+  ので、時刻から出す値を tick の整数として扱わないでください（取っておく絵は段に丸めた値ごとにし、
+  丸めずに取っておく値は tick の整数に切ってから出す。`art/items.py` の溶けた割合）。状態が期限で
+  持つ値（無敵・撃つ間隔）は期限と描く時刻から出し、残りの tick の数で持つ値は `drawn_left` で
+  描く時刻の値にします（残りを決めた tick と 0 には足さない。同じファイル）
 - 原型の命令の列の固定値（`tests/presentation/legacy_art_ops.json`）・音の表の固定値
   （`legacy_sound_values.json`）・粒子の固定値（`legacy_particles.json`）は、原型を node で
   読み込んで書き出したものです。手で直さず、リポジトリのいちばん上で書き出し直してください。

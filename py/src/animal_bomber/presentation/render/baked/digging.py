@@ -16,7 +16,6 @@ from typing import Final
 
 import pygame
 
-from animal_bomber.domain.core.tick import Tick
 from animal_bomber.presentation.render.art.animals.mole import (
     SPRAY_FROM,
     clod_centers,
@@ -71,12 +70,13 @@ class DigSprites:
         target: pygame.Surface,
         x: float,
         y: float,
-        remaining: Tick,
-        now: Tick,
+        remaining: float,
+        now: float,
         alpha: float = 1.0,
     ) -> None:
         """プレイヤーの中心 (x, y)（px）に、掘る身ぶりを貼る（原型の drawDigging）。
 
+        `remaining` は掘り終わるまでの残り（tick。小数もとる。進みは段に丸めて貼る）。
         `alpha` は描くときの不透明度（ふつうは 1。モジュールの説明）。
         """
         tile = self._layout.tile

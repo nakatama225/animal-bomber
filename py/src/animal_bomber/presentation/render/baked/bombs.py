@@ -95,11 +95,16 @@ class BombSprites:
         self,
         target: pygame.Surface,
         bomb: Bomb,
-        now: Tick,
+        now: float,
         offset: tuple[int, int] = (0, 0),
+        behind: float = 0.0,
     ) -> None:
-        """爆弾を `target` に貼る（`offset` は画面の揺れなどで全体をずらす px）。"""
-        look = bomb_look(bomb, now)
+        """爆弾を `target` に貼る（`offset` は画面の揺れなどで全体をずらす px）。
+
+        `behind` は、描く時刻 `now` が盤面の時刻より何 tick 前か（導火線の残りに足す。
+        `art/bombs.py` の `bomb_look`）。
+        """
+        look = bomb_look(bomb, now, behind)
         size = self._layout.tile
         scale = quantize(look.pulse, 1 - PULSE_SWING, 1 + PULSE_SWING, SCALE_LEVELS)
         dx = bomb.cell.col * size + offset[0]

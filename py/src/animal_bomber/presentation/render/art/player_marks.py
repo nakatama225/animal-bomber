@@ -58,11 +58,11 @@ def status_marks(
     return marks
 
 
-def hold_progress(animal: Animal, held: int) -> float:
+def hold_progress(animal: Animal, held: float) -> float:
     """とくぎの長押しの溜まり（0→1。原型の min(1, actHold / specialHoldOf(p))）。
 
-    `held` は押し続けている長さ（tick。`PlayerState.action_held`）。原型と同じく、秒に
-    直してから割る。
+    `held` は押し続けている長さ（tick。`PlayerState.action_held`。ゲーム速度が整数で
+    ないときは描く時刻の長さで、小数もとる）。原型と同じく、秒にしてから割る。
     """
     return min(1, seconds(held) / seconds(stats_of(animal).hold_ticks))
 
