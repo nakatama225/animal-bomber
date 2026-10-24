@@ -127,7 +127,8 @@ class MenuCursor:
         """枠を出す。
 
         パッドの Select から「設定へもどりますか？」を開いたとき（原型の
-        `askBackToSetup`）と、幕でパッドを触ったとき（原型 L3637）に呼ぶ。
+        `askBackToSetup`）と、パッドを試合に繋ぐ遊び方の幕の間、パッドを読むたびに
+        （押したボタンが無くても。原型 L3637）呼ぶ。
         """
         self._shown = True
 

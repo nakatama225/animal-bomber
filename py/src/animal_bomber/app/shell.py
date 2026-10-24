@@ -14,13 +14,15 @@
 1. イベントを配る。キーは全部キーボード（`KeyboardWatcher`）へ渡し、そのうえで流れの
    入口（起動の幕を消す → LAN の画面の欄の字 → Backspace → 試合の P → メニューのキー）へ
    渡す。マウスは、確認の画面 → 幕 → 横の板 → 試合の外の画面の順に当たりを見る
-2. パッドを読む（受け付けない間も毎フレーム読む。`PadMenuInput` の説明）
+2. パッドを読む（受け付けない間も毎フレーム読む。`PadMenuInput` の説明）。押した
+   ボタンが無くても流れへ渡す（幕の間は、それで白い枠を出す。`MenuFlow.gamepad`）
 3. 通信対戦なら、中継から届いたものを受け取り、局面に合わせて画面を替える
 4. 試合を進める（1台はゲーム速度の倍率ぶんの回数。通信対戦は入力が揃った tick だけ）
 5. 描く。試合の画面は 盤面 → 横の板 →（ポーズの幕）→（幕）→（通信対戦の案内の帯）、
    どの画面でも最後に 通知 → 確認の画面 → 起動の幕（原型の重なりの順）。描く前に、
-   マウスが乗った項目の見た目の進みと、カーソルの白い枠を離す量の進み
-   （`presentation/menu/hover.py` の `RingMotions`）を数える
+   マウスが乗った項目の見た目の進みを数え、幕が出た・外れたことを流れへ伝え
+   （`_sync_banner`）、カーソルの白い枠を離す量の進み（`presentation/menu/hover.py` の
+   `RingMotions`）を数える
 
 ## マウス
 
@@ -61,7 +63,7 @@
 """
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Final, Protocol, assert_never
 
 import pygame
@@ -129,6 +131,7 @@ from animal_bomber.presentation.render.overlay.toast import ToastOverlay
 from animal_bomber.presentation.render.panel.side_panel import (
     PanelContent,
     PanelHits,
+    PanelPart,
     PanelTool,
     speed_at,
 )
@@ -291,6 +294,8 @@ class _Game:
     """前のフレームに描いた盤面（ラウンドが替わったかを見る）。"""
     refresh: bool = True
     """横の板をすぐ作り直すか（原型が `renderCards` をすぐ呼ぶ場面）。"""
+    parts: set[PanelPart] = field(default_factory=set)
+    """横の板のうち、区切りを待たずに替える所（ポーズとゲーム速度。`SidePanel.show`）。"""
 
 
 class _ToastNotices:
@@ -884,6 +889,10 @@ class Shell:
                 self._start_local(local.setup)
             elif local.between_rounds:
                 local.start_next_round()
+                # 流れにも、すぐ幕を外したことを伝える（原型の `startRound` も
+                # `G.phase='play'` にするので、キーとマウスで送ったフレームのあとの
+                # `pollGamepads` は幕の分かれ道を通らず、L3637 が枠を出さない）。
+                self._flow.hide_banner()
                 # 新しい盤面の控えをすぐ取らせる（`_begin_game` と同じ）。取らないと、
                 # 新しい盤面を最初に進めるまで前のラウンドの位置が控えに残り、1 より
                 # 小さいゲーム速度（0.5 倍・0.75 倍）では、押したフレームに前の
@@ -898,7 +907,10 @@ class Shell:
         """ポーズする・やめる（1台の試合の最中だけ。原型の `togglePause`）。
 
         ポーズで曲を止め、やめたら曲を頭から鳴らす（原型も同じ）。ラウンドの幕と優勝の幕の
-        間はポーズしない（`LocalMatch.can_pause`）。
+        間はポーズしない（`LocalMatch.can_pause`）。横の板は、キーの案内とポーズの
+        ボタンの字だけをすぐ替え、名札と時計は最後の区切りの中身のまま（原型の
+        `togglePause` はボタンの字と `renderKeyHelp` だけを替え、`renderCards` を
+        呼ばない。L4217-4221）。
         """
         game = self._game
         if game is None or game.local is None:
@@ -909,16 +921,20 @@ class Shell:
             self._tools.music.stop()
         else:
             self._tools.music.start()
-        game.refresh = True
+        game.parts.add(PanelPart.KEYS)
 
     def _set_speed(self, rate: float) -> None:
-        """ゲーム速度を変える（原型の `applySpeed`）。曲も速める（2倍まで）。"""
+        """ゲーム速度を変える（原型の `applySpeed`）。曲も速める（2倍まで）。
+
+        横の板は、つまみの値と色だけをすぐ替える（原型の `applySpeed` も `spdVal` と
+        `.fast` だけを替える。L6049-6052）。
+        """
         game = self._game
         if game is None or game.local is None or rate == self._speed.rate:
             return
         self._speed.set(rate)
         self._tools.music.set_tempo(tempo_for(rate))
-        game.refresh = True
+        game.parts.add(PanelPart.SPEED)
 
     def _leave(self) -> None:
         """試合と中継との接続をやめる（原型の `backToSetup`。流れはタイトルにいる）。"""
@@ -1012,17 +1028,30 @@ class Shell:
         self._hover.update(item, held, now_ms)
         flow = self._flow
         game = self._game
+        world = None if game is None else game.runner.world
+        if game is not None and world is not None:
+            # 幕が出た・外れたことを、白い枠の進みを数える前に流れへ伝える。幕が出た
+            # フレームから幕を画面とみなし、そのフレームに枠を描くボタン（前の幕で
+            # 付けて残った枠）は離しきって描く。2フレーム目からの塗り直し
+            # （`MenuFlow.gamepad`。原型 L3637）は、同じ画面の中の変化として 0 から
+            # 離す。
+            self._sync_banner(game, world)
         banner_shown = game is not None and game.shown is not None
+        # 確認の画面を除いた画面で枠を描く項目（`MenuFlow.page_ring`）。確認の画面が
+        # 開いていれば、その下に描く項目。
+        ringed = focused_item(flow.page_groups(), flow.page_ring())
+        asking = flow.dialog is not None
         self._rings.update(
             (flow.screen, banner_shown),
-            flow.dialog is not None,
-            focused_item(flow.groups(), flow.focus()),
+            asking,
+            focused_item(flow.groups(), flow.focus()) if asking else ringed,
             now_ms,
+            under=ringed if asking else None,
         )
         motions = replace(self._hover.motions(now_ms), rings=self._rings.rings(now_ms))
         tool = hovered if isinstance(hovered, PanelTool) else None
-        if game is not None and game.runner.world is not None:
-            self._draw_match(game, game.runner.world, now_ms, motions, tool)
+        if game is not None and world is not None:
+            self._draw_match(game, world, now_ms, motions, tool)
             self._menu_drawn = None
         else:
             self._draw_menu(motions)
@@ -1052,9 +1081,10 @@ class Shell:
             self._canvas.blit(self._background, (0, 0))
             self._menu_drawn = None
             return
-        focus = None if flow.dialog is not None else flow.focus()
+        # 確認の画面が開いていても、下の画面で枠を付けていた項目には描く（暗くする幕の
+        # 下に見える。`MenuFlow.page_ring`）。
         self._menu_drawn = self._screens.draw(
-            self._canvas, view, focus, self._scrolls, motions
+            self._canvas, view, flow.page_ring(), self._scrolls, motions
         )
 
     def _draw_match(
@@ -1081,7 +1111,11 @@ class Shell:
             pad_in_match=game.pad_in_match,
         )
         immediate = game.refresh or world is not game.world
+        parts = frozenset(game.parts)
+        # 幕の間（2フレーム目から）は横の板を描かないので、印は横の板に届かずに消える。
+        # 幕を外すフレームは描く盤面が替わるので、横の板を作り直す。
         game.refresh = False
+        game.parts.clear()
         game.world = world
         view = self._view
         view.draw(
@@ -1090,22 +1124,25 @@ class Shell:
             content,
             now_ms,
             immediate=immediate,
+            parts=parts,
             paused=paused,
-            banner=game.banner.current(world),
+            banner=game.shown,
             # 描く値（位置と時刻）を前の tick と混ぜるのは1台の試合だけ（通信対戦は
             # ゲーム速度が無い）。
             blend=self._speed.blend if local is not None else 1.0,
             hovered_tool=tool,
         )
         notice = game.runner.notice()
-        self._draw_banner(game, world, motions)
+        self._draw_banner(game, motions)
         if notice:
             view.draw_notice(notice)
 
-    def _draw_banner(
-        self, game: _Game, world: WorldState, motions: Motions = NO_MOTION
-    ) -> None:
-        """幕を、流れのボタンと揃えて描く（ボタンの見た目の進みは `motions`）。"""
+    def _sync_banner(self, game: _Game, world: WorldState) -> None:
+        """いまの盤面の幕を、出している幕（`_Game.shown`）と流れのボタンに揃える。
+
+        幕が出た・外れた・ボタンが替わったときに、流れへ伝える（`MenuFlow.show_banner`・
+        `hide_banner`）。出した・外したフレームは、横の板をすぐ作り直す。
+        """
         flow = self._flow
         view = game.banner.current(world)
         buttons = self._banner_buttons(game, view)
@@ -1122,10 +1159,18 @@ class Shell:
             # 通信対戦で、決まったあとにずれが知らされたら「もういっかい」を消す。
             game.buttons = buttons
             flow.show_banner(*buttons)
+
+    def _draw_banner(self, game: _Game, motions: Motions = NO_MOTION) -> None:
+        """出している幕を、流れのボタンと揃えて描く（見た目の進みは `motions`）。"""
+        view = game.shown
         if view is None:
             return
-        focus = None if flow.dialog is not None else flow.focus()
-        self._view.draw_banner(view, banner_groups(*game.buttons), focus, motions)
+        # 幕のボタンの枠は、幕が出ている間の塗り直し（パッドで動かした・枠を出して
+        # いないときにパッドを読んだ・確認の画面を閉じた）で付けた枠と、前の幕で付けて
+        # 残った枠（`MenuFlow.page_ring`）。
+        self._view.draw_banner(
+            view, banner_groups(*game.buttons), self._flow.page_ring(), motions
+        )
 
     def _banner_buttons(
         self, game: _Game, view: BannerView | None

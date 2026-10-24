@@ -729,13 +729,13 @@ def shaken_scene() -> tuple[WorldState, FixedVisuals, list[float]]:
 
 
 def still_scene() -> tuple[WorldState, FixedVisuals, list[float]]:
-    """揺れていない1枚（`pit_then_others`）。見た目の乱数は引かない。"""
+    """揺れていない1枚（`pit_then_others`）。見た目の乱数は取り出さない。"""
     world, visuals = pit_then_others()
     return world, visuals, []
 
 
 def negibon_scene() -> tuple[WorldState, FixedVisuals, list[float]]:
-    """外周の鍋と飛んでいる葱の1枚（`lanes_and_leeks`）。見た目の乱数は引かない。"""
+    """外周の鍋と飛んでいる葱の1枚（`lanes_and_leeks`）。見た目の乱数は取り出さない。"""
     world, visuals = lanes_and_leeks()
     return world, visuals, []
 
@@ -745,7 +745,7 @@ def negibon_scene() -> tuple[WorldState, FixedVisuals, list[float]]:
     [shaken_scene, still_scene, negibon_scene],
     ids=["揺れと粒子", "揺れなし", "外周の鍋と葱"],
 )
-def test_盤面の左上をずらして描いても_盤面の中の絵と乱数を引く順は同じ(
+def test_盤面の左上をずらして描いても_盤面の中の絵と乱数を取り出す順は同じ(
     scene: Callable[[], tuple[WorldState, FixedVisuals, list[float]]],
 ) -> None:
     """窓の面では、盤面を枠の太さだけ内側に描く（`origin`）。

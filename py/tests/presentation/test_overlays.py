@@ -60,8 +60,9 @@ from animal_bomber.presentation.render.ui.theme import (
     INK,
     LINE,
     WHITE,
+    Color,
 )
-from animal_bomber.presentation.render.ui.typeset import TextPainter
+from animal_bomber.presentation.render.ui.typeset import TextPainter, TextStyle
 from animal_bomber.presentation.render.ui.widgets import Widgets
 
 from .frame_scenes import rgb
@@ -151,6 +152,16 @@ ROUND = BannerView(
     note=None,
     button="つぎのラウンド ▶",
     final=False,
+)
+
+FINAL = BannerView(
+    emoji="🏆",
+    title="うさぎ（1P） 優勝！",
+    summary="3勝先取を達成（全3ラウンド）",
+    board="🐰3　🐸1",
+    note=None,
+    button="もういっかい",
+    final=True,
 )
 
 WIDE = (1400, 900)
@@ -380,6 +391,84 @@ class Test幕:
         assert card.top == (SIZE[1] - card.h) // 2
         # ボタンは、カードの左の縁から枠と余白（2px＋38px）の所。
         assert [hit.rect.left for hit in hits] == [card.left + 40] * 2
+
+    @pytest.mark.parametrize("view", [ROUND, FINAL])
+    def test_絵文字の行は字の大きさで数え_下の余白は原型の30px(
+        self, view: BannerView
+    ) -> None:
+        """原型の `.bcard` の余白 `30px 38px` と `.be` の `line-height:1`（L143-148）。
+
+        `.be` は `font-size:76px` なので、絵文字の行は 76px。下に 6px 空けて題（`.bt`。
+        下に 6px）、文の行（`.bs`。行の高さ 1.6・下に 20px）、ボタン（`.go` は上に
+        6px）と並ぶ。題の上の端はカードの上の端から 2＋30＋76＋6＝114px、最後の
+        ボタンの下の端から枠の内側までは余白の 30px。絵文字の絵は行より高く（書体の
+        高さ）、字形は行の下へはみ出すが、並べるのは行の高さで。
+        """
+        groups = banner_groups(view.button, True)
+        target = checkered()
+        hits = BannerOverlay(WIDGETS).draw(target, view, groups, None)
+        card = box_of(rgb(target), ACCENT2, 30)
+        assert PAINTER.render(view.emoji, banner_module.EMOJI).get_height() > 76
+        title_top = BORDER + banner_module.PAD_Y + 76 + 6
+        assert title_top == 114
+        lines = PAINTER.normal_line(banner_module.TITLE) + 6
+        lines += banner_module.SUMMARY_LINE + banner_module.BOARD_LINE + 20
+        assert hits[0].rect.top - card.top == title_top + lines + 6
+        assert card.bottom - BORDER - hits[-1].rect.bottom == banner_module.PAD_Y == 30
+
+    @pytest.mark.parametrize("view", [ROUND, FINAL])
+    def test_題の行は上の端から114px_絵文字の絵は枠と余白の内側の上の端に描く(
+        self, monkeypatch: pytest.MonkeyPatch, view: BannerView
+    ) -> None:
+        """原型の `.bcard` の枠 2px と余白 30px、`.be` の行 76px と下の 6px。
+
+        原型の L143-148。題（`.bt`）の行の上の端はカードの上の端から
+        2＋30＋76＋6＝114px、絵文字の絵は行の上の端（2＋30＝32px）。題の絵と絵文字の
+        絵を、同じ大きさの不透明な目印の色の絵に替えて描き、描いた面で目印の色がある
+        行を数える（字形と書体によらず、置いた位置だけを比べる）。絵文字の絵は書体の
+        高さで 76px より高く、下の端は題の目印に隠れるので、上の端だけを比べる。
+        """
+        title_mark, emoji_mark = (255, 0, 255), (0, 255, 255)
+        painter = TextPainter()
+        paragraph, render = painter.paragraph, painter.render
+        sizes: dict[str, tuple[int, int]] = {}
+
+        def marked(image: pygame.Surface, name: str, color: Color) -> pygame.Surface:
+            sizes[name] = image.get_size()
+            mark = pygame.Surface(image.get_size(), pygame.SRCALPHA)
+            mark.fill((*color, 255))
+            return mark
+
+        def marked_paragraph(
+            text: str, width: int, style: TextStyle, line_height: int
+        ) -> pygame.Surface:
+            image = paragraph(text, width, style, line_height)
+            if (text, style) == (view.title, banner_module.TITLE):
+                return marked(image, "title", title_mark)
+            return image
+
+        def marked_render(text: str, style: TextStyle) -> pygame.Surface:
+            image = render(text, style)
+            if (text, style) == (view.emoji, banner_module.EMOJI):
+                return marked(image, "emoji", emoji_mark)
+            return image
+
+        monkeypatch.setattr(painter, "paragraph", marked_paragraph)
+        monkeypatch.setattr(painter, "render", marked_render)
+        target = checkered()
+        groups = banner_groups(view.button, True)
+        BannerOverlay(Widgets(painter)).draw(target, view, groups, None)
+        image = rgb(target)
+        card = box_of(image, ACCENT2, 30)
+
+        def rows_of(color: Color) -> tuple[int, int]:
+            rows = np.nonzero(np.all(image == np.array(color), axis=2).any(axis=1))[0]
+            return int(rows.min()) - card.top, int(rows.max()) + 1 - card.top
+
+        title_height = sizes["title"][1]
+        assert rows_of(title_mark) == (114, 114 + title_height)
+        assert rows_of(emoji_mark)[0] == BORDER + banner_module.PAD_Y == 32
+        assert sizes["emoji"][1] > 76
 
     def test_カードの影は_形の端で半分_標準偏差1つ外で約16パーセントの濃さ(
         self, monkeypatch: pytest.MonkeyPatch

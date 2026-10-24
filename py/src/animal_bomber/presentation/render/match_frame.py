@@ -33,6 +33,8 @@
 窓の外へ出る分（盤面の左と上と、盤面が横の板より高いときの下）は切れる。
 """
 
+from collections.abc import Collection
+
 import pygame
 
 from animal_bomber.domain.state.world import WorldState
@@ -50,6 +52,7 @@ from animal_bomber.presentation.render.layout import (
 from animal_bomber.presentation.render.panel.side_panel import (
     PanelContent,
     PanelHits,
+    PanelPart,
     PanelTool,
     SidePanel,
 )
@@ -184,6 +187,7 @@ def draw_match_frame(
     panel_topleft: tuple[int, int],
     now_ms: float,
     immediate: bool = False,
+    parts: Collection[PanelPart] = (),
     blend: float = 1.0,
     hovered_tool: PanelTool | None = None,
 ) -> PanelHits:
@@ -210,6 +214,8 @@ def draw_match_frame(
             数える）。
         immediate: 横の板を、盤面の時刻の区切りを待たずに作り直すか
             （`SidePanel.show`）。
+        parts: 横の板のうち、区切りを待たずに替える所（ポーズとゲーム速度。
+            `SidePanel.show`。描画の重さの場面は既定のまま）。
         blend: 描く値（位置と時刻）を1つ前の tick の値と混ぜる割合（`shell/loop.py`
             の `GameSpeed.blend`。既定の 1 はいまの値。描画の重さの場面は既定の
             まま）。
@@ -221,5 +227,5 @@ def draw_match_frame(
     renderer.draw(target, world, visuals, blend, origin=board.topleft)
     target.set_clip(None)
     frame.cover(target)
-    panel.show(content, world.now, immediate=immediate)
+    panel.show(content, world.now, immediate=immediate, parts=parts)
     return panel.draw(target, panel_topleft, now_ms, hovered_tool)

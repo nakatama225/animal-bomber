@@ -257,7 +257,7 @@ def renderer_image(
     cpu_players: Collection[PlayerId] = (),
     blend: float = 1.0,
 ) -> tuple[Image, list[float]]:
-    """取っておいた絵を貼って描いた絵と、引いた見た目の乱数。
+    """取っておいた絵を貼って描いた絵と、取り出した見た目の乱数。
 
     `blend` は描く値を1つ前の tick と混ぜる割合（`Renderer.draw`）。
     """
@@ -276,7 +276,7 @@ def direct_image(
     cpu_players: Collection[PlayerId] = (),
     now: float | None = None,
 ) -> tuple[Image, list[float]]:
-    """手本の `draw_frame` で、描く面の全体を取っておかずに描いた絵と、引いた乱数。
+    """手本の `draw_frame` で、描く面の全体を取っておかずに描いた絵と、取り出した乱数。
 
     `now` は描く時刻（`frame_scene`）。
     """

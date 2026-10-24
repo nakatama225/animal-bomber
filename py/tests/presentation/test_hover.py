@@ -268,14 +268,60 @@ class Test白い枠を離す量:
     def test_確認の画面を開くと_枠は離しきった所に出て_中で移れば0から離す(
         self,
     ) -> None:
+        """下の画面で枠を付けていた項目の離す量は、開いたときの変化のまま進む。
+
+        原型の確認の画面の間も、下の画面の項目の className は替わらず、`transition` も
+        そのまま進む。下の画面で枠を付けていた項目（`under`）は、確認の画面の暗さの
+        下に、その量で離して描く（`MenuFlow.page_ring`）。
+        """
         no, yes = dialog_view(DialogKind.DISCONNECT).buttons.items
         rings = shown_rings(TITLE, (CHIP, 0.0))
-        rings.update(TITLE, True, no, 50.0)
-        assert rings.rings(50.0) == {identity(no): 1.0}
-        rings.update(TITLE, True, yes, 300.0)
+        rings.update(TITLE, True, no, 50.0, under=CHIP)
+        assert rings.rings(50.0) == {
+            identity(no): 1.0,
+            identity(CHIP): pytest.approx(ease(50 / 120)),
+        }
+        rings.update(TITLE, True, yes, 300.0, under=CHIP)
         now = rings.rings(360.0)
         assert now[identity(yes)] == pytest.approx(ease(0.5))
-        assert identity(CHIP) not in now
+        assert now[identity(no)] == pytest.approx(1 - ease(0.5))
+        assert now[identity(CHIP)] == 1.0
+
+    def test_枠を消してから開いた確認の画面の下の項目は_開いたフレームから離し直す(
+        self,
+    ) -> None:
+        """原型のキーかパッドの B は、枠を出して下の画面を塗ってから確認の画面を開く。
+
+        マウスで枠を消して 0 へ戻っている途中の項目に、`MENU.nav` が
+        `navcur` を足し直す（L3298-3303）ので、その項目は、いまの値から向きの
+        替わった変化を縮める決まりで離していき、確認の画面の間も離しきるまで進む。
+        """
+        no = dialog_view(DialogKind.DISCONNECT).buttons.items[0]
+        rings = shown_rings(TITLE, (CHIP, 0.0), (None, 200.0))
+        rings.update(TITLE, True, no, 230.0, under=CHIP)
+        done = ease(30 / 120)
+        assert rings.rings(230.0)[identity(CHIP)] == pytest.approx(1 - done)
+        assert rings.rings(230.0 + 120 * done)[identity(CHIP)] == 1.0
+        # 枠を付けていない（マウスで開いた）なら、0 へ戻り続ける。
+        hidden = shown_rings(TITLE, (CHIP, 0.0), (None, 200.0))
+        hidden.update(TITLE, True, no, 230.0)
+        assert hidden.rings(400.0)[identity(CHIP)] == 0.0
+
+    def test_確認の画面を開いたまま画面が替わると_下の項目の枠は離しきって出る(
+        self,
+    ) -> None:
+        """通信対戦で、確認の画面を開いたまま幕が出たとき（幕が出ているかも画面とみなす）。
+
+        前の幕で付けて残った枠（`MenuFlow.page_ring`）は、表示した幕のボタンに最初から
+        付いているので、離しきった所に出て、次のフレームからも離しきったまま。
+        """
+        no = dialog_view(DialogKind.BACK_TO_SETUP).buttons.items[0]
+        rings = RingMotions()
+        rings.update(("試合", False), True, no, 0.0)
+        rings.update(("試合", True), True, no, 10.0, under=GO)
+        assert rings.rings(10.0)[identity(GO)] == 1.0
+        rings.update(("試合", True), True, no, 20.0, under=GO)
+        assert rings.rings(20.0)[identity(GO)] == 1.0
 
     def test_確認の画面を閉じて同じ項目へ戻れば離しきったまま_ほかの項目なら0から(
         self,
@@ -283,11 +329,11 @@ class Test白い枠を離す量:
         """原型は確認の画面の間も、下の画面の項目の className を替えない。"""
         no = dialog_view(DialogKind.DISCONNECT).buttons.items[0]
         same = shown_rings(TITLE, (CHIP, 0.0))
-        same.update(TITLE, True, no, 500.0)
+        same.update(TITLE, True, no, 500.0, under=CHIP)
         same.update(TITLE, False, CHIP, 600.0)
         assert same.rings(600.0)[identity(CHIP)] == 1.0
         moved = shown_rings(TITLE, (CHIP, 0.0))
-        moved.update(TITLE, True, no, 500.0)
+        moved.update(TITLE, True, no, 500.0, under=CHIP)
         moved.update(TITLE, False, OTHER_CHIP, 600.0)
         assert moved.rings(600.0)[identity(OTHER_CHIP)] == 0.0
         assert moved.rings(660.0)[identity(OTHER_CHIP)] == pytest.approx(ease(0.5))

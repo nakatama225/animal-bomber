@@ -681,8 +681,8 @@ class Test残りの数を描く時刻のものにする:
         """残りを決めた tick と、かかっていない状態は、描く時刻の値にしない。
 
         残りを決めた tick は、落とし穴にはまった tick・掘り始めた tick・撒き始めた
-        tick。跳び上がりの残りは、どの tick も tick のまま（docs/11 の「原型に合わせる
-        作業が残っている所」）。
+        tick。跳び上がりの残りは、どの tick も tick のまま（docs/11 の「原型に合わせない
+        所」の「ゲーム速度が整数でないときの、絵を tick ごとに取っておく値」）。
         """
         world, mole = arena((Animal.MOLE, Animal.RABBIT))
         mole.effects.add(EffectKind.PITFALL, HOLD_TIME, HOLD_TIME)

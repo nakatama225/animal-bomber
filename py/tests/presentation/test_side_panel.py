@@ -33,6 +33,7 @@ from animal_bomber.presentation.render.panel.side_panel import (
     THUMB,
     WARN_PULSE_MS,
     PanelContent,
+    PanelPart,
     SidePanel,
     pulse_opacity,
     speed_at,
@@ -333,6 +334,62 @@ class Test作り直し:
             panel.show(second, Tick(20))
             panel.draw(surface, (0, 0), frame * 16.7)
         assert (panel.content, panel.builds) == (first, 1)
+
+    def test_一部だけ替えると_名札と時計は前の中身のまま_区切りも動かさない(
+        self,
+    ) -> None:
+        """原型の `togglePause`・`applySpeed` は `renderCards` を呼ばない。
+
+        キーの案内とポーズのボタンの字（`PanelPart.KEYS`）、つまみの値と色
+        （`PanelPart.SPEED`）だけを、区切りを待たずに受け取る。名札と時計は前に受け取った
+        中身のまま。区切りの番号も動かさないので、次の区切り（30）で全部を受け取る。
+        """
+        panel = SidePanel(PAINTER)
+        world = make_world()
+        surface = pygame.Surface((PANEL_WIDTH, 2000))
+        first = content_of(world)
+        panel.show(first, Tick(15))
+        panel.draw(surface, (0, 0), 0.0)
+        world.players[3].has_special = True
+        world.ends_at = Tick(world.ends_at - 120)
+        # パッドを繋いだポーズ中の案内（Select の行が出る）。
+        rows = describe_key_help(KeyHelpSource(world, ROSTER, True, True, True, True))
+        paused = replace(content_of(world, paused=True, speed=2.0), help_rows=rows)
+        assert paused.cards != first.cards and paused.clock != first.clock
+        assert paused.help_rows != first.help_rows
+        panel.show(paused, Tick(16), parts={PanelPart.KEYS})
+        assert panel.content == replace(
+            first, help_rows=paused.help_rows, paused=True, can_pause=True
+        )
+        panel.show(paused, Tick(17), parts={PanelPart.SPEED})
+        assert panel.content == replace(
+            first, help_rows=paused.help_rows, paused=True, speed=2.0
+        )
+        panel.draw(surface, (0, 0), 16.7)
+        panel.show(paused, Tick(29))
+        assert panel.content is not None and panel.content.cards == first.cards
+        panel.show(paused, Tick(30))
+        assert panel.content == paused
+
+    def test_つまみだけを替えるときは_キーの案内とポーズのボタンの字を替えない(
+        self,
+    ) -> None:
+        """原型の `applySpeed` は、つまみの字と `.fast` と曲の速さだけを替える。
+
+        原型の L6043-6055。`renderKeyHelp` もポーズのボタンの字も替えない。区切りの
+        中で、キーの案内とポーズの印も違う中身を `PanelPart.SPEED` で渡しても、つまみの
+        値だけを受け取る。
+        """
+        panel = SidePanel(PAINTER)
+        world = make_world()
+        first = content_of(world)
+        panel.show(first, Tick(15))
+        rows = describe_key_help(KeyHelpSource(world, ROSTER, True, True, True, True))
+        changed = replace(content_of(world, paused=True, speed=2.0), help_rows=rows)
+        assert changed.help_rows != first.help_rows
+        assert changed.paused != first.paused
+        panel.show(changed, Tick(16), parts={PanelPart.SPEED})
+        assert panel.content == replace(first, speed=2.0)
 
     def test_ラウンドが替わって時刻が0に戻っても_区切りが変われば受け取る(self) -> None:
         panel = SidePanel(PAINTER)

@@ -3,12 +3,13 @@
 ## 呼び方（起動の層から）
 
     screens = MenuScreens(Widgets(TextPainter()))
-    drawn = screens.draw(canvas, flow.screen_view(), flow.focus(), scrolls)
+    drawn = screens.draw(canvas, flow.screen_view(), flow.page_ring(), scrolls)
     # drawn.hits：（項目, 四角）。マウスで押した位置の項目を `flow.press` に渡す
     # drawn.page・drawn.boxes：スクロールできる範囲（ホイールの量を丸めるのに使う）
 
-確認の画面が開いている間は、`focus` に None を渡して下の画面に白い枠を描かず、
-`overlay/dialog.py` の `DialogOverlay` に `flow.focus()` を渡す。
+確認の画面が開いている間も、`focus` には `flow.page_ring()`（開いたときに下の画面で
+白い枠を付けていた項目）を渡し、`overlay/dialog.py` の `DialogOverlay` に
+`flow.focus()` を渡す。
 
 ## 画面の並び（原型の `body`）
 
@@ -163,7 +164,7 @@ class MenuScreens:
         Args:
             target: 描く面。
             view: 画面の中身（`MenuFlow.screen_view()`）。
-            focus: 白い枠を描く項目の位置（`MenuFlow.focus()`）。None なら描かない。
+            focus: 白い枠を描く項目の位置（`MenuFlow.page_ring()`）。None なら描かない。
             scrolls: スクロールの量（鍵は `PAGE` と箱の名前）。省くと全部 0。
             motions: 項目ごとの、マウスが乗った見た目・押している見た目への進み。
         """

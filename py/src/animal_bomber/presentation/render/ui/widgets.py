@@ -426,18 +426,7 @@ class Widgets:
             motion = REST
         if item.style is ItemStyle.GO:
             go = go_look(motion)
-            alpha = round_half_up(go.glow_alpha * GLOW_ALPHA_LEVELS) / GLOW_ALPHA_LEVELS
-            glow = None
-            if alpha > 0:
-                glow = Shadow(
-                    0,
-                    round_half_up(go.glow_dy),
-                    round_half_up(go.glow_blur),
-                    0,
-                    GLOW,
-                    alpha,
-                )
-            return _Look(None, round_half_up(go.drop), glow)
+            return _Look(None, round_half_up(go.drop), go_glow(go))
         # 選ばれたチップとカード（原型の `.on`）は、黄色の縁とぼかさない影を持ち、
         # 縁の色は `:hover` より `.on` が勝つ（モジュールの説明）。
         chosen = item.selected and item.style in (ItemStyle.CHIP, ItemStyle.ANIMAL)
@@ -607,6 +596,20 @@ class Widgets:
 def go_look(motion: ItemMotion) -> GoLook:
     """見た目の進み `motion` のときの、大きいボタンの位置と影（モジュールの説明）。"""
     return GO_REST.toward(GO_HOVER, motion.hover).toward(GO_ACTIVE, motion.active)
+
+
+def go_glow(go: GoLook) -> Shadow | None:
+    """大きいボタンの光を、取っておく絵の段に丸めた影。不透明度が 0 に丸まれば None。
+
+    不透明度は `GLOW_ALPHA_LEVELS` の段に、ずれとぼかしの半径は整数の px に丸める
+    （半分は大きいほうへ）。
+    """
+    alpha = round_half_up(go.glow_alpha * GLOW_ALPHA_LEVELS) / GLOW_ALPHA_LEVELS
+    if alpha <= 0:
+        return None
+    return Shadow(
+        0, round_half_up(go.glow_dy), round_half_up(go.glow_blur), 0, GLOW, alpha
+    )
 
 
 def _blit_line(

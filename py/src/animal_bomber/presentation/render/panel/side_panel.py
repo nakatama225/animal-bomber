@@ -16,7 +16,9 @@
   時刻（`world.now`）を受け取り、15 tick（`REFRESH_TICKS`）の区切りを越えたフレームに
   だけ、そのとき渡された中身を受け取る。中身が前と同じでも、区切りを越えたら受け取った
   ことにする（原型も区切りごとに作り直すので、次に替わった中身は次の区切りまで出ない）。
-  被弾やポーズの切り替えのように原型がすぐ作り直す所は、`immediate=True` で渡す
+  被弾のように原型が `renderCards` をすぐ呼ぶ所は、`immediate=True` で渡す。ポーズの
+  切り替えとゲーム速度は、原型と同じく名札と時計を作り直さず、キーの案内・ポーズの
+  ボタンの字・つまみだけを替える（`PanelPart`）
 - 盤面の時刻で数えるので、ゲーム速度を変えると実時間の間隔も原型と同じく変わる（3 倍で
   約 83 ms、0.5 倍で 500 ms）。倍率で変わって見えるのは、横の板の中身が 0.25 秒より
   細かく替わる場面の、落とし穴の残り秒の刻み（と、そのときの時計の間隔）。何も起きて
@@ -47,7 +49,7 @@
 """
 
 import math
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Final
@@ -199,6 +201,18 @@ class PanelContent:
     """「⏸ ポーズ」のボタンを出すか（1台の試合だけ）。"""
 
 
+class PanelPart(Enum):
+    """区切りを待たずに替える、板の一部（原型が `renderCards` を呼ばずに替える所）。
+
+    `SidePanel.show` に渡す。名札と時計は替えない。
+    """
+
+    KEYS = "keys"
+    """キーの案内とポーズのボタンの字（原型の `togglePause`。L4217-4221）。"""
+    SPEED = "speed"
+    """ゲーム速度のつまみの値と色（原型の `applySpeed`。L6049-6052）。"""
+
+
 class PanelTool(Enum):
     """ツールバーのボタン（マウスが乗っているボタンを `SidePanel.draw` に渡す）。"""
 
@@ -339,7 +353,12 @@ class SidePanel:
         return total
 
     def show(
-        self, content: PanelContent, now: Tick, *, immediate: bool = False
+        self,
+        content: PanelContent,
+        now: Tick,
+        *,
+        immediate: bool = False,
+        parts: Collection[PanelPart] = (),
     ) -> None:
         """出す中身と、盤面の時刻 `now`（`world.now`）を渡す。
 
@@ -349,11 +368,27 @@ class SidePanel:
         のは次の区切り（原型のすぐ作り直す呼び出しも、盤面の時刻で決まる区切りを動かさ
         ない）。ラウンドが替わって盤面の時刻が 0 に戻っても、区切りの番号が前と同じで
         なければ受け取る。
+
+        区切りが同じで `immediate` でないときは、`parts` に挙げた所だけを `content` から
+        受け取り、時計と名札は前に受け取った中身のまま残す（区切りの番号も動かさない。
+        原型の `togglePause` と `applySpeed` は `renderCards` を呼ばない）。
         """
         slot = now // REFRESH_TICKS
-        if immediate or self._content is None or slot != self._slot:
+        shown = self._content
+        if immediate or shown is None or slot != self._slot:
             self._content = content
             self._slot = slot
+            return
+        if PanelPart.KEYS in parts:
+            shown = replace(
+                shown,
+                help_rows=content.help_rows,
+                paused=content.paused,
+                can_pause=content.can_pause,
+            )
+        if PanelPart.SPEED in parts:
+            shown = replace(shown, speed=content.speed)
+        self._content = shown
 
     def draw(
         self,

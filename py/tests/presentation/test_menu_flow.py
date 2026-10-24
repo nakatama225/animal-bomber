@@ -585,9 +585,11 @@ class Test幕:
         assert screen_of(flow) is MenuScreen.PLAY
 
     def test_パッドを試合に繋がない遊び方では_幕でパッドを受け付けない(self) -> None:
+        """原型の L3622（2人で遊ぶ形は、幕で枠も出さずに帰る）。"""
         flow = on_banner(drives=False)
         for command in (CONFIRM, START, DOWN):
             assert flow.gamepad({command}) == ()
+        assert flow.gamepad(()) == ()
         assert not flow.cursor_shown
         assert flow.keyboard(CONFIRM) == (AdvanceBanner(),)
 
@@ -596,7 +598,261 @@ class Test幕:
         assert flow.keyboard(CONFIRM) == ()
         for command in (CONFIRM, START, DOWN):
             assert flow.gamepad({command}) == ()
+        assert flow.gamepad(()) == ()
         assert not flow.cursor_shown
+
+
+def ring_label(flow: MenuFlow) -> str | None:
+    """確認の画面を除いた画面で、白い枠を描く項目の文（`page_ring`）。無ければ None。"""
+    at = flow.page_ring()
+    if at is None:
+        return None
+    group, index = at
+    return flow.page_groups()[group].items[index].label
+
+
+class Test白い枠を描く項目:
+    """確認の画面を除いた画面で、白い枠を描く項目（`MenuFlow.page_ring`）。
+
+    原型の白い枠は、`MENU.paint` が名簿（`MENU.list`）の項目の className に足す
+    `navcur` で、名簿に載っていない項目の className は、次に載って塗られるまで
+    そのまま残る（L3219-3277）。
+    """
+
+    def test_確認の画面も幕も無ければ_カーソルの位置(self) -> None:
+        flow = in_lobby()
+        assert flow.page_ring() is None
+        flow.keyboard(DOWN)
+        assert flow.page_ring() is not None
+        assert flow.page_ring() == flow.focus()
+
+    def test_確認の画面の下は_開いたときに枠を付けていた項目_マウスを動かしても残る(
+        self,
+    ) -> None:
+        """原型の確認の画面の間、名簿は確認の画面の2つだけ（L3219-3220）。
+
+        マウスを動かしたときの塗り直し（L3105）も、確認の画面の2つしか塗らない。閉じると
+        `MENU.reset` が下の画面を塗り直す（L3344-3350）ので、枠を消していれば描かない。
+        """
+        flow = in_lobby()
+        flow.keyboard(DOWN)
+        flow.keyboard(DOWN)
+        label = focused_label(flow)
+        assert label is not None
+        flow.keyboard(BACK)
+        assert flow.dialog is DialogKind.DISCONNECT
+        assert focused_label(flow) == "やめる"
+        assert ring_label(flow) == label
+        flow.hide_cursor()
+        assert ring_label(flow) == label
+        press(flow, "やめる")
+        assert flow.dialog is None
+        assert flow.page_ring() is None
+
+    def test_枠を消してからマウスで開いた確認の画面の下には_描かない(self) -> None:
+        flow = in_lobby()
+        flow.keyboard(DOWN)
+        flow.hide_cursor()
+        press(flow, "← せつぞくを切る")
+        assert flow.dialog is DialogKind.DISCONNECT
+        assert flow.page_ring() is None
+
+    def test_Bで開いた確認の画面は_枠を消していても_下の項目に描く(self) -> None:
+        """原型の `MENU.nav` は、枠を出して名簿を塗ってから戻る（L3298-3303）。"""
+        flow = in_lobby()
+        flow.keyboard(DOWN)
+        flow.keyboard(DOWN)
+        label = focused_label(flow)
+        flow.hide_cursor()
+        flow.keyboard(BACK)
+        assert flow.dialog is DialogKind.DISCONNECT
+        assert ring_label(flow) == label
+
+    def test_ロビーを組み直したら_確認の画面の下に描かない(self) -> None:
+        """原型の `buildLobby` は項目を作り直し、作り直した項目に `navcur` は無い。"""
+        flow = in_lobby()
+        flow.keyboard(DOWN)
+        flow.keyboard(BACK)
+        assert flow.page_ring() is not None
+        flow.update_lobby(Lobby(seat=0, present=(0, 1, 2)))
+        assert flow.dialog is DialogKind.DISCONNECT
+        assert flow.page_ring() is None
+
+    def test_枠を出したまま幕が出ても_パッドのAで送っても_幕のボタンを塗らない(
+        self,
+    ) -> None:
+        """原型は幕を表示する前に `MENU.reset` で塗る（L4477・L4509）。
+
+        名簿は表示されていない幕のボタンを外す（`offsetParent`。L3245-3247）ので、幕の
+        ボタンは塗られない。幕の間の L3637 は `MENU.on` が偽のときだけ塗り、`MENU.nav`
+        の A は塗らずに押す（L3298-3308）ので、枠を出したままパッドの A で送った幕の
+        ボタンは、次の幕でも塗られていない。
+        """
+        flow = make_flow()
+        flow.start_play(pad_drives_match=True, can_pause=True)
+        flow.gamepad({SELECT}, paused=True)
+        press(flow, "やめる")
+        assert flow.cursor_shown
+        flow.show_banner("つぎのラウンド ▶", True)
+        assert flow.focus() == (0, 0)
+        assert flow.page_ring() is None
+        assert flow.gamepad(()) == ()
+        assert flow.page_ring() is None
+        assert flow.gamepad({CONFIRM}) == (AdvanceBanner(),)
+        flow.hide_banner()
+        flow.show_banner("つぎのラウンド ▶", True)
+        flow.gamepad(())
+        assert flow.page_ring() is None
+
+    def test_幕の間は_パッドを押さないフレームも_枠を出して幕のボタンを塗る(
+        self,
+    ) -> None:
+        """原型の L3637。`pollGamepads` は幕の間も毎フレーム呼ばれる（L4241）。
+
+        パッドが無くても押したボタンが無くても、幕では L3622（2人で遊ぶ形）・L3630
+        （ゲスト）・L3631（Start）のほかに帰る所が無く、`MENU.on` が偽なら立てて塗る。
+        """
+        flow = on_banner()
+        assert not flow.cursor_shown
+        assert flow.page_ring() is None
+        assert flow.gamepad(()) == ()
+        assert flow.cursor_shown
+        assert ring_label(flow) == "つぎのラウンド ▶"
+
+    def test_幕が出ていなければ_パッドを押さないフレームに枠を出さない(self) -> None:
+        flow = make_flow()
+        flow.start_play(pad_drives_match=True, can_pause=True)
+        assert flow.gamepad(()) == ()
+        assert not flow.cursor_shown
+
+    def test_幕のStartは_枠を出す前に幕を送る(self) -> None:
+        """原型の L3631 は L3637 より前で帰る（`MENU.on` を立てない）。"""
+        flow = on_banner()
+        assert flow.gamepad({START}) == (AdvanceBanner(),)
+        assert not flow.cursor_shown
+        assert flow.page_ring() is None
+
+    def test_幕の上で枠が無ければ塗り_十字で移し_マウスで外すと次のフレームに戻す(
+        self,
+    ) -> None:
+        """原型の L3637（枠を出して塗る）・L3321（動かして塗る）・L3105（外す）。
+
+        マウスを動かして外しても、次の `pollGamepads` の L3637 が枠を出し直して、
+        カーソルの位置を塗る。
+        """
+        flow = on_banner()
+        flow.gamepad(())
+        assert ring_label(flow) == "つぎのラウンド ▶"
+        flow.gamepad({DOWN})
+        assert ring_label(flow) == "⚙ 設定をやりなおす"
+        flow.hide_cursor()
+        assert flow.page_ring() is None
+        flow.gamepad(())
+        assert flow.cursor_shown
+        assert ring_label(flow) == "⚙ 設定をやりなおす"
+
+    def test_幕のボタンに付けた枠は_次の幕にも次の試合にも残る(self) -> None:
+        """原型の幕のボタンは、幕を外しても次の試合でも同じ要素（L544-550・L6030-6036）。
+
+        幕が出ていない間の塗り直しは幕のボタンに触れないので、前の幕で付けた `navcur` は
+        次の幕に最初から出る。枠を出していなければ、マウスを動かしても塗り直さない
+        （L3105）。
+        """
+        flow = on_banner()
+        assert flow.gamepad({CONFIRM}) == (AdvanceBanner(),)
+        flow.hide_banner()
+        flow.hide_cursor()
+        flow.show_banner("つぎのラウンド ▶", True)
+        assert not flow.cursor_shown
+        assert ring_label(flow) == "つぎのラウンド ▶"
+        flow.hide_cursor()
+        assert ring_label(flow) == "つぎのラウンド ▶"
+        flow.hide_banner()
+        flow.start_play(pad_drives_match=True, can_pause=True)
+        flow.show_banner("もういっかい", True)
+        assert ring_label(flow) == "もういっかい"
+
+    def test_Startで送った幕のあとも_枠を付けたボタンに次の幕で描く(self) -> None:
+        """カーソルは1つ目のボタンへ戻るが、枠は前の幕で付けたボタンに残る。
+
+        枠を出したままなので、幕の間の L3637 も塗り直さない。
+        """
+        flow = on_banner()
+        flow.gamepad({DOWN})
+        assert flow.gamepad({START}) == (AdvanceBanner(),)
+        flow.hide_banner()
+        flow.show_banner("つぎのラウンド ▶", True)
+        assert flow.focus() == (0, 0)
+        assert ring_label(flow) == "⚙ 設定をやりなおす"
+        flow.gamepad(())
+        assert ring_label(flow) == "⚙ 設定をやりなおす"
+
+    def test_タイトルへ戻っても幕のボタンの枠は残り_次の試合の幕に出る(self) -> None:
+        """原型の `backToSetup` は `MENU.on` を偽にし、幕のボタンを塗らない。
+
+        原型の L6058-6079。`closeDialog` は確認の画面が無ければ何もせず（L3345）、
+        `showScreen('title')` の `MENU.reset`（L5699）はタイトルの名簿しか塗らないので、
+        「⚙ 設定をやりなおす」の className は残る。次の試合の幕は最初からそこに枠が
+        出て、`MENU.on` が偽なので、次の `pollGamepads` の L3637 がカーソルの位置
+        （先頭）を塗り直す。
+        """
+        flow = on_banner()
+        flow.gamepad({DOWN})
+        assert ring_label(flow) == "⚙ 設定をやりなおす"
+        assert flow.gamepad({CONFIRM}) == (ReturnToTitle(),)
+        assert not flow.cursor_shown
+        flow.start_play(pad_drives_match=True, can_pause=True)
+        flow.show_banner("つぎのラウンド ▶", True)
+        assert ring_label(flow) == "⚙ 設定をやりなおす"
+        flow.gamepad(())
+        assert ring_label(flow) == "つぎのラウンド ▶"
+
+    @pytest.mark.parametrize("leftover", [False, True])
+    def test_確認の画面を開いたまま幕が出たら_閉じるまで幕のボタンを塗らない(
+        self, leftover: bool
+    ) -> None:
+        """ポーズできない端末（通信対戦）は、試合の最中に Select で確認の画面を開く。
+
+        開いたまま試合が決まると、確認の画面の下に幕が出る。原型の名簿は確認の画面の
+        2つだけ（L3219-3220）なので、確認の画面の中で十字を押しても、マウスを動かしても、
+        幕のボタンは塗られない（L3268-3277）。L3637 は確認の画面が開いていても枠を
+        出す（確認の画面の2つを塗る）。前の幕で付けた枠が残っていれば、そのまま残る。
+        """
+        flow = make_flow()
+        if leftover:
+            flow.start_play(pad_drives_match=True, can_pause=False)
+            flow.show_banner("もういっかい", True)
+            flow.gamepad({DOWN})
+            flow.hide_banner()
+        flow.start_play(pad_drives_match=True, can_pause=False)
+        flow.gamepad({SELECT})
+        assert flow.dialog is DialogKind.BACK_TO_SETUP
+        flow.show_banner("もういっかい", True)
+        before = ring_label(flow)
+        assert before == ("⚙ 設定をやりなおす" if leftover else None)
+        flow.gamepad({RIGHT})
+        assert focused_label(flow) == "設定へもどる"
+        assert ring_label(flow) == before
+        flow.hide_cursor()
+        assert ring_label(flow) == before
+        flow.gamepad(())
+        assert focused_label(flow) == "設定へもどる"
+        assert ring_label(flow) == before
+
+    def test_幕の上で確認の画面を閉じると_幕のボタンを塗り直す(self) -> None:
+        """原型の `MENU.closeDialog` の `MENU.reset` は、幕が出ていれば幕を塗る。
+
+        幕を塗るとは、幕のボタンの className を塗り直すこと。ポーズできない端末は、
+        試合の最中に Select で確認の画面を開く（枠も出す）。開いたまま幕が出ても、幕の
+        ボタンは塗られない。
+        """
+        flow = make_flow()
+        flow.start_play(pad_drives_match=True, can_pause=False)
+        flow.gamepad({SELECT})
+        flow.show_banner(None, True)
+        assert flow.page_ring() is None
+        press(flow, "やめる")
+        assert ring_label(flow) == "⚙ 設定をやりなおす"
 
 
 class Test試合の最中:

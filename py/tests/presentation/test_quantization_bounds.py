@@ -8,7 +8,8 @@
 横 0.22px と縦 0.13px・ゲージと外周の鍋の撃つ間隔の帯の長さで 0.25px・火の玉の半径と
 芯の縦の半径で 0.25px・四角い粒の一辺と爆風のちらつく芯の一辺で 0.25px・位置で 0.5px。
 どれもマス 60）を超えないことを見る。ゲージ・帯の長さ・穴の大きさ・芯の太さは、試合で
-出る値を全部流す。
+出る値の全部で見る。画面の大きいボタンの光（不透明度で 0.005・ずれとぼかしの半径で
+0.5px。`render/ui/widgets.py` の `GLOW_ALPHA_LEVELS`）も、ここで見る。
 
 ⚠️ 鼻水で溶けている間のアイテムの段（`baked/items.py` の `MELT_PULSE_LEVELS`・
 `MELT_BOB_LEVELS`）は、ここに入れていない（取っておいた絵を画素で比べる `test_baked.py`
@@ -31,6 +32,7 @@ from animal_bomber.domain.rules.tuning import (
 from animal_bomber.domain.state.bomb import Blast, Bomb
 from animal_bomber.domain.state.item import Item
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng, ScriptedRandom
+from animal_bomber.presentation.menu.hover import ItemMotion
 from animal_bomber.presentation.render.art.animals.mole import dig_progress
 from animal_bomber.presentation.render.art.blasts import flicker_size, progress_of
 from animal_bomber.presentation.render.art.bombs import bomb_look
@@ -59,6 +61,7 @@ from animal_bomber.presentation.render.baked.techniques import gauge_level, snap
 from animal_bomber.presentation.render.canvas.surface import SUPERSAMPLE
 from animal_bomber.presentation.render.layout import TILE_MAX, TILE_MIN, Layout
 from animal_bomber.presentation.render.sprites import level_value, quantize
+from animal_bomber.presentation.render.ui.widgets import go_glow, go_look
 
 TILE = 60
 """上限を決めたマスの大きさ（描く面の上限。py/AGENTS.md）。"""
@@ -214,6 +217,29 @@ def test_爆風のちらつく芯の一辺のずれは_0_25pxまで() -> None:
             length = flicker_size(TILE, k, rng)
             worst = max(worst, abs(flicker_side(length) / SUPERSAMPLE - length))
     assert worst <= 0.25 + EPSILON
+
+
+def test_大きいボタンの光のずれは_不透明度で0_005_ずれとぼかしで0_5pxまで() -> None:
+    """乗った見た目と押している見た目の進みを、それぞれ 0〜1 で 0.01 おきに渡す。
+
+    変化の途中の光（`widgets.go_look`）を、取っておく絵の段に丸めたもの
+    （`widgets.go_glow`。上限は `GLOW_ALPHA_LEVELS` の説明）と比べる。0 に丸まって光を
+    描かないときは、丸める前の不透明度をずれに数える。
+    """
+    worst_alpha = worst_px = 0.0
+    for hover in range(101):
+        for active in range(101):
+            go = go_look(ItemMotion(hover / 100, active / 100))
+            glow = go_glow(go)
+            if glow is None:
+                worst_alpha = max(worst_alpha, go.glow_alpha)
+                continue
+            worst_alpha = max(worst_alpha, abs(glow.alpha - go.glow_alpha))
+            worst_px = max(
+                worst_px, abs(glow.dy - go.glow_dy), abs(glow.blur - go.glow_blur)
+            )
+    assert worst_alpha <= 0.005 + EPSILON
+    assert worst_px <= 0.5 + EPSILON
 
 
 def test_位置は_いちばん近い整数のpxに丸める() -> None:

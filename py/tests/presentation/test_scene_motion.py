@@ -364,6 +364,14 @@ class Test外周と葱と粘膜爆弾と粒子と歩いた距離の1つ前のtic
         assert isinstance(frog.action, Tongue)
         assert tracker.motion(frog.id).previous_reach == held
         assert tongue_reach(tongue_look(frog.action)) > held
+        # 舌を戻し終えた tick は、1つ前の tick に伸ばしていても持たない（いま伸ばして
+        # いない）。
+        for _ in range(600):
+            step(world, tracker, idle(world))
+            if not isinstance(frog.action, Tongue):
+                break
+        assert not isinstance(frog.action, Tongue)
+        assert tracker.motion(frog.id).previous_reach is None
 
     def test_新しいラウンドの盤面では_1つ前の値を忘れる(self) -> None:
         """新しい盤面では、葱の1つ前の位置と、前の盤面の粒子を忘れる。

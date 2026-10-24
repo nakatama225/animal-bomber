@@ -15,11 +15,12 @@
 
 原型は幕の間も毎フレーム盤面を揺らす（揺れは update でしか減らない）。この版も、幕の間の
 フレームごとに、盤面と同じ見た目の乱数（`Renderer` に渡したもの。原型の `Math.random` と
-同じく1本）から揺れのずれを引き（`renderer.py` の `shake_shift`。揺れの幅は
+同じく1本）から揺れのずれを取り出し（`renderer.py` の `shake_shift`。揺れの幅は
 `SceneTracker` の値で、盤面を進めない幕の間は減らない）、幕がぼかした盤面をそのずれだけ
-ずらして貼る（`BannerOverlay.draw`）。幕を出したフレームは、先に揺れのずれを引いてから、
-揺れの幅を 0 として盤面を描き（`_Steady`。乱数を引く順は原型と同じく、画面の揺れ →
-爆風 → 被弾の揺れ）、幕は揺れていない盤面をぼかして取っておき、引いたずれで貼る。
+ずらして貼る（`BannerOverlay.draw`）。幕を出したフレームは、先に揺れのずれを取り出して
+から、揺れの幅を 0 として盤面を描き（`_Steady`。乱数を取り出す順は原型と同じく、画面の
+揺れ → 爆風 → 被弾の揺れ）、幕は揺れていない盤面をぼかして取っておき、取り出したずれで
+貼る。
 
 残り 30 秒から時計の数字が明滅している間は、幕の間も、そのフレームの明滅の数字と、
 幕を出したフレームに横の板を貼った位置から決めた数字の四角を幕へ渡す（幕は数字の
@@ -46,7 +47,7 @@
 前の板の下の端だった帯だけを塗る（`_fit_panel`）。
 """
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from typing import Final
 
@@ -76,6 +77,7 @@ from animal_bomber.presentation.render.overlay.pause import PauseOverlay
 from animal_bomber.presentation.render.panel.side_panel import (
     PanelContent,
     PanelHits,
+    PanelPart,
     PanelTool,
     SidePanel,
 )
@@ -92,7 +94,7 @@ class _Steady:
     """揺れの幅だけを 0 にして、ほかは `visuals` の値を読ませる（`Visuals` の形）。
 
     幕を出したフレームに、揺れていない盤面を描くため（モジュールの説明の「幕の間の盤面の
-    揺れ」）。揺れの幅が 0 なので、`Renderer.draw` は揺れの乱数を引かない。
+    揺れ」）。揺れの幅が 0 なので、`Renderer.draw` は揺れの乱数を取り出さない。
     """
 
     __slots__ = ("_visuals",)
@@ -256,6 +258,7 @@ class MatchView:
         *,
         immediate: bool,
         paused: bool,
+        parts: Collection[PanelPart] = (),
         banner: BannerView | None = None,
         blend: float = 1.0,
         hovered_tool: PanelTool | None = None,
@@ -265,8 +268,11 @@ class MatchView:
         幕 `banner` の下の絵をもうぼかして持っているなら、揺れのずれと明滅する時計の
         数字を決めるだけで何も描かない（このあとの `draw_banner` がぼかした絵で窓の
         全体を覆い、ぼかした盤面をそのずれだけずらし、時計の数字のまわりをぼかし直す）。
-        幕を出した最初のフレームは、揺れのずれを引いてから、盤面を揺らさずに描き、その
-        絵をぼかす（モジュールの説明の「幕の間の盤面の揺れ」）。
+        幕を出した最初のフレームは、揺れのずれを取り出してから、盤面を揺らさずに描き、
+        その絵をぼかす（モジュールの説明の「幕の間の盤面の揺れ」）。そのフレームの
+        横の板は、マウスが乗ったツールバーのボタンの見た目で描かない（原型の幕は窓の
+        全体を覆うので、幕が出るとマウスの下は幕になり、`.tbtn:hover` は外れる。
+        L137・L139-142）。
         ポーズの幕は、盤面を描いたときの揺れのずれだけずらして重ねる（原型も揺れの内側で
         描く。`render/overlay/pause.py`）。
 
@@ -277,6 +283,7 @@ class MatchView:
             now_ms: いまの時刻（ms）。
             immediate: 横の板を、盤面の時刻の区切り（15 tick）を待たずに作り直すか。
             paused: ポーズ中か（ポーズの幕を重ねる）。
+            parts: 横の板のうち、区切りを待たずに替える所（`SidePanel.show`）。
             banner: このフレームに重ねる幕。出さないなら None。
             blend: 描く値（位置と時刻）を1つ前の tick の値と混ぜる割合
                 （`draw_match_frame`）。
@@ -291,6 +298,7 @@ class MatchView:
         if banner is not None:
             self._banner_shake = shake_shift(visuals.shake, self._rng)
             visuals = _Steady(visuals)
+            hovered_tool = None
         if self._repaint:
             canvas.blit(self._background, (0, 0))
             self._repaint = False
@@ -308,6 +316,7 @@ class MatchView:
             panel_topleft=panel_topleft,
             now_ms=now_ms,
             immediate=immediate,
+            parts=parts,
             blend=blend,
             hovered_tool=hovered_tool,
         )

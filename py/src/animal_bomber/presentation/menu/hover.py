@@ -40,10 +40,20 @@ className へ `navcur` を足し外しする（`MENU.paint`。L3271-3276）。`.
 （`RingMotions`）。
 
 新しく出した要素には `transition` が始まらないので、画面を替えたとき（`showScreen`。
-次の画面は `display:none` から出す）・確認の画面を開いたとき・幕が出たときは、枠は
-離しきった所に出る。確認の画面の間も、下の画面の項目の className は替えない
-（`MENU.list` が確認の画面の2つしか返さない）ので、閉じたあとに枠が同じ項目へ戻れば
-離しきったまま、ほかの項目（`MENU.reset` で先頭）へ移れば 0 から離していく。
+次の画面は `display:none` から出す）・確認の画面を開いたときは、枠は離しきった所に
+出る。幕は、出す前の `MENU.reset`（`endGame`。L4477。幕を表示するのは L4509）が
+幕のボタンを塗らない（`MENU.list` は表示されていない要素を外す。L3245-3247）ので、
+幕が出たときに枠があるのは、前の幕で付けた `navcur` が className に残っているとき
+だけで、それは離しきった所に出る。幕の2フレーム目からの `pollGamepads` が枠を出して
+塗ったとき（L3637。パッドを押さなくても毎フレーム通る）・十字で動かしたときは、
+表示中の幕のボタンに `navcur` を足すので、0 から離していく（同じボタンに足し直した
+ときは、className が替わらないので離しきったまま）。そのため、幕が出ているかも画面を
+見分ける値に含め（呼ぶ側の `app/shell.py`）、幕が出たフレームから幕を画面とみなす。
+確認の画面の間も、下の画面の項目の className は替えない（`MENU.list` が確認の画面の
+2つしか返さない）ので、下の画面で枠を付けていた項目は、確認の画面の暗さの下に枠を
+付けたまま見える。閉じたあとに枠が同じ項目へ戻れば離しきったまま、ほかの項目
+（`MENU.reset` で先頭）へ移れば 0 から離していく。どの項目に枠を描くかは
+`menu/flow.py` の `MenuFlow.page_ring` が決める。
 """
 
 from collections.abc import Hashable, Mapping
@@ -210,7 +220,8 @@ class RingMotions:
     """カーソルの白い枠を項目から離す量の進み（モジュールの説明の「カーソルの白い枠」）。
 
     いまの画面（`page`）の、項目ごとの離す量の変化を持つ。確認の画面の変化は別に持ち、
-    開いている間は下の画面の変化をそのままにしておく。
+    開いている間は下の画面の変化をそのままにしておく（下の画面に描く枠も、その値で
+    離す。`rings`）。
     """
 
     def __init__(self) -> None:
@@ -225,14 +236,21 @@ class RingMotions:
         dialog: bool,
         focused: MenuItem | None,
         now_ms: float,
+        *,
+        under: MenuItem | None = None,
     ) -> None:
         """いまの画面と、確認の画面が開いているかと、白い枠を描く項目を渡す。
 
         `page` は確認の画面を除いた画面を見分ける値（画面と、幕が出ているか）、
         `dialog` は確認の画面が開いているか。`focused` は白い枠を描く項目（確認の画面が
         開いていれば、その2つのボタンのどちらか）。枠を出していなければ None。
+        `under` は、確認の画面が開いている間に、下の画面で白い枠を描く項目
+        （`MenuFlow.page_ring`）。下の画面の変化は、その項目へ向けたまま進める（開く前の
+        フレームから同じ項目なら、変化はそのまま続く。原型も下の画面を塗ってから確認の
+        画面を開く。L3298-3303・L3357-3375）。
         """
         target = None if focused is None else identity(focused)
+        below = None if under is None else identity(under)
         if page != self._page:
             # 画面が替わった（確認の画面も閉じる。原型の `showScreen` の
             # `closeDialog`）。
@@ -241,8 +259,9 @@ class RingMotions:
             if not dialog:
                 self._changes = {} if target is None else {target: ARRIVED}
                 return
-            self._changes = {}
+            self._changes = {} if below is None else {below: ARRIVED}
         if dialog:
+            _approach(self._changes, below, now_ms)
             if self._dialog is None:
                 self._dialog = {} if target is None else {target: ARRIVED}
                 return
@@ -252,9 +271,17 @@ class RingMotions:
         _approach(self._changes, target, now_ms)
 
     def rings(self, now_ms: float) -> dict[MenuItem, float]:
-        """時刻 `now_ms` の、項目ごとの離す量の進み（いま見えている画面の項目）。"""
-        changes = self._changes if self._dialog is None else self._dialog
-        return {key: change.value(now_ms) for key, change in changes.items()}
+        """時刻 `now_ms` の、項目ごとの離す量の進み。
+
+        確認の画面が開いていれば、その2つと、下の画面の項目（下の画面の変化は開いた
+        ときのまま進む。確認の画面の項目と下の画面の項目は同じ値にならない）。
+        """
+        rings = {key: change.value(now_ms) for key, change in self._changes.items()}
+        if self._dialog is not None:
+            rings.update(
+                {key: change.value(now_ms) for key, change in self._dialog.items()}
+            )
+        return rings
 
 
 _NO_PAGE: Final = object()

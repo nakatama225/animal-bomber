@@ -6,8 +6,10 @@
 中身は `menu/screens.py` の `DialogView`。
 
 確認の画面が開いている間は、カーソルはこの2つのボタンの上だけを動く
-（`MenuFlow.groups()`）。下の画面には白い枠を描かない（呼ぶ側が下の画面に focus を
-渡さない）。
+（`MenuFlow.groups()`）。下の画面は、開いたときに白い枠を付けていた項目に、閉じるまで
+枠を付けたまま描き（原型の `MENU.paint` は確認の画面の2つしか塗らないので、下の画面の
+className は替わらない。`MenuFlow.page_ring`）、ここで窓全体を暗くするので、その枠は
+暗い灰色に見える（白に 0.34 を掛けた色）。
 """
 
 from typing import Final

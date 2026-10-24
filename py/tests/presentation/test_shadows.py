@@ -5,10 +5,12 @@
 """
 
 import math
+from dataclasses import astuple
 
 import numpy as np
 import pygame
 
+from animal_bomber.presentation.render.ui import theme
 from animal_bomber.presentation.render.ui.shapes import (
     blur_radius,
     box_shadow,
@@ -195,6 +197,34 @@ def test_半透明の絵どうしは_下の不透明度を数えて重ねる() -
     over(opaque, dark, (1, 1))
     copied.blit(dark, (1, 1))
     assert pygame.image.tobytes(opaque, "RGBA") == pygame.image.tobytes(copied, "RGBA")
+
+
+def test_影の値は_原型のCSSの値() -> None:
+    """（横のずれ, 縦のずれ, ぼかし, 広げる量, 色, 不透明度）を原型の CSS と並べる。
+
+    影を描いた所の暗さを見るテストは、近似のぼかしの差を許す幅で比べるので、値の
+    書き違い（不透明度 0.45 → 0.5 など）はその幅に隠れる。ここで値そのものを固定する。
+    原型の行は、`.card` L184・`.bcard` L145・`.cfmBox` L222・canvas L74・`.go` L57・
+    `.go:hover` L58・`.logoPlate` L169-170・`::-webkit-slider-thumb` L112・`.logo`
+    L166・`.logoSub` L173。
+    """
+    glow = (255, 150, 40)
+    black = (0, 0, 0)
+    pairs = [
+        (theme.CARD_SHADOW, (0, 18, 50, 0, black, 0.45)),
+        (theme.BANNER_SHADOW, (0, 24, 70, 0, black, 0.6)),
+        (theme.DIALOG_SHADOW, (0, 10, 30, 0, black, 0.5)),
+        (theme.BOARD_SHADOW, (0, 18, 50, 0, black, 0.5)),
+        (theme.GO_GLOW, (0, 12, 30, 0, glow, 0.28)),
+        (theme.GO_GLOW_HOVER, (0, 16, 34, 0, glow, 0.34)),
+        (theme.PLATE_SHADOW, (0, 12, 34, 0, black, 0.55)),
+        (theme.PLATE_RING, (0, 0, 0, 6, (224, 69, 44), 0.18)),
+        (theme.THUMB_SHADOW, (0, 2, 7, 0, black, 0.55)),
+        (theme.LOGO_TEXT_SHADOW, (0, 16, 26, 0, black, 0.6)),
+        (theme.LOGO_SUB_TEXT_SHADOW, (0, 6, 16, 0, black, 0.5)),
+    ]
+    for shadow, values in pairs:
+        assert astuple(shadow) == values
 
 
 def test_字の影は_字の形をずらしてぼかす() -> None:

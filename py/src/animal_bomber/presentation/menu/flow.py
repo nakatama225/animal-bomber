@@ -27,9 +27,12 @@
 - キーボード（`keyboard`）：確認の画面が開いていれば確認の画面のカーソル。試合の
   画面では、幕が出ていれば Enter・Space で幕を送るだけ（矢印・Escape は何もしない。
   カーソルの位置にかかわらず1つ目のボタン）。ほかの画面ではカーソル
-- パッド（`gamepad`）：確認の画面か幕かメニューの画面ならカーソル。幕では、パッドを
-  試合に繋がない遊び方（2人で遊ぶ）なら何もしない（机に置いたパッドに肘が当たって
-  幕が飛ぶのを防ぐ。原型の注記 L3618-3620）。Start は幕を送る近道。幕では枠が
+- パッド（`gamepad`。押したボタンが無くても毎フレーム呼ぶ）：確認の画面か幕か
+  メニューの画面ならカーソル。幕では、パッドを試合に繋がない遊び方（2人で遊ぶ）なら
+  何もしない（机に置いたパッドに肘が当たって幕が飛ぶのを防ぐ。原型の注記
+  L3618-3620）。Start は幕を送る近道。それ以外は、押したボタンが無いフレームも、
+  枠を出していなければ枠を出して幕のボタンを塗る（原型 L3637。原型の
+  `pollGamepads` は、パッドが無くても毎フレームここを通る）。そのため幕では、枠が
   出ていなくても1回目の決定を飲み込まない（幕でする操作はほぼ1つ目のボタンで、
   カーソルも幕が出るたびにそこへ戻すので、飲み込むと「A が反応しない」としか
   見えない。原型の注記 L3632-3636）。試合の最中は、Start でポーズ、ポーズ中
@@ -72,6 +75,7 @@ from animal_bomber.presentation.menu.cursor import (
     Moved,
     NavCommand,
 )
+from animal_bomber.presentation.menu.hover import identity
 from animal_bomber.presentation.menu.items import (
     Advance,
     Answer,
@@ -363,6 +367,10 @@ class MenuFlow:
         self._lobby: Lobby | None = None
         self._pad_drives_match = False
         self._can_pause = False
+        self._under: MenuItem | None = None
+        """確認の画面を開いたときに、下の画面で白い枠を描いていた項目（`page_ring`）。"""
+        self._banner_ring: str | None = None
+        """幕のボタンのうち、白い枠を描くもののグループ名（`page_ring`）。"""
 
     @property
     def screen(self) -> MenuScreen:
@@ -452,18 +460,79 @@ class MenuFlow:
         dialog = self.dialog_view()
         if dialog is not None:
             return (dialog.buttons,)
+        return self.page_groups()
+
+    def page_groups(self) -> tuple[MenuGroup, ...]:
+        """確認の画面を除いた、いまの画面の項目（確認の画面が開いていれば、その下の画面）。
+
+        試合の画面では幕のボタン（幕が出ていなければ無い）。
+        """
         if self._screen is MenuScreen.PLAY:
-            return () if self._banner is None else banner_groups(*self._banner)
+            return self._banner_groups()
         view = self.screen_view()
         return () if view is None else view.groups
 
     def focus(self) -> tuple[int, int] | None:
-        """白い枠を描く項目（`groups` のグループ番号, 項目番号）。枠が無ければ None。"""
+        """カーソルの位置（`groups` のグループ番号, 項目番号）。
+
+        枠を出していなければ None。確認の画面と試合の外の画面では、白い枠を描く項目と
+        同じ。幕では、白い枠を描く項目は `page_ring` が決める（カーソルの位置と違う
+        ことがある）。
+        """
         return self._cursor.at(_sizes(self.groups()))
 
+    def page_ring(self) -> tuple[int, int] | None:
+        """確認の画面を除いた画面で、白い枠を描く項目（`page_groups` の位置）。
+
+        無ければ None。原型の白い枠は、`MENU.paint` が名簿（`MENU.list`）の項目の
+        className に足す `navcur` で、名簿に載っていない項目の className は、次に載って
+        塗られるまでそのまま残る（L3219-3277）。そのため次の3つは、カーソルの位置と別に
+        決まる。
+
+        - 確認の画面が開いている間：名簿は確認の画面の2つだけなので、下の画面の項目は
+          開いたときの className のまま。開いたときに白い枠を描いていた項目（`_ask` で
+          控える）に、閉じるまで描く。マウスを動かしても消えない（L3105 の paint も
+          確認の画面の2つしか塗らない）。ロビーを組み直したら描かない（原型の
+          `buildLobby` は項目を作り直し、作り直した項目に `navcur` は付いていない）
+        - 幕：原型は幕を出す前に `MENU.reset` で塗る（`endGame`。L4477）が、名簿は
+          表示されていない幕のボタンを外す（`offsetParent`。L3245-3247）ので、幕の
+          ボタンを塗るのは幕が出ている間の paint だけ（枠を出していないときの
+          `pollGamepads`（L3637。押したボタンが無くても毎フレーム。`gamepad`）・
+          パッドの十字でカーソルを動かしたとき（L3321）・枠を出したままマウスを
+          動かしたとき（L3105）・確認の画面を閉じたとき）。幕のボタンの className は
+          幕を外しても、次の試合でも残るので、前の幕で付けた枠は次の幕に最初から出る
+          （`_paint_banner`）
+        - ほかの画面：カーソルの位置（`focus`）と同じ
+        """
+        if self._screen is MenuScreen.PLAY:
+            groups = self._banner_groups()
+            for index, group in enumerate(groups):
+                if group.name == self._banner_ring:
+                    return index, 0
+            return None
+        if self._dialog is None:
+            return self.focus()
+        under = self._under
+        if under is None:
+            return None
+        for group_index, group in enumerate(self.page_groups()):
+            for item_index, item in enumerate(group.items):
+                if _same_item(item, under):
+                    return group_index, item_index
+        return None
+
     def hide_cursor(self) -> None:
-        """マウスを動かしたときに呼ぶ。白い枠を消す（原型 L3105）。"""
+        """マウスを動かしたときに呼ぶ。白い枠を消す（原型 L3105）。
+
+        原型は枠を出していたときだけ名簿を塗り直すので、幕のボタンの枠を外すのも、枠を
+        出したまま幕の上でマウスを動かしたときだけ（`page_ring`）。パッドを試合に繋ぐ
+        遊び方では、次の `gamepad` が枠を出し直して塗る（原型も次の `pollGamepads` の
+        L3637 が塗る）。
+        """
+        shown = self._cursor.shown
         self._cursor.hide()
+        if shown:
+            self._paint_banner()
 
     def keyboard(self, command: NavCommand) -> tuple[Effect, ...]:
         """メニューのキーを1つ押した（原型の keydown の入口）。"""
@@ -476,24 +545,35 @@ class MenuFlow:
     def gamepad(
         self, commands: Collection[NavCommand], *, paused: bool = False
     ) -> tuple[Effect, ...]:
-        """パッドで押し始めたボタンを渡す（原型の `pollGamepads` の画面の分かれ道）。
+        """パッドを読むたびに呼ぶ（原型の `pollGamepads` の画面の分かれ道）。
+
+        押し始めたボタンが無くても、毎フレーム呼ぶ。原型の `pollGamepads` は、パッドが
+        無くても毎フレーム画面の分かれ道まで進み、幕の間は、押したボタンを見ずに枠を
+        出して幕のボタンを塗る（L3637。`page_ring`）。
 
         Args:
             commands: この回に押し始めたボタン（`shell/gamepad.py` の `PadMenuInput`）。
+                無ければ空。
             paused: いまポーズ中か（試合の画面の Select の条件に使う）。
         """
+        on_banner = self._screen is MenuScreen.PLAY and self._banner is not None
+        if on_banner:
+            # 原型の幕の分かれ道（L3621-3639）。確認の画面が開いていても通る。
+            if not self._pad_drives_match or not self._banner_groups():
+                return ()
+            if NavCommand.START in commands:
+                if self._advance_label() is None:
+                    return ()
+                return (AdvanceBanner(),)
+            if not self._cursor.shown:
+                # 原型 L3637：枠を出して、幕のボタンを塗る（確認の画面が開いていれば、
+                # 塗るのは確認の画面の2つ。`_paint_banner`）。
+                self._cursor.show()
+                self._paint_banner()
+            return self._navigate(commands) if commands else ()
         if not commands:
             return ()
-        on_banner = self._screen is MenuScreen.PLAY and self._banner is not None
-        if self._dialog is not None or self._screen is not MenuScreen.PLAY or on_banner:
-            if on_banner:
-                if not self._pad_drives_match or not self._banner_groups():
-                    return ()
-                if NavCommand.START in commands:
-                    if self._advance_label() is None:
-                        return ()
-                    return (AdvanceBanner(),)
-                self._cursor.show()
+        if self._dialog is not None or self._screen is not MenuScreen.PLAY:
             return self._navigate(commands)
         if not self._pad_drives_match:
             return ()
@@ -550,6 +630,8 @@ class MenuFlow:
         first = self._screen is not MenuScreen.LOBBY
         self._lobby = lobby
         self._connecting = False
+        # 組み直した項目には、確認の画面の下でも白い枠を描かない（`page_ring`）。
+        self._under = None
         if first:
             self._show(MenuScreen.LOBBY)
         return self._share()
@@ -630,7 +712,12 @@ class MenuFlow:
                 return self.press(groups[group].items[item])
             case GoBack():
                 return self._back()
-            case Moved() | None:
+            case Moved():
+                # 原型の `MENU.nav` は、枠を出したときと動かしたときに名簿を塗る
+                # （L3299・L3321。幕なら幕のボタン。`page_ring`）。
+                self._paint_banner()
+                return ()
+            case None:
                 return ()
             case _:
                 assert_never(result)
@@ -750,19 +837,49 @@ class MenuFlow:
         つなげなかった理由は、LAN の画面を出たら消す。
         """
         self._dialog = None
+        self._under = None
         self._screen = screen
         self._failure = ""
         self._cursor.reset()
 
     def _ask(self, kind: DialogKind) -> None:
-        """確認の画面を開く。カーソルは「やめる」へ（原型の `askConfirm`）。"""
+        """確認の画面を開く。カーソルは「やめる」へ（原型の `askConfirm`）。
+
+        開く前に、下の画面で白い枠を描いていた項目を控える（`page_ring`）。
+        """
+        focus = self.focus()
+        self._under = None if focus is None else self.groups()[focus[0]].items[focus[1]]
         self._dialog = kind
         self._cursor.reset()
 
     def _close_dialog(self) -> None:
-        """確認の画面を閉じる。カーソルは画面の先頭へ（原型の `MENU.closeDialog`）。"""
+        """確認の画面を閉じる。カーソルは画面の先頭へ（原型の `MENU.closeDialog`）。
+
+        原型の `MENU.reset` は下の画面を塗り直すので、幕が出ていれば幕のボタンも塗る。
+        """
         self._dialog = None
+        self._under = None
         self._cursor.reset()
+        self._paint_banner()
+
+    def _paint_banner(self) -> None:
+        """幕のボタンの白い枠を、いまのカーソルで塗り直す（原型の `MENU.paint`）。
+
+        幕が出ていて、確認の画面が開いていないときだけ（原型の名簿が幕のボタンのとき。
+        `page_ring`）。枠を出していなければ、名簿に載っている幕のボタンの枠を外す。
+        """
+        if (
+            self._screen is not MenuScreen.PLAY
+            or self._banner is None
+            or self._dialog is not None
+        ):
+            return
+        groups = self._banner_groups()
+        focus = self._cursor.at(_sizes(groups))
+        if focus is not None:
+            self._banner_ring = groups[focus[0]].name
+        elif any(group.name == self._banner_ring for group in groups):
+            self._banner_ring = None
 
     def _banner_groups(self) -> tuple[MenuGroup, ...]:
         return () if self._banner is None else banner_groups(*self._banner)
@@ -781,3 +898,8 @@ class MenuFlow:
 
 def _sizes(groups: tuple[MenuGroup, ...]) -> list[int]:
     return [len(group.items) for group in groups]
+
+
+def _same_item(item: MenuItem, other: MenuItem) -> bool:
+    """同じ項目とみなすか（選ばれたか・押せるかを除いて比べる。`hover.identity`）。"""
+    return identity(item) == identity(other)

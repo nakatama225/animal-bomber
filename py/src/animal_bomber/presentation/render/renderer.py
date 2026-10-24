@@ -166,8 +166,8 @@ class Renderer:
 
         `origin` は盤面の左上を置く位置（px。既定は描く面の左上）。窓の面では、盤面の
         枠の太さだけ内側（`layout.WindowLayout.board_rect`）。背景・盤面・揺れでずらす
-        絵を全部同じだけずらすので、`origin` を変えても、見た目の乱数を引く順と、盤面の
-        中の絵は変わらない。
+        絵を全部同じだけずらすので、`origin` を変えても、見た目の乱数を取り出す順と、
+        盤面の中の絵は変わらない。
 
         `blend` は、描く値を1つ前の tick の値と混ぜる割合（既定の 1 はいまの値。ゲーム
         速度が整数でない1台の試合だけ 1 より小さい。`shell/loop.py` の
@@ -289,12 +289,12 @@ class Renderer:
 
 
 def shake_shift(shake: float, rng: CosmeticRng) -> tuple[int, int]:
-    """画面の揺れの幅 `shake`（px）から、このフレームのずれ（整数の px）を引く。
+    """画面の揺れの幅 `shake`（px）から、このフレームのずれ（整数の px）を決める。
 
-    揺れが 0.2 を超えていれば、見た目の乱数を横・縦の順に2つ引き（`art/frame.py` の
+    揺れが 0.2 を超えていれば、見た目の乱数を横・縦の順に2つ取り出し（`art/frame.py` の
     `shake_offset`）、いちばん近い整数の px に丸める（モジュールの説明の「画面の
-    揺れ」）。揺れが小さければ乱数を引かずに (0, 0)。幕の間の盤面の揺れ
-    （`app/match_view.py`）も、この関数で同じ乱数から引く。
+    揺れ」）。揺れが小さければ乱数を取り出さずに (0, 0)。幕の間の盤面の揺れ
+    （`app/match_view.py`）も、この関数で同じ乱数から取り出す。
     """
     moved = shake_offset(shake, rng)
     return (0, 0) if moved is None else (snap(moved[0]), snap(moved[1]))

@@ -82,11 +82,16 @@ from animal_bomber.presentation.render.overlay.banner import (
     BannerClock,
     blur,
 )
+from animal_bomber.presentation.render.overlay.dialog import (
+    SHADE_ALPHA as DIALOG_SHADE_ALPHA,
+)
 from animal_bomber.presentation.render.overlay.toast import PAD_Y as TOAST_PAD_Y
 from animal_bomber.presentation.render.overlay.toast import TEXT as TOAST_TEXT
 from animal_bomber.presentation.render.overlay.toast import wrap_width
 from animal_bomber.presentation.render.panel.side_panel import (
+    REFRESH_TICKS,
     WARN_PULSE_MS,
+    PanelContent,
     SidePanel,
     thumb_center,
 )
@@ -99,6 +104,8 @@ from animal_bomber.presentation.render.ui.shapes import (
 from animal_bomber.presentation.render.ui.theme import (
     ACCENT,
     BORDER,
+    FOCUS_OFFSET,
+    FOCUS_WIDTH,
     GO_TOP,
     LINE,
     WHITE,
@@ -178,6 +185,44 @@ def white_steps(driver: Driver, rect: pygame.Rect) -> list[int]:
         for step in range(7)
         if tuple(canvas.get_at((rect.left - 1 - step, rect.centery)))[:3] == WHITE
     ]
+
+
+def color_steps(
+    driver: Driver, rect: pygame.Rect, color: tuple[int, int, int]
+) -> list[int]:
+    """`white_steps` と同じ所の画素のうち、色が `color` のものの離れ。"""
+    canvas = driver.shell.canvas
+    return [
+        step
+        for step in range(7)
+        if tuple(canvas.get_at((rect.left - 1 - step, rect.centery)))[:3] == color
+    ]
+
+
+def dimmed_white() -> tuple[int, int, int]:
+    """白に確認の画面の暗さ（原型の `rgba(0,0,0,.66)`）を重ねた色。"""
+    surface = pygame.Surface((1, 1))
+    surface.fill(WHITE)
+    shade = pygame.Surface((1, 1))
+    shade.fill((0, 0, 0))
+    shade.set_alpha(DIALOG_SHADE_ALPHA)
+    surface.blit(shade, (0, 0))
+    red, green, blue, _ = surface.get_at((0, 0))
+    return red, green, blue
+
+
+def host_lobby() -> Driver:
+    """中継の代わりにつないで、ホストだけがつながったロビーの画面まで進めた端末。"""
+    relay = FakeRelay()
+    driver = Driver(connect=lambda address: relay.open())
+    driver.skip_splash()
+    driver.click("LAN対戦")
+    driver.click("たてる")
+    for _ in range(3):
+        relay.deliver()
+        driver.frame(ticks=0)
+    assert screen_of(driver) is MenuScreen.LOBBY
+    return driver
 
 
 def focus_rect(driver: Driver) -> pygame.Rect:
@@ -268,11 +313,11 @@ def frame_colors(surface: pygame.Surface) -> list[tuple[int, ...]]:
 def script_view_rng(
     monkeypatch: pytest.MonkeyPatch, driver: Driver, values: Sequence[float]
 ) -> list[float]:
-    """盤面の絵と幕の揺れが分け合う見た目の乱数に、値の列を引かせる。
+    """盤面の絵と幕の揺れが分け合う見た目の乱数から、決めた値の列を取り出させる。
 
-    分け合う乱数は `MatchView` の1本。引いた値の list を返す（用意した値を使い切ったら
-    0.5 を返して控える。引いた数の違いは、返した list を比べて見る）。ほかの見た目の
-    乱数（`SceneTracker` の粒子など）は差し替えない。
+    分け合う乱数は `MatchView` の1本。取り出した値の list を返す（用意した値を使い
+    切ったら 0.5 を返して控える。取り出した数の違いは、返した list を比べて見る）。
+    ほかの見た目の乱数（`SceneTracker` の粒子など）は差し替えない。
     """
     shared = driver.shell._view._rng
     original = CosmeticRng.random
@@ -310,6 +355,20 @@ def darkened(surface: pygame.Surface) -> np.ndarray:
     shade.set_alpha(SHADE_ALPHA)
     blurred.blit(shade, (0, 0))
     return pygame.surfarray.array3d(blurred)
+
+
+def blank_rings(driver: Driver, *images: np.ndarray) -> None:
+    """渡した絵（`[x, y]` の RGB）の、幕のボタンのまわり（白い枠が出る所）を 0 で塗る。
+
+    1人で遊ぶ形の幕では、パッドを押さなくても2フレーム目から先頭のボタンに白い枠が
+    出て、0 から離していく（原型 L3637。`test_マウスで始めた1人の幕は_…` が検証する）。
+    幕の下の絵を、幕を出したフレームの絵と比べるテストは、そこを比べない。
+    """
+    reach = FOCUS_OFFSET + FOCUS_WIDTH
+    for hit in driver.shell.hits:
+        ring = hit.rect.inflate(2 * reach, 2 * reach)
+        for image in images:
+            image[ring.left : ring.right, ring.top : ring.bottom] = 0
 
 
 def capture_banner_target(driver: Driver) -> list[pygame.Surface]:
@@ -594,8 +653,55 @@ class Testキーボードでメニューを動かす:
         assert focus_rect(driver) == driver.shell.hits[1].rect
         assert white_steps(driver, focus_rect(driver)) == [0, 1, 2]
 
-    def test_幕が出たフレームから_枠を離しきって描く(self) -> None:
-        """原型の幕（`#banner`）も `display:none` から出す（`endGame`）。"""
+    def test_確認の画面の下でも_下の画面で枠を付けていた項目に暗くした枠を描く(
+        self,
+    ) -> None:
+        """原型の `MENU.paint` は確認の画面の2つしか塗らない（L3219-3220・L3268-3277）。
+
+        下の画面で `navcur` を付けていた項目は、確認の画面の `rgba(0,0,0,.66)`
+        （L218-219）の下に、白を暗くした枠を付けたまま見える（255 × 0.34 ≒ 87）。
+        マウスを動かしても消えない（L3105 の塗り直しも確認の画面の2つしか塗らない）。
+        閉じると、`MENU.reset` が下の画面を塗り直すので、枠を消していれば消える。
+        """
+        driver = host_lobby()
+        driver.tap(pygame.KSCAN_DOWN)
+        driver.tap(pygame.KSCAN_DOWN)
+        driver.frames(20, ticks=0)
+        rect = focus_rect(driver)
+        assert white_steps(driver, rect) == [2, 3, 4]
+        gray = dimmed_white()
+        assert max(abs(part - 87) for part in gray) <= 1
+        driver.tap(pygame.KSCAN_ESCAPE)
+        assert driver.shell.flow.dialog is not None
+        assert color_steps(driver, rect, gray) == [2, 3, 4]
+        driver.move_mouse((5, 5))
+        assert not driver.shell.flow.cursor_shown
+        assert color_steps(driver, rect, gray) == [2, 3, 4]
+        driver.click("やめる")
+        assert driver.shell.flow.dialog is None
+        assert white_steps(driver, rect) == []
+        assert color_steps(driver, rect, gray) == []
+
+    def test_枠を消してからマウスで開いた確認の画面の下には_枠を描かない(
+        self,
+    ) -> None:
+        """原型はマウスを動かすと、下の画面の項目から `navcur` を外す（L3105）。"""
+        driver = host_lobby()
+        driver.tap(pygame.KSCAN_DOWN)
+        driver.tap(pygame.KSCAN_DOWN)
+        driver.frames(20, ticks=0)
+        rect = focus_rect(driver)
+        driver.move_mouse((5, 5))
+        driver.click("← せつぞくを切る")
+        assert driver.shell.flow.dialog is not None
+        assert color_steps(driver, rect, dimmed_white()) == []
+
+    def test_枠を出したまま幕が出ても_幕のボタンに枠を描かない(self) -> None:
+        """原型は幕を表示する前に `MENU.reset` で塗る（`endGame`。L4477・L4509）。
+
+        名簿は表示されていない幕のボタンを外す（L3245-3247）ので、幕のボタンには枠が
+        付かない。カーソルは1つ目のボタンにある（幕の上で A を押せば次へ進む）。
+        """
         driver = Driver()
         runner = start_local(driver)
         driver.frame()
@@ -609,11 +715,225 @@ class Testキーボードでメニューを動かす:
         assert driver.shell.flow.dialog is None
         assert driver.shell.flow.cursor_shown
         finish_round(driver, runner)
-        seen = []
-        for _ in range(3):
+        seen = [[white_steps(driver, hit.rect) for hit in driver.shell.hits]]
+        for _ in range(2):
             driver.frame()
-            seen.append(white_steps(driver, focus_rect(driver)))
-        assert seen == [[2, 3, 4]] * 3
+            seen.append([white_steps(driver, hit.rect) for hit in driver.shell.hits])
+        assert seen == [[[], []]] * 3
+        assert driver.shell.flow.focus() == (0, 0)
+        # 十字で動かすと、表示中の幕のボタンに枠を付けるので、大きいボタンも 0 から離す
+        # （幕が出たときから枠を付けていたことにすると、離しきった所から始まる）。
+        go, leave = (hit.rect for hit in driver.shell.hits)
+        for _ in range(2):
+            driver.pads.hold(1, PadButton.UP)
+            driver.frame()
+            driver.pads.hold(1)
+            driver.frame()
+        assert white_steps(driver, leave) == []
+        assert white_steps(driver, go) == [0, 1, 2]
+
+    def test_前の幕で付けた枠は_次の幕に離しきって出て_塗り直しても離しきったまま(
+        self,
+    ) -> None:
+        """原型の幕のボタンは、幕を外しても同じ要素（L544-550・L6030-6036）。
+
+        前の幕をパッドの A で送ると、L3637 が枠を出して塗ってから送る。幕が出ていない
+        間の塗り直しは幕のボタンに触れないので、次の幕には最初から枠が出る
+        （`display:none` から出すので、離しきった所に）。マウスで枠を消していれば、
+        幕の2フレーム目の L3637 が同じボタンを塗り直す（className は替わらないので、
+        離しきったまま）。マウスを動かしても、同じフレームのうちに付け直す（原型も、
+        mousemove のあとの `pollGamepads` が付け直してから描く）。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        finish_round(driver, runner)
+        assert not driver.shell.flow.cursor_shown
+        driver.pads.hold(1, PadButton.A)
+        driver.frame()
+        driver.pads.hold(1)
+        assert runner.match.round == 2
+        driver.move_mouse((5, 5))
+        driver.frames(3)
+        finish_round(driver, runner)
+        rect = driver.rect_of(NEXT_ROUND_BUTTON)
+        assert not driver.shell.flow.cursor_shown
+        assert white_steps(driver, rect) == [2, 3, 4]
+        driver.frame()
+        assert driver.shell.flow.cursor_shown
+        assert white_steps(driver, rect) == [2, 3, 4]
+        driver.move_mouse((6, 6))
+        assert driver.shell.flow.cursor_shown
+        assert white_steps(driver, rect) == [2, 3, 4]
+
+    def test_幕の上で十字で移すと0から離し_マウスを動かしても同じフレームに付け直す(
+        self,
+    ) -> None:
+        """原型の L3321 は表示中の幕のボタンに `navcur` を足す（0 から離す）。
+
+        大きいボタンは 0.1 秒（`.go`）、「⚙ 設定をやりなおす」（`.tbtn`）はすぐ
+        離しきる。枠を出したままマウスを動かすと、原型は幕のボタンを塗り直して枠を外す
+        （L3105）が、描く前の `pollGamepads` の L3637 が枠を出し直してカーソルの位置を
+        塗るので、枠は離しきったまま見える。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        finish_round(driver, runner)
+        go, leave = (hit.rect for hit in driver.shell.hits)
+        driver.pads.hold(1, PadButton.DOWN)
+        driver.frame()
+        driver.pads.hold(1)
+        assert white_steps(driver, leave) == [2, 3, 4]
+        assert white_steps(driver, go) == []
+        driver.pads.hold(1, PadButton.UP)
+        driver.frame()
+        driver.pads.hold(1)
+        assert white_steps(driver, go) == [0, 1, 2]
+        assert white_steps(driver, leave) == []
+        driver.frames(10)
+        assert white_steps(driver, go) == [2, 3, 4]
+        driver.move_mouse((5, 5))
+        assert driver.shell.flow.cursor_shown
+        assert white_steps(driver, go) == [2, 3, 4]
+        assert white_steps(driver, leave) == []
+        assert runner.between_rounds
+
+    def test_マウスで始めた1人の幕は_2フレーム目に先頭のボタンへ枠を付けて0から離す(
+        self,
+    ) -> None:
+        """原型の `pollGamepads` は幕の間も毎フレーム呼ばれ（L4241）、L3637 を通る。
+
+        パッドを押さなくても（パッドが無くても）、`MENU.on` が偽なら立てて塗る。幕を
+        表示したのは `endGame`（update の中。L4509）で、そのフレームの `pollGamepads` は
+        幕を表示する前に終わっているので、塗るのは幕の2フレーム目。表示中の要素に
+        `navcur` を足すので、大きいボタンは 0 から 0.1 秒で離す。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        assert not driver.shell.flow.cursor_shown
+        finish_round(driver, runner)
+        go, leave = (hit.rect for hit in driver.shell.hits)
+        assert (white_steps(driver, go), white_steps(driver, leave)) == ([], [])
+        driver.frame()
+        assert driver.shell.flow.cursor_shown
+        assert white_steps(driver, go) == [0, 1, 2]
+        assert white_steps(driver, leave) == []
+        driver.frames(10)
+        assert white_steps(driver, go) == [2, 3, 4]
+
+    def test_2人で遊ぶ形の幕には_枠を出さない(self) -> None:
+        """原型の L3622（2人で遊ぶ形は、幕で L3637 より前に帰る）。"""
+        driver = Driver()
+        runner = start_local(driver, DUO)
+        driver.frame()
+        finish_round(driver, runner)
+        for _ in range(8):
+            assert [white_steps(driver, hit.rect) for hit in driver.shell.hits] == [
+                [],
+                [],
+            ]
+            driver.frame()
+        assert not driver.shell.flow.cursor_shown
+
+    @pytest.mark.parametrize("keys", [False, True], ids=["マウス", "キーボード"])
+    def test_2人の幕にも前の試合の幕で付けた枠が出て_枠を出していればマウスで消える(
+        self, keys: bool
+    ) -> None:
+        """原型の幕のボタンの className は、試合をまたいでも残る（L6058-6079・L5699）。
+
+        2人で遊ぶ形は L3622 が L3637 より前で帰るので、幕で塗り直さない。1人の試合の
+        幕で「⚙ 設定をやりなおす」に付けた枠は、次の2人の試合の幕にも出る。マウスで
+        始めた（`MENU.on` が偽の）ときは、マウスを動かしても塗り直さないので残り
+        （L3105）、キーボードで始めた（枠を出したままの）ときは、マウスを動かすと
+        幕のボタンを塗り直して消える。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        finish_round(driver, runner)
+        driver.pads.hold(1, PadButton.DOWN)
+        driver.frame()
+        driver.pads.hold(1, PadButton.A)
+        driver.frame()
+        driver.pads.hold(1)
+        assert screen_of(driver) is MenuScreen.TITLE
+        if keys:
+            # 枠を出して「2人 vs CPU×2」へ下り、キャラ選びとルールの「はじめる」へ。
+            steps = [pygame.KSCAN_RETURN, pygame.KSCAN_DOWN, pygame.KSCAN_RETURN]
+            steps += [pygame.KSCAN_UP, pygame.KSCAN_RETURN] * 2
+            for key in steps:
+                driver.tap(key)
+            duo = driver.shell.runner
+            assert isinstance(duo, LocalMatch)
+            assert duo.setup.mode.value == "duo"
+        else:
+            duo = start_local(driver, DUO)
+        assert driver.shell.flow.cursor_shown is keys
+        driver.frame()
+        finish_round(driver, duo)
+        leave = driver.rect_of(SETUP_BUTTON)
+        assert white_steps(driver, leave) == [2, 3, 4]
+        driver.frame()
+        assert white_steps(driver, leave) == [2, 3, 4]
+        driver.move_mouse((5, 5))
+        assert white_steps(driver, leave) == ([] if keys else [2, 3, 4])
+        assert not driver.shell.flow.cursor_shown
+
+    def test_前の試合の幕で付けた枠は_次の試合の幕に出て_2フレーム目に先頭へ移る(
+        self,
+    ) -> None:
+        """原型の `backToSetup` は `MENU.on` を偽にし、幕のボタンは塗らない。
+
+        原型の L6058-6079。「⚙ 設定をやりなおす」の className に残った `navcur` は、
+        次の試合の幕の1フレーム目に離しきって出る。2フレーム目の L3637 が先頭を塗る
+        ので、枠は「つぎのラウンド ▶」へ移り、0 から離していく。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        finish_round(driver, runner)
+        driver.pads.hold(1, PadButton.DOWN)
+        driver.frame()
+        driver.pads.hold(1, PadButton.A)
+        driver.frame()
+        driver.pads.hold(1)
+        assert screen_of(driver) is MenuScreen.TITLE
+        assert not driver.shell.flow.cursor_shown
+        runner = start_local(driver)
+        driver.frame()
+        finish_round(driver, runner)
+        go, leave = (hit.rect for hit in driver.shell.hits)
+        assert white_steps(driver, leave) == [2, 3, 4]
+        assert white_steps(driver, go) == []
+        driver.frame()
+        assert white_steps(driver, go) == [0, 1, 2]
+        assert white_steps(driver, leave) == []
+
+    def test_幕が出た次のフレームにEnterで送ると_その幕では枠を出さない(self) -> None:
+        """原型のキーの入口は、同じフレームの `pollGamepads` より先に届く。
+
+        入力のイベントは、描く前に呼ぶ関数（`loop`）より先に届く。Enter の
+        `advanceBanner` は `startRound` で幕を外す（`G.phase='play'`。
+        L4150）ので、そのフレームの `pollGamepads` は幕の分かれ道を通らず、`MENU.on` は
+        偽のまま。次の幕は、2フレーム目の L3637 が先頭を 0 から離して塗る（前の幕で
+        枠を付けていないので、1フレーム目には出ない）。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        finish_round(driver, runner)
+        driver.down(pygame.KSCAN_RETURN)
+        assert runner.match.round == 2
+        assert not driver.shell.flow.cursor_shown
+        driver.up(pygame.KSCAN_RETURN)
+        driver.frames(3)
+        finish_round(driver, runner)
+        go = driver.rect_of(NEXT_ROUND_BUTTON)
+        assert white_steps(driver, go) == []
+        driver.frame()
+        assert white_steps(driver, go) == [0, 1, 2]
 
     def test_Enterを押したまま始めても爆弾を置かず_離して押し直すと置く(
         self,
@@ -715,12 +1035,16 @@ class Testゲームパッドでメニューを動かす:
         assert not runner.between_rounds
 
     def test_1人のとき_幕はパッドのAで1回目から次へ進む(self) -> None:
-        """幕では枠が出ていなくても、1回目の決定を飲み込まない（原型の注記）。"""
+        """幕では枠が出ていなくても、1回目の決定を飲み込まない（原型 L3632-3636）。
+
+        原型は L3637 で枠を出してから `MENU.nav` が A を押す。枠が出ていないのは幕の
+        1フレーム目だけ（2フレーム目からは L3637 が出す）なので、幕が出た次の
+        フレームに A を押す。
+        """
         driver = Driver()
         runner = start_local(driver)
         driver.frame()
         finish_round(driver, runner)
-        driver.frame()
         assert not driver.shell.flow.cursor_shown
         driver.pads.hold(1, PadButton.A)
         driver.frame()
@@ -898,7 +1222,7 @@ class Testラウンドの幕:
         assert all(color != LINE for color in frame_colors(driver.shell.canvas))
 
     @pytest.mark.parametrize("final", [False, True], ids=["ラウンドの幕", "優勝の幕"])
-    def test_揺れが残ったまま決まった幕の間も_描くたびに乱数を2つ引いて盤面だけをずらす(
+    def test_揺れが残ったまま決まった幕の間も_描くたびに乱数を2つ取り出し盤面だけずらす(
         self, monkeypatch: pytest.MonkeyPatch, final: bool
     ) -> None:
         """原型は幕の間も draw を呼び、揺れは update でしか減らない。
@@ -909,9 +1233,9 @@ class Testラウンドの幕:
         （枠・すき間・横の板・カード）と四隅（枠の内側の角丸の外）は動かない。ずれて空いた
         盤面の右の 3 列には、盤面の背景（`Renderer.background`）をぼかして暗くした色が
         見える（原型の背景は揺らす前に塗る。L4533-4537）。ずれが 0 に戻れば、基準の絵と
-        同じ。どのフレームも引くのは揺れの2つだけ（幕を出したフレームは、盤面を揺らさずに
-        描いてぼかすので、盤面の絵は揺れの乱数を引かない）。盤面の絵を描くのは幕を出した
-        フレームだけ。
+        同じ。どのフレームも取り出すのは揺れの2つだけ（幕を出したフレームは、盤面を揺らさずに
+        描いてぼかすので、盤面の絵は揺れの乱数を取り出さない）。盤面の絵を描くのは幕を
+        出したフレームだけ。
         """
         driver = Driver()
         runner = start_local(driver)
@@ -949,6 +1273,7 @@ class Testラウンドの幕:
         assert used == values
         assert drawn == []
         still, left, right, back = (pygame.surfarray.array3d(shot) for shot in shots)
+        blank_rings(driver, still, left, right, back)
         board = pygame.Rect(WINDOW.board_rect)
         band = slice(board.top + 8, board.top + 70)
         inner = slice(board.left + 12, board.right - 12)
@@ -976,7 +1301,7 @@ class Testラウンドの幕:
     def test_幕を出したフレームが揺れていても_ぼかすのは揺らさずに描いた盤面(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """幕を出したフレームは、揺れのずれを先に引き、盤面を揺らさずに描いてぼかす。
+        """幕を出したフレームは、揺れのずれを先に取り出し、盤面を揺らさずに描いてぼかす。
 
         乱数 0 と 0.5 で、幕を出したフレームのずれは横 −3px・縦 0。次のフレームはずれ 0
         なので、ぼかした盤面をずらさずに貼る（揺らして描いてからぼかすと、揺れが絵に
@@ -1003,15 +1328,15 @@ class Testラウンドの幕:
         inner = slice(board.left + 12, board.right - 12)
         assert not np.array_equal(first[inner, band], second[inner, band])
 
-    def test_爆風で決まった幕は_揺れの2つを引いてから_揺らさずに盤面を描く(
+    def test_爆風で決まった幕は_揺れの2つを取り出してから_揺らさずに盤面を描く(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """原型の draw は、揺れの2つ（L4540-4541）を爆風の芯（L4747）より先に引く。
+        """原型の draw は、揺れの2つ（L4540-4541）を爆風の芯（L4747）より先に取り出す。
 
         1P の爆弾を 2P（CPU）の足元へ移して導火線を 1 tick にし、ほかの CPU を退場
         させる。次の tick に爆風で 2P が倒れてラウンドが決まり、爆発と被弾の揺れ・
         爆風・粒子が残ったまま幕を出す。分け合う乱数の先頭の2つ（0 と 0.5）が幕を
-        出したフレームのずれ（横 −3px）になり、盤面を描き始めたときに引いてあるのは
+        出したフレームのずれ（横 −3px）になり、盤面を描き始めたときに取り出してあるのは
         その2つだけで、描き終えたときは爆風のマスの数だけ多い。幕がぼかす盤面は、
         同じ盤面と見た目の値を、揺れだけ 0 にして描いた絵と同じ。この場面の絵に出る
         見た目の値は爆風の粒子で、炎の跡は無く（炎の跡を残す動物は退場させてある）、
@@ -1146,6 +1471,7 @@ class Testラウンドの幕:
         assert clock is not None and clock.rect == shown.rect
         assert clock.image is not shown.image
         spot = clock.rect.inflate(2 * BLUR_RADIUS, 2 * BLUR_RADIUS).clip(window)
+        blank_rings(driver, still, dim)
         changed = np.any(dim != still, axis=2)
         xs, ys = np.nonzero(changed)
         assert xs.size > 0
@@ -1216,7 +1542,9 @@ class Testラウンドの幕:
         for _ in range(3):
             driver.frame(ms=WARN_PULSE_MS / 2)
         assert passed == [None] * 4
-        assert np.array_equal(pygame.surfarray.array3d(canvas), still)
+        later = pygame.surfarray.array3d(canvas)
+        blank_rings(driver, still, later)
+        assert np.array_equal(later, still)
 
     def test_幕を出したフレームに板が低くなっても_時計は板を貼った位置で描き直す(
         self,
@@ -1372,7 +1700,9 @@ class Testラウンドの幕:
         driver.wheel(-1)
         assert driver.shell.panel_scroll == 0
         driver.frame()
-        assert np.array_equal(pygame.surfarray.array3d(canvas), still)
+        later = pygame.surfarray.array3d(canvas)
+        blank_rings(driver, still, later)
+        assert np.array_equal(later, still)
         driver.click(NEXT_ROUND_BUTTON)
         assert runner.match.round == 2
         hits = driver.shell.panel_hits
@@ -1381,7 +1711,7 @@ class Testラウンドの幕:
         driver.wheel(-1)
         assert driver.shell.panel_scroll == WHEEL_PX
 
-    def test_揺れが小さいまま決まった幕は_乱数を引かず_幕を出したフレームの絵のまま(
+    def test_揺れが小さいまま決まった幕は_乱数を取り出さず_幕を出したフレームの絵のまま(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """揺れが 0.2 以下なら原型も揺らさない（L4540）。
@@ -1399,7 +1729,9 @@ class Testラウンドの幕:
         still = pygame.surfarray.array3d(canvas)
         driver.frames(3)
         assert used == []
-        assert np.array_equal(pygame.surfarray.array3d(canvas), still)
+        later = pygame.surfarray.array3d(canvas)
+        blank_rings(driver, still, later)
+        assert np.array_equal(later, still)
 
     def test_幕が消えたフレームに_窓の全体を塗り直す(self) -> None:
         """盤面と横の板のすき間に、ぼかした絵を残さない。"""
@@ -2083,6 +2415,66 @@ class Test盤面と横の板:
         content = driver.shell.panel_content
         assert content is not None and content.speed == 1.5
 
+    def test_ポーズとゲーム速度では_名札は区切りのまま_案内とボタンとつまみを替える(
+        self,
+    ) -> None:
+        """原型のポーズとつまみの操作は、名札と時計を作り直さない。
+
+        原型の `togglePause` はボタンの字と `renderKeyHelp` だけを替え（L4217-4221）、
+        `applySpeed` はつまみの字と `.fast` だけを替える（L6049-6052）。
+        どちらも `renderCards`（名札と時計）を呼ばず、ポーズの間は update も呼ばない
+        （L4256）ので、区切り（L4406）のあとに替わった名札の値は、ポーズの間ずっと前の
+        値のまま。区切りの直後に、イベントを出さずに 1P の爆弾の数を増やして見る
+        （アイテムを拾ったときの名札の「💣」も、原型は区切りで出す）。パッドを繋いで
+        おくと、ポーズ中のキーの案内に Select の行が出る。
+        """
+        driver = Driver()
+        driver.pads.hold(1)
+        runner = start_local(driver)
+        world = runner.world
+        while world.now % REFRESH_TICKS != 1:
+            driver.frame()
+
+        def shown() -> PanelContent:
+            content = driver.shell.panel_content
+            assert content is not None
+            return content
+
+        def select_row(content: PanelContent) -> bool:
+            texts = [span.text for row in content.help_rows for span in row.spans]
+            return any("設定へもどる" in text for text in texts)
+
+        bombs = shown().cards[0].stats
+        world.players[0].max_bombs += 1
+        driver.frame()
+        assert shown().cards[0].stats == bombs
+        driver.down(pygame.KSCAN_P)
+        assert runner.paused
+        assert shown().paused and select_row(shown())
+        assert shown().cards[0].stats == bombs
+        driver.up(pygame.KSCAN_P)
+        driver.frames(30)
+        assert shown().cards[0].stats == bombs
+        set_speed(driver, 1.5)
+        assert shown().speed == 1.5
+        assert shown().cards[0].stats == bombs
+        driver.tap(pygame.KSCAN_P)
+        assert not runner.paused
+        assert not shown().paused and not select_row(shown())
+        assert shown().cards[0].stats == bombs
+        # 替えたあとは、ほかの所と同じく区切りを待つ（パッドを外しても、キーの案内の
+        # パッドの段は区切りまで残る。原型も `renderKeyHelp` を呼ぶのは `togglePause` と
+        # `renderCards` だけ。L4221・L5541）。
+        rows = shown().help_rows
+        driver.pads.pads = []
+        driver.frame()
+        assert world.now % REFRESH_TICKS != 0
+        assert shown().help_rows == rows
+        # 再開して区切りを越えると、名札も新しい値になる。
+        while world.now % REFRESH_TICKS != 0:
+            driver.frame()
+        assert shown().cards[0].stats != bombs
+
     def test_決着したら_約4Hzを待たずに名札を作り直す(self) -> None:
         """決着のイベントで横の板の作り直しの印を立てる（`refreshes_panel` の配線）。
 
@@ -2531,6 +2923,31 @@ class Testマウス:
         assert rim(hits.pause) == LINE and rim(hits.settings) == LINE
         assert driver.shell._view._panel.builds == builds
 
+    def test_ツールバーにマウスが乗ったまま幕が出ても_ぼかす縁は乗っていない色(
+        self,
+    ) -> None:
+        """原型の幕（`#banner`）は窓の全体を覆う（`position:fixed;inset:0`。L139-142）。
+
+        幕が出るとマウスの下は幕になり、`.tbtn:hover`（L137）は外れるので、幕の
+        `backdrop-filter` がぼかすのは乗っていない縁。この版は幕を出したフレームに
+        1回だけぼかすので、そのフレームの横の板を、乗っていない見た目で描く。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        scroll_panel_down(driver)
+        hits = driver.shell.panel_hits
+        assert hits is not None and hits.pause is not None
+        pause = hits.pause
+        driver.move_mouse(pause.center)
+        driver.frame()
+        spot = (pause.left + 1, pause.centery)
+        assert tuple(driver.shell.canvas.get_at(spot))[:3] == ACCENT
+        shots = capture_banner_target(driver)
+        finish_round(driver, runner)
+        assert len(shots) == 1
+        assert tuple(shots[0].get_at(spot))[:3] == LINE
+
     def test_盤面のぼかした影は_横の板の箱の間にも出る(self) -> None:
         """原型の canvas の影は、横の板の箱の下に重なり、箱の間から見える。
 
@@ -2872,6 +3289,12 @@ class Test通信対戦:
     def test_ラウンドの幕は全員に出し_ボタンは無く_決着のあとの待ちで消える(
         self,
     ) -> None:
+        """ボタンの無いラウンドの幕では、白い枠も出さない。
+
+        原型の通信対戦のラウンドの幕はボタンで送る（L3637 が枠を出す）。この版の
+        ラウンドの幕はボタンが無いので、L3637 に当たる塗り直しをしない
+        （`docs/11-画面と設定.md` の「決めたこと」の「カーソルの白い枠が出るとき」）。
+        """
         pair = LanPair()
         host, _ = pair.start()
         pair.step(5)
@@ -2882,7 +3305,10 @@ class Test通信対戦:
             assert labels(driver) == []
             assert driver.shell.runner is not None
             assert driver.shell.runner.between_rounds
-        pair.step(130)
+        pair.step(3)
+        for driver in (pair.host, pair.guest):
+            assert not driver.shell.flow.cursor_shown
+        pair.step(127)
         for driver in (pair.host, pair.guest):
             runner = driver.shell.runner
             assert runner is not None and not runner.between_rounds
@@ -2891,6 +3317,13 @@ class Test通信対戦:
     def test_ホストだけが_もういっかいで次の試合を始め_幕は次の試合で消える(
         self,
     ) -> None:
+        """優勝の幕には、ホストにもゲストにも、2フレーム目から先頭のボタンに白い枠を描く。
+
+        原型のホストの幕は L3637 が枠を出す。ゲストの幕は原型に無い（L3630 がゲストを
+        帰すのは、ゲストに幕が出ないため）ので、この版はホストの幕と同じく出す
+        （`docs/11-画面と設定.md` の「決めたこと」の「カーソルの白い枠が出るとき」）。
+        どちらもマウスでつないだ端末（枠を消したまま）。
+        """
         pair = LanPair()
         host, guest = pair.start()
         pair.step(5)
@@ -2898,6 +3331,12 @@ class Test通信対戦:
         pair.step(2)
         assert labels(pair.host) == [AGAIN_BUTTON, SETUP_BUTTON]
         assert labels(pair.guest) == [SETUP_BUTTON]
+        for driver, label in ((pair.host, AGAIN_BUTTON), (pair.guest, SETUP_BUTTON)):
+            flow = driver.shell.flow
+            assert flow.cursor_shown
+            ring = flow.page_ring()
+            assert ring is not None
+            assert flow.page_groups()[ring[0]].items[ring[1]].label == label
         first = host.config
         pair.host.click(AGAIN_BUTTON)
         pair.settle()
