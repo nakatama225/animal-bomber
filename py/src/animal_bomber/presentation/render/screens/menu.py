@@ -22,8 +22,11 @@
 ## 取っておくもの
 
 置いた絵（`parts.ScreenPlan`）は、画面の中身と窓の大きさの組ごとに取っておく。中身が
-同じなら（同じ値の `ScreenView` なら）置き直さない。スクロールと白い枠は毎フレーム
-描く。
+同じなら（同じ値の `ScreenView` なら）置き直さない。スクロール・項目・白い枠は毎フレーム
+描く。項目は、マウスが乗った見た目への進み（`menu/hover.py` の `Motions`）に合わせて
+貼る（`render/ui/widgets.py` の `Widgets.paint_all`。ずらしている途中の項目は、ほかの
+項目のあとに貼る）。白い枠は、ずらして貼った項目のまわりに描く。返す項目の四角
+（マウスの当たり）は、ずらす前の四角。
 """
 
 from collections.abc import Mapping
@@ -33,6 +36,7 @@ from typing import Final, assert_never
 import pygame
 
 from animal_bomber.presentation.menu.flow import ScreenView
+from animal_bomber.presentation.menu.hover import NO_MOTION, Motions
 from animal_bomber.presentation.menu.screens import (
     LanView,
     LobbyView,
@@ -51,7 +55,7 @@ from animal_bomber.presentation.render.screens.parts import (
 from animal_bomber.presentation.render.screens.pick import plan_pick
 from animal_bomber.presentation.render.screens.rules import plan_rules
 from animal_bomber.presentation.render.screens.title import plan_title
-from animal_bomber.presentation.render.ui.shapes import draw_focus, page_background
+from animal_bomber.presentation.render.ui.shapes import page_background
 from animal_bomber.presentation.render.ui.theme import DIM, PAGE_PADDING
 from animal_bomber.presentation.render.ui.widgets import Hit, Widgets
 
@@ -152,6 +156,7 @@ class MenuScreens:
         view: ScreenView,
         focus: tuple[int, int] | None,
         scrolls: Mapping[str, int] | None = None,
+        motions: Motions = NO_MOTION,
     ) -> DrawnScreen:
         """画面を `target`（窓の大きさの描く面）に描く。
 
@@ -160,22 +165,25 @@ class MenuScreens:
             view: 画面の中身（`MenuFlow.screen_view()`）。
             focus: 白い枠を描く項目の位置（`MenuFlow.focus()`）。None なら描かない。
             scrolls: スクロールの量（鍵は `PAGE` と箱の名前）。省くと全部 0。
+            motions: 項目ごとの、マウスが乗った見た目・押している見た目への進み。
         """
         amounts = {} if scrolls is None else scrolls
         size = target.get_size()
         window = pygame.Rect((0, 0), size)
         plan = self.plan(view, size)
-        surface = plan.surface
+        frame = plan.box
         target.blit(page_background(size), (0, 0))
-        content = surface.get_height() + 2 * PAGE_PADDING
+        content = frame.h + 2 * PAGE_PADDING
         if content <= size[1]:
             offset = 0
-            top = (size[1] - surface.get_height()) // 2
+            top = (size[1] - frame.h) // 2
         else:
             offset = clamp_scroll(amounts.get(PAGE, 0), content, size[1])
             top = PAGE_PADDING - offset
-        left = (size[0] - surface.get_width()) // 2
-        target.blit(surface, (left, top))
+        # 絵の左上（並べる箱の左上から、影の分だけ左上）。
+        left = (size[0] - frame.w) // 2 - frame.x
+        top -= frame.y
+        target.blit(plan.surface, (left, top))
         boxes: list[ScrollBox] = []
         for box in plan.boxes:
             rect = box.rect.move(left, top)
@@ -186,14 +194,20 @@ class MenuScreens:
             )
             _draw_thumb(target, rect, height, amount)
             boxes.append(ScrollBox(box.name, rect, height, amount))
+        placed = [
+            (
+                planned.item,
+                planned.rect.move(left, top),
+                focus is not None and planned.position == focus,
+            )
+            for planned in plan.items
+        ]
+        self._widgets.paint_all(target, placed, motions)
         hits: list[Hit] = []
-        for planned in plan.items:
-            rect = planned.rect.move(left, top)
-            if focus is not None and planned.position == focus:
-                draw_focus(target, rect, self._widgets.radius(planned.item))
+        for item, rect, _ in placed:
             seen = rect.clip(window)
             if seen.w > 0 and seen.h > 0:
-                hits.append(Hit(planned.item, seen))
+                hits.append(Hit(item, seen))
         return DrawnScreen(
             hits=tuple(hits),
             page=ScrollBox(PAGE, window, content, offset),

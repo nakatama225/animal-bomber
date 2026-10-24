@@ -25,8 +25,12 @@
 ぼかしは、枠を描いてある描く面をそのままぼかす（原型の `backdrop-filter` も枠の上を
 ぼかす）。
 
-⚠️ 盤面の下のぼかした影（canvas の `box-shadow:0 18px 50px`）は描いていない
-（`docs/11-画面と設定.md` の「原型に合わせる作業が残っている所」）。
+盤面のぼかした影（canvas の `box-shadow:0 18px 50px rgba(0,0,0,.5)`）も、枠の下に、
+窓の背景へ1回だけ焼いておく（`BoardFrame.background`。ぼかし方は `ui/shapes.py`）。
+毎フレーム貼る絵の数は変わらない。横の板の後ろの背景（`app/match_view.py` の
+`panel_backdrop`）はこの背景から切り出すので、板の箱の間からも影が見える（原型も
+横の板の箱は盤面の影の上に重なる）。窓は盤面のまわりに余白を持たないので、影のうち
+窓の外へ出る分（盤面の左と上と、盤面が横の板より高いときの下）は切れる。
 """
 
 import pygame
@@ -46,11 +50,17 @@ from animal_bomber.presentation.render.layout import (
 from animal_bomber.presentation.render.panel.side_panel import (
     PanelContent,
     PanelHits,
+    PanelTool,
     SidePanel,
 )
 from animal_bomber.presentation.render.renderer import Renderer, Visuals
-from animal_bomber.presentation.render.ui.shapes import rounded_box
-from animal_bomber.presentation.render.ui.theme import BOARD_FILL, LINE, WHITE
+from animal_bomber.presentation.render.ui.shapes import box_shadow, rounded_box
+from animal_bomber.presentation.render.ui.theme import (
+    BOARD_FILL,
+    BOARD_SHADOW,
+    LINE,
+    WHITE,
+)
 
 
 class BoardFrame:
@@ -58,7 +68,7 @@ class BoardFrame:
 
     Args:
         background: 窓の背景（枠の無いもの。取っておいた絵のことがあるので書き換えず、
-            写しに枠を焼く）。
+            写しに盤面の影と枠を焼く）。
         board_rect: 窓の中の盤面の四角（枠の内側。`layout.WindowLayout.board_rect`）。
     """
 
@@ -67,6 +77,9 @@ class BoardFrame:
         """盤面の四角（枠の内側）。"""
         outer = self.board_rect.inflate(BOARD_BORDER * 2, BOARD_BORDER * 2)
         framed = background.copy()
+        box_shadow(outer.size, BOARD_RADIUS, BOARD_SHADOW).blit_at(
+            framed, outer.topleft
+        )
         framed.blit(
             rounded_box(
                 outer.size,
@@ -78,7 +91,7 @@ class BoardFrame:
             outer.topleft,
         )
         self.background = framed
-        """枠を焼いた窓の背景（窓の背景を塗り直すときは、これを貼る）。"""
+        """盤面の影と枠を焼いた窓の背景（窓の背景を塗り直すときは、これを貼る）。"""
         self.corners = _corners(framed, self.board_rect)
         """盤面の四隅に貼る小さい絵と、貼る位置（左上・右上・左下・右下）。"""
 
@@ -172,6 +185,7 @@ def draw_match_frame(
     now_ms: float,
     immediate: bool = False,
     blend: float = 1.0,
+    hovered_tool: PanelTool | None = None,
 ) -> PanelHits:
     """盤面を盤面の四角で切って描き、四隅を枠の角丸で切り、横の板を貼る。
 
@@ -199,6 +213,8 @@ def draw_match_frame(
         blend: 描く値（位置と時刻）を1つ前の tick の値と混ぜる割合（`shell/loop.py`
             の `GameSpeed.blend`。既定の 1 はいまの値。描画の重さの場面は既定の
             まま）。
+        hovered_tool: マウスが乗っているツールバーのボタン（`SidePanel.draw`）。
+            乗っていなければ None（貼る数は変わらない。描画の重さの場面は既定のまま）。
     """
     board = frame.board_rect
     target.set_clip(board)
@@ -206,4 +222,4 @@ def draw_match_frame(
     target.set_clip(None)
     frame.cover(target)
     panel.show(content, world.now, immediate=immediate)
-    return panel.draw(target, panel_topleft, now_ms)
+    return panel.draw(target, panel_topleft, now_ms, hovered_tool)

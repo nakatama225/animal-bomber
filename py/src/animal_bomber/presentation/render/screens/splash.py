@@ -79,9 +79,10 @@ class SplashPainter:
             block = title_block(
                 widgets, size[0], view.logo, view.subtitle, view.version
             )
-            height = block.get_height() + PROMPT_TOP + prompt_line
+            width, block_height = block.size
+            height = block_height + PROMPT_TOP + prompt_line
             top = (size[1] - height) // 2
-            still.blit(block, ((size[0] - block.get_width()) // 2, top))
+            block.blit_at(still, ((size[0] - width) // 2, top))
             self._still = {key: still}
-            self._prompt_top = top + block.get_height() + PROMPT_TOP
+            self._prompt_top = top + block_height + PROMPT_TOP
         return still

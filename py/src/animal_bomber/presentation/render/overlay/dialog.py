@@ -1,8 +1,9 @@
 """確認の画面（原型の `#cfmWrap`。HTML L562-565・CSS L217-224）。
 
 窓全体を `rgba(0,0,0,.66)` で暗くし、真ん中に箱（地 `#2d2019`・枠 2px・角丸 16px・
-余白 22px・幅は 420px まで）。箱の中に文（行の高さ 1.7）と、右寄せの2つのチップ
-（「やめる」ともう1つ）。中身は `menu/screens.py` の `DialogView`。
+余白 22px・幅は 420px まで・ぼかした影 `0 10px 30px`）。箱の中に文（行の高さ 1.7）と、
+右寄せの2つのチップ（「やめる」ともう1つ。マウスが乗った見た目に替えて毎フレーム貼る）。
+中身は `menu/screens.py` の `DialogView`。
 
 確認の画面が開いている間は、カーソルはこの2つのボタンの上だけを動く
 （`MenuFlow.groups()`）。下の画面には白い枠を描かない（呼ぶ側が下の画面に focus を
@@ -13,9 +14,16 @@ from typing import Final
 
 import pygame
 
+from animal_bomber.presentation.menu.hover import NO_MOTION, Motions
 from animal_bomber.presentation.menu.screens import DialogView
-from animal_bomber.presentation.render.ui.shapes import draw_focus, rounded_box
-from animal_bomber.presentation.render.ui.theme import BORDER, FIELD, INK, LINE
+from animal_bomber.presentation.render.ui.shapes import shadowed_box
+from animal_bomber.presentation.render.ui.theme import (
+    BORDER,
+    DIALOG_SHADOW,
+    FIELD,
+    INK,
+    LINE,
+)
 from animal_bomber.presentation.render.ui.widgets import (
     Hit,
     Widgets,
@@ -60,11 +68,12 @@ class DialogOverlay:
         target: pygame.Surface,
         view: DialogView,
         focus: tuple[int, int] | None,
+        motions: Motions = NO_MOTION,
     ) -> tuple[Hit, ...]:
         """確認の画面を `target` に重ね、2つのボタンの四角を返す。
 
         `focus` は `MenuFlow.focus()`（確認の画面が開いている間は、この2つのボタンの
-        位置）。
+        位置）。`motions` はボタンごとの、マウスが乗った見た目への進み。
         """
         size = target.get_size()
         shade = self._shade
@@ -87,19 +96,18 @@ class DialogOverlay:
         height = message.get_height() + 18 + row + 2 * (PAD + BORDER)
         box = pygame.Rect(0, 0, width, height)
         box.center = (size[0] // 2, size[1] // 2)
-        target.blit(
-            rounded_box(box.size, RADIUS, FIELD, None, LINE, BORDER), box.topleft
-        )
+        shadowed_box(
+            box.size, RADIUS, FIELD, None, LINE, BORDER, shadows=(DIALOG_SHADOW,)
+        ).blit_at(target, box.topleft)
         target.blit(message, (box.x + PAD + BORDER, box.y + PAD + BORDER))
         x = box.right - PAD - BORDER - buttons
         y = box.y + PAD + BORDER + message.get_height() + 18
         hits: list[Hit] = []
         chosen = focused_item((view.buttons,), focus)
         for item, item_size in zip(items, sizes, strict=True):
-            rect = pygame.Rect((x, y), item_size)
-            target.blit(widgets.image(item, item_size), rect.topleft)
-            if chosen is not None and item == chosen:
-                draw_focus(target, rect, widgets.radius(item))
-            hits.append(Hit(item, rect))
+            hits.append(Hit(item, pygame.Rect((x, y), item_size)))
             x += item_size[0] + BUTTON_GAP
+        widgets.paint_all(
+            target, [(hit.item, hit.rect, hit.item == chosen) for hit in hits], motions
+        )
         return tuple(hits)

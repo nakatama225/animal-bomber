@@ -7,7 +7,8 @@
 出したときに1回だけ作る。`render/overlay/banner.py`）。
 
 幕の間（2フレーム目から）は、盤面と横の板を描かない。ぼかした絵が窓の全体を覆うので、
-ぼかした絵とカードだけを貼る。幕の間は描画の重さの場面（`tools/bench_match_scene.py`）の
+ぼかした絵とカード（地と文）とボタンを貼る（ボタンはマウスが乗った見た目に替えられる
+ように、カードと別に貼る）。幕の間は描画の重さの場面（`tools/bench_match_scene.py`）の
 対象の外（py/AGENTS.md の「描画の重さ」）。幕が消えたフレームに窓の全体を塗り直す。
 
 試合の状態から何を描くか（横の板の中身・幕を出すか・ポーズ中か）は `Shell` が決めて
@@ -38,6 +39,7 @@ import pygame
 
 from animal_bomber.domain.state.world import WorldState
 from animal_bomber.presentation.hud.banner import BannerView
+from animal_bomber.presentation.menu.hover import NO_MOTION, Motions
 from animal_bomber.presentation.menu.items import MenuGroup
 from animal_bomber.presentation.render.baked.art import BakedArt
 from animal_bomber.presentation.render.lan_screen import LanScreen
@@ -48,6 +50,7 @@ from animal_bomber.presentation.render.overlay.pause import PauseOverlay
 from animal_bomber.presentation.render.panel.side_panel import (
     PanelContent,
     PanelHits,
+    PanelTool,
     SidePanel,
 )
 from animal_bomber.presentation.render.renderer import Renderer, Visuals
@@ -109,6 +112,11 @@ class MatchView:
     def art(self) -> BakedArt:
         """取っておく盤面の絵（試合の前に描いておく先）。"""
         return self._art
+
+    @property
+    def background(self) -> pygame.Surface:
+        """試合の画面の窓の背景（盤面の影と枠を焼いたもの。書き換えない）。"""
+        return self._background
 
     @property
     def renderer(self) -> Renderer:
@@ -176,6 +184,7 @@ class MatchView:
         paused: bool,
         banner: BannerView | None = None,
         blend: float = 1.0,
+        hovered_tool: PanelTool | None = None,
     ) -> None:
         """窓の背景（要るときだけ）・盤面・横の板・ポーズの幕を描く。
 
@@ -193,6 +202,7 @@ class MatchView:
             banner: このフレームに重ねる幕。出さないなら None。
             blend: 描く値（位置と時刻）を1つ前の tick の値と混ぜる割合
                 （`draw_match_frame`）。
+            hovered_tool: マウスが乗っているツールバーのボタン（`draw_match_frame`）。
         """
         canvas = self._canvas
         self._bannered = False
@@ -215,6 +225,7 @@ class MatchView:
             now_ms=now_ms,
             immediate=immediate,
             blend=blend,
+            hovered_tool=hovered_tool,
         )
         self._fit_panel()
         if paused:
@@ -226,14 +237,17 @@ class MatchView:
         view: BannerView,
         groups: Sequence[MenuGroup],
         focus: tuple[int, int] | None,
+        motions: Motions = NO_MOTION,
     ) -> None:
-        """幕を重ねる（ボタンは `groups`、白い枠は `focus`）。
+        """幕を重ねる（ボタンは `groups`、白い枠は `focus`、見た目の進みは `motions`）。
 
         塗り直しの印を立てる。幕の間は `draw` が何も描かずに戻るので、印は使われずに
         残り、幕が消えたフレームの `draw` が窓の全体を塗り直す（すき間と横の板の下に、
         ぼかした絵を残さない）。
         """
-        self._banner_hits = self._banner.draw(self._canvas, view, groups, focus)
+        self._banner_hits = self._banner.draw(
+            self._canvas, view, groups, focus, motions=motions
+        )
         self._bannered = True
         self._repaint = True
 

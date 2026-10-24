@@ -25,7 +25,7 @@ import math
 import os
 from collections import OrderedDict
 from collections.abc import Hashable, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, TypeAlias
 
@@ -211,7 +211,8 @@ class TextPainter:
 
         影は（横のずれ, 縦のずれ, 色）の並び（ずれは 0 以上）。後ろの影ほど下に重ねる
         （CSS と同じく、1つ目の影がいちばん上）。絵は影の分だけ下と右に広がり、文は
-        左上に置く。
+        左上に置く。影は、文の絵の形（不透明度）を影の色1色で塗った絵（CSS の決まり。
+        色の絵文字も、色つきの写しではなく形だけが影になる）。
         """
         key = ("shadowed", text, style, tuple(shadows))
         image = self._images.get(key)
@@ -224,8 +225,9 @@ class TextPainter:
         image = pygame.Surface(
             (front.get_width() + right, front.get_height() + down), pygame.SRCALPHA
         )
+        shape = pygame.surfarray.array_alpha(front)
         for dx, dy, color in reversed(shadows):
-            image.blit(self.render(text, replace(style, color=color)), (dx, dy))
+            image.blit(_silhouette(shape, color), (dx, dy))
         image.blit(front, (0, 0))
         self._remember(key, image)
         return image
@@ -489,6 +491,16 @@ def _draw_key(target: pygame.Surface, box: pygame.Rect, look: KeyLook) -> None:
     pygame.draw.rect(target, look.border, box, border_radius=look.radius)
     inner = pygame.Rect(box.x + 1, box.y + 1, box.w - 2, box.h - 1 - look.bottom)
     pygame.draw.rect(target, look.fill, inner, border_radius=max(0, look.radius - 1))
+
+
+def _silhouette(shape: np.ndarray, color: Color) -> pygame.Surface:
+    """不透明度の配列 `shape`（横・縦）の形を、色 `color` 1色で塗った面。"""
+    image = pygame.Surface(shape.shape, pygame.SRCALPHA)
+    image.fill((*color, 0))
+    alpha = pygame.surfarray.pixels_alpha(image)
+    alpha[...] = shape
+    del alpha  # 画素の配列を手放す（持っている間は、この面を貼れない）
+    return image
 
 
 def _straight(surface: pygame.Surface) -> pygame.Surface:

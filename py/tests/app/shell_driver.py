@@ -133,6 +133,8 @@ class Driver:
     now: float = 0.0
     on_prepare: Callable[[pygame.Surface], None] | None = None
     """絵を描いておくときに、そのときの描く面を渡す先（じゅんびちゅうを見るため）。"""
+    pointed: list[bool] = field(default_factory=list)
+    """マウスの形を替えた順（`ShellTools.point` に渡された値。True が指の形）。"""
 
     def __post_init__(self) -> None:
         pygame.font.init()
@@ -144,6 +146,9 @@ class Driver:
 
         def present(canvas: pygame.Surface) -> None:
             self.presented += 1
+
+        def point(pointing: bool) -> None:
+            self.pointed.append(pointing)
 
         tools = ShellTools(
             window=self.window,
@@ -158,6 +163,7 @@ class Driver:
             address_of=parse_relay_address,
             present=present,
             prepare=prepare,
+            point=point,
         )
         self.shell = Shell(tools, relay=self.relay, started_ms=self.now)
 
@@ -221,6 +227,32 @@ class Driver:
 
     def move_mouse(self, pos: tuple[int, int]) -> None:
         self.frame(pygame.event.Event(pygame.MOUSEMOTION, pos=pos, rel=(0, 0)), ticks=0)
+
+    def press_at(self, pos: tuple[int, int]) -> None:
+        """`pos` でマウスの左のボタンを押す（離さない）フレームを1つ回す。"""
+        down = pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=pos, button=1)
+        self.frame(down, ticks=0)
+
+    def release_at(self, pos: tuple[int, int]) -> None:
+        """`pos` でマウスの左のボタンを離すフレームを1つ回す。"""
+        up = pygame.event.Event(pygame.MOUSEBUTTONUP, pos=pos, button=1)
+        self.frame(up, ticks=0)
+
+    def leave_window(self) -> None:
+        """マウスが窓の外へ出たフレームを1つ回す。"""
+        self.frame(pygame.event.Event(pygame.WINDOWLEAVE), ticks=0)
+
+    def lose_focus(self) -> None:
+        """窓から離れた（ほかのアプリへ移った）フレームを1つ回す。"""
+        self.frame(pygame.event.Event(pygame.WINDOWFOCUSLOST), ticks=0)
+
+    def rect_of(self, label: str) -> pygame.Rect:
+        """いま押せる項目のうち、文が `label` のものの四角。"""
+        for hit in self.shell.hits:
+            if hit.item.label == label:
+                return hit.rect
+        labels = [hit.item.label for hit in self.shell.hits]
+        raise AssertionError(f"「{label}」が無い: {labels}")
 
     def wheel(self, amount: float) -> None:
         """ホイールを回す（正が上）。"""

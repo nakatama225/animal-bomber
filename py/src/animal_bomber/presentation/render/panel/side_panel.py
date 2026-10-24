@@ -32,16 +32,24 @@
 明滅の不透明度ごとに、時計の地の色に重ねた不透明な小さい絵を取っておいて貼る。
 どちらも貼るたびに薄めない（py/AGENTS.md の「描画の重さ」）。
 
+## マウスと影
+
+- ツールバーのボタン（原型の `.tbtn`）にマウスが乗っている間は、縁を `var(--accent)` に
+  する（`.tbtn:hover`。L137。`.tbtn` は `transition` も `transform` も持たないので、すぐ
+  替わり、動かない）。板の絵は作り直さず、乗っているボタンの絵を、板の上に1枚だけ貼る
+  （`draw` の `hovered`）。マウスが乗っていないときは貼らないので、描画の重さの場面の
+  描き方は変わらない
+- つまみの丸のぼかした影（`0 2px 7px`。L112）は、板の絵を作るときに焼き込む
+
 ## 原型と違う所
 
-- 押せる物の上にマウスが来たときの縁の色と浮き上がり（`:hover`）・ぼかした影は描いて
-  いない（`docs/11-画面と設定.md` の「原型に合わせる作業が残っている所」）
 - 字の大きさは整数の px に丸める（`theme.css_px`）
 """
 
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
+from enum import Enum
 from typing import Final
 
 import pygame
@@ -64,6 +72,7 @@ from animal_bomber.presentation.render.ui.shapes import (
     opacity_level,
     pulse,
     rounded_box,
+    shadowed_box,
 )
 from animal_bomber.presentation.render.ui.theme import (
     ACCENT,
@@ -81,6 +90,7 @@ from animal_bomber.presentation.render.ui.theme import (
     TAG_CPU,
     TAG_HUMAN,
     TAG_NEGIBON,
+    THUMB_SHADOW,
     Color,
     mix,
 )
@@ -189,6 +199,15 @@ class PanelContent:
     """「⏸ ポーズ」のボタンを出すか（1台の試合だけ）。"""
 
 
+class PanelTool(Enum):
+    """ツールバーのボタン（マウスが乗っているボタンを `SidePanel.draw` に渡す）。"""
+
+    PAUSE = "pause"
+    """「⏸ ポーズ」「▶ 再開」。"""
+    SETTINGS = "settings"
+    """「設定へ」。"""
+
+
 @dataclass(frozen=True, slots=True)
 class PanelHits:
     """板の押せる所（窓の座標）。押したときの配線は起動の層がする。"""
@@ -199,6 +218,14 @@ class PanelHits:
     """「⏸ ポーズ」「▶ 再開」のボタン。出さないなら None。"""
     settings: pygame.Rect
     """「設定へ」のボタン（原型は確認の画面を出さずにタイトルへ戻る）。"""
+
+    def tool_at(self, pos: tuple[int, int]) -> PanelTool | None:
+        """位置 `pos` にあるツールバーのボタン。無ければ None。"""
+        if self.pause is not None and self.pause.collidepoint(pos):
+            return PanelTool.PAUSE
+        if self.settings.collidepoint(pos):
+            return PanelTool.SETTINGS
+        return None
 
 
 def speed_at(x: float, track: pygame.Rect) -> float:
@@ -258,6 +285,8 @@ class _Built:
     pause: pygame.Rect | None
     settings: pygame.Rect
     digits_top: int
+    tools: tuple[tuple[PanelTool, str, pygame.Rect], ...]
+    """ツールバーのボタンと、その字と四角（板の座標）。"""
 
 
 class SidePanel:
@@ -282,6 +311,7 @@ class SidePanel:
         self._built: _Built | None = None
         self._cards: dict[tuple[PlayerCard, int], pygame.Surface] = {}
         self._digits: dict[tuple[str, bool, int], pygame.Surface] = {}
+        self._hovered_tools: dict[tuple[str, tuple[int, int]], pygame.Surface] = {}
         self._warn_since: float | None = None
         self._fader = Fader()
         self.builds = 0
@@ -326,11 +356,17 @@ class SidePanel:
             self._slot = slot
 
     def draw(
-        self, target: pygame.Surface, topleft: tuple[int, int], now_ms: float
+        self,
+        target: pygame.Surface,
+        topleft: tuple[int, int],
+        now_ms: float,
+        hovered: PanelTool | None = None,
     ) -> PanelHits:
         """板を `target` の `topleft` に貼り、押せる所を返す。
 
-        `now_ms` は実時間（ms。時計の数字の明滅だけに使う）。
+        `now_ms` は実時間（ms。時計の数字の明滅だけに使う）。`hovered` はマウスが乗って
+        いるツールバーのボタン（その縁を `var(--accent)` にした絵を、板の上に1枚貼る。
+        モジュールの説明の「マウスと影」）。
 
         Raises:
             ValueError: まだ中身を受け取っていないとき（先に `show` を呼ぶ）。
@@ -350,6 +386,9 @@ class SidePanel:
         digits = self._digits_image(content.clock, now_ms)
         left = x + (PANEL_WIDTH - digits.get_width()) // 2
         target.blit(digits, (left, y + built.digits_top))
+        for tool, label, rect in built.tools:
+            if tool is hovered:
+                target.blit(self._tool_image(label, rect.size, ACCENT), rect.move(x, y))
         return PanelHits(
             speed=None if built.speed is None else built.speed.move(x, y),
             pause=None if built.pause is None else built.pause.move(x, y),
@@ -448,13 +487,15 @@ class SidePanel:
         self._draw_help(body, content.help_rows, y)
         y += self._help_height(content.help_rows)
         y += SECTION_GAP
-        pause, settings = self._draw_tools(body, content, y)
+        tools = self._draw_tools(body, content, y)
+        rects = {tool: rect for tool, _, rect in tools}
         return _Built(
             body=body,
             speed=speed,
-            pause=pause,
-            settings=settings,
+            pause=rects.get(PanelTool.PAUSE),
+            settings=rects[PanelTool.SETTINGS],
             digits_top=digits_top,
+            tools=tools,
         )
 
     def _box(self, size: tuple[int, int], border: Color = LINE) -> pygame.Surface:
@@ -551,8 +592,10 @@ class SidePanel:
         track = pygame.Rect(left, y, INNER_WIDTH, TRACK_HEIGHT)
         body.blit(horizontal_bar(track.size, 4, TRACK_STOPS), track.topleft)
         center = thumb_center(speed, track)
-        thumb = rounded_box((THUMB, THUMB), THUMB // 2, INK, None, ACCENT, 3)
-        body.blit(thumb, (center - THUMB // 2, track.centery - THUMB // 2))
+        thumb = shadowed_box(
+            (THUMB, THUMB), THUMB // 2, INK, None, ACCENT, 3, shadows=(THUMB_SHADOW,)
+        )
+        thumb.blit_at(body, (center - THUMB // 2, track.centery - THUMB // 2))
         y += TRACK_HEIGHT + 4
         # 目盛りの位置は原型の CSS の値（1× と 2× は丸の幅の分を足し引きした位置）。
         ticks = (
@@ -689,32 +732,42 @@ class SidePanel:
 
     def _draw_tools(
         self, body: pygame.Surface, content: PanelContent, top: int
-    ) -> tuple[pygame.Rect | None, pygame.Rect]:
-        """ツールバー（原型の `.toolbar`）。ボタンの四角（ポーズ, 設定へ）を返す。"""
+    ) -> tuple[tuple[PanelTool, str, pygame.Rect], ...]:
+        """ツールバー（原型の `.toolbar`）。ボタンと字と四角を返す。"""
         height = self._tool_height()
-        labels = ["設定へ"]
+        labels = [(PanelTool.SETTINGS, "設定へ")]
         if content.can_pause:
-            labels.insert(0, "▶ 再開" if content.paused else "⏸ ポーズ")
+            pause = "▶ 再開" if content.paused else "⏸ ポーズ"
+            labels.insert(0, (PanelTool.PAUSE, pause))
         gap = 8
         width = (PANEL_WIDTH - gap * (len(labels) - 1)) // len(labels)
-        rects: list[pygame.Rect] = []
-        for index, label in enumerate(labels):
+        tools: list[tuple[PanelTool, str, pygame.Rect]] = []
+        for index, (tool, label) in enumerate(labels):
             rect = pygame.Rect(index * (width + gap), top, width, height)
-            body.blit(
-                rounded_box(rect.size, 10, FIELD, None, LINE, BORDER), rect.topleft
-            )
-            text = self._painter.render(label, TOOL_TEXT)
-            body.blit(
-                text,
-                (
-                    rect.centerx - text.get_width() // 2,
-                    rect.centery - text.get_height() // 2,
-                ),
-            )
-            rects.append(rect)
-        if content.can_pause:
-            return rects[0], rects[1]
-        return None, rects[0]
+            body.blit(self._tool_image(label, rect.size, LINE), rect.topleft)
+            tools.append((tool, label, rect))
+        return tuple(tools)
+
+    def _tool_image(
+        self, label: str, size: tuple[int, int], rim: Color
+    ) -> pygame.Surface:
+        """ツールバーのボタン1つの絵（縁の色 `rim`）。マウスが乗った絵は取っておく。"""
+        key = (label, size)
+        if rim == ACCENT and key in self._hovered_tools:
+            return self._hovered_tools[key]
+        image = pygame.Surface(size, pygame.SRCALPHA)
+        image.blit(rounded_box(size, 10, FIELD, None, rim, BORDER), (0, 0))
+        text = self._painter.render(label, TOOL_TEXT)
+        image.blit(
+            text,
+            (
+                size[0] // 2 - text.get_width() // 2,
+                size[1] // 2 - text.get_height() // 2,
+            ),
+        )
+        if rim == ACCENT:
+            self._hovered_tools[key] = image
+        return image
 
 
 def _row_gap(rows: Sequence[HelpRow], index: int) -> int:

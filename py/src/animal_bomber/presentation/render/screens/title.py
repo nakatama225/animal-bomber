@@ -35,7 +35,7 @@ def plan_title(
     """タイトルを置く（窓の大きさ `window`）。"""
     width = card_width(window[0])
     placer = Placer(widgets, width, positions_of(view.groups))
-    placer.center(
+    placer.center_shadowed(
         title_block(widgets, window[0], view.logo, view.subtitle, view.version)
     )
     placer.gap(MENU_TOP)

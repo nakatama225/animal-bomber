@@ -18,7 +18,27 @@
 3. 通信対戦なら、中継から届いたものを受け取り、局面に合わせて画面を替える
 4. 試合を進める（1台はゲーム速度の倍率ぶんの回数。通信対戦は入力が揃った tick だけ）
 5. 描く。試合の画面は 盤面 → 横の板 →（ポーズの幕）→（幕）→（通信対戦の案内の帯）、
-   どの画面でも最後に 通知 → 確認の画面 → 起動の幕（原型の重なりの順）
+   どの画面でも最後に 通知 → 確認の画面 → 起動の幕（原型の重なりの順）。描く前に、
+   マウスが乗った項目の見た目の進みと、カーソルの白い枠を離す量の進み
+   （`presentation/menu/hover.py` の `RingMotions`）を数える
+
+## マウス
+
+- 項目とツールバーのボタンは、左のボタンを離したときに、押したときと同じ項目の上
+  なら決める（原型の `onclick`。L5642・L5706・L6027 など）。押したときに決めると、
+  押している間の大きいボタンの沈み（`.go:active`）が見えない。起動の幕も、幕の上で
+  押して離したときに消し始める（原型の `sp.onclick`。L5758。押したまま窓の外へ動かして
+  離したら、項目と同じく何もしない）。ゲーム速度のつまみだけは
+  押したときに動く（原型の `<input type=range>` も押して動かす）
+- マウスが乗っている項目は、前のフレームに描いた項目の四角とマウスの位置で決め、
+  項目ごとの見た目の進み（`presentation/menu/hover.py` の `HoverMotions`）を描く所へ
+  渡す。重なりの順は押すときと同じ（起動の幕が押せない間 → 何も乗らない、確認の
+  画面 → その2つ、幕 → 幕のボタン、試合 → 横の板のツールバー、ほか → 画面の項目）。
+  マウスが窓の外へ出たら、どれにも乗っていないことにする
+- マウスの形は、押せる項目・ツールバーのボタン・ゲーム速度のつまみの上で指にする
+  （原型の `cursor:pointer`。L35・L43・L54・L108・L111・L135・L187・L200）。押せない
+  項目の上は矢印（押しても何も起きないので、浮かせないのと揃える）。形を替えるのは
+  起動の入口（`ShellTools.point`）
 
 ## 置き場所
 
@@ -41,7 +61,7 @@
 """
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final, Protocol, assert_never
 
 import pygame
@@ -82,6 +102,12 @@ from animal_bomber.presentation.menu.flow import (
     TogglePause,
     UiSound,
 )
+from animal_bomber.presentation.menu.hover import (
+    NO_MOTION,
+    HoverMotions,
+    Motions,
+    RingMotions,
+)
 from animal_bomber.presentation.menu.items import MenuItem
 from animal_bomber.presentation.menu.local_setup import (
     CpuControl,
@@ -103,6 +129,7 @@ from animal_bomber.presentation.render.overlay.toast import ToastOverlay
 from animal_bomber.presentation.render.panel.side_panel import (
     PanelContent,
     PanelHits,
+    PanelTool,
     speed_at,
 )
 from animal_bomber.presentation.render.renderer import Renderer
@@ -115,7 +142,7 @@ from animal_bomber.presentation.render.screens.menu import (
 from animal_bomber.presentation.render.screens.splash import SplashPainter
 from animal_bomber.presentation.render.ui.shapes import page_background
 from animal_bomber.presentation.render.ui.typeset import TextPainter
-from animal_bomber.presentation.render.ui.widgets import Hit, Widgets
+from animal_bomber.presentation.render.ui.widgets import Hit, Widgets, focused_item
 from animal_bomber.shell.gamepad import (
     GamepadSource,
     PadChoice,
@@ -201,6 +228,10 @@ def no_present(canvas: pygame.Surface) -> None:
     """窓へ出さない（テストで使う）。"""
 
 
+def no_point(pointing: bool) -> None:
+    """マウスの形を替えない（テストで使う）。"""
+
+
 def prebuild(art: BakedArt, animals: Sequence[Animal]) -> None:
     """試合で使う絵を先に描いておく（`BakedArt.prebuild`）。"""
     art.prebuild(animals)
@@ -228,6 +259,11 @@ class ShellTools:
     """LAN の画面の欄の名前を「ホスト名:ポート」に読む（`parse_relay_address`）。"""
     present: Callable[[pygame.Surface], None] = no_present
     """描く面を窓へ出す。絵を描いておく間・中継につなぐ間（窓が止まる）の前に呼ぶ。"""
+    point: Callable[[bool], None] = no_point
+    """マウスの形を替える（True で指の形、False で矢印。`app/main.py` の `point`）。
+
+    形が替わるフレームにだけ呼ぶ（モジュールの説明の「マウス」）。
+    """
     prepare: Callable[[BakedArt, Sequence[Animal]], None] = prebuild
     """試合で使う絵を先に描いておく。テストでは何もしない関数を渡して時間を省く。"""
 
@@ -316,6 +352,17 @@ class Shell:
         self._scrolls: dict[str, int] = {}
         self._scrolled_screen = self._flow.screen
         self._mouse = (0, 0)
+        self._pointer: tuple[int, int] | None = None
+        """マウスの位置（窓の中で動いたか押したときから。窓の外へ出たら None）。"""
+        self._held: MenuItem | PanelTool | None = None
+        """左のボタンを押したときに、マウスの下にあった項目かツールバーのボタン。"""
+        self._splash_held = False
+        """起動の幕がクリックを受ける間に、左のボタンを押したか（離したときに消す）。"""
+        self._hover = HoverMotions()
+        self._rings = RingMotions()
+        """カーソルの白い枠を離す量の進み（画面と、幕が出ているかを画面とみなす）。"""
+        self._pointed = False
+        """いまのマウスの形が指か（替わったときだけ `ShellTools.point` を呼ぶ）。"""
         self._dragging = False
         self._menu_drawn: DrawnScreen | None = None
         self._dialog_hits: tuple[Hit, ...] = ()
@@ -444,20 +491,25 @@ class Shell:
         if kind == pygame.KEYDOWN:
             self._key_down(event, now_ms)
         elif kind == pygame.MOUSEMOTION:
-            self._mouse = event.pos
+            self._mouse = self._pointer = event.pos
             # 原型も、マウスを動かしたら白い枠を消す（L3105）。
             self._flow.hide_cursor()
             if self._dragging:
                 self._drag(event.pos[0])
         elif kind == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            self._mouse = event.pos
-            self._click(event.pos, now_ms)
+            self._mouse = self._pointer = event.pos
+            self._mouse_down(event.pos, now_ms)
         elif kind == pygame.MOUSEBUTTONUP and event.button == 1:
-            self._dragging = False
+            self._mouse = self._pointer = event.pos
+            self._mouse_up(event.pos, now_ms)
         elif kind == pygame.MOUSEWHEEL:
             self._wheel(event.precise_y)
+        elif kind == pygame.WINDOWLEAVE:
+            self._pointer = None
         elif kind == pygame.WINDOWFOCUSLOST:
             self._dragging = False
+            self._held = None
+            self._splash_held = False
 
     def _key_down(self, event: pygame.event.Event, now_ms: float) -> None:
         """キーを1つ押した（モジュールの説明の「1フレームの順」の 1. の順に渡す）。"""
@@ -481,46 +533,123 @@ class Shell:
         if command is not None:
             self._apply(flow.keyboard(command))
 
-    def _click(self, pos: tuple[int, int], now_ms: float) -> None:
-        """マウスの左のボタンを押した。上に重なっているものから当たりを見る。"""
-        flow = self._flow
-        if flow.splash.blocks_clicks(now_ms):
-            flow.splash.dismiss(now_ms)
+    def _mouse_down(self, pos: tuple[int, int], now_ms: float) -> None:
+        """マウスの左のボタンを押した（モジュールの説明の「マウス」）。
+
+        起動の幕が押せない間は、幕の上で押したことを覚えるだけ（離したときに消す）。
+        つまみはここで動かし、項目とツールバーのボタンは、押したものを覚えて、離した
+        ときに決める（`_mouse_up`）。
+        """
+        self._held = None
+        self._splash_held = False
+        if self._flow.splash.blocks_clicks(now_ms):
+            self._splash_held = True
             return
-        if flow.dialog is not None:
-            self._press(_hit_at(self._dialog_hits, pos))
+        track = self._track_at(pos)
+        if track is not None:
+            self._dragging = True
+            self._set_speed(speed_at(pos[0], track))
             return
+        self._held = self._target_at(pos)
+
+    def _mouse_up(self, pos: tuple[int, int], now_ms: float) -> None:
+        """マウスの左のボタンを離した。押したときと同じものの上なら決める。
+
+        起動の幕の上で押していたら、幕がまだクリックを受けていれば消し始める（原型の
+        `sp.onclick`）。幕は窓全体を覆うので、窓の中で離せば幕の上。押したまま窓の外へ
+        動かして離したら消さない（ブラウザの click は、押した要素と離した要素に共通の
+        祖先へ届くので、窓の外で離すと幕の上で離したことにならず、幕の `onclick` は
+        呼ばれない。⚠️ ブラウザでは確認していない。項目も、窓の外で離せば決めない）。
+        押している間に幕が消え始めていたら何もしない（下の項目も決めない）。
+        """
+        self._dragging = False
+        held, self._held = self._held, None
+        splash_held, self._splash_held = self._splash_held, False
+        if splash_held:
+            if self._canvas.get_rect().collidepoint(pos):
+                self._flow.splash.dismiss(now_ms)
+            return
+        if held is None or self._target_at(pos) != held:
+            return
+        if isinstance(held, PanelTool):
+            self._press_tool(held)
+        else:
+            self._apply(self._flow.press(held))
+
+    def _target_at(self, pos: tuple[int, int]) -> MenuItem | PanelTool | None:
+        """位置 `pos` にある項目かツールバーのボタン（上に重なっているものから）。
+
+        確認の画面が開いていればその2つだけ、幕が出ていれば幕のボタンだけ（原型の
+        `.cfm` と `#banner` は窓全体を覆う）。試合の画面ならツールバーのボタン、試合の外
+        なら画面の項目。
+        """
+        if self._flow.dialog is not None:
+            return _hit_at(self._dialog_hits, pos)
         game = self._game
         if game is not None:
             if game.shown is not None:
-                # 幕は窓全体を覆う（原型の `#banner` は fixed）。幕のボタンのほかは
-                # 押せない。
-                self._press(_hit_at(self._view.banner_hits, pos))
-                return
-            self._click_panel(game, pos)
-            return
+                return _hit_at(self._view.banner_hits, pos)
+            hits = self._view.panel_hits
+            return None if hits is None else hits.tool_at(pos)
         drawn = self._menu_drawn
-        if drawn is not None:
-            self._press(_hit_at(drawn.hits, pos))
+        return None if drawn is None else _hit_at(drawn.hits, pos)
 
-    def _click_panel(self, game: _Game, pos: tuple[int, int]) -> None:
-        """横の板のつまみ・ポーズ・設定へ（原型はどれも画面の操作の音を鳴らさない）。"""
+    def _track_at(self, pos: tuple[int, int]) -> pygame.Rect | None:
+        """位置 `pos` がゲーム速度のつまみの上なら、つまみの四角（窓の座標）。
+
+        確認の画面と幕が出ている間は、つまみの上でも None（原型の `.cfm` と
+        `#banner` は窓全体を覆い、つまみを押せない）。
+        """
+        game = self._game
         hits = self._view.panel_hits
-        if hits is None:
-            return
-        if hits.speed is not None and hits.speed.collidepoint(pos):
-            self._dragging = True
-            self._set_speed(speed_at(pos[0], hits.speed))
-        elif hits.pause is not None and hits.pause.collidepoint(pos):
-            self._toggle_pause()
-        elif hits.settings.collidepoint(pos):
-            # 原型の「設定へ」は確認の画面を出さずにタイトルへ戻る（マウスで押しに行く
-            # 動作そのものを、戻りたい合図とみなす。原型の注記 L3377-3380）。
-            self._apply(self._flow.back_to_setup())
+        if (
+            self._flow.dialog is None
+            and game is not None
+            and game.shown is None
+            and hits is not None
+            and hits.speed is not None
+            and hits.speed.collidepoint(pos)
+        ):
+            return hits.speed
+        return None
 
-    def _press(self, item: MenuItem | None) -> None:
-        if item is not None:
-            self._apply(self._flow.press(item))
+    def _pointing(self, hovered: MenuItem | PanelTool | None) -> bool:
+        """マウスの形を指にするか（原型の `cursor:pointer`。モジュールの説明）。
+
+        押せる項目・ツールバーのボタン・ゲーム速度のつまみの上なら指。押せない項目の
+        上は矢印。起動の幕がクリックを受ける間は、`hovered` が None で、試合も始まって
+        いない（つまみが無い）ので矢印。
+        """
+        if isinstance(hovered, PanelTool):
+            return True
+        if isinstance(hovered, MenuItem):
+            return hovered.enabled
+        pointer = self._pointer
+        return pointer is not None and self._track_at(pointer) is not None
+
+    def _press_tool(self, tool: PanelTool) -> None:
+        """横の板のポーズ・設定へ（原型はどちらも画面の操作の音を鳴らさない）。"""
+        match tool:
+            case PanelTool.PAUSE:
+                self._toggle_pause()
+            case PanelTool.SETTINGS:
+                # 原型の「設定へ」は確認の画面を出さずにタイトルへ戻る（マウスで押しに
+                # 行く動作そのものを、戻りたい合図とみなす。原型の注記 L3377-3380）。
+                self._apply(self._flow.back_to_setup())
+            case _:
+                assert_never(tool)
+
+    def _hovered(self, now_ms: float) -> MenuItem | PanelTool | None:
+        """いまマウスが乗っている項目かツールバーのボタン（モジュールの説明の「マウス」）。
+
+        当たりは前のフレームに描いた四角で見る。起動の幕が押せない間は何も乗らない。
+        押せない項目は `HoverMotions.update` が乗っていないことにする（押しても何も
+        起きないので、浮かせない）。
+        """
+        pointer = self._pointer
+        if pointer is None or self._flow.splash.blocks_clicks(now_ms):
+            return None
+        return self._target_at(pointer)
 
     def _drag(self, x: int) -> None:
         hits = self._view.panel_hits
@@ -869,26 +998,43 @@ class Shell:
     # 描く
 
     def _draw(self, now_ms: float) -> None:
+        hovered = self._hovered(now_ms)
+        pointing = self._pointing(hovered)
+        if pointing != self._pointed:
+            self._pointed = pointing
+            self._tools.point(pointing)
+        item = hovered if isinstance(hovered, MenuItem) else None
+        held = self._held if isinstance(self._held, MenuItem) else None
+        self._hover.update(item, held, now_ms)
+        flow = self._flow
         game = self._game
+        banner_shown = game is not None and game.shown is not None
+        self._rings.update(
+            (flow.screen, banner_shown),
+            flow.dialog is not None,
+            focused_item(flow.groups(), flow.focus()),
+            now_ms,
+        )
+        motions = replace(self._hover.motions(now_ms), rings=self._rings.rings(now_ms))
+        tool = hovered if isinstance(hovered, PanelTool) else None
         if game is not None and game.runner.world is not None:
-            self._draw_match(game, game.runner.world, now_ms)
+            self._draw_match(game, game.runner.world, now_ms, motions, tool)
             self._menu_drawn = None
         else:
-            self._draw_menu()
+            self._draw_menu(motions)
         canvas = self._canvas
         self._view.note_toast(self._toasts.draw(canvas, self._toast.view(now_ms)))
-        flow = self._flow
         dialog = flow.dialog_view()
         self._dialog_hits = ()
         if dialog is not None:
-            self._dialog_hits = self._dialog.draw(canvas, dialog, flow.focus())
+            self._dialog_hits = self._dialog.draw(canvas, dialog, flow.focus(), motions)
             self._view.invalidate()
         splash = flow.splash_view(now_ms)
         if splash is not None:
             self._splash.draw(canvas, splash, now_ms)
             self._view.invalidate()
 
-    def _draw_menu(self) -> None:
+    def _draw_menu(self, motions: Motions) -> None:
         flow = self._flow
         if flow.screen is not self._scrolled_screen:
             # 原型も、画面を替えたらページの先頭へ戻る（`window.scrollTo(0,0)`）。
@@ -901,10 +1047,23 @@ class Shell:
             self._menu_drawn = None
             return
         focus = None if flow.dialog is not None else flow.focus()
-        self._menu_drawn = self._screens.draw(self._canvas, view, focus, self._scrolls)
+        self._menu_drawn = self._screens.draw(
+            self._canvas, view, focus, self._scrolls, motions
+        )
 
-    def _draw_match(self, game: _Game, world: WorldState, now_ms: float) -> None:
-        """試合の画面を描く（中身を決めて、描くのは `MatchView`）。"""
+    def _draw_match(
+        self,
+        game: _Game,
+        world: WorldState,
+        now_ms: float,
+        motions: Motions = NO_MOTION,
+        tool: PanelTool | None = None,
+    ) -> None:
+        """試合の画面を描く（中身を決めて、描くのは `MatchView`）。
+
+        `motions` は幕のボタンの見た目の進み、`tool` はマウスが乗っているツールバーの
+        ボタン。
+        """
         local = game.local
         paused = local is not None and local.paused
         content = panel_content(
@@ -930,14 +1089,17 @@ class Shell:
             # 描く値（位置と時刻）を前の tick と混ぜるのは1台の試合だけ（通信対戦は
             # ゲーム速度が無い）。
             blend=self._speed.blend if local is not None else 1.0,
+            hovered_tool=tool,
         )
         notice = game.runner.notice()
-        self._draw_banner(game, world)
+        self._draw_banner(game, world, motions)
         if notice:
             view.draw_notice(notice)
 
-    def _draw_banner(self, game: _Game, world: WorldState) -> None:
-        """幕を、流れのボタンと揃えて描く。"""
+    def _draw_banner(
+        self, game: _Game, world: WorldState, motions: Motions = NO_MOTION
+    ) -> None:
+        """幕を、流れのボタンと揃えて描く（ボタンの見た目の進みは `motions`）。"""
         flow = self._flow
         view = game.banner.current(world)
         buttons = self._banner_buttons(game, view)
@@ -957,7 +1119,7 @@ class Shell:
         if view is None:
             return
         focus = None if flow.dialog is not None else flow.focus()
-        self._view.draw_banner(view, banner_groups(*game.buttons), focus)
+        self._view.draw_banner(view, banner_groups(*game.buttons), focus, motions)
 
     def _banner_buttons(
         self, game: _Game, view: BannerView | None

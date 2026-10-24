@@ -8,10 +8,28 @@
 """
 
 import math
+from dataclasses import dataclass
 from typing import Final, TypeAlias
 
 Color: TypeAlias = tuple[int, int, int]
 """色（赤・緑・青。0〜255）。"""
+
+
+@dataclass(frozen=True, slots=True)
+class Shadow:
+    """外へ落とす影1つ（原型の `box-shadow`・`text-shadow` の1つ。内側の影は除く）。"""
+
+    dx: int
+    """横のずれ（px）。"""
+    dy: int
+    """縦のずれ（px。正が下）。"""
+    blur: int
+    """ぼかしの半径（px。CSS の値。ガウスの標準偏差はこの半分）。"""
+    spread: int
+    """形を広げる量（px。CSS の `spread`）。"""
+    color: Color
+    alpha: float
+    """不透明度（0〜1。原型の `rgba(…, a)` の a）。"""
 
 
 def hex_color(text: str) -> Color:
@@ -107,6 +125,34 @@ LOGO_SHADOW_FAR: Final = hex_color("#5d1a10")
 """ロゴの字の影の遠いほう（原型の `0 9px 0 #5d1a10`）。"""
 WHITE: Final = (255, 255, 255)
 """カーソルの枠の色（原型の `.navcur{outline:3px solid #fff}`）。"""
+
+BLACK: Final = (0, 0, 0)
+"""ぼかした影の色（原型の `rgba(0,0,0,…)`）。"""
+GLOW: Final = (255, 150, 40)
+"""大きいボタンの下の光の色（原型の `rgba(255,150,40,…)`）。"""
+
+CARD_SHADOW: Final = Shadow(0, 18, 50, 0, BLACK, 0.45)
+"""画面のカードの影（原型の `.card{box-shadow:0 18px 50px rgba(0,0,0,.45)}`。L184）。"""
+BANNER_SHADOW: Final = Shadow(0, 24, 70, 0, BLACK, 0.6)
+"""幕のカードの影（原型の `.bcard{box-shadow:0 24px 70px rgba(0,0,0,.6)}`。L145）。"""
+DIALOG_SHADOW: Final = Shadow(0, 10, 30, 0, BLACK, 0.5)
+"""確認の画面の箱の影（原型の `.cfmBox` の `0 10px 30px rgba(0,0,0,.5)`。L222）。"""
+BOARD_SHADOW: Final = Shadow(0, 18, 50, 0, BLACK, 0.5)
+"""盤面の影（原型の canvas の `box-shadow:0 18px 50px rgba(0,0,0,.5)`。L74）。"""
+GO_GLOW: Final = Shadow(0, 12, 30, 0, GLOW, 0.28)
+"""大きいボタンの下の光（原型の `.go` の2つ目の影 `0 12px 30px`。L57）。"""
+GO_GLOW_HOVER: Final = Shadow(0, 16, 34, 0, GLOW, 0.34)
+"""マウスが乗った大きいボタンの下の光（原型の `.go:hover` の `0 16px 34px`。L58）。"""
+PLATE_SHADOW: Final = Shadow(0, 12, 34, 0, BLACK, 0.55)
+"""ロゴの銘板の影（原型の `.logoPlate` の1つ目の影 `0 12px 34px`。L169）。"""
+PLATE_RING: Final = Shadow(0, 0, 0, 6, (224, 69, 44), 0.18)
+"""ロゴの銘板のまわりの輪（原型の `.logoPlate` の2つ目の影 `0 0 0 6px`。L170）。"""
+THUMB_SHADOW: Final = Shadow(0, 2, 7, 0, BLACK, 0.55)
+"""つまみの丸の影（原型の `::-webkit-slider-thumb` の `0 2px 7px`。L112）。"""
+LOGO_TEXT_SHADOW: Final = Shadow(0, 16, 26, 0, BLACK, 0.6)
+"""ロゴの字のぼかした影（原型の `.logo` の3つ目の影 `0 16px 26px`。L166）。"""
+LOGO_SUB_TEXT_SHADOW: Final = Shadow(0, 6, 16, 0, BLACK, 0.5)
+"""ロゴの下の題のぼかした影（原型の `.logoSub` の2つ目の影 `0 6px 16px`。L173）。"""
 
 PAGE_STOPS: Final = (
     (0.0, hex_color("#4a3527")),

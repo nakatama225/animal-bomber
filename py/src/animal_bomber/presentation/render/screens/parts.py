@@ -2,9 +2,14 @@
 
 原型の画面は DOM の流れ（ブロックが上から下へ並び、`margin` が空きを作る）で組まれて
 いる。この版は、画面ごとの関数が `Placer` に絵と項目を上から順に渡し、空き（原型の
-margin。隣り合う margin は大きいほうにまとまる）を数で足していく。置き終えたら1枚の
-絵（`ScreenPlan.surface`）に合わせる。項目の四角とスクロールする箱は、その絵の上の
-位置で持つ。
+margin。隣り合う margin は大きいほうにまとまる）を数で足していく。置き終えたら、項目を
+除いた1枚の絵（`ScreenPlan.surface`）に合わせる。項目の四角とスクロールする箱は、その絵の
+上の位置で持つ。項目は、マウスが乗ったときの見た目に替えられるように、絵に焼かずに
+毎フレーム貼る（`render/screens/menu.py`）。
+
+カードのぼかした影（`.card` の `0 18px 50px`）とロゴの影は、並べ方に数えない（CSS の影も
+大きさとスクロールの範囲に含まれない）。絵は影の分だけ大きく、並べる箱（カード、カードの
+無い画面では中身の全体）の位置を `ScreenPlan.box` に持つ。
 
 部品の寸法は原型の CSS（`label.lb`・`.chips`・`.note`・`.animals`・`.shead`・`.card`・
 `.logoPlate`・`.logoSub`・`.ver`）。
@@ -22,25 +27,34 @@ from animal_bomber.presentation.menu.items import MenuGroup, MenuItem
 from animal_bomber.presentation.menu.screens import Heading
 from animal_bomber.presentation.render.ui.shapes import (
     Fader,
+    Shadowed,
+    layered,
     opacity_level,
-    rounded_box,
+    shadowed_box,
+    text_shadow,
 )
 from animal_bomber.presentation.render.ui.theme import (
     ACCENT2,
     APP_MAX_WIDTH,
     BORDER,
     CARD_BOTTOM,
+    CARD_SHADOW,
     CARD_TOP,
     DIM,
     INK,
     LINE,
     LOGO_SHADOW_FAR,
     LOGO_SHADOW_NEAR,
+    LOGO_SUB_TEXT_SHADOW,
+    LOGO_TEXT_SHADOW,
     PAGE_PADDING,
     PLATE_BOTTOM,
     PLATE_RIM,
+    PLATE_RING,
+    PLATE_SHADOW,
     PLATE_TOP,
     SELECTED_SHADOW,
+    Shadow,
 )
 from animal_bomber.presentation.render.ui.typeset import RichStyle, TextStyle
 from animal_bomber.presentation.render.ui.widgets import Widgets, css_style
@@ -172,6 +186,11 @@ class ScreenPlan:
 
     surface: pygame.Surface
     items: tuple[PlannedItem, ...]
+    box: pygame.Rect
+    """並べる箱（カードか、カードの無い画面では中身の全体）の、`surface` の上の四角。
+
+    窓の真ん中に置く・ページをスクロールする範囲を決めるのはこの箱（影は含まない）。
+    """
     boxes: tuple[PlannedBox, ...] = ()
 
 
@@ -221,6 +240,15 @@ class Placer:
         """いまの高さに、横の真ん中に `image` を置き、その下へ進む。"""
         self.put(image, (self.width - image.get_width()) // 2)
 
+    def center_shadowed(self, shadowed: Shadowed) -> None:
+        """影を焼いた絵の箱を、いまの高さの横の真ん中に置き、箱の下へ進む（影は数えない）。"""
+        width, height = shadowed.size
+        x = (self.width - width) // 2
+        self._pieces.append(
+            (shadowed.image, x - shadowed.origin[0], self.y - shadowed.origin[1])
+        )
+        self.y += height
+
     def faded(self, image: pygame.Surface, opacity: float) -> pygame.Surface:
         """`image` を不透明度 `opacity` に薄めた写し（原型の opacity）。"""
         return self._fader.faded(id(image), image, opacity_level(opacity))
@@ -268,8 +296,7 @@ class Placer:
         self.gap(LABEL_GAP)
 
     def item(self, item: MenuItem, rect: pygame.Rect) -> None:
-        """項目を `rect` に置く（いまの高さは変えない）。"""
-        self._pieces.append((self.widgets.image(item, rect.size), rect.x, rect.y))
+        """項目を `rect` に置く（いまの高さは変えない。絵は描くときに貼る）。"""
         self._items.append(PlannedItem(item, rect, self._positions.get(id(item))))
 
     def wide_item(self, item: MenuItem, x: int = 0, width: int | None = None) -> None:
@@ -357,10 +384,11 @@ class Placer:
         return Placer(self.widgets, width, self._positions)
 
     def plan(self, *, framed: bool) -> ScreenPlan:
-        """置いたものを1枚の絵に合わせる。
+        """置いたもの（項目を除く）を1枚の絵に合わせる。
 
-        `framed` なら、原型の `.card`（グラデーションの地・枠 2px・角丸 20px・余白）で
-        囲む。
+        `framed` なら、原型の `.card`（グラデーションの地・枠 2px・角丸 20px・余白・
+        ぼかした影 `0 18px 50px`）で囲む。絵は、カードの影と、並べる箱の外へ出る絵
+        （ロゴの影）が入る大きさにし、並べる箱の位置を `ScreenPlan.box` に持つ。
         """
         if framed:
             left, top = CARD_PAD_X + BORDER, CARD_PAD_TOP + BORDER
@@ -371,22 +399,31 @@ class Placer:
         else:
             left, top = 0, 0
             size = (self.width, self.y)
-        surface = pygame.Surface((max(1, size[0]), max(1, size[1])), pygame.SRCALPHA)
+        size = (max(1, size[0]), max(1, size[1]))
+        layers: list[tuple[pygame.Surface, int, int]] = []
         if framed:
-            card = rounded_box(size, CARD_RADIUS, CARD_TOP, CARD_BOTTOM, LINE, BORDER)
-            surface.blit(card, (0, 0))
-        for image, x, y in self._pieces:
-            surface.blit(image, (x + left, y + top))
+            card = shadowed_box(
+                size,
+                CARD_RADIUS,
+                CARD_TOP,
+                CARD_BOTTOM,
+                LINE,
+                BORDER,
+                shadows=(CARD_SHADOW,),
+            )
+            layers.append((card.image, -card.origin[0], -card.origin[1]))
+        layers += [(image, x + left, y + top) for image, x, y in self._pieces]
+        whole = layered(size, layers)
+        dx, dy = left + whole.origin[0], top + whole.origin[1]
         return ScreenPlan(
-            surface,
+            whole.image,
             tuple(
-                PlannedItem(
-                    planned.item, planned.rect.move(left, top), planned.position
-                )
+                PlannedItem(planned.item, planned.rect.move(dx, dy), planned.position)
                 for planned in self._items
             ),
+            pygame.Rect(whole.origin, size),
             tuple(
-                PlannedBox(box.name, box.rect.move(left, top), box.content)
+                PlannedBox(box.name, box.rect.move(dx, dy), box.content)
                 for box in self._boxes
             ),
         )
@@ -408,51 +445,87 @@ def picker_head(placer: Placer, who: str, right: str) -> None:
     placer.y += height
 
 
-def logo_plate(widgets: Widgets, window: int, logo: str) -> pygame.Surface:
-    """ロゴの銘板（原型の `.logoPlate` と `.logo`）。
+def _shadowed_text(
+    widgets: Widgets,
+    text: str,
+    style: TextStyle,
+    solid: Sequence[tuple[int, int, tuple[int, int, int]]],
+    blurred: Shadow,
+) -> Shadowed:
+    """ぼかさない影つきの文の下に、字の形のぼかした影を重ねた絵（`text-shadow`）。
 
-    字の大きさは原型の `clamp(40px,9vw,86px)`（窓の幅の 9%）。字の影は、ぼかさない
-    2つ（`0 4px 0`・`0 9px 0`）を写す。3つ目のぼかした影と、銘板のまわりの 6px の輪は
-    描いていない（`docs/11-画面と設定.md` の「原型に合わせる作業が残っている所」）。
+    箱は、ぼかさない影つきの文の絵の大きさ（並べ方は影を焼く前と同じ）。ぼかした影は
+    原型の CSS でいちばん後ろに書いてあるので、いちばん下に重ねる。
+    """
+    painter = widgets.painter
+    lettered = painter.shadowed(text, style, list(solid))
+    soft = text_shadow(painter.render(text, style), blurred)
+    return layered(
+        lettered.get_size(),
+        [(soft.image, -soft.origin[0], -soft.origin[1]), (lettered, 0, 0)],
+    )
+
+
+def logo_plate(widgets: Widgets, window: int, logo: str) -> Shadowed:
+    """ロゴの銘板（原型の `.logoPlate` と `.logo`）。箱は銘板の大きさ。
+
+    字の大きさは原型の `clamp(40px,9vw,86px)`（窓の幅の 9%）。銘板の影は、ぼかした影
+    `0 12px 34px` と、まわりの 6px の薄い赤の輪（ぼかさない `0 0 0 6px`）。字の影は、
+    ぼかさない2つ（`0 4px 0`・`0 9px 0`）と、ぼかした3つ目（`0 16px 26px`）。字の影は
+    銘板の中で切らない（CSS の `text-shadow` は銘板の外へも出る）。
     """
     painter = widgets.painter
     size = max(40, min(LOGO_MAX, math.floor(window * 0.09)))
     style = css_style(size, INK, 900, -0.02)
-    text = painter.shadowed(
-        logo, style, [(0, 4, LOGO_SHADOW_NEAR), (0, 9, LOGO_SHADOW_FAR)]
+    text = _shadowed_text(
+        widgets,
+        logo,
+        style,
+        [(0, 4, LOGO_SHADOW_NEAR), (0, 9, LOGO_SHADOW_FAR)],
+        LOGO_TEXT_SHADOW,
     )
     line = size  # 原型の line-height:1
-    width = text.get_width() + 2 * 34 + 2 * 3
+    width = text.size[0] + 2 * 34 + 2 * 3
     height = 14 + line + 18 + 2 * 3
-    plate = pygame.Surface((width, height), pygame.SRCALPHA)
-    plate.blit(
-        rounded_box(
-            (width, height), height // 2, PLATE_TOP, PLATE_BOTTOM, PLATE_RIM, 3
-        ),
-        (0, 0),
+    plate = shadowed_box(
+        (width, height),
+        height // 2,
+        PLATE_TOP,
+        PLATE_BOTTOM,
+        PLATE_RIM,
+        3,
+        shadows=(PLATE_SHADOW, PLATE_RING),
     )
     glyph_height = painter.metrics(style)[0]
-    plate.blit(text, (3 + 34, 3 + 14 + (line - glyph_height) // 2))
-    return plate
+    x, y = 3 + 34, 3 + 14 + (line - glyph_height) // 2
+    return layered(
+        (width, height),
+        [
+            (plate.image, -plate.origin[0], -plate.origin[1]),
+            (text.image, x - text.origin[0], y - text.origin[1]),
+        ],
+    )
 
 
-def logo_subtitle(widgets: Widgets, window: int, text: str) -> pygame.Surface:
-    """ロゴの下の題（原型の `.logoSub`：黄・太字・字の間 0.1em・ぼかさない影 3px）。
+def logo_subtitle(widgets: Widgets, window: int, text: str) -> Shadowed:
+    """ロゴの下の題（原型の `.logoSub`：黄・太字・字の間 0.1em）。
 
-    原型の2つ目の影（ぼかした影）は描いていない（`docs/11-画面と設定.md` の「原型に
-    合わせる作業が残っている所」）。
+    字の影は、ぼかさない `0 3px 0` と、ぼかした `0 6px 16px`。箱は、ぼかさない影つきの
+    文の絵の大きさ。
     """
     size = max(17, min(LOGO_SUB_MAX, math.floor(window * 0.026)))
     style = css_style(size, ACCENT2, 900, 0.1)
-    return widgets.painter.shadowed(text, style, [(0, 3, SELECTED_SHADOW)])
+    return _shadowed_text(
+        widgets, text, style, [(0, 3, SELECTED_SHADOW)], LOGO_SUB_TEXT_SHADOW
+    )
 
 
 def title_block(
     widgets: Widgets, window: int, logo: str, subtitle: str, version: str
-) -> pygame.Surface:
+) -> Shadowed:
     """ロゴの銘板・題・版の行を縦に並べた絵（原型の `.titleWrap`）。
 
-    タイトルと起動の幕で使う。
+    タイトルと起動の幕で使う。箱は影を除いた大きさ（並べるときはこれを使う）。
     """
     painter = widgets.painter
     plate = logo_plate(widgets, window, logo)
@@ -462,15 +535,20 @@ def title_block(
     sub_line = painter.normal_line(
         css_style(max(17, min(LOGO_SUB_MAX, math.floor(window * 0.026))), ACCENT2)
     )
-    width = max(plate.get_width(), sub.get_width(), ver.get_width())
-    height = 6 + plate.get_height() + 14 + sub_line + 8 + ver_line + 2
-    block = pygame.Surface((width, height), pygame.SRCALPHA)
+    width = max(plate.size[0], sub.size[0], ver.get_width())
+    height = 6 + plate.size[1] + 14 + sub_line + 8 + ver_line + 2
     y = 6
-    block.blit(plate, ((width - plate.get_width()) // 2, y))
-    y += plate.get_height() + 14
-    block.blit(sub, ((width - sub.get_width()) // 2, y))
+    plate_x = (width - plate.size[0]) // 2
+    layers = [(plate.image, plate_x - plate.origin[0], y - plate.origin[1])]
+    y += plate.size[1] + 14
+    sub_x = (width - sub.size[0]) // 2
+    layers.append((sub.image, sub_x - sub.origin[0], y - sub.origin[1]))
     y += sub_line + 8
-    block.blit(
-        ver, ((width - ver.get_width()) // 2, y + (ver_line - ver.get_height()) // 2)
+    layers.append(
+        (
+            ver,
+            (width - ver.get_width()) // 2,
+            y + (ver_line - ver.get_height()) // 2,
+        )
     )
-    return block
+    return layered((width, height), layers)

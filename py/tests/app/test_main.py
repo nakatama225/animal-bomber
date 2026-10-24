@@ -12,9 +12,10 @@ import os
 import subprocess
 import sys
 
+import pygame
 import pytest
 
-from animal_bomber.app.main import parse_args, tallest_panel, window_layout
+from animal_bomber.app.main import parse_args, point, tallest_panel, window_layout
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.presentation.audio.sounds import SoundName
 from animal_bomber.presentation.render.layout import (
@@ -38,6 +39,8 @@ DUMMY_ENV = {**os.environ, "SDL_VIDEODRIVER": "dummy", "SDL_AUDIODRIVER": "dummy
 # - フレームごとに、1P（0番）の爆弾が盤面にあるか（`Shell.frame` を包む）
 # - 鳴らした効果音の名前（`PygameSoundBank.play` を包む）と、フレームごとに、その
 #   フレームの終わりまでに鳴らした数
+# - マウスの形を替える関数（`app.main.point` を包む）が呼ばれたフレームと渡された値。
+#   "hover" のフレームは、前のフレームに描いた1つ目の項目の真ん中へマウスを動かす
 MAIN_SMOKE = """
 import json, sys
 import numpy
@@ -53,10 +56,11 @@ EVENTS = {
     "down": [key(pygame.KSCAN_DOWN), key(pygame.KSCAN_DOWN, pygame.KEYUP)],
     "up": [key(pygame.KSCAN_UP), key(pygame.KSCAN_UP, pygame.KEYUP)],
     "bomb": [key(pygame.KSCAN_SPACE), key(pygame.KSCAN_SPACE, pygame.KEYUP)],
+    "leave": [pygame.event.Event(pygame.WINDOWLEAVE)],
 }
 seen = {
     "probes": [], "frames": 0, "prebuilt": [], "own_bomb": [], "played": [],
-    "played_until": [],
+    "played_until": [], "pointed": [],
 }
 window = {}
 def channel_states():
@@ -72,6 +76,10 @@ def scripted():
     seen["frames"] += 1
     if name == "probe":
         seen["probes"].append(channel_states())
+    if name == "hover":
+        return [pygame.event.Event(
+            pygame.MOUSEMOTION, pos=window["first_item"], rel=(0, 0), buttons=(0, 0, 0)
+        )]
     return list(EVENTS[name])
 pygame.event.get = scripted
 set_mode = pygame.display.set_mode
@@ -111,6 +119,8 @@ def watched_frame(self, ticks, events, now_ms):
             world is not None and any(bomb.owner == 0 for bomb in world.bombs)
         )
         seen["played_until"].append(len(seen["played"]))
+        if self.hits:
+            window["first_item"] = self.hits[0].rect.center
     return going
 Shell.frame = watched_frame
 
@@ -120,8 +130,13 @@ def watched_play(self, name, intensity=1):
     return play(self, name, intensity)
 PygameSoundBank.play = watched_play
 
-from animal_bomber.app.main import main
-main([])
+import animal_bomber.app.main as main_module
+point = main_module.point
+def watched_point(pointing):
+    seen["pointed"].append([seen["frames"], pointing])
+    return point(pointing)
+main_module.point = watched_point
+main_module.main([])
 seen["mixer_after"] = pygame.mixer.get_init()
 print(json.dumps(seen))
 """
@@ -242,6 +257,22 @@ def test_試合の前に_じゅんびちゅうを窓に出してから_出る動
     assert first["text_pixels"] > 0
 
 
+HOVER_PLAN = ["none", "enter", "enter_up", "hover", "none", "leave", "none"]
+"""起動の幕を Enter で消し、タイトルの1つ目の項目にマウスを乗せ、窓の外へ出す台本。"""
+
+
+def test_遊ぶときの窓では_項目に乗ると形を指にし_窓の外へ出ると矢印に戻す() -> None:
+    """`main()` が `Shell` に渡す形を替える関数（`point`）を、本物の経路で呼ぶ。
+
+    形の選び方は `Testマウスの形` が見る。ここは配線（`ShellTools.point`）だけを、
+    マウスを動かすイベントを送って見る。呼ばれるのは形が替わるフレームだけ。
+    """
+    result = _run_main(HOVER_PLAN)
+    hover = HOVER_PLAN.index("hover") + 1
+    leave = HOVER_PLAN.index("leave") + 1
+    assert result["pointed"] == [[hover, True], [leave, False]]
+
+
 class Test窓の寸法:
     def test_画面の9割から_原型の式でマスを決め_高さは9割で頭打ち(self) -> None:
         painter = TextPainter()
@@ -261,6 +292,41 @@ class Test窓の寸法:
     ) -> None:
         """盤面（マス 26 で 474px）より高く、窓の高さを決める側に回る。"""
         assert tallest_panel(TextPainter()) > 474
+
+
+class Testマウスの形:
+    def test_指にするときは指の形_ほかは矢印の形を渡す(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """原型の `cursor:pointer`（押せる物の上は指）と、既定の矢印。"""
+        given: list[int] = []
+        monkeypatch.setattr(pygame.mouse, "set_cursor", given.append)
+        point(True)
+        point(False)
+        assert given == [pygame.SYSTEM_CURSOR_HAND, pygame.SYSTEM_CURSOR_ARROW]
+
+    def test_形を作れない所でも_形を替える関数は例外を出さない(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """形を作れないときは、形を替えないだけで、画面の流れは止めない。
+
+        SDL の dummy では、pygame はマウスの形を作れず `pygame.error` を出す。
+        """
+        tried: list[int] = []
+
+        def refuse(shape: int) -> None:
+            tried.append(shape)
+            raise pygame.error("形を作れない")
+
+        monkeypatch.setattr(pygame.mouse, "set_cursor", refuse)
+        errors: list[pygame.error] = []
+        for pointing in (True, False):
+            try:
+                point(pointing)
+            except pygame.error as error:
+                errors.append(error)
+        assert errors == []
+        assert tried == [pygame.SYSTEM_CURSOR_HAND, pygame.SYSTEM_CURSOR_ARROW]
 
 
 class Test起動の引数:

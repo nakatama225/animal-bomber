@@ -4,6 +4,9 @@
 四角と、作り直した回数（`builds`）を見る。
 """
 
+import math
+from dataclasses import replace
+
 import numpy as np
 import pygame
 import pytest
@@ -24,8 +27,10 @@ from animal_bomber.presentation.hud.scoreboard import (
 )
 from animal_bomber.presentation.menu.choices import SPEED_CHOICES, format_speed
 from animal_bomber.presentation.render.layout import PANEL_WIDTH
+from animal_bomber.presentation.render.panel import side_panel
 from animal_bomber.presentation.render.panel.side_panel import (
     REFRESH_TICKS,
+    THUMB,
     WARN_PULSE_MS,
     PanelContent,
     SidePanel,
@@ -33,7 +38,14 @@ from animal_bomber.presentation.render.panel.side_panel import (
     speed_at,
     thumb_center,
 )
-from animal_bomber.presentation.render.ui.theme import ACCENT2, INK, NG
+from animal_bomber.presentation.render.ui.shapes import rounded_box
+from animal_bomber.presentation.render.ui.theme import (
+    ACCENT,
+    ACCENT2,
+    INK,
+    NG,
+    THUMB_SHADOW,
+)
 from animal_bomber.presentation.render.ui.typeset import TextPainter
 
 from .frame_scenes import rgb
@@ -69,6 +81,28 @@ def content_of(
     )
 
 
+def blurred_thumb(*, sigma: float, dy: int) -> np.ndarray:
+    """つまみの丸の形を `dy` 下へずらし、標準偏差 `sigma` のガウスのぼかしをかけた手本。
+
+    値は不透明度（0〜1）。添え字は（行, 列）で、丸の左上から数える。形はつまみの丸と
+    同じ大きさと角の丸みの角丸の不透明度。
+    """
+    pad = 20
+    shape = pygame.surfarray.array_alpha(rounded_box((THUMB, THUMB), THUMB // 2, INK))
+    field = np.zeros((THUMB + 2 * pad, THUMB + 2 * pad))
+    field[pad + dy : pad + dy + THUMB, pad : pad + THUMB] = shape.T / 255.0
+    radius = math.ceil(4 * sigma)
+    xs = np.arange(-radius, radius + 1, dtype=np.float64)
+    kernel = np.exp(-(xs * xs) / (2 * sigma * sigma))
+    kernel /= kernel.sum()
+    for axis in (0, 1):
+        field = np.apply_along_axis(
+            lambda line: np.convolve(line, kernel, mode="same"), axis, field
+        )
+    out: np.ndarray = field[pad:, pad:]
+    return out
+
+
 def drawn(
     panel: SidePanel, content: PanelContent, now_ms: float = 0.0
 ) -> pygame.Surface:
@@ -97,6 +131,85 @@ class Test押せる所:
         # ツールバーは板のいちばん下。ポーズが左、設定へが右。
         assert hits.pause.bottom == hits.settings.bottom == area.bottom
         assert hits.pause.right < hits.settings.left
+
+    def test_つまみの丸の下にぼかした影を落とす(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """原型の `::-webkit-slider-thumb` の `0 2px 7px rgba(0,0,0,.55)`（L112）。
+
+        影の不透明度を 0 にした板と比べる。丸の下の端のすぐ下（目盛りの字の無い 1.5 倍の
+        所）は暗くなり、丸より上へ 9px 離れた所はほとんど替わらない。
+        """
+        content = content_of(make_world(), speed=1.5)
+        shadowed = rgb(drawn(SidePanel(PAINTER), content)).astype(int).sum(axis=2)
+        monkeypatch.setattr(
+            side_panel, "THUMB_SHADOW", replace(THUMB_SHADOW, alpha=0.0)
+        )
+        panel = SidePanel(PAINTER)
+        bare = rgb(drawn(panel, content)).astype(int).sum(axis=2)
+        surface = pygame.Surface((PANEL_WIDTH + 40, panel.height(content) + 40))
+        hits = panel.draw(surface, (20, 20), 0.0)
+        assert hits.speed is not None
+        center = thumb_center(1.5, hits.speed)
+        below = hits.speed.bottom + 1
+        assert bare[below, center] - shadowed[below, center] > 15
+        above = hits.speed.top - 9
+        assert abs(bare[above, center] - shadowed[above, center]) <= 3
+        assert (shadowed <= bare + 3).all()
+        # 影は 2px 下へずれるので、丸のすぐ下はすぐ上より暗い（ずれが無ければ同じ）。
+        top = hits.speed.centery - THUMB // 2
+        bottom = top + THUMB - 1
+        below_dark = 1 - shadowed[bottom + 1, center] / bare[bottom + 1, center]
+        above_dark = 1 - shadowed[top - 1, center] / bare[top - 1, center]
+        assert below_dark > above_dark + 0.1
+
+    def test_つまみの丸の影の濃さは_ずらしてぼかした丸の形の手本と同じ(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """原型の `0 2px 7px rgba(0,0,0,.55)`（L112）。
+
+        丸の形を 2px 下へずらし、標準偏差 3.5px のガウスのぼかしをかけ、不透明度 0.55 を
+        掛けた影。丸の下の端のすぐ下から 5 行（ずらした形の下の端と、そこから標準偏差
+        1つ外を含む）の暗さを、numpy で作った手本と比べる。丸は端が曲がっているので、
+        直線の端の値（0.5・0.159）ではなく、丸の形そのものをぼかした手本を使う。黒い
+        影なので、影の不透明度を 0 にした板と比べた暗さが、その画素の影の不透明度に
+        なる。
+        """
+        content = content_of(make_world(), speed=1.5)
+        shadowed = rgb(drawn(SidePanel(PAINTER), content)).astype(float).sum(axis=2)
+        monkeypatch.setattr(
+            side_panel, "THUMB_SHADOW", replace(THUMB_SHADOW, alpha=0.0)
+        )
+        panel = SidePanel(PAINTER)
+        bare = rgb(drawn(panel, content)).astype(float).sum(axis=2)
+        surface = pygame.Surface((PANEL_WIDTH + 40, panel.height(content) + 40))
+        hits = panel.draw(surface, (20, 20), 0.0)
+        assert hits.speed is not None
+        center = thumb_center(1.5, hits.speed)
+        top = hits.speed.centery - THUMB // 2
+        wanted = blurred_thumb(sigma=3.5, dy=2)
+        for row in range(THUMB, THUMB + 5):
+            dark = 1 - shadowed[top + row, center] / bare[top + row, center]
+            assert dark == pytest.approx(0.55 * wanted[row, THUMB // 2], abs=0.02)
+
+    def test_つまみの丸は_影を除いた丸の大きさで倍率の位置に置く(self) -> None:
+        """丸の縁（`var(--accent)` の 3px）の上の端と左の端（影の分ずらさない）。"""
+        panel = SidePanel(PAINTER)
+        content = content_of(make_world(), speed=1.5)
+        surface = drawn(panel, content)
+        hits = panel.draw(surface, (20, 20), 0.0)
+        assert hits.speed is not None
+        center = thumb_center(1.5, hits.speed)
+        image = rgb(surface).astype(int)
+        rim = np.all(np.abs(image - np.array(ACCENT)) <= 30, axis=2)
+        top = hits.speed.centery - THUMB // 2
+        column = np.nonzero(rim[top - 12 : top + THUMB, center])[0]
+        assert column.size > 0
+        assert abs(top - 12 + int(column.min()) - top) <= 1
+        left = center - THUMB // 2
+        row = np.nonzero(rim[hits.speed.centery, left - 12 : left + THUMB])[0]
+        assert row.size > 0
+        assert abs(left - 12 + int(row.min()) - left) <= 1
 
     def test_通信対戦では_つまみとポーズのボタンを出さない(self) -> None:
         """原型のゲストと同じく隠す（押せるのに何も起きないボタンを置かない）。"""

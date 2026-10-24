@@ -7,15 +7,24 @@ from dataclasses import replace
 
 import numpy as np
 import pygame
+import pytest
 
 from animal_bomber.presentation.hud.banner import BannerView
 from animal_bomber.presentation.hud.toast import ToastView
+from animal_bomber.presentation.menu.hover import (
+    NO_MOTION,
+    ItemMotion,
+    Motions,
+    identity,
+)
 from animal_bomber.presentation.menu.items import Advance, Answer, Leave
 from animal_bomber.presentation.menu.screens import (
     DialogKind,
     banner_groups,
     dialog_view,
 )
+from animal_bomber.presentation.render.overlay import banner as banner_module
+from animal_bomber.presentation.render.overlay import dialog as dialog_module
 from animal_bomber.presentation.render.overlay.banner import BannerOverlay, blur
 from animal_bomber.presentation.render.overlay.dialog import DialogOverlay
 from animal_bomber.presentation.render.overlay.pause import PauseOverlay
@@ -27,7 +36,17 @@ from animal_bomber.presentation.render.overlay.toast import (
     ToastOverlay,
 )
 from animal_bomber.presentation.render.ui.shapes import rounded_box
-from animal_bomber.presentation.render.ui.theme import ACCENT2, BORDER, INK, WHITE
+from animal_bomber.presentation.render.ui.theme import (
+    ACCENT,
+    ACCENT2,
+    BANNER_SHADOW,
+    BORDER,
+    DIALOG_SHADOW,
+    FIELD,
+    INK,
+    LINE,
+    WHITE,
+)
 from animal_bomber.presentation.render.ui.typeset import TextPainter
 from animal_bomber.presentation.render.ui.widgets import Widgets
 
@@ -81,6 +100,33 @@ def gaussian_reference(
     for index, weight in enumerate(kernel):
         out += weight * padded[:, index : index + pixels.shape[1]]
     return out
+
+
+def box_of(image: np.ndarray, rim: tuple[int, int, int], inset: int) -> pygame.Rect:
+    """縁の色が `rim` の箱（窓の真ん中にかかる箱）の四角。
+
+    窓の真ん中の行で縁の色の左右の端の列を、左の端から `inset` px 内の列（角丸に
+    かからない所）で縁の色の上下の端の行を探す。
+    """
+    match = np.all(image == np.array(rim), axis=2)
+    columns = np.nonzero(match[image.shape[0] // 2])[0]
+    left, right = int(columns.min()), int(columns.max())
+    rows = np.nonzero(match[:, left + inset])[0]
+    top, bottom = int(rows.min()), int(rows.max())
+    return pygame.Rect(left, top, right - left + 1, bottom - top + 1)
+
+
+def darkening(
+    bare: pygame.Surface, shadowed: pygame.Surface, row: int, center: int
+) -> float:
+    """影の無い絵と比べて、行 `row` の `center` の左右 20px がどれだけ暗いか（割合）。
+
+    市松模様の地の白と黒をまとめて数えるため、40px の幅の明るさの和で比べる。
+    """
+    band = slice(center - 20, center + 20)
+    lit = rgb(bare)[row, band].astype(float).sum()
+    dark = rgb(shadowed)[row, band].astype(float).sum()
+    return float(1 - dark / lit)
 
 
 ROUND = BannerView(
@@ -169,6 +215,132 @@ class Test幕:
     def test_通信対戦のラウンドの幕は_ボタンを出さない(self) -> None:
         overlay = BannerOverlay(WIDGETS)
         assert overlay.draw(checkered(), ROUND, banner_groups(None, False), None) == ()
+
+    def test_カードの下にぼかした影を落とし_置き方は変えない(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """原型の `.bcard{box-shadow:0 24px 70px rgba(0,0,0,.6)}`（L145）。
+
+        影の不透明度を 0 にした幕と比べる。ボタンの四角は同じ（影は置き方に数えない）
+        で、違う画素は暗くなり、カードの下（ボタンより下）にある。
+        """
+        groups = banner_groups(ROUND.button, True)
+        target = checkered()
+        hits = BannerOverlay(WIDGETS).draw(target, ROUND, groups, None)
+        monkeypatch.setattr(
+            banner_module, "BANNER_SHADOW", replace(BANNER_SHADOW, alpha=0.0)
+        )
+        bare = checkered()
+        bare_hits = BannerOverlay(WIDGETS).draw(bare, ROUND, groups, None)
+        assert [hit.rect for hit in hits] == [hit.rect for hit in bare_hits]
+        darker = rgb(bare).astype(int).sum(axis=2) - rgb(target).astype(int).sum(axis=2)
+        assert darker.min() >= -3
+        rows = np.nonzero(darker.max(axis=1) > 20)[0]
+        assert rows.size > 0
+        assert rows.max() > max(hit.rect.bottom for hit in hits) + 20
+
+    def test_ボタンは_マウスが乗った見た目で貼る(self) -> None:
+        """大きいボタンは 2px 上へ、幕の小さいボタン（`.tbtn`）は縁だけ橙に。
+
+        マウスが乗るのは一度に1つなので、1つずつ乗せて描く（乗った大きいボタンの光は
+        小さいボタンにかかる。`test_乗った大きいボタンの光は_下のボタンにかかる`）。
+        """
+        groups = banner_groups(ROUND.button, True)
+        go, leave = (item for group in groups for item in group.items)
+        plain, lifted, rimmed = checkered(), checkered(), checkered()
+        hits = BannerOverlay(WIDGETS).draw(plain, ROUND, groups, None)
+        on_go = Motions({identity(go): ItemMotion(1.0, 0.0)})
+        BannerOverlay(WIDGETS).draw(lifted, ROUND, groups, None, on_go)
+        on_leave = Motions({identity(leave): ItemMotion(1.0, 0.0)})
+        BannerOverlay(WIDGETS).draw(rimmed, ROUND, groups, None, on_leave)
+        go_rect, leave_rect = (hit.rect for hit in hits)
+        before = rgb(plain)
+        column = go_rect.centerx
+        assert tuple(rgb(lifted)[go_rect.top - 2, column]) == tuple(
+            before[go_rect.top, column]
+        )
+        assert tuple(rgb(rimmed)[leave_rect.centery, leave_rect.left + 1]) == ACCENT
+        assert tuple(before[leave_rect.centery, leave_rect.left + 1]) == LINE
+
+    def test_乗った大きいボタンの光は_下のボタンにかかる(self) -> None:
+        """乗った大きいボタンは、あとに並ぶ「⚙ 設定をやりなおす」より上に描く。
+
+        原型の `.go:hover`・`.go:active` は `transform` を持つので積層文脈を作り、
+        位置の指定が無い `.tbtn.bback` より上に描かれる。乗っていないときと押している
+        間（光の不透明度 0）は、下のボタンの上の端から 3px の画素は地の色のまま。
+        乗ると、光で赤に寄る。変わり始めでずれを丸めると 0px の間も上に貼る
+        （`transform` は値が 0px に近くても積層文脈を作る）。
+        """
+        groups = banner_groups(ROUND.button, True)
+        go = groups[0].items[0]
+
+        def drawn(motion: ItemMotion | None) -> np.ndarray:
+            motions = NO_MOTION if motion is None else Motions({identity(go): motion})
+            target = checkered()
+            BannerOverlay(WIDGETS).draw(target, ROUND, groups, None, motions)
+            image: np.ndarray = rgb(target).astype(int)
+            return image
+
+        hits = BannerOverlay(WIDGETS).draw(checkered(), ROUND, groups, None)
+        leave = hits[1].rect
+        spot = (leave.top + 3, leave.centerx)
+        assert tuple(drawn(None)[spot]) == FIELD
+        assert drawn(ItemMotion(1.0, 0.0))[spot][0] - FIELD[0] > 20
+        assert WIDGETS.shift(go, ItemMotion(0.1, 0.0)) == 0
+        assert drawn(ItemMotion(0.1, 0.0))[spot][0] - FIELD[0] > 20
+        assert tuple(drawn(ItemMotion(1.0, 1.0))[spot]) == FIELD
+
+    def test_カードは_影を除いた大きさで窓の真ん中に置く(self) -> None:
+        """カードの黄色い縁（`.bcard` の `var(--accent2)`）の上の端と左の端の位置。
+
+        影を焼いた絵の大きさで真ん中に置くと、左上へ影の届く幅だけずれる。
+        """
+        groups = banner_groups(ROUND.button, True)
+        target = checkered()
+        hits = BannerOverlay(WIDGETS).draw(target, ROUND, groups, None)
+        card = box_of(rgb(target), ACCENT2, 30)
+        assert card.left == (SIZE[0] - card.w) // 2
+        assert card.top == (SIZE[1] - card.h) // 2
+        # ボタンは、カードの左の縁から枠と余白（2px＋38px）の所。
+        assert [hit.rect.left for hit in hits] == [card.left + 40] * 2
+
+    def test_カードの影は_形の端で半分_標準偏差1つ外で約16パーセントの濃さ(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """原型の `0 24px 70px rgba(0,0,0,.6)`（標準偏差 35px のガウスのぼかし）。
+
+        影の形の下の端（カードの下の端から 24px 下）は 0.6 × 0.5、そこから標準偏差
+        1つ（35px）外は 0.6 × 0.159 だけ暗い。影の不透明度を 0 にした幕と比べる。
+        """
+        groups = banner_groups(ROUND.button, True)
+        target = checkered()
+        BannerOverlay(WIDGETS).draw(target, ROUND, groups, None)
+        monkeypatch.setattr(
+            banner_module, "BANNER_SHADOW", replace(BANNER_SHADOW, alpha=0.0)
+        )
+        bare = checkered()
+        BannerOverlay(WIDGETS).draw(bare, ROUND, groups, None)
+        card = box_of(rgb(bare), ACCENT2, 30)
+        edge = card.bottom - 1 + 24
+        assert darkening(bare, target, edge, card.centerx) == pytest.approx(
+            0.6 * 0.5, abs=0.05
+        )
+        assert darkening(bare, target, edge + 35, card.centerx) == pytest.approx(
+            0.6 * 0.159, abs=0.04
+        )
+
+    def test_白い枠は_ずらして貼ったボタンのまわりに描く(self) -> None:
+        """原型の `outline` は `transform` で項目と一緒に動く（大きいボタンは 2px）。"""
+        groups = banner_groups(ROUND.button, True)
+        go = groups[0].items[0]
+        target = checkered()
+        motions = Motions({identity(go): ItemMotion(1.0, 0.0)})
+        hits = BannerOverlay(WIDGETS).draw(target, ROUND, groups, (0, 0), motions)
+        rect = hits[0].rect
+        image = rgb(target)
+        # 白い枠は、ずらした上の端から 2px 離して 3px（いちばん外の行）。
+        assert tuple(image[rect.top - 2 - 2 - 3, rect.centerx]) == WHITE
+        assert tuple(image[rect.top - 2 - 2 - 4, rect.centerx]) != WHITE
 
 
 def test_ポーズの幕は_盤面の四角だけを暗くして_PAUSEを出す() -> None:
@@ -283,3 +455,73 @@ def test_確認の画面は_やめるを左に_もう1つを右に並べる() ->
     assert tuple(image[yes.centery, yes.left - 4]) != WHITE
     # 窓全体を暗くする（箱の外の白は 0.66 で黒に寄る）。
     assert image[:30, :30].max() < 100
+
+
+def test_確認の画面の箱の下にぼかした影を落とし_ボタンはマウスで替わる(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """原型の `.cfmBox{box-shadow:0 10px 30px rgba(0,0,0,.5)}`（L222）と `.chip:hover`。
+
+    影の不透明度を 0 にした確認の画面と比べる（違う画素は暗く、ボタンより下にもある）。
+    マウスが乗ったボタンだけ、縁が橙になって 1px 上へずれる。
+    """
+    view = dialog_view(DialogKind.DISCONNECT)
+    target = checkered()
+    hits = DialogOverlay(WIDGETS).draw(target, view, None)
+    monkeypatch.setattr(
+        dialog_module, "DIALOG_SHADOW", replace(DIALOG_SHADOW, alpha=0.0)
+    )
+    bare = checkered()
+    assert DialogOverlay(WIDGETS).draw(bare, view, None) == hits
+    darker = rgb(bare).astype(int).sum(axis=2) - rgb(target).astype(int).sum(axis=2)
+    assert darker.min() >= -3
+    rows = np.nonzero(darker.max(axis=1) > 20)[0]
+    assert rows.size > 0 and rows.max() > max(hit.rect.bottom for hit in hits) + 10
+    no, yes = hits
+    hovered = checkered()
+    motions = Motions({identity(yes.item): ItemMotion(1.0, 0.0)})
+    DialogOverlay(WIDGETS).draw(hovered, view, None, motions)
+    image = rgb(hovered)
+    assert tuple(image[yes.rect.centery, yes.rect.left + 1]) == ACCENT
+    assert tuple(image[yes.rect.top - 1, yes.rect.centerx]) == ACCENT
+    assert tuple(image[no.rect.centery, no.rect.left + 1]) == LINE
+
+
+def test_確認の画面の箱の影は_形の端で半分_標準偏差1つ外で約16パーセントの濃さ(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """原型の `.cfmBox` の `0 10px 30px rgba(0,0,0,.5)`（標準偏差 15px）。
+
+    影の形の下の端（箱の下の端から 10px 下）は 0.5 × 0.5、そこから標準偏差1つ（15px）
+    外は 0.5 × 0.159 だけ暗い。影の不透明度を 0 にした確認の画面と比べる。
+    """
+    view = dialog_view(DialogKind.DISCONNECT)
+    target = checkered()
+    DialogOverlay(WIDGETS).draw(target, view, None)
+    monkeypatch.setattr(
+        dialog_module, "DIALOG_SHADOW", replace(DIALOG_SHADOW, alpha=0.0)
+    )
+    bare = checkered()
+    DialogOverlay(WIDGETS).draw(bare, view, None)
+    box = box_of(rgb(bare), LINE, 24)
+    assert box.center == (SIZE[0] // 2, SIZE[1] // 2)
+    edge = box.bottom - 1 + 10
+    assert darkening(bare, target, edge, box.centerx) == pytest.approx(
+        0.5 * 0.5, abs=0.05
+    )
+    assert darkening(bare, target, edge + 15, box.centerx) == pytest.approx(
+        0.5 * 0.159, abs=0.035
+    )
+
+
+def test_確認の画面の白い枠は_ずらして貼ったボタンのまわりに描く() -> None:
+    """マウスが乗ったチップは 1px 上へずれ、白い枠も一緒に動く（原型の `outline`）。"""
+    view = dialog_view(DialogKind.DISCONNECT)
+    yes = view.buttons.items[1]
+    target = checkered()
+    motions = Motions({identity(yes): ItemMotion(1.0, 0.0)})
+    hits = DialogOverlay(WIDGETS).draw(target, view, (0, 1), motions)
+    rect = hits[1].rect
+    image = rgb(target)
+    assert tuple(image[rect.top - 1 - 2 - 3, rect.centerx]) == WHITE
+    assert tuple(image[rect.top - 1 - 2 - 4, rect.centerx]) != WHITE

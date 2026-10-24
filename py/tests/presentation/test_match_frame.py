@@ -6,6 +6,7 @@
 背景に描かせて、枠の4辺・四隅の枠の色の画素・四隅の内側の盤面の画素を見る。
 """
 
+import math
 import random
 
 import numpy as np
@@ -50,12 +51,13 @@ from animal_bomber.presentation.render.panel.side_panel import (
     REFRESH_TICKS,
     PanelContent,
     PanelHits,
+    PanelTool,
     SidePanel,
 )
 from animal_bomber.presentation.render.renderer import Renderer, Visuals
 from animal_bomber.presentation.render.scene.tracker import SceneTracker
 from animal_bomber.presentation.render.ui.shapes import page_background
-from animal_bomber.presentation.render.ui.theme import BOARD_FILL, LINE
+from animal_bomber.presentation.render.ui.theme import ACCENT, BOARD_FILL, LINE
 from animal_bomber.presentation.render.ui.typeset import TextPainter
 
 from .frame_scenes import FixedVisuals
@@ -252,6 +254,53 @@ class Test盤面と横の板を描く:
         self.draw(target, renderer, panel, content_of(make_world()), 0.0)
         assert target.on_panel == 2
 
+    @pytest.mark.parametrize("tool", [PanelTool.PAUSE, PanelTool.SETTINGS])
+    def test_マウスが乗ったツールバーのボタンだけ_縁を替えた絵を1枚足して貼る(
+        self, tool: PanelTool
+    ) -> None:
+        """原型の `.tbtn:hover{border-color:var(--accent)}`（L137。すぐ替わる）。
+
+        板の絵は作り直さない。乗っていないボタンの縁は枠線の色のまま。縁の画素は、
+        ボタンの左の辺の真ん中（角丸にかからない所）。
+        """
+        world = make_world()
+        content = content_of(world)
+        panel = SidePanel(PAINTER)
+        plain = Counting(SIZE)
+        draw_match_frame(
+            plain,
+            frame=FRAME,
+            renderer=Renderer(BakedArt(LAYOUT)),
+            world=world,
+            visuals=SceneTracker(),
+            panel=panel,
+            content=content,
+            panel_topleft=(PANEL_LEFT, 0),
+            now_ms=0.0,
+        )
+        builds = panel.builds
+        target = Counting(SIZE)
+        hits = draw_match_frame(
+            target,
+            frame=FRAME,
+            renderer=Renderer(BakedArt(LAYOUT)),
+            world=world,
+            visuals=SceneTracker(),
+            panel=panel,
+            content=content,
+            panel_topleft=(PANEL_LEFT, 0),
+            now_ms=0.0,
+            hovered_tool=tool,
+        )
+        assert target.on_panel == plain.on_panel + 1
+        assert panel.builds == builds
+        assert hits.pause is not None
+        rects = {PanelTool.PAUSE: hits.pause, PanelTool.SETTINGS: hits.settings}
+        for each, rect in rects.items():
+            rim = color_at(target, (rect.left + 1, rect.centery))
+            assert rim == (ACCENT if each is tool else LINE)
+            assert color_at(plain, (rect.left + 1, rect.centery)) == LINE
+
     def test_押せる所は_貼った位置に合わせて返す(self) -> None:
         renderer = Renderer(BakedArt(LAYOUT))
         target = pygame.Surface(SIZE)
@@ -376,7 +425,7 @@ class Test盤面の枠:
         assert boards and max(boards) < min(corners)
 
     def test_四隅の内側の角丸の外は枠の色_内側は盤面の画素(self) -> None:
-        """外側の角丸の外は窓の背景、枠の4辺は枠の色。
+        """外側の角丸の外は窓の背景（盤面の影を焼いたもの）、枠の4辺は枠の色。
 
         比べる盤面の画素は、同じ盤面を枠の無い面の左上に描いたもの。弧にかかって色が
         混ざる画素は見ない（内側の角丸の弧から 1px 以上離れた画素を選ぶ）。角から縦に
@@ -387,7 +436,7 @@ class Test盤面の枠:
         world = self.draw(target, Renderer(art), SceneTracker())
         flat = pygame.Surface(LAYOUT.surface_size)
         Renderer(art).draw(flat, world, SceneTracker())
-        page = page_background(SIZE)
+        page = FRAME.background
         for right, bottom in CORNERS:
             for dx, dy in ((1, 4), (4, 1), (2, 3)):
                 assert color_at(target, corner_spot(right, bottom, dx, dy)) == LINE
@@ -438,6 +487,43 @@ class Test盤面の枠:
                 mixed = LINE[channel] * (1 - inside) + board[channel] * inside
                 assert abs(got[channel] - mixed) <= 2
         assert min(insides) < 0.5 < max(insides)
+
+    def test_盤面のぼかした影を_枠の下に窓の背景へ焼く(self) -> None:
+        """原型の canvas の `box-shadow:0 18px 50px rgba(0,0,0,.5)`（L74）。
+
+        影の形は枠の外側の角丸の箱を 18px 下へずらしたもの。標準偏差 25（ぼかしの半径の
+        半分）のガウスのぼかしなら、箱の右の辺から外へ d px の画素の影の濃さは
+        0.5 ×（1 − Φ(d / 25)）。盤面の右のすき間（8.5px）・横の板の下（40.5px）と、
+        盤面の下の、ずらした影の下の端（0.5px）で、窓の背景がどれだけ暗くなったかを
+        比べる。
+        暗くなった割合を細かく読むため、明るい1色の背景に焼かせる。
+        """
+        page = pygame.Surface(SIZE)
+        page.fill((240, 240, 240))
+        frame = BoardFrame(page, BOARD)
+        outer = BOARD.inflate(BOARD_BORDER * 2, BOARD_BORDER * 2)
+
+        def darkened(spot: tuple[int, int]) -> float:
+            got = sum(color_at(frame.background, spot))
+            was = sum(color_at(page, spot))
+            return 1 - got / was
+
+        def expected(distance: float) -> float:
+            normal = 0.5 * (1 + math.erf(distance / 25 / math.sqrt(2)))
+            return 0.5 * (1 - normal)
+
+        middle = BOARD.centery
+        assert darkened((outer.right + 8, middle)) == pytest.approx(
+            expected(8.5), abs=0.03
+        )
+        assert darkened((outer.right + 40, middle)) == pytest.approx(
+            expected(40.5), abs=0.02
+        )
+        assert darkened((BOARD.centerx, outer.bottom + 18)) == pytest.approx(
+            expected(0.5), abs=0.03
+        )
+        # 影は枠の下に焼く（枠の4辺は枠の色のまま）。
+        assert color_at(frame.background, (BOARD.right + 1, middle)) == LINE
 
     def test_枠を焼くのは背景の写しで_渡した背景は書き換えない(self) -> None:
         """遊ぶときに渡す背景は取っておいた絵（`page_background`）で、試合の外の画面も貼る。

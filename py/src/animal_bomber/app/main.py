@@ -24,6 +24,7 @@ Mac）を付けて起動すると、すぐその中継につなぐ（docs/10-通
 """
 
 import argparse
+import contextlib
 import time
 from collections.abc import Callable, Iterable, Sequence
 from typing import Final
@@ -188,6 +189,17 @@ def present(screen: pygame.Surface, canvas: pygame.Surface) -> None:
     pygame.event.pump()
 
 
+def point(pointing: bool) -> None:
+    """マウスの形を、指（`pointing` が True）か矢印にする（原型の `cursor:pointer`）。
+
+    SDL の dummy ドライバ（窓を開かないテスト）はマウスの形を作れず `pygame.error` を
+    出すので、そのときは形を替えない（遊ぶのに差し支えはない）。
+    """
+    shape = pygame.SYSTEM_CURSOR_HAND if pointing else pygame.SYSTEM_CURSOR_ARROW
+    with contextlib.suppress(pygame.error):
+        pygame.mouse.set_cursor(shape)
+
+
 def run(
     screen: pygame.Surface,
     shell: Shell,
@@ -239,6 +251,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         host_address=host,
         address_of=parse_relay_address,
         present=lambda canvas: present(screen, canvas),
+        point=point,
     )
     shell = Shell(tools, relay=args.relay, started_ms=now_ms())
     try:

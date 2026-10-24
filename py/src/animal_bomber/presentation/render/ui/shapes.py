@@ -1,18 +1,37 @@
-"""角丸の箱・グラデーション・円形の背景・カーソルの白い枠（原型の CSS の形）。
+"""角丸の箱・グラデーション・円形の背景・カーソルの白い枠・影（原型の CSS の形）。
 
 pygame の角丸（`pygame.draw.rect` の `border_radius`）は縁がぎざぎざになるので、2倍の
-大きさで描いてから縮めて、縁をなめらかにする。描いた絵は形と色ごとに取っておく（返した
-絵を書き換えないこと。貼るだけにする）。
+大きさで描いてから縮めて、縁をなめらかにする。描いた絵は形と色と影ごとに取っておく
+（返した絵を書き換えないこと。貼るだけにする）。
 
-ぼかさない影（`0 4px 0 #8a3d12`）は写す。ぼかした影（`box-shadow:0 18px 50px …` など）・
-ロゴの銘板の 6px の輪・押せる物の上にマウスが来たときの縁の色と浮き上がり（`:hover`）・
-押している間の沈み（`.go:active`）は描いていない（`docs/11-画面と設定.md` の「原型に
-合わせる作業が残っている所」）。
+## 影
+
+ぼかさない影（`0 4px 0 #8a3d12` など）は、箱の真下にずらして描く
+（`solid_shadow`）。ぼかした影（原型の `box-shadow`・`text-shadow` のぼかしの
+あるもの。`theme.py` の `Shadow`）は、影の形（角丸の箱か字の形）を影の色で塗り、
+ぼかして、箱の絵を作るときに1回だけ同じ絵に焼き込む（`shadowed_box`・`beneath`・
+`text_shadow`）。毎フレーム貼る絵の数は増えない。影は並べ方に数えない（CSS の影も、
+大きさとスクロールの範囲に含まれない）ので、影を焼いた絵は、箱の左上が絵のどこに
+あるかと箱の大きさを持つ（`Shadowed`）。
+
+ぼかし方は、pygame の箱のぼかし（`pygame.transform.box_blur`）を同じ半径で3回
+かける。CSS の決まりでは、ぼかしの半径 b の影はガウスのぼかし（標準偏差 b/2）に
+近い絵にする。幅 2r+1 の箱を3回かけると標準偏差は √(r(r+1)) になるので、これが
+いちばん b/2 に近い整数の r を選ぶ（`blur_radius`。半径 50 なら r = 25 で標準偏差
+25.5）。3回の箱のぼかしは、ガウスのぼかしのよく知られた近似（SVG の
+`feGaussianBlur` の仕様にも同じ近似がある）。numpy で作った本物のガウスのぼかしと、
+影の不透明度（0〜255 の段。不透明度 0.45 の影）で比べると、差の平均は 0.35〜1.0 段・
+いちばん大きい差は 4.4 段で、時間は箱の大きさだけで決まる（半径によらない。画面の
+カードの影 1290×1000 で約 22 ms）。pygame の `gaussian_blur` は同じ大きさで 12〜28 倍の
+時間がかかり、半径を標準偏差に合わせても差の平均が 0.8〜1.5 段と大きい。箱の
+ぼかし1回は、差の平均が 1.3〜3.3 段だった（比べ方は `docs/11-画面と設定.md` の
+「決めたこと」の「ぼかした影」）。
 """
 
 import math
 from collections import OrderedDict
 from collections.abc import Hashable, Sequence
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Final, TypeAlias
 
@@ -31,6 +50,7 @@ from animal_bomber.presentation.render.ui.theme import (
     SPLASH_STOPS,
     WHITE,
     Color,
+    Shadow,
 )
 
 SUPERSAMPLE: Final = 2
@@ -145,14 +165,18 @@ def rounded_box(
 
 
 @lru_cache(maxsize=256)
-def focus_ring(size: tuple[int, int], radius: int) -> pygame.Surface:
+def focus_ring(
+    size: tuple[int, int], radius: int, gap: int = FOCUS_OFFSET
+) -> pygame.Surface:
     """項目の大きさ `size`・角の丸み `radius` に掛ける、カーソルの白い枠の絵。
 
-    原型の `.navcur{outline:3px solid #fff;outline-offset:2px}`。枠は項目の角の
-    丸みに沿う（ブラウザの outline は border-radius に沿う）。絵は項目より
-    `ring_margin()` だけ四方に広く、項目の左上から `-ring_margin()` の所に貼る。
+    原型の `.navcur{outline:3px solid #fff;outline-offset:2px}`。`gap` は項目から
+    離す量（px。枠が出た・移った直後は 0 から 2px へ変わる。`menu/hover.py` の
+    `RingMotions`）。枠は項目の角の丸みに沿う（ブラウザの outline は border-radius に
+    沿う）。絵は項目より `ring_margin(gap)` だけ四方に広く、項目の左上から
+    `-ring_margin(gap)` の所に貼る。
     """
-    margin = ring_margin()
+    margin = ring_margin(gap)
     width, height = size[0] + 2 * margin, size[1] + 2 * margin
     scale = SUPERSAMPLE
     big = pygame.Surface((width * scale, height * scale), pygame.SRCALPHA)
@@ -161,21 +185,21 @@ def focus_ring(size: tuple[int, int], radius: int) -> pygame.Surface:
     pygame.draw.rect(big, WHITE, outer, border_radius=(radius + margin) * scale)
     cut = FOCUS_WIDTH * scale
     inner = outer.inflate(-2 * cut, -2 * cut)
-    pygame.draw.rect(
-        big, (*WHITE, 0), inner, border_radius=(radius + FOCUS_OFFSET) * scale
-    )
+    pygame.draw.rect(big, (*WHITE, 0), inner, border_radius=(radius + gap) * scale)
     return pygame.transform.smoothscale(big, (width, height))
 
 
-def ring_margin() -> int:
-    """カーソルの白い枠が項目の外へ出る幅（離す 2px ＋ 太さ 3px）。"""
-    return FOCUS_OFFSET + FOCUS_WIDTH
+def ring_margin(gap: int = FOCUS_OFFSET) -> int:
+    """カーソルの白い枠が項目の外へ出る幅（離す量 `gap`（既定は 2px）＋ 太さ 3px）。"""
+    return gap + FOCUS_WIDTH
 
 
-def draw_focus(target: pygame.Surface, rect: pygame.Rect, radius: int) -> None:
-    """項目の四角 `rect` のまわりに、カーソルの白い枠を描く。"""
-    margin = ring_margin()
-    target.blit(focus_ring(rect.size, radius), (rect.x - margin, rect.y - margin))
+def draw_focus(
+    target: pygame.Surface, rect: pygame.Rect, radius: int, gap: int = FOCUS_OFFSET
+) -> None:
+    """項目の四角 `rect` のまわりに、`gap` px 離してカーソルの白い枠を描く。"""
+    margin = ring_margin(gap)
+    target.blit(focus_ring(rect.size, radius, gap), (rect.x - margin, rect.y - margin))
 
 
 def _radial(
@@ -244,6 +268,223 @@ def solid_shadow(
     箱の真下に `drop` px ずらして描く。
     """
     target.blit(rounded_box(rect.size, radius, color), (rect.x, rect.y + drop))
+
+
+@dataclass(frozen=True, slots=True)
+class Shadowed:
+    """影を焼いた絵と、箱の左上が絵のどこにあるか・箱の大きさ（モジュールの説明の「影」）。
+
+    並べるときは箱の大きさ `size` を使い、貼るときは箱の左上から `origin` だけ左上へ
+    ずらす（`blit_at`）。返した絵は取っておいたものなので書き換えない。
+    """
+
+    image: pygame.Surface
+    origin: tuple[int, int]
+    """箱の左上の、絵の中の位置（px）。"""
+    size: tuple[int, int]
+    """箱の大きさ（px。影を含まない）。"""
+
+    def blit_at(self, target: pygame.Surface, topleft: tuple[int, int]) -> None:
+        """箱の左上が `topleft` に来るように、絵を `target` に貼る。"""
+        target.blit(
+            self.image, (topleft[0] - self.origin[0], topleft[1] - self.origin[1])
+        )
+
+
+def blur_radius(blur: float) -> int:
+    """CSS のぼかしの半径 `blur` に当てる、3回かける箱の半径（モジュールの説明）。
+
+    幅 2r+1 の箱を3回かけた標準偏差 √(r(r+1)) が、`blur` の半分にいちばん近い r。
+    `blur` が 0 なら 0（ぼかさない）。
+    """
+    sigma = blur / 2
+    if sigma <= 0:
+        return 0
+    guess = max(0, math.floor(sigma))
+    return min(
+        range(max(0, guess - 1), guess + 2),
+        key=lambda r: abs(math.sqrt(r * (r + 1)) - sigma),
+    )
+
+
+BLUR_PASSES: Final = 3
+"""箱のぼかしをかける回数（モジュールの説明）。"""
+
+
+def soft_blur(surface: pygame.Surface, blur: float) -> pygame.Surface:
+    """`surface` を、CSS のぼかしの半径 `blur` に寄せてぼかした新しい面。
+
+    箱のぼかしを `BLUR_PASSES` 回かける。絵の縁から `BLUR_PASSES * blur_radius(blur)` px
+    の内に、透明でない画素を置かないこと（縁の画素を延ばしてぼかすので、縁に届くと
+    その色が残る）。
+    """
+    radius = blur_radius(blur)
+    out = surface.copy()
+    for _ in range(BLUR_PASSES if radius else 0):
+        out = pygame.transform.box_blur(out, radius)
+    return out
+
+
+def shadow_reach(shadow: Shadow) -> int:
+    """影が、広げた形の外へ届く幅（px。ぼかしで広がる分）。"""
+    return BLUR_PASSES * blur_radius(shadow.blur)
+
+
+def _shadow_layer(size: tuple[int, int], radius: int, shadow: Shadow) -> Shadowed:
+    """大きさ `size`・角の丸み `radius` の箱が落とす影1つの絵（箱は描かない）。
+
+    影の形は箱を `spread` だけ広げた角丸（角の丸みも同じだけ大きくする。CSS の決まり）。
+    絵の全体を影の色の透明で塗ってから形を描く（ぼかしで縁の黒が混ざらないように）。
+    """
+    width, height = max(1, size[0]), max(1, size[1])
+    spread = shadow.spread
+    reach = shadow_reach(shadow) + spread
+    left = max(0, reach - shadow.dx)
+    right = max(0, reach + shadow.dx)
+    top = max(0, reach - shadow.dy)
+    bottom = max(0, reach + shadow.dy)
+    layer = pygame.Surface(
+        (width + left + right, height + top + bottom), pygame.SRCALPHA
+    )
+    layer.fill((*shadow.color, 0))
+    shape = (width + 2 * spread, height + 2 * spread)
+    grown = radius + spread if radius > 0 else 0
+    layer.blit(
+        rounded_box(shape, grown, shadow.color),
+        (left + shadow.dx - spread, top + shadow.dy - spread),
+    )
+    layer = soft_blur(layer, shadow.blur)
+    layer.fill(
+        (255, 255, 255, opacity_level(shadow.alpha)),
+        special_flags=pygame.BLEND_RGBA_MULT,
+    )
+    return Shadowed(layer, (left, top), (width, height))
+
+
+@lru_cache(maxsize=24)
+def box_shadow(size: tuple[int, int], radius: int, shadow: Shadow) -> Shadowed:
+    """箱が落とす影1つの絵（形と影ごとに取っておく。盤面と大きいボタンの光が使う）。"""
+    return _shadow_layer(size, radius, shadow)
+
+
+def layered(
+    size: tuple[int, int], layers: Sequence[tuple[pygame.Surface, int, int]]
+) -> Shadowed:
+    """箱の座標で置いた絵の並び `layers`（下から順）を、全部が入る1枚に重ねる。
+
+    箱の大きさは `size`。箱の外（負の座標も）へ出る絵も切らずに入れる。重ね方は
+    `over`（半透明どうしも、下の絵の不透明度を数えて重ねる）。
+    """
+    bounds = pygame.Rect((0, 0), size).unionall(
+        [pygame.Rect((x, y), image.get_size()) for image, x, y in layers]
+    )
+    image = pygame.Surface(bounds.size, pygame.SRCALPHA)
+    image.fill((0, 0, 0, 0))
+    for layer, x, y in layers:
+        over(image, layer, (x - bounds.x, y - bounds.y))
+    return Shadowed(image, (-bounds.x, -bounds.y), size)
+
+
+def over(target: pygame.Surface, layer: pygame.Surface, spot: tuple[int, int]) -> None:
+    """画素ごとの透明を持つ面 `target` の `spot` に `layer` を重ねる（CSS の重ね方）。
+
+    pygame の `blit` は、下の画素が半透明（不透明度が 0 と 255 の間）のとき、下の色を
+    不透明とみなして混ぜる（下の不透明度を色の重みに数えない）。そのため、色の違う
+    半透明の影どうし（ロゴの銘板の赤い輪と黒い影）を重ねると、上の色が強く出る。下の
+    画素が全部透明か全部不透明の所は `blit` と同じ結果なので `blit` で貼り、半透明の
+    画素がある所だけ、下の不透明度を数えて重ねる（Porter-Duff の source-over）。
+    """
+    rect = pygame.Rect(spot, layer.get_size()).clip(target.get_rect())
+    if rect.w <= 0 or rect.h <= 0:
+        return
+    area = (slice(rect.x, rect.right), slice(rect.y, rect.bottom))
+    view = pygame.surfarray.pixels_alpha(target)
+    below = np.array(view[area])  # 重ねる所だけを写す（面の全体を写さない）
+    del view  # 画素の配列を手放す（持っている間は、この面に貼れない）
+    if not np.any((below > 0) & (below < 255)):
+        target.blit(layer, spot)
+        return
+    inner = (
+        slice(rect.x - spot[0], rect.right - spot[0]),
+        slice(rect.y - spot[1], rect.bottom - spot[1]),
+    )
+    top_alpha = pygame.surfarray.array_alpha(layer)[inner] / 255.0
+    top_color = pygame.surfarray.array3d(layer)[inner].astype(np.float64)
+    under = below / 255.0
+    color = pygame.surfarray.pixels3d(target)
+    alpha = pygame.surfarray.pixels_alpha(target)
+    rest = under * (1.0 - top_alpha)
+    total = top_alpha + rest
+    mixed = top_color * top_alpha[..., None] + color[area] * rest[..., None]
+    safe = np.where(total > 0, total, 1.0)
+    color[area] = np.round(mixed / safe[..., None]).astype(np.uint8)
+    alpha[area] = np.round(total * 255.0).astype(np.uint8)
+    del color, alpha  # 画素の配列を手放す（持っている間は、この面を貼れない）
+
+
+def beneath(
+    image: pygame.Surface,
+    size: tuple[int, int],
+    radius: int,
+    shadows: Sequence[Shadow],
+) -> Shadowed:
+    """左上を箱の左上に合わせた絵 `image` の下に、箱の影 `shadows` を重ねた絵。
+
+    `shadows` は原型の CSS の順（1つ目がいちばん上）。絵 `image` は箱より大きくてよい
+    （ぼかさない影の分だけ高い項目の絵）。
+    """
+    layers: list[tuple[pygame.Surface, int, int]] = []
+    for shadow in reversed(shadows):
+        layer = box_shadow(size, radius, shadow)
+        layers.append((layer.image, -layer.origin[0], -layer.origin[1]))
+    layers.append((image, 0, 0))
+    return layered(size, layers)
+
+
+@lru_cache(maxsize=16)
+def shadowed_box(
+    size: tuple[int, int],
+    radius: int,
+    fill: Color,
+    bottom: Color | None = None,
+    border: Color | None = None,
+    border_width: int = 0,
+    bottom_border: int | None = None,
+    shadows: tuple[Shadow, ...] = (),
+) -> Shadowed:
+    """影を焼いた角丸の箱（形と色と影ごとに取っておく）。
+
+    引数は `rounded_box` と同じ（`shadows` は原型の CSS の順で、1つ目がいちばん上）。
+    """
+    layers: list[tuple[pygame.Surface, int, int]] = []
+    for shadow in reversed(shadows):
+        layer = _shadow_layer(size, radius, shadow)
+        layers.append((layer.image, -layer.origin[0], -layer.origin[1]))
+    box = rounded_box(size, radius, fill, bottom, border, border_width, bottom_border)
+    layers.append((box, 0, 0))
+    return layered(size, layers)
+
+
+def text_shadow(glyphs: pygame.Surface, shadow: Shadow) -> Shadowed:
+    """字の絵 `glyphs` の形が落とす、ぼかした影1つの絵（原型の `text-shadow`）。
+
+    影の形は字の絵の不透明度（色の絵文字も同じく形だけを使う）。箱は字の絵の大きさ。
+    """
+    width, height = glyphs.get_size()
+    reach = shadow_reach(shadow)
+    layer = pygame.Surface((width + 2 * reach, height + 2 * reach), pygame.SRCALPHA)
+    layer.fill((*shadow.color, 0))
+    alphas = pygame.surfarray.pixels_alpha(layer)
+    alphas[reach : reach + width, reach : reach + height] = (
+        pygame.surfarray.array_alpha(glyphs)
+    )
+    del alphas  # 画素の配列を手放す（持っている間は、この絵をぼかせない）
+    layer = soft_blur(layer, shadow.blur)
+    layer.fill(
+        (255, 255, 255, opacity_level(shadow.alpha)),
+        special_flags=pygame.BLEND_RGBA_MULT,
+    )
+    return Shadowed(layer, (reach - shadow.dx, reach - shadow.dy), (width, height))
 
 
 class Fader:

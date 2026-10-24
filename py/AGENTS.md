@@ -44,7 +44,9 @@ uv run tools/verify.sh   # ruff → ruff format --check → mypy --strict → li
   1 回だけ貼ります（合否はこの形で測って決めました。窓の面がアルファの桁を持つ形式だと、
   直接描く形は重くなります。`app/main.py` の `run` と `app/shell.py` の描く面）
 - 試合の画面の毎フレームの描き方（盤面を盤面の四角で切って描き、盤面の四隅を枠の角丸で切る
-  小さい絵の4枚と、横の板の1枚と時計の数字の1枚を貼る）と横の板の中身の組み方は、
+  小さい絵の4枚と、横の板の1枚と時計の数字の1枚を貼る。盤面の枠とぼかした影は窓の背景に焼いて
+  あるので毎フレームは描かない。マウスがツールバーのボタンに乗っている間だけ、そのボタンの絵を
+  1枚足す）と横の板の中身の組み方は、
   `render/match_frame.py` の `draw_match_frame` と
   `panel_content` にまとめてあり、遊ぶときの窓（`app/match_view.py`）・窓の高さ
   （`app/main.py` の `tallest_panel`）・描画の重さの場面（`tools/bench_match_scene.py`）が
@@ -56,7 +58,7 @@ uv run tools/verify.sh   # ruff → ruff format --check → mypy --strict → li
   ぼけていない四隅が浮いて見える）
 - ラウンドの幕と優勝の幕の間は、描画の重さの場面の対象の外です。幕を出した最初のフレームだけ
   盤面と横の板を描いてぼかし（`render/overlay/banner.py`。マス 60 で約 12 ms）、2フレーム目
-  からは盤面と横の板を描かずに、ぼかした絵とカードだけを貼ります（`app/match_view.py` の
+  からは盤面と横の板を描かずに、ぼかした絵とカード（地と文）とボタンを貼ります（`app/match_view.py` の
   `MatchView.draw`）。幕の間にも盤面を描く形に戻すなら、場面に幕を足して測り直してください
 - ⛔ 描く面をマス 60px より大きくしないでください（`render/layout.py` の `TILE_MAX`）。上げるなら
   測り直してください（段階 0 の測定で、マス 96 は、3 回測った四角い粒と光の玉の p99 の 6 つのうち

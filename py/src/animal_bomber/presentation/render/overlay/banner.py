@@ -3,6 +3,11 @@
 中身の文は `hud/banner.py` の `BannerView`、ボタンは `menu/screens.py` の
 `banner_groups`（`MenuFlow.groups()` が幕を出している間に返すもの）。
 
+カード（ぼかした影 `0 24px 70px` を焼いた地と文）は幕ごとに取っておき、ボタンは
+マウスが乗った見た目に替えられるように毎フレーム貼る。カードは影を除いた大きさで
+窓の真ん中に置く。マウスが乗った大きいボタンは、下の「⚙ 設定をやりなおす」のあとに
+貼るので、光が下のボタンにかかる（`render/ui/widgets.py` の説明の「重なりの順」）。
+
 ## 下の盤面のぼかし
 
 原型は幕の下を `rgba(15,9,6,.82)` で暗くし、3px ぼかす（`backdrop-filter`）。毎フレーム
@@ -27,10 +32,16 @@ from typing import Final
 import pygame
 
 from animal_bomber.presentation.hud.banner import BannerView
+from animal_bomber.presentation.menu.hover import NO_MOTION, Motions
 from animal_bomber.presentation.menu.items import ItemStyle, MenuGroup, MenuItem
-from animal_bomber.presentation.render.ui.shapes import draw_focus, rounded_box
+from animal_bomber.presentation.render.ui.shapes import (
+    Shadowed,
+    layered,
+    shadowed_box,
+)
 from animal_bomber.presentation.render.ui.theme import (
     ACCENT2,
+    BANNER_SHADOW,
     BORDER,
     CARD_BOTTOM,
     CARD_TOP,
@@ -87,7 +98,7 @@ class BannerOverlay:
         self._widgets = widgets
         self._view: BannerView | None = None
         self._backdrop: pygame.Surface | None = None
-        self._cards: dict[Hashable, tuple[pygame.Surface, list[Hit]]] = {}
+        self._cards: dict[Hashable, tuple[Shadowed, list[Hit]]] = {}
         self.backdrops = 0
         """下の絵をぼかして作った回数（幕を出すたびに1回）。"""
 
@@ -97,6 +108,7 @@ class BannerOverlay:
         view: BannerView,
         groups: Sequence[MenuGroup],
         focus: tuple[int, int] | None,
+        motions: Motions = NO_MOTION,
     ) -> tuple[Hit, ...]:
         """幕を `target` に重ね、ボタンの四角を返す（モジュールの説明）。
 
@@ -105,6 +117,7 @@ class BannerOverlay:
             view: 幕の中身。
             groups: 幕のボタンのグループ（`MenuFlow.groups()`）。
             focus: カーソルの位置（`MenuFlow.focus()`）。
+            motions: ボタンごとの、マウスが乗った見た目・押している見た目への進み。
         """
         size = target.get_size()
         backdrop = self._backdrop
@@ -115,14 +128,17 @@ class BannerOverlay:
             self.backdrops += 1
         target.blit(backdrop, (0, 0))
         card, hits = self._card(view, tuple(groups), size[0])
-        left = (size[0] - card.get_width()) // 2
-        top = (size[1] - card.get_height()) // 2
-        target.blit(card, (left, top))
+        width, height = card.size
+        left = (size[0] - width) // 2
+        top = (size[1] - height) // 2
+        card.blit_at(target, (left, top))
         placed = tuple(Hit(hit.item, hit.rect.move(left, top)) for hit in hits)
         chosen = focused_item(groups, focus)
-        for hit in placed:
-            if chosen is not None and hit.item == chosen:
-                draw_focus(target, hit.rect, self._widgets.radius(hit.item))
+        self._widgets.paint_all(
+            target,
+            [(hit.item, hit.rect, hit.item == chosen) for hit in placed],
+            motions,
+        )
         return placed
 
     def holds(self, view: BannerView | None, size: tuple[int, int]) -> bool:
@@ -146,7 +162,8 @@ class BannerOverlay:
 
     def _card(
         self, view: BannerView, groups: tuple[MenuGroup, ...], window: int
-    ) -> tuple[pygame.Surface, list[Hit]]:
+    ) -> tuple[Shadowed, list[Hit]]:
+        """幕のカード（地と文。ボタンは除く）と、ボタンの四角（カードの左上から）。"""
         key = (view, groups, window)
         found = self._cards.get(key)
         if found is not None:
@@ -176,27 +193,35 @@ class BannerOverlay:
             height += _button_gap(item) + item_size[1]
         width = inner + 2 * (PAD_X + BORDER)
         height += 2 * (PAD_Y + BORDER)
-        card = pygame.Surface((width, height + 6), pygame.SRCALPHA)
-        card.blit(
-            rounded_box(
-                (width, height), CARD_RADIUS, CARD_TOP, CARD_BOTTOM, ACCENT2, BORDER
-            ),
-            (0, 0),
+        box = shadowed_box(
+            (width, height),
+            CARD_RADIUS,
+            CARD_TOP,
+            CARD_BOTTOM,
+            ACCENT2,
+            BORDER,
+            shadows=(BANNER_SHADOW,),
         )
+        layers = [(box.image, -box.origin[0], -box.origin[1])]
+
+        def centered(image: pygame.Surface, top: int) -> int:
+            """`image` を横の真ん中に置き、その下の端を返す。"""
+            layers.append((image, (width - image.get_width()) // 2, top))
+            return top + image.get_height()
+
         y = PAD_Y + BORDER
-        y = _centered(card, painter.render(view.emoji, EMOJI), y) + 6
-        y = _centered(card, title, y) + 6
+        y = centered(painter.render(view.emoji, EMOJI), y) + 6
+        y = centered(title, y) + 6
         for line in lines:
-            y = _centered(card, line, y)
+            y = centered(line, y)
         y += 20
         hits: list[Hit] = []
         x = PAD_X + BORDER
         for item, item_size in zip(items, sizes, strict=True):
             y += _button_gap(item)
-            rect = pygame.Rect((x, y), item_size)
-            card.blit(widgets.image(item, item_size), rect.topleft)
-            hits.append(Hit(item, rect))
+            hits.append(Hit(item, pygame.Rect((x, y), item_size)))
             y += item_size[1]
+        card = layered((width, height), layers)
         self._cards[key] = (card, hits)
         if len(self._cards) > 16:
             self._cards.pop(next(iter(self._cards)))
@@ -206,12 +231,6 @@ class BannerOverlay:
 def _button_gap(item: MenuItem) -> int:
     """ボタンの上の空き（原型の `.go{margin-top:6px}`・`.bback{margin-top:10px}`）。"""
     return 6 if item.style is ItemStyle.GO else 10
-
-
-def _centered(target: pygame.Surface, image: pygame.Surface, top: int) -> int:
-    """`image` を横の真ん中に置き、その下の端を返す。"""
-    target.blit(image, ((target.get_width() - image.get_width()) // 2, top))
-    return top + image.get_height()
 
 
 def blur(surface: pygame.Surface) -> pygame.Surface:

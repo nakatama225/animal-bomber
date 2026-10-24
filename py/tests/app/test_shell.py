@@ -51,8 +51,10 @@ from animal_bomber.presentation.hud.banner import (
     BannerView,
 )
 from animal_bomber.presentation.hud.scoreboard import CardLook
+from animal_bomber.presentation.hud.toast import ease
 from animal_bomber.presentation.lan_status import WAIT_NOTICE_FRAMES
 from animal_bomber.presentation.menu.choices import hp_for_hits
+from animal_bomber.presentation.menu.hover import NO_MOTION, Motions
 from animal_bomber.presentation.menu.items import MenuGroup
 from animal_bomber.presentation.menu.screens import LanView, LobbyView, MenuScreen
 from animal_bomber.presentation.render.art.negibons import LeekLook, NegibonLook
@@ -66,9 +68,15 @@ from animal_bomber.presentation.render.ui.shapes import (
     page_background,
     splash_background,
 )
-from animal_bomber.presentation.render.ui.theme import LINE
+from animal_bomber.presentation.render.ui.theme import (
+    ACCENT,
+    GO_TOP,
+    LINE,
+    WHITE,
+    mix,
+)
 from animal_bomber.presentation.render.ui.typeset import TextStyle
-from animal_bomber.presentation.render.ui.widgets import Hit
+from animal_bomber.presentation.render.ui.widgets import Hit, focused_item
 from animal_bomber.presentation.render.views.player import drawn_position
 from animal_bomber.shell.gamepad import PadButton
 from tests.net.fake_relay import FakeConnection, FakeRelay
@@ -125,6 +133,27 @@ def labels(driver: Driver) -> list[str]:
 def screen_of(driver: Driver) -> MenuScreen:
     """いまの画面（関数にして読む。属性のまま比べると、型検査が前の比べで型を絞る）。"""
     return driver.shell.flow.screen
+
+
+def white_steps(driver: Driver, rect: pygame.Rect) -> list[int]:
+    """項目の四角 `rect` の左の辺の真ん中から外へ 1〜7px の画素のうち、白いものの離れ。
+
+    離れは 0 始まり（0 が辺のすぐ外）。白い枠を 2px 離して描けば [2, 3, 4]。
+    """
+    canvas = driver.shell.canvas
+    return [
+        step
+        for step in range(7)
+        if tuple(canvas.get_at((rect.left - 1 - step, rect.centery)))[:3] == WHITE
+    ]
+
+
+def focus_rect(driver: Driver) -> pygame.Rect:
+    """白い枠を描いた項目の四角（前のフレームに描いたもの）。"""
+    flow = driver.shell.flow
+    focused = focused_item(flow.groups(), flow.focus())
+    assert focused is not None
+    return next(hit.rect for hit in driver.shell.hits if hit.item == focused)
 
 
 def scroll_panel_down(driver: Driver) -> None:
@@ -368,6 +397,81 @@ class Testキーボードでメニューを動かす:
         driver.tap(pygame.KSCAN_RETURN)
         assert screen_of(driver) is MenuScreen.TITLE
         assert driver.shell.flow.cursor_shown
+
+    def test_枠が移ったフレームは項目に付けて描き_変化の長さで2px離す(self) -> None:
+        """原型の `.navcur` の `outline-offset`（0 → 2px）に `.mbtn` の 0.12 秒。
+
+        離す量は整数の px（60 フレーム毎秒で 0・0・1・1・2）。前の項目の枠はすぐ消える。
+        """
+        driver = Driver()
+        driver.skip_splash()
+        driver.tap(pygame.KSCAN_RETURN)
+        driver.frames(10)
+        first, second = driver.shell.hits[0].rect, driver.shell.hits[1].rect
+        assert white_steps(driver, first) == [2, 3, 4]
+        driver.down(pygame.KSCAN_DOWN)
+        assert white_steps(driver, second) == [0, 1, 2]
+        assert white_steps(driver, first) == []
+        gaps = []
+        for _ in range(4):
+            driver.frame()
+            gaps.append(white_steps(driver, second)[0])
+        assert gaps == [0, 1, 1, 2]
+
+    def test_画面が替わったフレームは_枠を離しきって描く(self) -> None:
+        """原型の次の画面は `display:none` から出すので、`transition` が始まらない。
+
+        次のフレームからも離しきったまま（0 から離し直さない）。
+        """
+        driver = Driver()
+        driver.skip_splash()
+        driver.tap(pygame.KSCAN_RETURN)
+        driver.down(pygame.KSCAN_RETURN)
+        assert screen_of(driver) is MenuScreen.PICK
+        assert white_steps(driver, focus_rect(driver)) == [2, 3, 4]
+        driver.up(pygame.KSCAN_RETURN)
+        assert white_steps(driver, focus_rect(driver)) == [2, 3, 4]
+
+    def test_確認の画面を開いたフレームは_枠を離しきって描き_中で移れば0から(
+        self,
+    ) -> None:
+        """原型の確認の画面（`.cfm`）も `display:none` から出す。ボタンは `.chip`。"""
+        driver = Driver()
+        start_local(driver)
+        driver.frame()
+        for button in (PadButton.START, None, PadButton.BACK):
+            driver.pads.hold(1, *(() if button is None else (button,)))
+            driver.frame()
+        assert driver.shell.flow.dialog is not None
+        assert white_steps(driver, focus_rect(driver)) == [2, 3, 4]
+        driver.pads.hold(1)
+        driver.frame()
+        assert white_steps(driver, focus_rect(driver)) == [2, 3, 4]
+        driver.pads.hold(1, PadButton.RIGHT)
+        driver.frame()
+        assert focus_rect(driver) == driver.shell.hits[1].rect
+        assert white_steps(driver, focus_rect(driver)) == [0, 1, 2]
+
+    def test_幕が出たフレームから_枠を離しきって描く(self) -> None:
+        """原型の幕（`#banner`）も `display:none` から出す（`endGame`）。"""
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        # パッドで「設定へもどりますか？」を開いて枠を出し、やめてからポーズをやめる。
+        steps = (PadButton.START, PadButton.BACK, PadButton.A, PadButton.START)
+        for button in steps:
+            driver.pads.hold(1, button)
+            driver.frame()
+            driver.pads.hold(1)
+            driver.frame()
+        assert driver.shell.flow.dialog is None
+        assert driver.shell.flow.cursor_shown
+        finish_round(driver, runner)
+        seen = []
+        for _ in range(3):
+            driver.frame()
+            seen.append(white_steps(driver, focus_rect(driver)))
+        assert seen == [[2, 3, 4]] * 3
 
     def test_Enterを押したまま始めても爆弾を置かず_離して押し直すと置く(
         self,
@@ -652,10 +756,11 @@ class Testラウンドの幕:
             view: BannerView,
             groups: Sequence[MenuGroup],
             focus: tuple[int, int] | None,
+            motions: Motions = NO_MOTION,
         ) -> tuple[Hit, ...]:
             if not shots:
                 shots.append(target.copy())
-            return draw(target, view, groups, focus)
+            return draw(target, view, groups, focus, motions)
 
         overlay.draw = captured  # type: ignore[method-assign]
         finish_round(driver, runner)
@@ -1290,14 +1395,14 @@ class Test盤面と横の板:
     def test_1台の試合は_盤面のまわりに枠を描き_四隅を内側の角丸で切る(self) -> None:
         """原型の canvas の CSS（3px の `var(--line)`・角丸 14px。L73-74）。
 
-        枠の外側の角丸の外（窓の左上の画素）は窓の背景のまま。
+        枠の外側の角丸の外（窓の左上の画素）は窓の背景（盤面の影を焼いたもの）のまま。
         """
         driver = Driver()
         start_local(driver)
         driver.frames(2)
         canvas = driver.shell.canvas
         assert frame_colors(canvas) == [LINE] * 8
-        page = page_background(canvas.get_size())
+        page = driver.shell._view.background
         assert canvas.get_at((0, 0)) == page.get_at((0, 0))
 
     def test_ポーズとゲーム速度は_横の板にすぐ出す(self) -> None:
@@ -1336,12 +1441,15 @@ class Test盤面と横の板:
     def test_通知が消えたあと_盤面と横の板の間のすき間に通知の跡を残さない(
         self,
     ) -> None:
-        """すき間は毎フレームは描かないので、前のフレームの通知の下を背景で塗り直す。"""
+        """すき間は毎フレームは描かないので、前のフレームの通知の下を背景で塗り直す。
+
+        背景は、試合の画面の窓の背景（盤面の影と枠を焼いたもの）。
+        """
         driver = Driver()
         start_local(driver)
         driver.frame()
         canvas = driver.shell.canvas
-        background = page_background(canvas.get_size())
+        background = driver.shell._view.background
         spot = (WINDOW.panel_origin[0] - 8, 30)
         assert canvas.get_at(spot) == background.get_at(spot)
         long = notices.sudden_death(SuddenDeathReason.TIME_UP)
@@ -1516,6 +1624,402 @@ class Testマウス:
         assert drawn is not None
         assert drawn.page.offset == 0
         assert all(box.offset == 0 for box in drawn.boxes)
+
+    def test_項目は左のボタンを離したときに決まり_押したときには決まらない(
+        self,
+    ) -> None:
+        """原型の `onclick`（押して、同じ項目の上で離したときに呼ぶ）。"""
+        driver = Driver()
+        driver.skip_splash()
+        solo = driver.rect_of(SOLO)
+        driver.press_at(solo.center)
+        assert screen_of(driver) is MenuScreen.TITLE
+        driver.release_at(solo.center)
+        assert screen_of(driver) is MenuScreen.PICK
+
+    def test_押した項目と違う所で離すと_何も決まらない(self) -> None:
+        driver = Driver()
+        driver.skip_splash()
+        solo, duo = driver.rect_of(SOLO), driver.rect_of(DUO)
+        driver.press_at(solo.center)
+        driver.release_at(duo.center)
+        assert screen_of(driver) is MenuScreen.TITLE
+        driver.press_at((3, 3))
+        driver.release_at(solo.center)
+        assert screen_of(driver) is MenuScreen.TITLE
+
+    def test_マウスを乗せた項目だけ縁が橙になり_0点12秒で替わりきる(self) -> None:
+        """原型の `.mbtn:hover{border-color:var(--accent);transform:translateY(-1px)}`。
+
+        変化の長さは `.mbtn{transition:.12s}`、途中は CSS の既定の `ease`。縁の画素は
+        ボタンの左の辺の真ん中。乗ったフレームから変わり始める。
+        """
+        driver = Driver()
+        driver.skip_splash()
+        solo, duo = driver.rect_of(SOLO), driver.rect_of(DUO)
+        canvas = driver.shell.canvas
+
+        def rim(rect: pygame.Rect) -> tuple[int, ...]:
+            return tuple(canvas.get_at((rect.left + 1, rect.centery)))[:3]
+
+        assert rim(solo) == LINE
+        driver.move_mouse(solo.center)
+        assert rim(solo) == LINE
+        driver.frame(ticks=0, ms=60)
+        assert rim(solo) == mix(ACCENT, LINE, ease(0.5))
+        driver.frame(ticks=0, ms=60)
+        assert rim(solo) == ACCENT
+        assert rim(duo) == LINE
+        assert tuple(canvas.get_at((solo.centerx, solo.top - 1)))[:3] == ACCENT
+        driver.move_mouse((3, 3))
+        driver.frame(ticks=0, ms=200)
+        assert rim(solo) == LINE
+        assert tuple(canvas.get_at((solo.centerx, solo.top - 1)))[:3] != ACCENT
+
+    def test_マウスが窓の外へ出たら_どれにも乗っていないことにする(self) -> None:
+        driver = Driver()
+        driver.skip_splash()
+        solo = driver.rect_of(SOLO)
+        canvas = driver.shell.canvas
+        spot = (solo.left + 1, solo.centery)
+        driver.move_mouse(solo.center)
+        driver.frame(ticks=0, ms=200)
+        assert tuple(canvas.get_at(spot))[:3] == ACCENT
+        driver.leave_window()
+        driver.frame(ticks=0, ms=200)
+        assert tuple(canvas.get_at(spot))[:3] == LINE
+
+    def test_起動の幕がクリックを受ける間は_下の画面の項目に乗らない(self) -> None:
+        driver = Driver()
+        driver.frame(ticks=0)
+        solo = driver.rect_of(SOLO)
+        item = driver.item(SOLO)
+        driver.move_mouse(solo.center)
+        driver.frame(ticks=0, ms=500)
+        assert driver.shell._hover.motions(driver.now).of(item).hover == 0.0
+        driver.tap(pygame.KSCAN_SPACE)
+        driver.frame(ticks=0, ms=500)
+        assert driver.shell._hover.motions(driver.now).of(item).hover == 1.0
+
+    def test_大きいボタンは押している間だけ沈み_外へ動かすと戻る(self) -> None:
+        """原型の `.go:hover` の `translateY(-2px)`・`.go:active` の `3px`（L58-59）。
+
+        ボタンの上の端（グラデーションの上の色）が来る行で見る。押したまま外へ動かすと
+        戻り、外で離しても決まらない。離したあとに戻ってきても、沈まない。
+        """
+        driver = Driver()
+        driver.skip_splash()
+        driver.click(SOLO)
+        scroll_down(driver)
+        driver.click("つぎへ ▶")
+        scroll_down(driver)
+        go = driver.rect_of("はじめる")
+        canvas = driver.shell.canvas
+
+        def top_row() -> int:
+            column = pygame.surfarray.array3d(canvas)[go.centerx].astype(int)
+            yellow = np.all(np.abs(column - GO_TOP) <= 8, axis=1)
+            return int(np.nonzero(yellow)[0].min())
+
+        assert top_row() == go.top
+        driver.move_mouse(go.center)
+        driver.frame(ticks=0, ms=150)
+        assert top_row() == go.top - 2
+        driver.press_at(go.center)
+        driver.frame(ticks=0, ms=150)
+        assert top_row() == go.top + 3
+        assert screen_of(driver) is MenuScreen.RULES
+        driver.move_mouse((3, 3))
+        driver.frame(ticks=0, ms=150)
+        assert top_row() == go.top
+        driver.release_at((3, 3))
+        assert screen_of(driver) is MenuScreen.RULES
+        driver.move_mouse(go.center)
+        driver.frame(ticks=0, ms=150)
+        assert top_row() == go.top - 2
+
+    def test_大きいボタンも_離したときに決まる(self) -> None:
+        driver = Driver()
+        driver.skip_splash()
+        driver.click(SOLO)
+        scroll_down(driver)
+        driver.click("つぎへ ▶")
+        scroll_down(driver)
+        go = driver.rect_of("はじめる")
+        driver.press_at(go.center)
+        assert driver.shell.runner is None
+        driver.release_at(go.center)
+        assert isinstance(driver.shell.runner, LocalMatch)
+
+    def test_幕のボタンも_マウスが乗ると2px上へずれる(self) -> None:
+        """幕の「つぎのラウンド ▶」（原型の `.go`）。幕の下の横の板には乗らない。"""
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        finish_round(driver, runner)
+        driver.frame()
+        go = driver.rect_of(NEXT_ROUND_BUTTON)
+        canvas = driver.shell.canvas
+
+        def top_row() -> int:
+            """ボタンのまわりで、上の色（幕のカードの黄色い縁と同じ色）が来る行。"""
+            column = pygame.surfarray.array3d(canvas)[go.centerx].astype(int)
+            near = column[go.top - 8 : go.bottom]
+            yellow = np.all(np.abs(near - GO_TOP) <= 8, axis=1)
+            return go.top - 8 + int(np.nonzero(yellow)[0].min())
+
+        assert top_row() == go.top
+        driver.move_mouse(go.center)
+        driver.frame(ticks=0, ms=150)
+        assert top_row() == go.top - 2
+        # 乗っただけでは送らない（幕は出たまま）。
+        assert labels(driver) == [NEXT_ROUND_BUTTON, SETUP_BUTTON]
+
+    def test_確認の画面のボタンも_マウスが乗ると縁が替わる(self) -> None:
+        """確認の画面の2つのボタン（原型の `.chip`）。乗ったほうだけ縁が橙になる。"""
+        driver = Driver()
+        start_local(driver)
+        driver.pads.hold(1, PadButton.START)
+        driver.frame()
+        driver.pads.hold(1)
+        driver.frame()
+        driver.pads.hold(1, PadButton.BACK)
+        driver.frame()
+        assert driver.shell.flow.dialog is not None
+        no, yes = driver.rect_of("やめる"), driver.rect_of("設定へもどる")
+        canvas = driver.shell.canvas
+
+        def rim(rect: pygame.Rect) -> tuple[int, ...]:
+            return tuple(canvas.get_at((rect.left + 1, rect.centery)))[:3]
+
+        assert rim(yes) == LINE
+        driver.move_mouse(yes.center)
+        driver.frame(ticks=0, ms=150)
+        assert rim(yes) == ACCENT
+        assert rim(no) == LINE
+
+    def test_ツールバーにマウスを乗せると_そのボタンの縁だけすぐ替わる(self) -> None:
+        """原型の `.tbtn:hover{border-color:var(--accent)}`（L137。変化の長さは無い）。
+
+        横の板は作り直さない。乗っていないときは、乗る前と同じ画素。
+        """
+        driver = Driver()
+        start_local(driver)
+        driver.frame()
+        scroll_panel_down(driver)
+        hits = driver.shell.panel_hits
+        assert hits is not None and hits.pause is not None
+        canvas = driver.shell.canvas
+
+        def rim(rect: pygame.Rect) -> tuple[int, ...]:
+            return tuple(canvas.get_at((rect.left + 1, rect.centery)))[:3]
+
+        assert rim(hits.pause) == LINE and rim(hits.settings) == LINE
+
+        def inside(rect: pygame.Rect) -> np.ndarray:
+            """ボタンの縁（2px）と角丸（10px）にかからない内側の画素（地と字）。"""
+            area = rect.inflate(-24, -8)
+            pixels: np.ndarray = pygame.surfarray.array3d(canvas)[
+                area.left : area.right, area.top : area.bottom
+            ].copy()
+            return pixels
+
+        label = inside(hits.settings)
+        builds = driver.shell._view._panel.builds
+        driver.move_mouse(hits.pause.center)
+        assert rim(hits.pause) == ACCENT
+        assert rim(hits.settings) == LINE
+        driver.move_mouse(hits.settings.center)
+        assert rim(hits.pause) == LINE
+        assert rim(hits.settings) == ACCENT
+        # 縁を替えた絵の字は「設定へ」のまま（ポーズに乗ったときの絵を使い回さない）。
+        assert np.array_equal(inside(hits.settings), label)
+        driver.move_mouse((WINDOW.panel_origin[0] + 10, 300))
+        assert rim(hits.pause) == LINE and rim(hits.settings) == LINE
+        assert driver.shell._view._panel.builds == builds
+
+    def test_盤面のぼかした影は_横の板の箱の間にも出る(self) -> None:
+        """原型の canvas の影は、横の板の箱の下に重なり、箱の間から見える。
+
+        時計の箱とつまみの箱の間（10px のすき間）の、盤面に近い所の画素は、窓の背景
+        （影の無いもの）より暗い。
+        """
+        driver = Driver()
+        start_local(driver)
+        driver.frame()
+        canvas = driver.shell.canvas
+        page = page_background(canvas.get_size())
+        assert driver.shell.panel_scroll == 0
+        left = WINDOW.panel_origin[0]
+        # 時計の箱の下の端から 5px 下（10px のすき間の真ん中）。
+        spot = (left + 1, driver.shell._view._panel._clock_height() + 5)
+        got = sum(tuple(canvas.get_at(spot))[:3])
+        was = sum(tuple(page.get_at(spot))[:3])
+        assert got < was - 6
+
+    def test_起動の幕は_押して離したときに消え始め_下の項目は決めない(self) -> None:
+        """原型の `sp.onclick=dismiss`（L5758。押して離したときに呼ぶ）。"""
+        driver = Driver()
+        driver.frame(ticks=0)
+        solo = driver.rect_of(SOLO)
+        splash = driver.shell.flow.splash
+        driver.press_at(solo.center)
+        assert splash.dismissed_at(driver.now) is None
+        driver.frame(ticks=0, ms=500)
+        assert splash.dismissed_at(driver.now) is None
+        driver.release_at(solo.center)
+        assert splash.dismissed_at(driver.now) == driver.now
+        driver.frame(ticks=0, ms=600)
+        assert driver.shell.flow.splash_view(driver.now) is None
+        assert screen_of(driver) is MenuScreen.TITLE
+
+    def test_起動の幕の上で押して_窓の外で離しても消え始めない(self) -> None:
+        """押したまま窓の外へ動かして離すと、幕の上で離したことにならない。
+
+        ブラウザの click は押した要素と離した要素に共通の祖先へ届くので、幕の
+        `onclick` は呼ばれない（項目も窓の外で離せば決まらないのと同じ）。そのあと
+        窓の中で押して離せば消え始める。
+        """
+        driver = Driver()
+        driver.frame(ticks=0)
+        splash = driver.shell.flow.splash
+        center = (WINDOW.size[0] // 2, WINDOW.size[1] // 2)
+        for outside in ((-20, -20), (WINDOW.size[0] + 5, center[1])):
+            driver.press_at(center)
+            driver.release_at(outside)
+            assert splash.blocks_clicks(driver.now)
+            assert splash.dismissed_at(driver.now) is None
+        driver.press_at(center)
+        driver.release_at((WINDOW.size[0] - 1, WINDOW.size[1] - 1))
+        assert splash.dismissed_at(driver.now) == driver.now
+
+    def test_押している間に起動の幕が自動で消え始めたら_離しても項目を決めない(
+        self,
+    ) -> None:
+        """押したのは幕の上なので、離した所の項目は決まらない（原型の click と同じ）。
+
+        自動で消え始めた時刻は、離した時刻で書き換えない。
+        """
+        driver = Driver()
+        driver.frame(ticks=0)
+        solo = driver.rect_of(SOLO)
+        splash = driver.shell.flow.splash
+        driver.press_at(solo.center)
+        driver.frame(ticks=0, ms=3300)
+        auto = splash.dismissed_at(driver.now)
+        assert auto is not None and auto < driver.now
+        driver.release_at(solo.center)
+        assert splash.dismissed_at(driver.now) == auto
+        driver.frame(ticks=0, ms=600)
+        assert screen_of(driver) is MenuScreen.TITLE
+        # 幕が消えたあとは、押して離せば決まる。
+        driver.press_at(solo.center)
+        driver.release_at(solo.center)
+        assert screen_of(driver) is MenuScreen.PICK
+
+    def test_窓から離れたら_押した項目を忘れ_戻って離しても決まらない(self) -> None:
+        """起動の幕の上で押したことも忘れる（戻って離しても幕は消え始めない）。"""
+        driver = Driver()
+        driver.frame(ticks=0)
+        driver.press_at((3, 3))
+        driver.lose_focus()
+        driver.release_at((3, 3))
+        assert driver.shell.flow.splash.dismissed_at(driver.now) is None
+        driver.skip_splash()
+        solo = driver.rect_of(SOLO)
+        driver.press_at(solo.center)
+        driver.lose_focus()
+        driver.release_at(solo.center)
+        assert screen_of(driver) is MenuScreen.TITLE
+
+    def test_確認の画面と幕が出ている間は_つまみの位置を押しても倍率を変えない(
+        self,
+    ) -> None:
+        """原型の `.cfm` と `#banner` は窓全体を覆うので、つまみを押せない。"""
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        hits = driver.shell.panel_hits
+        assert hits is not None and hits.speed is not None
+        spot = (thumb_center(3.0, hits.speed), hits.speed.centery)
+        driver.pads.hold(1, PadButton.START)
+        driver.frame()
+        driver.pads.hold(1)
+        driver.frame()
+        driver.pads.hold(1, PadButton.BACK)
+        driver.frame()
+        assert driver.shell.flow.dialog is not None
+        driver.press_at(spot)
+        driver.release_at(spot)
+        assert driver.shell.speed.rate == 1.0
+        driver.click("やめる")
+        driver.pads.hold(1, PadButton.START)
+        driver.frame()
+        driver.pads.hold(1)
+        driver.frame()
+        assert driver.shell.flow.dialog is None
+        finish_round(driver, runner)
+        driver.frame()
+        assert labels(driver) == [NEXT_ROUND_BUTTON, SETUP_BUTTON]
+        driver.press_at(spot)
+        driver.release_at(spot)
+        assert driver.shell.speed.rate == 1.0
+        # 幕を送ったあとは押せる（つまみの位置は同じ）。
+        driver.click(NEXT_ROUND_BUTTON)
+        driver.frame()
+        driver.press_at(spot)
+        driver.release_at(spot)
+        assert driver.shell.speed.rate == 3.0
+
+    def test_マウスの形は_押せる物の上だけ指になり_替わるときだけ替える(
+        self,
+    ) -> None:
+        """原型の `cursor:pointer`（`.mbtn`・`.chip`・`.tbtn`・つまみなど）。
+
+        起動の幕がクリックを受ける間・窓の外・押せない項目の上は矢印（替えない）。
+        """
+        driver = Driver()
+        driver.frame(ticks=0)
+        solo = driver.rect_of(SOLO)
+        driver.move_mouse(solo.center)
+        driver.frame(ticks=0)
+        assert driver.pointed == []
+        driver.skip_splash()
+        assert driver.pointed == [True]
+        driver.move_mouse((solo.centerx + 5, solo.centery))
+        driver.frame(ticks=0)
+        assert driver.pointed == [True]
+        driver.move_mouse((3, 3))
+        assert driver.pointed == [True, False]
+        driver.move_mouse(solo.center)
+        driver.leave_window()
+        assert driver.pointed == [True, False, True, False]
+        # 欄の名前が読めない間の「さんかする」（押せない項目）の上は矢印のまま。
+        driver.click("LAN対戦")
+        driver.move_mouse((3, 3))
+        join = driver.rect_of("さんかする")
+        assert not driver.item("さんかする").enabled
+        before = list(driver.pointed)
+        driver.move_mouse(join.center)
+        assert driver.pointed == before
+        driver.move_mouse(driver.rect_of("たてる").center)
+        assert driver.pointed == [*before, True]
+
+    def test_マウスの形は_試合のツールバーとつまみの上で指になる(self) -> None:
+        driver = Driver()
+        start_local(driver)
+        driver.frame()
+        hits = driver.shell.panel_hits
+        assert hits is not None and hits.speed is not None
+        driver.move_mouse((3, 3))
+        assert driver.pointed[-1] is False
+        driver.move_mouse(hits.speed.center)
+        assert driver.pointed[-1] is True
+        driver.move_mouse((3, 3))
+        driver.move_mouse(hits.settings.center)
+        assert driver.pointed[-1] is True
+        driver.move_mouse((WINDOW.panel_origin[0] + 10, 300))
+        assert driver.pointed[-1] is False
 
 
 class LanPair:

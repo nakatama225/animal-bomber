@@ -105,6 +105,28 @@ class Test描いた絵:
         text_rows = np.nonzero(text.any(axis=1))[0]
         assert rows.max() > text_rows.max()
 
+    @needs_fonts
+    def test_影は_色の絵文字も影の色1色の形で描く(self) -> None:
+        """CSS の text-shadow は、字の形を影の色で塗る（色の絵文字も形だけが影）。
+
+        原型の `.logoSub` の 🐰💣🐘 の下には `#8a3d12` の形が出る。影を文の高さより
+        大きくずらし、文と重ならない所で、影の画素の色が影の色だけであることを確認する。
+        """
+        painter = TextPainter()
+        shade = (138, 61, 18)
+        front = painter.render("🐰あ", STYLE)
+        drop = front.get_height() + 4
+        image = painter.shadowed("🐰あ", STYLE, [(0, drop, shade)])
+        alphas = pygame.surfarray.array_alpha(image)[:, drop:]
+        colors = pygame.surfarray.array3d(image)[:, drop:]
+        seen = alphas > 0
+        width = front.get_width()
+        # 絵文字の側（左の半分）にも影の形がある。
+        assert seen[: width // 2].sum() > 10
+        assert {tuple(color) for color in colors[seen]} == {shade}
+        # 影の形は、文の絵の不透明度と同じ形。
+        assert np.array_equal(alphas, pygame.surfarray.array_alpha(front))
+
     def test_書体が無くても止まらず_絵文字は描かない(self) -> None:
         painter = TextPainter(FontFiles(None, None, None, None, None))
         image = rgb(_on_black(painter.render("A🍌", STYLE)))
