@@ -16,15 +16,15 @@ import json, random, sys
 sys.path.insert(0, {str(TOOLS)!r})
 import pygame
 from bench_match_scene import MatchScene, MatchSceneSpec
-from animal_bomber.presentation.render.layout import PANEL_GAP, PANEL_WIDTH
+from animal_bomber.presentation.render.layout import PANEL_WIDTH
 pygame.display.init()
 assert pygame.display.get_driver() == "dummy"
 out = {{}}
 for kind in ("square", "glow"):
     spec = MatchSceneSpec(26, kind)
     pygame.display.set_mode(spec.size)
-    panel_left = spec.board_size[0] + PANEL_GAP
-    board_rect = pygame.Rect((0, 0), spec.board_size)
+    panel_left = spec.window.panel_origin[0]
+    board_rect = pygame.Rect(spec.window.board_rect)
     class Counting(pygame.Surface):
         def __init__(self, size):
             super().__init__(size)
@@ -32,11 +32,14 @@ for kind in ("square", "glow"):
             self.spinner_blits = 0
             self.panels = []
             self.on_panel = 0
-            self.unclipped = 0
+            self.unclipped = []
         def blit(self, source, dest, area=None, special_flags=0):
             x = dest[0] if isinstance(dest, tuple) else dest.x
+            y = dest[1] if isinstance(dest, tuple) else dest.y
             if x < panel_left and self.get_clip() != board_rect:
-                self.unclipped += 1
+                self.unclipped.append([x, y, *source.get_size(),
+                                       bool(source.get_masks()[3]),
+                                       source.get_alpha(), special_flags])
             if source.get_masks()[3]:
                 self.alpha_blits += 1
                 alpha = source.get_alpha()
@@ -72,9 +75,13 @@ for kind in ("square", "glow"):
     out[kind] = {{"frames": frames, "drawn": scene.renders - built,
                   "counts": scene.counts, "phases": scene.blast_phases,
                   "shaken": shaken, "spinners": spinners, "panels": panels,
-                  "panel_builds": scene.panel_builds, "unclipped": unclipped}}
+                  "panel_builds": scene.panel_builds, "unclipped": unclipped,
+                  "board": list(board_rect)}}
 print(json.dumps(out))
 """
+
+CORNER = 11
+"""盤面の四隅に貼る絵の一辺（px。枠の内側の角丸の半径 14 − 3）。"""
 
 
 def test_場面は_取っておいた絵を薄めずに貼り_測る間に絵を描かない() -> None:
@@ -101,8 +108,13 @@ def test_場面は_取っておいた絵を薄めずに貼り_測る間に絵を
       2枚だけ（板の中の箱や文を、毎フレーム1つずつ貼らない）
     - 板の絵は、名札の中身が変わるたびに作り直す（場面はきつねのとくぎの回数を
       15 フレームごとに変えるので、40 フレームで 0・15・30 フレーム目の3回）
-    - 盤面は、遊ぶときと同じく盤面の四角で切って描く（板より左に貼るときは、描く先の
-      切り取りが盤面の四角になっている）
+    - 盤面は、遊ぶときと同じく盤面の四角（枠の太さ 3px だけ内側）で切って描く（板より
+      左に貼るときは、描く先の切り取りが盤面の四角になっている）
+    - 盤面の枠のために、どのフレームにも4枚増える。切り取りを戻したあとに、盤面の
+      四隅（左上・右上・左下・右下の順）へ、枠の内側の角丸の外だけ不透明な一辺 11px の
+      絵（画素ごとの透明を持ち、薄めず、色に不透明度を掛けた形でもない）を貼る。
+      盤面の四角の外に貼るのは、この4枚だけ（枠の4辺は窓の背景に焼いてあり、毎フレーム
+      描かない）。4枚は画素ごとの透明を持つので、下の下限にも足す
     """
     completed = subprocess.run(
         [sys.executable, "-c", COUNTING],
@@ -131,7 +143,8 @@ def test_場面は_取っておいた絵を薄めずに貼り_測る間に絵を
         assert (counts["players"], counts["bombs"], counts["items"]) == (4, 8, 20)
         assert result["spinners"] == [counts["spinners"]] * len(result["spinners"])
         fire = 2 + counts["trail"]
-        least = 297 * 2 + 20 * 2 + 8 * 4 + players + 1 + fire
+        corners = 4
+        least = 297 * 2 + 20 * 2 + 8 * 4 + players + 1 + fire + corners
         least += 105 if kind == "square" else 0
         for alpha_blits, faded_blits in result["frames"]:
             assert faded_blits == 0
@@ -140,4 +153,11 @@ def test_場面は_取っておいた絵を薄めずに貼り_測る間に絵を
             assert panel_blits == [[False, None, 0]]
             assert on_panel == 2
         assert result["panel_builds"] == 3
-        assert result["unclipped"] == [0] * len(result["unclipped"])
+        left, top, width, height = result["board"]
+        assert (left, top) == (3, 3)
+        right, bottom = left + width - CORNER, top + height - CORNER
+        wanted = [
+            [x, y, CORNER, CORNER, True, 255, 0]
+            for x, y in ((left, top), (right, top), (left, bottom), (right, bottom))
+        ]
+        assert result["unclipped"] == [wanted] * len(result["unclipped"])

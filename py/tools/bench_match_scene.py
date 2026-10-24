@@ -29,10 +29,12 @@
 `bench_render.py` の冒頭の「測っていないもの」）。
 
 場面で使う絵は、作るときに全部描いておく（試合の前に描いておく `BakedArt.prebuild` と、
-場面だけで出る状態の印の組み合わせ）。盤面は描く面の左上 (0, 0) に盤面の四角で切って
-描き、横の板はその右に貼る（遊ぶときの窓の並び。`layout.WindowLayout`）。横の板の中身を
-組む所と、盤面を描いて横の板を貼る所は、遊ぶときと同じ関数を呼ぶ
-（`render/match_frame.py` の `panel_content`・`draw_match_frame`）。
+場面だけで出る状態の印の組み合わせ）。盤面は描く面の枠の内側（左上から枠の太さ 3px だけ
+内側）に盤面の四角で切って描き、盤面の四隅を枠の角丸で切る小さい絵を4枚貼り、横の板は
+枠の右に貼る（遊ぶときの窓の並び。`layout.WindowLayout`）。枠の4辺は遊ぶときも窓の背景に
+焼いておいて毎フレーム描かないので、場面でも描かない。横の板の中身を組む所と、盤面を
+描いて四隅と横の板を貼る所は、遊ぶときと同じ関数を呼ぶ（`render/match_frame.py` の
+`panel_content`・`draw_match_frame`）。
 
 遊ぶときに試合の画面へ重ねるもののうち、通知（`#toast`）・ポーズの幕・ラウンドの幕と
 優勝の幕・確認の画面・通信対戦の案内の帯は、場面に入れていない。出ている間だけ重ね、
@@ -67,8 +69,9 @@ from animal_bomber.presentation.hud.scoreboard import HudSource
 from animal_bomber.presentation.render.art.player import BLINK_ALPHA
 from animal_bomber.presentation.render.art.player_marks import MAX_MARKS
 from animal_bomber.presentation.render.baked.art import BakedArt
-from animal_bomber.presentation.render.layout import PANEL_GAP, Layout
+from animal_bomber.presentation.render.layout import Layout
 from animal_bomber.presentation.render.match_frame import (
+    BoardFrame,
     draw_match_frame,
     panel_content,
 )
@@ -77,6 +80,7 @@ from animal_bomber.presentation.render.panel.side_panel import (
     SidePanel,
 )
 from animal_bomber.presentation.render.renderer import Renderer
+from animal_bomber.presentation.render.ui.shapes import page_background
 from animal_bomber.presentation.render.ui.typeset import TextPainter
 from animal_bomber.presentation.render.views.player import TrackedMotion, player_look
 from bench_match_visuals import (
@@ -125,8 +129,12 @@ class MatchScene:
         self._art = BakedArt(layout)
         self._renderer = Renderer(self._art, CosmeticRng(rng), cpu_players=CPU_PLAYERS)
         self._panel = SidePanel(TextPainter())
-        self._panel_left = layout.board_size[0] + PANEL_GAP
-        self._board_rect = pygame.Rect((0, 0), layout.board_size)
+        window = spec.window
+        self._panel_left = window.panel_origin[0]
+        # 四隅の絵は、遊ぶときと同じく窓の背景に枠を焼いたものから切り出す。
+        self._frame = BoardFrame(
+            page_background(spec.size), pygame.Rect(window.board_rect)
+        )
         self._cells = open_cells()
         self._world = self._build_world(rng)
         self._match = MatchState()
@@ -199,9 +207,9 @@ class MatchScene:
         return self._panel.builds - self._panel_builds_before
 
     def draw(self, target: pygame.Surface, frame: int) -> None:
-        """`frame` フレーム目を描く（盤面を左上に、横の板をその右に）。
+        """`frame` フレーム目を描く（盤面を枠の内側に、横の板を枠の右に）。
 
-        盤面を切って描いて横の板を貼る所は、遊ぶときと同じ関数
+        盤面を切って描いて四隅と横の板を貼る所は、遊ぶときと同じ関数
         （`render/match_frame.py` の `draw_match_frame`）を呼ぶ。
         """
         self._pose(frame)
@@ -209,7 +217,7 @@ class MatchScene:
         now_ms = self._start_ms + frame * FRAME_MS
         draw_match_frame(
             target,
-            board_rect=self._board_rect,
+            frame=self._frame,
             renderer=self._renderer,
             world=self._world,
             visuals=self.visuals,

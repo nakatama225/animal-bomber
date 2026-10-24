@@ -12,6 +12,9 @@ import pytest
 
 from animal_bomber.domain.rules.lane import LaneSide, lane_spot
 from animal_bomber.presentation.render.layout import (
+    BOARD_BORDER,
+    BOARD_INNER_RADIUS,
+    BOARD_RADIUS,
     HEIGHT_RESERVE,
     MIN_AVAILABLE_HEIGHT,
     MIN_AVAILABLE_WIDTH,
@@ -25,6 +28,7 @@ from animal_bomber.presentation.render.layout import (
     fit_window,
     js_round,
 )
+from animal_bomber.presentation.render.ui.theme import BOARD_FILL
 
 LEGACY = Path(__file__).resolve().parents[3] / "legacy" / "animal-bomber.html"
 
@@ -75,19 +79,28 @@ def test_窓の幅と高さから引く分は_原型の値() -> None:
     assert (MIN_AVAILABLE_WIDTH, MIN_AVAILABLE_HEIGHT) == (320, 240)
 
 
-def test_窓は盤面を左上に_すき間をあけて右に横の板() -> None:
-    """1440×900 ではマス 46。盤面 1115×839 の右に 16px あけて、幅 238px の板。"""
+def test_窓は枠を付けた盤面を左上に_すき間をあけて右に横の板() -> None:
+    """1440×900 ではマス 46。盤面 1115×839 に枠 3px を付け、16px あけて幅 238px の板。
+
+    原型の `.stage{gap:16px}` は canvas の枠の外側から数え、板の上の端は枠の外側の
+    上の端にそろう（`align-items:flex-start`）。
+    """
     window = fit_window(1440, 900, panel_height=600)
     assert window.board.tile == 46
     assert window.board.board_size == (1115, 839)
-    assert window.panel_origin == (1115 + 16, 0)
-    assert window.size == (1115 + 16 + 238, 839)
+    assert BOARD_BORDER == 3
+    assert window.panel_origin == (3 + 1115 + 3 + 16, 0)
+    assert window.size == (3 + 1115 + 3 + 16 + 238, 3 + 839 + 3)
 
 
 def test_横の板のほうが高ければ_窓の高さは横の板の高さ() -> None:
-    """原型はページが縦に流れる。窓は流れないので、高いほうに合わせる。"""
-    assert fit_window(1440, 900, panel_height=979).size == (1369, 979)
-    assert fit_window(1440, 900, panel_height=839).size == (1369, 839)
+    """原型はページが縦に流れる。窓は流れないので、高いほうに合わせる。
+
+    比べる盤面の高さには、枠の上下の 3px×2 を含める（盤面 839 なら 845）。
+    """
+    assert fit_window(1440, 900, panel_height=979).size == (1375, 979)
+    assert fit_window(1440, 900, panel_height=846).size == (1375, 846)
+    assert fit_window(1440, 900, panel_height=842).size == (1375, 845)
 
 
 @pytest.mark.parametrize(
@@ -126,18 +139,33 @@ def test_窓に収まるいちばん大きいマス(window: tuple[int, int], til
 def test_窓の高さは上限で頭打ちにし_はみ出す板の高さを返す() -> None:
     """横の板だけをスクロールする量（`panel_overflow`）は、板の高さと窓の高さの差。"""
     window = fit_window(1440, 900, panel_height=979, max_height=810)
-    assert window.size == (1369, 810)
+    assert window.size == (1375, 810)
     assert window.panel_overflow == 979 - 810
     # 上限より低ければ、上限は使わない。盤面のほうが高ければ板ははみ出さない。
     low = fit_window(1440, 900, panel_height=600, max_height=1000)
-    assert low.size == (1369, 839)
+    assert low.size == (1375, 845)
     assert low.panel_overflow == 0
     assert fit_window(1440, 900, panel_height=979).panel_overflow == 0
 
 
-def test_盤面の四角は_窓の左上の盤面の大きさ() -> None:
+def test_盤面の四角は_枠の太さだけ内側の_盤面の大きさ() -> None:
+    """枠の外側の左上が窓の左上。盤面（canvas の中身）はそこから枠の太さだけ内側。"""
     window = fit_window(1440, 900, panel_height=979, max_height=810)
-    assert window.board_rect == (0, 0, 1115, 839)
+    assert window.board_rect == (3, 3, 1115, 839)
+
+
+def test_枠の太さと角の丸みは_原型のcanvasのCSS() -> None:
+    """原型 L73 の `canvas{…border:3px solid var(--line);border-radius:14px;…}`。
+
+    原型のファイルを読んで並べる。内側の角丸は CSS の決まり（外側の丸み − 枠の太さ）。
+    """
+    text = LEGACY.read_text(encoding="utf-8")
+    assert (
+        "canvas{background:#1b120d;border:3px solid var(--line);border-radius:14px;"
+        in text
+    )
+    assert (BOARD_BORDER, BOARD_RADIUS, BOARD_INNER_RADIUS) == (3, 14, 11)
+    assert BOARD_FILL == (0x1B, 0x12, 0x0D)
 
 
 def test_範囲の外のマスは作らない() -> None:

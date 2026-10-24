@@ -32,6 +32,7 @@ from animal_bomber.domain.state.effects import EffectKind
 from animal_bomber.domain.state.item import Item
 from animal_bomber.domain.state.player import OUT, Negibon
 from animal_bomber.domain.state.world import WorldState, create_world, hash_world
+from animal_bomber.presentation.cosmetic_rng import CosmeticRng, ScriptedRandom
 from animal_bomber.presentation.render.art.animals.body import WALK_FREQUENCY
 from animal_bomber.presentation.render.art.blasts import progress_of
 from animal_bomber.presentation.render.art.foxfires import TrailMark
@@ -63,6 +64,7 @@ from .frame_scenes import (
     direct_image,
     frame_mismatches,
     renderer_image,
+    rgb,
 )
 
 LAYOUT = Layout(50)
@@ -715,3 +717,60 @@ def test_マスの継ぎ目に背景が透けない(tile: int) -> None:
         got, _ = renderer_image(art, world, visuals, randoms)
         wanted, _ = direct_image(layout, world, visuals, randoms)
         assert_same_frame(got, wanted, 0)
+
+
+OUTSIDE = (7, 200, 90)
+"""盤面の外の画素を見分けるために塗っておく色（盤面の絵に出ない色）。"""
+
+
+def shaken_scene() -> tuple[WorldState, FixedVisuals, list[float]]:
+    """揺れている1枚（`ordinary`）と、差す見た目の乱数。"""
+    return ordinary()
+
+
+def still_scene() -> tuple[WorldState, FixedVisuals, list[float]]:
+    """揺れていない1枚（`pit_then_others`）。見た目の乱数は引かない。"""
+    world, visuals = pit_then_others()
+    return world, visuals, []
+
+
+def negibon_scene() -> tuple[WorldState, FixedVisuals, list[float]]:
+    """外周の鍋と飛んでいる葱の1枚（`lanes_and_leeks`）。見た目の乱数は引かない。"""
+    world, visuals = lanes_and_leeks()
+    return world, visuals, []
+
+
+@pytest.mark.parametrize(
+    "scene",
+    [shaken_scene, still_scene, negibon_scene],
+    ids=["揺れと粒子", "揺れなし", "外周の鍋と葱"],
+)
+def test_盤面の左上をずらして描いても_盤面の中の絵と乱数を引く順は同じ(
+    scene: Callable[[], tuple[WorldState, FixedVisuals, list[float]]],
+) -> None:
+    """窓の面では、盤面を枠の太さだけ内側に描く（`origin`）。
+
+    左上 (0, 0) に描いた絵を、そのまま `origin` だけずらした絵になる（背景・盤面・揺れで
+    ずらす絵・粒子・外周の鍋と葱の全部を同じだけずらす）。盤面の四角で切って描くので、
+    盤面の外は描く前の色のまま。揺れているほう（背景と盤面を別々に貼る）と、揺れて
+    いないほう（合わせた1枚を貼る）の両方を見る。
+    """
+    world, visuals, randoms = scene()
+    art = BakedArt(LAYOUT)
+    flat, used_flat = renderer_image(art, world, visuals, randoms)
+    width, height = LAYOUT.surface_size
+    board = pygame.Rect((4, 7), (width, height))
+    target = pygame.Surface((width + 10, height + 12))
+    target.fill(OUTSIDE)
+    scripted = ScriptedRandom(list(randoms))
+    target.set_clip(board)
+    Renderer(art, CosmeticRng(scripted)).draw(
+        target, world, visuals, origin=board.topleft
+    )
+    target.set_clip(None)
+    got = rgb(target)  # 配列は縦・横の順
+    assert scripted.used == used_flat == randoms
+    assert (got[board.top : board.bottom, board.left : board.right] == flat).all()
+    outside = np.ones(got.shape[:2], dtype=bool)
+    outside[board.top : board.bottom, board.left : board.right] = False
+    assert (got[outside] == OUTSIDE).all()

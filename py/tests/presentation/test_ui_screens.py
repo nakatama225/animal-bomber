@@ -2,7 +2,8 @@
 
 画面の中身は `menu/screens.py` の関数で作り、窓の大きさの `pygame.Surface` に描いて、
 画素と、返した項目の四角（マウスの当たり）を見る。窓の大きさは、dummy の画面
-（1024×768）で横の板を置いた窓に近い 957×760 と、マス 60 の窓（1708×1094）。
+（1024×768）で横の板を置いた窓に近い 957×760 と、マス 60 の窓（枠を付けた盤面と横の板を
+並べた 1714×1100）。
 """
 
 from collections.abc import Iterator
@@ -47,7 +48,7 @@ from .frame_scenes import rgb
 
 WIDGETS = Widgets(TextPainter())
 SMALL = (957, 760)
-LARGE = (1708, 1094)
+LARGE = (1714, 1100)
 
 
 def views() -> Iterator[tuple[str, ScreenView]]:

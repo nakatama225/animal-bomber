@@ -16,6 +16,7 @@ TypeScript 版の `tests/ui/shell.test.ts`（本物の GameSession を回す通�
 """
 
 import itertools
+from collections.abc import Sequence
 
 import numpy as np
 import pygame
@@ -47,10 +48,12 @@ from animal_bomber.presentation.hud.banner import (
     AGAIN_BUTTON,
     NEXT_ROUND_BUTTON,
     SETUP_BUTTON,
+    BannerView,
 )
 from animal_bomber.presentation.hud.scoreboard import CardLook
 from animal_bomber.presentation.lan_status import WAIT_NOTICE_FRAMES
 from animal_bomber.presentation.menu.choices import hp_for_hits
+from animal_bomber.presentation.menu.items import MenuGroup
 from animal_bomber.presentation.menu.screens import LanView, LobbyView, MenuScreen
 from animal_bomber.presentation.render.art.negibons import LeekLook, NegibonLook
 from animal_bomber.presentation.render.art.player import PlayerLook
@@ -63,7 +66,9 @@ from animal_bomber.presentation.render.ui.shapes import (
     page_background,
     splash_background,
 )
+from animal_bomber.presentation.render.ui.theme import LINE
 from animal_bomber.presentation.render.ui.typeset import TextStyle
+from animal_bomber.presentation.render.ui.widgets import Hit
 from animal_bomber.presentation.render.views.player import drawn_position
 from animal_bomber.shell.gamepad import PadButton
 from tests.net.fake_relay import FakeConnection, FakeRelay
@@ -151,11 +156,13 @@ def watch_drawn(driver: Driver) -> list[tuple[float, float]]:
         world: WorldState,
         visuals: Visuals,
         blend: float = 1.0,
+        *,
+        origin: Offset = (0, 0),
     ) -> None:
         first = world.players[0]
         at = drawn_position(first.position, visuals.motion(first.id).previous, blend)
         drawn.append((blend, at.y))
-        draw(target, world, visuals, blend)
+        draw(target, world, visuals, blend, origin=origin)
 
     renderer.draw = watched  # type: ignore[method-assign]
     return drawn
@@ -174,6 +181,27 @@ def board_pixels(driver: Driver) -> np.ndarray:
     """描く面のうち、盤面の四角の画素（横・縦・色の3つの軸）。"""
     board = driver.shell.canvas.subsurface(pygame.Rect(driver.window.board_rect))
     return pygame.surfarray.array3d(board)
+
+
+def frame_colors(surface: pygame.Surface) -> list[tuple[int, ...]]:
+    """盤面の枠の4辺の真ん中と、四隅の内側の角丸の外の画素の色（窓は `WINDOW`）。
+
+    四隅の画素は、盤面の四角の角から横 1px・縦 4px 内側（内側の角丸 11px の外で、
+    外側の角丸 14px の内）。原型の canvas の CSS どおりなら、8つとも枠の色。
+    """
+    board = pygame.Rect(WINDOW.board_rect)
+    spots = [
+        (board.left - 2, board.centery),
+        (board.right + 1, board.centery),
+        (board.centerx, board.top - 2),
+        (board.centerx, board.bottom + 1),
+    ]
+    for right in (False, True):
+        for bottom in (False, True):
+            x = board.right - 2 if right else board.left + 1
+            y = board.bottom - 5 if bottom else board.top + 4
+            spots.append((x, y))
+    return [tuple(surface.get_at(spot))[:3] for spot in spots]
 
 
 def notice_text_pixels(driver: Driver) -> int:
@@ -591,9 +619,11 @@ class Testラウンドの幕:
             world: WorldState,
             visuals: Visuals,
             blend: float = 1.0,
+            *,
+            origin: Offset = (0, 0),
         ) -> None:
             drawn.append(world.now)
-            draw(target, world, visuals, blend)
+            draw(target, world, visuals, blend, origin=origin)
 
         renderer.draw = counted  # type: ignore[method-assign]
         finish_round(driver, runner)
@@ -604,6 +634,36 @@ class Testラウンドの幕:
         assert len(drawn) == 1
         assert labels(driver) == [NEXT_ROUND_BUTTON, SETUP_BUTTON]
 
+    def test_幕の下のぼかしは_盤面の枠もぼかす(self) -> None:
+        """原型の幕の `backdrop-filter` は、盤面の枠（canvas の CSS）の上もぼかす。
+
+        幕を出したフレームにぼかす元の面（幕を重ねる前の描く面）には枠があり、幕を
+        重ねたあとの枠の所は、ぼかして暗くした色（枠の色ではない）。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frame()
+        overlay = driver.shell._view._banner
+        draw = overlay.draw
+        shots: list[pygame.Surface] = []
+
+        def captured(
+            target: pygame.Surface,
+            view: BannerView,
+            groups: Sequence[MenuGroup],
+            focus: tuple[int, int] | None,
+        ) -> tuple[Hit, ...]:
+            if not shots:
+                shots.append(target.copy())
+            return draw(target, view, groups, focus)
+
+        overlay.draw = captured  # type: ignore[method-assign]
+        finish_round(driver, runner)
+        assert overlay.backdrops == 1
+        (shot,) = shots
+        assert frame_colors(shot) == [LINE] * 8
+        assert all(color != LINE for color in frame_colors(driver.shell.canvas))
+
     def test_幕が消えたフレームに_窓の全体を塗り直す(self) -> None:
         """盤面と横の板のすき間に、ぼかした絵を残さない。"""
         driver = Driver()
@@ -611,7 +671,7 @@ class Testラウンドの幕:
         driver.frame()
         canvas = driver.shell.canvas
         background = page_background(canvas.get_size())
-        spot = (WINDOW.board.board_size[0] + 8, WINDOW.size[1] - 8)
+        spot = (WINDOW.panel_origin[0] - 8, WINDOW.size[1] - 8)
         assert canvas.get_at(spot) == background.get_at(spot)
         finish_round(driver, runner)
         driver.frames(3)
@@ -865,6 +925,20 @@ class Testポーズ:
         driver.tap(pygame.KSCAN_P)
         assert not runner.paused
         assert board_pixels(driver).mean() > 0.9 * before
+
+    def test_ポーズの幕を重ねても_盤面の四隅は枠の色のまま(self) -> None:
+        """原型のポーズの幕は canvas の中に描くので、canvas の角丸で四隅が切れる。
+
+        幕は盤面の四角を暗くするので、重ねたあとに四隅の絵を貼り直す。
+        """
+        driver = Driver()
+        runner = start_local(driver)
+        driver.frames(2)
+        driver.down(pygame.KSCAN_P)
+        assert runner.paused
+        driver.up(pygame.KSCAN_P)
+        driver.frames(2)
+        assert frame_colors(driver.shell.canvas) == [LINE] * 8
 
     def test_ポーズの間に押した爆弾のキーは_再開しても置かない(self) -> None:
         """原型も毎フレーム押した瞬間を忘れる（ポーズの間も）。"""
@@ -1185,26 +1259,46 @@ class Test盤面と横の板:
         assert driver.shell.renderer.cpu_players == cpus
 
     def test_盤面は盤面の四角で切って描く(self) -> None:
-        """画面の揺れでずらした盤面と粒子が、すき間へはみ出さないように。"""
+        """画面の揺れでずらした盤面と粒子が、盤面の枠とすき間へはみ出さないように。"""
         driver = Driver()
         start_local(driver)
         renderer = driver.shell.renderer
         draw = renderer.draw
         clips: list[pygame.Rect] = []
+        origins: list[Offset] = []
 
         def watched(
             target: pygame.Surface,
             world: WorldState,
             visuals: Visuals,
             blend: float = 1.0,
+            *,
+            origin: Offset = (0, 0),
         ) -> None:
             clips.append(target.get_clip())
-            draw(target, world, visuals, blend)
+            origins.append(origin)
+            draw(target, world, visuals, blend, origin=origin)
 
         renderer.draw = watched  # type: ignore[method-assign]
         driver.frame()
         assert clips == [pygame.Rect(WINDOW.board_rect)]
+        # 盤面の左上は、枠の太さだけ内側（盤面の四角の左上）に置く。
+        assert origins == [pygame.Rect(WINDOW.board_rect).topleft]
+        assert origins != [(0, 0)]
         assert driver.shell.canvas.get_clip() == driver.shell.canvas.get_rect()
+
+    def test_1台の試合は_盤面のまわりに枠を描き_四隅を内側の角丸で切る(self) -> None:
+        """原型の canvas の CSS（3px の `var(--line)`・角丸 14px。L73-74）。
+
+        枠の外側の角丸の外（窓の左上の画素）は窓の背景のまま。
+        """
+        driver = Driver()
+        start_local(driver)
+        driver.frames(2)
+        canvas = driver.shell.canvas
+        assert frame_colors(canvas) == [LINE] * 8
+        page = page_background(canvas.get_size())
+        assert canvas.get_at((0, 0)) == page.get_at((0, 0))
 
     def test_ポーズとゲーム速度は_横の板にすぐ出す(self) -> None:
         """名札はふだん約 4 Hz で作り直すが、原型がすぐ作り直す場面は待たない。"""
@@ -1248,7 +1342,7 @@ class Test盤面と横の板:
         driver.frame()
         canvas = driver.shell.canvas
         background = page_background(canvas.get_size())
-        spot = (WINDOW.board.board_size[0] + 8, 30)
+        spot = (WINDOW.panel_origin[0] - 8, 30)
         assert canvas.get_at(spot) == background.get_at(spot)
         long = notices.sudden_death(SuddenDeathReason.TIME_UP)
         driver.shell.toast.show(long, driver.now)
@@ -1737,6 +1831,66 @@ class Test通信対戦:
         assert notice_text_pixels(pair.host) == 0
         pair.host.frames(WAIT_NOTICE_FRAMES)
         assert notice_text_pixels(pair.host) > 0
+
+    def test_盤面のまわりに枠を描き_案内の帯を重ねても下の四隅は枠の色(self) -> None:
+        """1台の試合と同じく、盤面の枠を描く（原型の canvas の CSS。L73-74）。
+
+        案内の帯は盤面の下の端に重ねるので、重ねたあとに四隅の絵を貼り直す（原型の
+        canvas の中身と同じく、四隅で切れて見える）。
+        """
+        pair = LanPair()
+        host, _ = pair.start()
+        # ゲストは `--relay` を付けて起動したので、起動の幕が消えきる（0.45 秒）まで
+        # 回す。
+        pair.step(30)
+        assert frame_colors(pair.host.shell.canvas) == [LINE] * 8
+        assert frame_colors(pair.guest.shell.canvas) == [LINE] * 8
+        for _ in range(10):
+            pair.relay.deliver()
+            pair.host.frame()
+        pair.host.frames(WAIT_NOTICE_FRAMES)
+        assert not host.ready
+        assert notice_text_pixels(pair.host) > 0
+        assert frame_colors(pair.host.shell.canvas) == [LINE] * 8
+
+    def test_ラウンドの幕を消したあとの案内の帯でも_下の四隅は枠の色(self) -> None:
+        """幕を重ねた印（案内の帯のあとに四隅を貼り直さない印）は、フレームごとに下ろす。
+
+        印が残ると、ラウンドの幕が消えたあとの次のラウンドで、案内の帯を重ねたフレームに
+        四隅を貼り直さず、下の四隅が帯の色のまま（内側の角丸で切れない）になる。
+        """
+        pair = LanPair()
+        host, _ = pair.start()
+        pair.step(30)
+        overlay = pair.host.shell._view._banner
+        before = overlay.backdrops
+        pair.finish_round(final=False)
+        pair.step(2)
+        assert overlay.backdrops == before + 1
+        pair.step(130)
+        runner = pair.host.shell.runner
+        assert runner is not None and not runner.between_rounds
+        assert runner.match is not None and runner.match.round == 2
+        assert frame_colors(pair.host.shell.canvas) == [LINE] * 8
+        for _ in range(10):
+            pair.relay.deliver()
+            pair.host.frame()
+        pair.host.frames(WAIT_NOTICE_FRAMES)
+        assert not host.ready
+        assert notice_text_pixels(pair.host) > 0
+        assert frame_colors(pair.host.shell.canvas) == [LINE] * 8
+
+    def test_優勝の幕と案内の帯を重ねたフレームは_四隅を貼り直さない(self) -> None:
+        """幕のぼかした絵は枠もぼかしてあるので、ぼけていない四隅を貼ると浮いて見える。"""
+        pair = LanPair()
+        pair.start()
+        pair.step(5)
+        pair.finish_round(final=True)
+        pair.step(2)
+        assert labels(pair.host) == [AGAIN_BUTTON, SETUP_BUTTON]
+        assert notice_text_pixels(pair.host) > 0
+        corners = frame_colors(pair.host.shell.canvas)[4:]
+        assert all(color != LINE for color in corners)
 
     def test_試合の最中にずれが知らされたら_進めずに曲を止め_帯に理由を出す(
         self,

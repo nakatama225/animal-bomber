@@ -60,6 +60,8 @@ PANEL: Final = hex_color("#402e23")
 """横の板の箱（原型の `--panel`）。"""
 LINE: Final = hex_color("#5c4433")
 """枠線（原型の `--line`）。"""
+BOARD_FILL: Final = hex_color("#1b120d")
+"""盤面の枠の内側の地（原型の canvas の `background:#1b120d`。L73）。"""
 
 FIELD: Final = hex_color("#2d2019")
 """チップ・動物のカード・小さいボタン・更新履歴の箱・確認の画面の地（原型 L35）。"""

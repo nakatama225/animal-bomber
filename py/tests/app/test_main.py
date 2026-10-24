@@ -17,7 +17,11 @@ import pytest
 from animal_bomber.app.main import parse_args, tallest_panel, window_layout
 from animal_bomber.domain.rules.animals import Animal
 from animal_bomber.presentation.audio.sounds import SoundName
-from animal_bomber.presentation.render.layout import PANEL_GAP, PANEL_WIDTH
+from animal_bomber.presentation.render.layout import (
+    BOARD_BORDER,
+    PANEL_GAP,
+    PANEL_WIDTH,
+)
 from animal_bomber.presentation.render.loading import BACKGROUND
 from animal_bomber.presentation.render.ui.typeset import TextPainter
 
@@ -144,13 +148,14 @@ def test_窓を閉じたら_終わる() -> None:
     assert result["mixer_after"] is None
 
 
-def test_dummyの画面の9割に_盤面とすき間と横の板を並べた窓を開く() -> None:
+def test_dummyの画面の9割に_枠を付けた盤面とすき間と横の板を並べた窓を開く() -> None:
     """dummy の画面は 1024×768。9 割（921×691）からマスは下限の 26（盤面 630×474）。
 
-    窓の高さは、盤面と横の板の高いほうを 9 割の高さ（691）で頭打ちにしたもの。
+    窓の幅は、盤面に枠 3px×2・すき間・横の板を足した幅。窓の高さは、枠を付けた盤面と
+    横の板の高いほうを 9 割の高さ（691）で頭打ちにしたもの。
     """
     result = _run_main(["none"])
-    assert result["size"] == [630 + PANEL_GAP + PANEL_WIDTH, 691]
+    assert result["size"] == [630 + BOARD_BORDER * 2 + PANEL_GAP + PANEL_WIDTH, 691]
 
 
 PLAY_SOLO = [
@@ -246,8 +251,8 @@ class Test窓の寸法:
         assert layout.board.tile == 50
         assert layout.board.board_size == (1212, 912)
         assert layout.size == (
-            1212 + PANEL_GAP + PANEL_WIDTH,
-            min(972, max(912, tallest)),
+            1212 + BOARD_BORDER * 2 + PANEL_GAP + PANEL_WIDTH,
+            min(972, max(912 + BOARD_BORDER * 2, tallest)),
         )
         assert layout.panel_height == tallest
 

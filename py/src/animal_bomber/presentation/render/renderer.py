@@ -150,8 +150,15 @@ class Renderer:
         world: WorldState,
         visuals: Visuals,
         blend: float = 1.0,
+        *,
+        origin: tuple[int, int] = (0, 0),
     ) -> None:
-        """いまの盤面を `target`（描く面。アルファの桁の無い面）の左上 (0, 0) に描く。
+        """いまの盤面を `target`（描く面。アルファの桁の無い面）の `origin` に描く。
+
+        `origin` は盤面の左上を置く位置（px。既定は描く面の左上）。窓の面では、盤面の
+        枠の太さだけ内側（`layout.WindowLayout.board_rect`）。背景・盤面・揺れでずらす
+        絵を全部同じだけずらすので、`origin` を変えても、見た目の乱数を引く順と、盤面の
+        中の絵は変わらない。
 
         `blend` は、描く値を1つ前の tick の値と混ぜる割合（既定の 1 はいまの値。ゲーム
         速度が整数でない1台の試合だけ 1 より小さい。`shell/loop.py` の
@@ -166,19 +173,24 @@ class Renderer:
 
         ⚠️ 画面の揺れでずらした盤面と粒子は、盤面の大きさ（`Layout.surface_size`）の
         外へはみ出して描くことがある。窓の大きさの面に描くときは、呼ぶ側が盤面の四角で
-        切っておく（`target.set_clip`。原型の canvas も盤面の外を描かない）。
+        切っておく（`target.set_clip`。原型の canvas も盤面の外を描かない。盤面の枠は
+        切り取りの外なので、揺れても動かない）。
         """
         art, rng, now = self.art, self._rng, world.now
         at = drawn_time(now, blend)
         behind = now - at
         moved = shake_offset(visuals.shake, rng)
-        offset = (0, 0) if moved is None else (snap(moved[0]), snap(moved[1]))
+        shake = (0, 0) if moved is None else (snap(moved[0]), snap(moved[1]))
+        # 揺れのずれに盤面の左上の位置を足した、絵を貼るときのずれ。揺れているかは
+        # 揺れのずれだけで決める（足したずれで決めると、`origin` が (0, 0) でないとき
+        # 毎フレーム揺れているほうの道を通る）。
+        offset = (origin[0] + shake[0], origin[1] + shake[1])
         board = self._board
-        if offset == (0, 0):
-            target.blit(board.still(world.board, self._background), (0, 0))
+        if shake == (0, 0):
+            target.blit(board.still(world.board, self._background), origin)
         else:
             # 背景は揺らさない（`art/frame.py` の draw_background の注記）。
-            target.blit(self._background, (0, 0))
+            target.blit(self._background, origin)
             target.blit(
                 board.layer(world.board),
                 (board.left + offset[0], board.top + offset[1]),
@@ -226,9 +238,9 @@ class Renderer:
         for actor in world.actors:
             match actor:
                 case SlimeBomb():
-                    origin, hopped = visuals.slime(actor)
+                    thrown, hopped = visuals.slime(actor)
                     flown = drawn_flown(actor.flown, visuals.flown_before(actor), blend)
-                    slime = slime_look(actor, origin, hopped, flown)
+                    slime = slime_look(actor, thrown, hopped, flown)
                     art.slimes.draw(target, slime, at, offset)
                 case Foxfire():
                     pass  # 前の輪で描いた

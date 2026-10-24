@@ -13,6 +13,14 @@
 試合の状態から何を描くか（横の板の中身・幕を出すか・ポーズ中か）は `Shell` が決めて
 渡す。ここは描く面と、描いたものの控え（横の板のスクロールと高さ・押せる所）だけを持つ。
 
+## 盤面の枠
+
+窓の背景は、`Shell` から受けた背景の写しに盤面の枠を焼いたもの
+（`render/match_frame.py` の `BoardFrame.background`）を使う。盤面の四角に重ねるポーズの
+幕と通信対戦の案内の帯は、重ねたあとに盤面の四隅を貼り直す（原型のポーズの幕は canvas の
+中に描くので、四隅で切れる）。ただし幕を重ねたフレームの案内の帯は、貼り直さない（幕の
+ぼかした絵は枠もぼかしてあるので、ぼけていない四隅を貼ると、そこだけ浮いて見える）。
+
 ## 窓の背景を塗り直す所
 
 窓の背景を全部塗り直すのは、塗り直しの印が立っているとき（`invalidate`。試合が
@@ -34,7 +42,7 @@ from animal_bomber.presentation.menu.items import MenuGroup
 from animal_bomber.presentation.render.baked.art import BakedArt
 from animal_bomber.presentation.render.lan_screen import LanScreen
 from animal_bomber.presentation.render.layout import PANEL_WIDTH, WindowLayout
-from animal_bomber.presentation.render.match_frame import draw_match_frame
+from animal_bomber.presentation.render.match_frame import BoardFrame, draw_match_frame
 from animal_bomber.presentation.render.overlay.banner import BannerOverlay
 from animal_bomber.presentation.render.overlay.pause import PauseOverlay
 from animal_bomber.presentation.render.panel.side_panel import (
@@ -63,7 +71,7 @@ class MatchView:
 
     Args:
         canvas: 描く面（窓の大きさ。`Shell` と同じ面）。
-        background: 窓の背景（描く面と同じ大きさ）。
+        background: 窓の背景（描く面と同じ大きさ。枠の無いもの。書き換えない）。
         window: 窓の並び（盤面の四角と横の板の位置）。
         painter: 文を描くもの。
         widgets: 幕のボタンを描くもの。
@@ -78,12 +86,13 @@ class MatchView:
         widgets: Widgets,
     ) -> None:
         self._canvas = canvas
-        self._background = background
-        self._board_rect = pygame.Rect(window.board_rect)
+        self._frame = BoardFrame(background, pygame.Rect(window.board_rect))
+        self._background = self._frame.background
+        self._board_rect = self._frame.board_rect
         self._panel_left = window.panel_origin[0]
         self._art = BakedArt(window.board)
         self._renderer = Renderer(self._art)
-        self._panel = SidePanel(painter, panel_backdrop(background, window))
+        self._panel = SidePanel(painter, panel_backdrop(self._background, window))
         self._pause = PauseOverlay(painter)
         self._banner = BannerOverlay(widgets)
         self._texts = LanScreen(self._board_rect.h, painter)
@@ -93,6 +102,8 @@ class MatchView:
         self._banner_hits: tuple[Hit, ...] = ()
         self._repaint = True
         self._toast_rect: pygame.Rect | None = None
+        self._bannered = False
+        """このフレームに幕を重ねたか（案内の帯のあとに四隅を貼り直すかを決める）。"""
 
     @property
     def art(self) -> BakedArt:
@@ -184,6 +195,7 @@ class MatchView:
                 （`draw_match_frame`）。
         """
         canvas = self._canvas
+        self._bannered = False
         if self._banner.holds(banner, canvas.get_size()):
             return
         if self._repaint:
@@ -193,7 +205,7 @@ class MatchView:
             canvas.blit(self._background, self._toast_rect, self._toast_rect)
         self._panel_hits = draw_match_frame(
             canvas,
-            board_rect=self._board_rect,
+            frame=self._frame,
             renderer=self._renderer,
             world=world,
             visuals=visuals,
@@ -207,6 +219,7 @@ class MatchView:
         self._fit_panel()
         if paused:
             self._pause.draw(canvas, self._board_rect)
+            self._frame.cover(canvas)
 
     def draw_banner(
         self,
@@ -221,6 +234,7 @@ class MatchView:
         ぼかした絵を残さない）。
         """
         self._banner_hits = self._banner.draw(self._canvas, view, groups, focus)
+        self._bannered = True
         self._repaint = True
 
     def hide_banner(self) -> None:
@@ -230,8 +244,14 @@ class MatchView:
         self._repaint = True
 
     def draw_notice(self, notice: str) -> None:
-        """通信対戦の案内の帯（1行）を、盤面の下の端に重ねる。"""
+        """通信対戦の案内の帯（1行）を、盤面の下の端に重ねる。
+
+        このフレームに幕を重ねていなければ、盤面の四隅を貼り直す（モジュールの説明の
+        「盤面の枠」）。
+        """
         self._texts.draw_notice(self._canvas.subsurface(self._board_rect), notice)
+        if not self._bannered:
+            self._frame.cover(self._canvas)
 
     def _fit_panel(self) -> None:
         """出している横の板の高さを控え、スクロールの量を丸める。

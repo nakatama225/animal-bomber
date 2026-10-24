@@ -104,8 +104,9 @@ class TestClocked:
         assert report["load_before"] == [1.0, 1.0, 1.0]
         assert report["load_after"] == [2.0, 2.0, 2.0]
         record = side_record(completed)
-        # 描いた面は、マス 60 の盤面（1454×1094）・すき間 16・横の板 238 の窓の大きさ。
-        assert record["presented"] == [[[1708, 1094], 0xFF000000]] * (2 * 102)
+        # 描いた面は、マス 60 の盤面（1454×1094）に枠 3px×2・すき間 16・横の板 238 を
+        # 足した窓の大きさ。
+        assert record["presented"] == [[[1714, 1100], 0xFF000000]] * (2 * 102)
         assert record["sleeps"] == []
 
     def test_表に_列ごとの値と_負荷と_条件が出る(self) -> None:
@@ -126,8 +127,8 @@ class TestClocked:
         rows = [line.split() for line in lines if line.startswith("  60  ")]
         values = ["0.0", "51.50", "51.00", "96.00", "100.00", "101.00", "49.50", "85"]
         assert rows == [
-            ["60", "1708x1094", "四角い粒", *values],
-            ["60", "1708x1094", "光の玉", *values],
+            ["60", "1714x1100", "四角い粒", *values],
+            ["60", "1714x1100", "光の玉", *values],
         ]
         assert "p99 100.00 ms" in lines[-1]
         assert "→ 不合格" in lines[-1]

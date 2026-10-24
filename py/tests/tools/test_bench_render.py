@@ -36,8 +36,9 @@ class TestBenchRender:
             "baked",
             "none",
         )
-        # マス 26 の盤面（630×474）・すき間 16・横の板 238 の窓の大きさ。
-        assert (result["width"], result["height"]) == (884, 474)
+        # マス 26 の盤面（630×474）に枠 3px×2・すき間 16・横の板 238 を足した窓の
+        # 大きさ。
+        assert (result["width"], result["height"]) == (890, 480)
         counts = [result[key] for key in ("blasts", "particles", "spinners")]
         assert counts + [result["players"], result["bombs"]] == [297, 105, 4, 4, 8]
         # 位相をそろえ損ねると、薄れた絵をまとめて貼るフレームが無くなり、軽く測れる。

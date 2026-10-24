@@ -94,7 +94,8 @@ def tallest_panel(painter: TextPainter) -> int:
     始まりの形（つまみ・パッドの段・ポーズ中の Select の行まで出す）。外周にいる間の
     段など、試合の途中で増える行は入れない（そのときは板だけをスクロールする。
     `app/shell.py`）。中身は、遊ぶときと同じ関数（`render/match_frame.py` の
-    `panel_content`）で組む。
+    `panel_content`）で組む。窓の高さは、この高さと、枠を付けた盤面の高さ（盤面の
+    高さに枠の上下の 3px×2 を足した高さ）の高いほう（`layout.WindowLayout.size`）。
     """
     plan = plan_local_match(DEFAULT_LOCAL_SETUP, seed=0)
     config: MatchConfig = plan.config
@@ -118,11 +119,12 @@ def tallest_panel(painter: TextPainter) -> int:
 
 
 def window_layout(desktop: tuple[int, int], painter: TextPainter) -> WindowLayout:
-    """画面の大きさ `desktop`（px）に合わせた窓の並び（盤面・すき間・横の板）。
+    """画面の大きさ `desktop`（px）に合わせた窓の並び（枠を付けた盤面・横の板）。
 
     画面の 9 割を原型のブラウザの窓の大きさとみなして、原型の fitBoard の式でマスを
-    決める（26〜60px。`layout.fit_window`）。窓の高さは盤面と横の板の高いほうで、画面の
-    9 割で頭打ち（横の板がはみ出したら、板だけをホイールでスクロールする）。描く面は
+    決める（26〜60px。`layout.fit_window`）。窓の幅は、盤面に枠 3px×2・すき間・横の板を
+    足した幅。窓の高さは枠を付けた盤面と横の板の高いほうで、画面の 9 割で頭打ち（横の
+    板がはみ出したら、板だけをホイールでスクロールする）。描く面は
     マス 60 まで（py/AGENTS.md「描画の重さ」）。pygame の SCALED（`main`）は整数倍で
     しか広げないので、拡大するのは、画面の縦が窓の 2 倍以上あるときだけ。原型はマス 96
     まで広げるので、大きい画面では盤面が原型より小さい（2560×1440 相当でマス 60 と
