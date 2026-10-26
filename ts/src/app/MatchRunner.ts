@@ -29,6 +29,13 @@ export interface MatchRunner {
   readonly generation: number;
   /** 止めているか。 */
   readonly paused: boolean;
+  /**
+   * 1台の試合を、わざと止めているか（ポーズ・決まった試合）。止めている間は、押してすぐ離したキーを
+   * 毎フレーム忘れる（`Shell`。忘れないと、ポーズ中に押した爆弾のキーで、再開した最初の tick に爆弾を置く）。
+   *
+   * 通信対戦はいつも false。入力を待って進めないのは止めているのではなく、押したキーは送るまで残す。
+   */
+  readonly stopped: boolean;
   /** 止める・再開する。止められない試合（通信対戦）では何もしない。 */
   readonly togglePause: () => void;
   /** 1 tick 進める。`ready` のときだけ呼ぶ。 */
@@ -73,6 +80,10 @@ export class LocalMatch implements MatchRunner {
 
   get paused(): boolean {
     return this.#paused;
+  }
+
+  get stopped(): boolean {
+    return this.#paused || this.session.match.finished;
   }
 
   togglePause(): void {

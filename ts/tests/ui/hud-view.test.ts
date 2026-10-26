@@ -5,12 +5,11 @@ import { GameSession } from '../../src/app/GameSession.js';
 import { tick } from '../../src/domain/core/Tick.js';
 import { IdleInputSource } from '../../src/domain/input/InputSource.js';
 import { defaultMatchConfig } from '../../src/domain/rules/MatchConfig.js';
-import { keyHelpFor } from '../../src/platform/keyHelp.js';
-import { SOLO_KEYS } from '../../src/platform/Keyboard.js';
 import { BannerOverlay } from '../../src/platform/ui/BannerOverlay.js';
 import { activate, pointerButton } from '../../src/platform/ui/dom.js';
-import { SidePanel } from '../../src/platform/ui/SidePanel.js';
+import { SidePanel, type KeyHelpFor } from '../../src/platform/ui/SidePanel.js';
 import { Toasts } from '../../src/platform/ui/Toasts.js';
+import { describeKeyHelp } from '../../src/presentation/hud/keyHelp.js';
 import type { Roster } from '../../src/presentation/hud/roster.js';
 import type { HudSource } from '../../src/presentation/hud/scoreboard.js';
 
@@ -46,17 +45,52 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+/** キーの案内（1台の試合・パッドなし）。ポーズ中かは呼ぶたびに読む。 */
+function keyHelp(paused: () => boolean = () => false): KeyHelpFor {
+  return (source) =>
+    describeKeyHelp({
+      world: source.world,
+      roster: source.roster,
+      padConnected: false,
+      padInMatch: true,
+      paused: paused(),
+      canPause: true,
+    });
+}
+
 describe('横の板', () => {
-  it('時計・名札・キー配置の説明を並べる', () => {
+  it('時計・名札・キーの案内を並べる', () => {
     const root = document.createElement('div');
-    const panel = new SidePanel(root, () => [{ playerId: 0, help: keyHelpFor('1P', SOLO_KEYS) }]);
+    const panel = new SidePanel(root, keyHelp());
     panel.update(hud().source());
 
     expect(root.querySelector('[data-part="clock"] .time')?.textContent).toBe('3:00');
     expect(root.querySelectorAll('.card')).toHaveLength(2);
     expect(root.querySelector('[data-player="0"] .tag')?.textContent).toBe('1P（あなた）');
     expect(root.querySelector('[data-player="1"] .tag')?.textContent).toBe('CPU・ふつう');
-    expect(root.querySelector('.keyhelp')?.textContent).toContain('W A S D');
+    // 行は文のまま並べる。太字だけの行は b、キーは空白で区切る。
+    const rows = [...(root.querySelector('.keyhelp .help')?.children ?? [])];
+    expect(rows.map((row) => [row.tagName, row.textContent])).toEqual([
+      ['B', 'そうさ'],
+      ['DIV', 'うごく W A S D / ↑ ← ↓ →'],
+      ['DIV', 'ばくだん Space Enter Z /'],
+      ['DIV', 'とぶ E Q X C R Shift（長押しでとくぎ🍗）'],
+      ['DIV', 'P ポーズ'],
+    ]);
+  });
+
+  it('キーの案内が変われば（ポーズ中の Select の行など）、書き直す', () => {
+    const root = document.createElement('div');
+    let paused = false;
+    const panel = new SidePanel(root, (source) =>
+      describeKeyHelp({ world: source.world, roster: source.roster, padConnected: true, padInMatch: true, paused, canPause: true }),
+    );
+    const { source } = hud();
+    panel.update(source());
+    expect(root.querySelector('.keyhelp')?.textContent).not.toContain('設定へもどる');
+    paused = true;
+    panel.update(source());
+    expect(root.querySelector('.keyhelp')?.textContent).toContain('Select 設定へもどる');
   });
 
   it('中身が変わらなければ要素を作り直さない', () => {
@@ -74,18 +108,24 @@ describe('横の板', () => {
     expect(root.querySelector('.card')).not.toBe(before);
   });
 
-  it('自分が葱ボンになったら、葱ボンの操作を足す（ほかの人がなっても足さない）', () => {
+  it('人間が葱ボンになったら、いちばん上に葱ボンの段を出す（CPU がなっても出さない）', () => {
     const root = document.createElement('div');
-    // 説明を出すのは 2P（番号1）。番号0 の人を見て判断する取り違えも検出する。
-    const panel = new SidePanel(root, () => [{ playerId: 1, help: keyHelpFor('2P', SOLO_KEYS) }]);
+    const panel = new SidePanel(root, keyHelp());
     const { session, source } = hud();
-    session.world.players[0]!.life = { kind: 'negibon', along: 0, readyAt: tick(0) };
-    panel.update(source());
-    expect(root.querySelector('.keyhelp .note')).toBeNull();
-
+    // 番号1 は CPU。番号1 を見て判断する取り違えも検出する。
     session.world.players[1]!.life = { kind: 'negibon', along: 0, readyAt: tick(0) };
     panel.update(source());
-    expect(root.querySelector('.keyhelp .note')?.textContent).toContain('葱を撃つ');
+    expect(root.querySelector('.keyhelp')?.textContent).not.toContain('葱を発射');
+
+    session.world.players[0]!.life = { kind: 'negibon', along: 0, readyAt: tick(0) };
+    panel.update(source());
+    const help = root.querySelector('.keyhelp .help');
+    expect(help?.firstElementChild?.textContent).toBe('🌿 うさぎ は葱ボン＝場外');
+    expect(help?.textContent).toContain('葱を発射 Space か Enter');
+    // 区切りの行（破線）は、まだ写さずに飛ばす。空の行を残さない（葱ボンの段 4 行・そうさの段 4 行・ポーズの行）。
+    const children = [...(help?.children ?? [])];
+    expect(children).toHaveLength(9);
+    expect(children.some((child) => child.textContent === '')).toBe(false);
   });
 
   it('試合が無ければ空にする', () => {

@@ -3,12 +3,17 @@
  *
  * キーボードの矢印・Enter と、パッドの十字・A は、どちらもこの操作に翻訳してから渡す。
  * 操作の意味を決める場所を1つにするため（原型も同じ形）。
+ *
+ * - `start`：パッドの Start。メニューではカーソルを動かさず、枠を出すだけ
+ * - `select`：パッドの Select（Back）。メニューではカーソルを動かさず、枠を出すだけ
+ * - `other`：パッドのほかのボタン（X・Y・L1・R1・L2・R2）。カーソルを動かさず、枠を出すだけ。
+ *   原型はパッドのどのボタンの押し始めもカーソルへ渡すので、枠が出ていなければどのボタンでも枠が出る
  */
-export type NavCommand = 'up' | 'down' | 'left' | 'right' | 'confirm' | 'back';
+export type NavCommand = 'up' | 'down' | 'left' | 'right' | 'confirm' | 'back' | 'start' | 'select' | 'other';
 
 /** 操作を受けた結果。 */
 export type NavResult =
-  /** 何もしない（並びが空・枠を出しただけ、など）。 */
+  /** 何もしない（並びが空・関係の無い操作、など）。 */
   | { readonly kind: 'none' }
   /** カーソルが動いた、または枠を出した。描き直す。 */
   | { readonly kind: 'moved' }
@@ -44,13 +49,21 @@ const MOVED: NavResult = { kind: 'moved' };
  *
  * マウスで遊ぶ人には枠は要らない。枠が出ていないときの最初の1押しは、まず枠を出す。
  * ⚠️ そのとき飲み込むのは決定だけ。移動と戻るまで飲み込むと、マウスに触れたあとの
- * 最初の1押しが毎回反映されず、「たまに効かない」に見える。危ないのは、どこを指しているか
+ * 最初の1押しが毎回反映されず、「たまに反応しない」に見える。危ないのは、どこを指しているか
  * 見えないまま決定することだけ（原型の注意書き）。
  *
  * ⚠️ 試合が決まった幕だけは、最初の決定をそのまま反映する（`HiddenConfirm` の `activate`）。
  * 幕でする操作はほぼ「もういっかい」だけで、カーソルも幕が出るたびに「もういっかい」へ戻す。
  * 1回目を飲み込むと「決定が反映されない」としか見えない。原型もキーボードの Space・Enter は
  * そのまま次へ進め、パッドの A も1回目を飲み込まなかった。
+ *
+ * ## 1回に届く操作は1つとは限らない
+ *
+ * パッドは1回の読み取りで、押し始めたボタンをまとめて渡す（原型の `hit`）。原型の `MENU.nav`
+ * （L3288-3322）と同じ順に見る：枠が出ていなければ枠を出し、決定が含まれていれば（ふつうの画面では）
+ * ほかの操作ごと飲み込む。続けて、戻るがあれば戻るだけ、なければ決定があれば決定だけ、なければ上下を
+ * 動かしてから左右を動かす（上下と左右は同じ回に両方動く。下は上より、右は左より先に見る）。
+ * キーボードは1回に1つを渡す。
  */
 export class MenuCursor {
   #group = 0;
@@ -82,39 +95,44 @@ export class MenuCursor {
   }
 
   /**
-   * 操作を1つ受ける。
+   * 1回ぶんの操作を受ける（原型の `MENU.nav`）。
    *
+   * @param commands この回に押し始めた操作（キーボードは1つ、パッドはまとめて）
    * @param sizes いまの画面の、グループごとの項目の数（上から順）。空のグループは含めない
    * @param hiddenConfirm 枠が出ていないときの決定をどう扱うか
    */
-  handle(command: NavCommand, sizes: readonly number[], hiddenConfirm: HiddenConfirm = 'show'): NavResult {
-    if (sizes.length === 0) return NONE;
+  handle(commands: readonly NavCommand[], sizes: readonly number[], hiddenConfirm: HiddenConfirm = 'show'): NavResult {
+    if (commands.length === 0 || sizes.length === 0) return NONE;
     this.fit(sizes);
-    if (!this.#shown) {
+    const showed = !this.#shown;
+    if (showed) {
       this.#shown = true;
-      if (command === 'confirm' && hiddenConfirm === 'show') return MOVED;
+      // 同じ回の移動も飲み込む（原型は A があれば、枠を出して返る。L3300）。
+      if (commands.includes('confirm') && hiddenConfirm === 'show') return MOVED;
     }
-    switch (command) {
-      case 'back':
-        return { kind: 'back' };
-      case 'confirm':
-        return { kind: 'activate', group: this.#group, item: this.#item };
-      case 'up':
-      case 'down': {
-        const step = command === 'down' ? 1 : -1;
-        this.#group = (this.#group + step + sizes.length) % sizes.length;
-        // 項目の少ないグループへ移ると、項目の番号がはみ出すことがある。
-        this.fit(sizes);
-        return MOVED;
-      }
-      case 'left':
-      case 'right': {
-        const size = sizes[this.#group] ?? 1;
-        const step = command === 'right' ? 1 : -1;
-        this.#item = (this.#item + step + size) % size;
-        return MOVED;
-      }
+    if (commands.includes('back')) return { kind: 'back' };
+    if (commands.includes('confirm')) return { kind: 'activate', group: this.#group, item: this.#item };
+    let moved = false;
+    const groups = sizes.length;
+    if (commands.includes('down')) {
+      this.#group = (this.#group + 1) % groups;
+      moved = true;
+    } else if (commands.includes('up')) {
+      this.#group = (this.#group - 1 + groups) % groups;
+      moved = true;
     }
+    // 項目の少ないグループへ移ると、項目の番号がはみ出すことがある。
+    if (moved) this.fit(sizes);
+    const size = sizes[this.#group] ?? 1;
+    if (commands.includes('right')) {
+      this.#item = (this.#item + 1) % size;
+      moved = true;
+    } else if (commands.includes('left')) {
+      this.#item = (this.#item - 1 + size) % size;
+      moved = true;
+    }
+    // Start・Select・ほかのボタンは、枠を出すだけ（出ていれば何もしない）。
+    return moved || showed ? MOVED : NONE;
   }
 
   /**

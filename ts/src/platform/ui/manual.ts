@@ -2,8 +2,8 @@ import { ANIMAL_LOOKS } from '../../content/animals.js';
 import { abilityOf } from '../../domain/abilities/registry.js';
 import { TICKS_PER_SECOND } from '../../domain/core/Tick.js';
 import { ITEM_DEFINITIONS } from '../../domain/rules/items.js';
-import { GAMEPAD_HELP, keyHelpFor, menuHelp, PAD_MENU_HELP } from '../keyHelp.js';
-import { PLAYER1_KEYS, PLAYER2_KEYS, SOLO_KEYS } from '../Keyboard.js';
+import { KEY_HINT_P1, KEY_HINT_P2, KEY_HINT_SOLO } from '../../presentation/menu/keyHints.js';
+import { menuHelp, PAD_MENU_HELP } from '../keyHelp.js';
 
 /** 遊び方の説明の1節。 */
 export interface ManualSection {
@@ -14,22 +14,19 @@ export interface ManualSection {
 /**
  * 遊び方の説明。
  *
- * キー・長押しの長さ・アイテムの一覧は、それぞれの表（キー配置・動物の能力・アイテムの定義）から作る。
- * 手で書き写すと、値を変えたときに説明だけ古いまま残る。
+ * 長押しの長さ・アイテムの一覧・メニューのキーは、それぞれの表（動物の能力・アイテムの定義・メニューの操作）から作る。
+ * 手で書き写すと、値を変えたときに説明だけ古いまま残る。試合のキーは、キャラ選びと同じ原型の固定の文
+ * （`presentation/menu/keyHints.ts`。原型の案内は割り当てた全部のキーを書かない）。
  */
 export function describeManual(): ManualSection[] {
   return [
     {
       title: 'そうさ（1人で遊ぶとき・通信対戦）',
-      lines: [...keyHelpFor('', SOLO_KEYS).lines, ...GAMEPAD_HELP],
+      lines: [KEY_HINT_SOLO],
     },
     {
       title: 'そうさ（1台で2人のとき）',
-      lines: [
-        ...keyHelpFor('', PLAYER1_KEYS).lines.map((line) => `1P ${line}`),
-        ...keyHelpFor('', PLAYER2_KEYS).lines.map((line) => `2P ${line}`),
-        'ゲームパッドは1人で遊ぶときだけ使える（1台に1人ぶん）',
-      ],
+      lines: [`1P ${KEY_HINT_P1}`, `2P ${KEY_HINT_P2}`, 'ゲームパッドは1人で遊ぶときだけ使える（1台に1人ぶん）'],
     },
     {
       title: 'メニュー',

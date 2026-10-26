@@ -6,10 +6,9 @@ import {
   TIME_CHOICES,
   WIN_CHOICES,
 } from '../../presentation/menu/choices.js';
+import { keyHintsFor } from '../../presentation/menu/keyHints.js';
 import type { LocalSetup, PlayMode } from '../../presentation/menu/localSetup.js';
 import type { MenuFlow, SoundSetting } from '../../presentation/menu/MenuFlow.js';
-import { keyHelpFor } from '../keyHelp.js';
-import { PLAYER1_KEYS, PLAYER2_KEYS, SOLO_KEYS } from '../Keyboard.js';
 import { chipRow, el, pointerButton } from './dom.js';
 import { describeManual } from './manual.js';
 
@@ -117,13 +116,12 @@ export class MenuView {
 
   #pick(): HTMLElement[] {
     const { humans } = this.#flow.sizes;
-    const bindings = humans === 1 ? [SOLO_KEYS] : [PLAYER1_KEYS, PLAYER2_KEYS];
-    const sections = bindings.map((binding, index) => {
+    const sections = keyHintsFor(humans).map((hint, index) => {
       const human = index as 0 | 1;
       const chosen = this.#flow.setup.picks[human];
       return el('div', { className: 'field', data: { human: String(human) } }, [
         el('span', { className: 'field-label', text: `${human + 1}P のどうぶつ` }),
-        el('div', { className: 'note', text: keyHelpFor('', binding).lines[0] ?? '' }),
+        el('div', { className: 'note', text: hint }),
         el(
           'div',
           { className: 'animals' },

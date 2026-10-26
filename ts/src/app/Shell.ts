@@ -5,26 +5,25 @@ import type { PlayerId } from '../domain/state/PlayerState.js';
 import { CombinedInputSource } from '../platform/CombinedInputSource.js';
 import { GameSpeed } from '../platform/FrameLoop.js';
 import { GamepadInputSource, PadChoice, PadMenuInput, type PadSnapshot } from '../platform/GamepadInput.js';
-import { GAMEPAD_HELP, keyHelpFor, type KeyHelp } from '../platform/keyHelp.js';
 import {
   KeyboardInputSource,
   PLAYER1_KEYS,
   PLAYER2_KEYS,
   SOLO_KEYS,
   type KeyBinding,
-  type KeyStateReader,
+  type KeyboardState,
 } from '../platform/Keyboard.js';
 import { BannerOverlay } from '../platform/ui/BannerOverlay.js';
 import { pointerButton } from '../platform/ui/dom.js';
 import { MenuNavigator } from '../platform/ui/MenuNavigator.js';
 import { MenuView } from '../platform/ui/MenuView.js';
-import { SidePanel, type KeyHelpEntry, type KeyHelpFor } from '../platform/ui/SidePanel.js';
+import { SidePanel, type KeyHelpFor } from '../platform/ui/SidePanel.js';
 import { speedControl } from '../platform/ui/SpeedControl.js';
 import { Toasts } from '../platform/ui/Toasts.js';
 import { Countdown } from '../presentation/audio/Countdown.js';
 import type { SoundBank } from '../presentation/audio/SoundBank.js';
+import { describeKeyHelp } from '../presentation/hud/keyHelp.js';
 import { displayName } from '../presentation/hud/roster.js';
-import type { HudSource } from '../presentation/hud/scoreboard.js';
 import { RoundBanner } from '../presentation/hud/RoundBanner.js';
 import { planLocalMatch, type LocalController, type LocalSetup } from '../presentation/menu/localSetup.js';
 import type { NavCommand } from '../presentation/menu/MenuCursor.js';
@@ -63,7 +62,8 @@ export interface MusicControl {
 export interface ShellTools {
   /** 盤面を描く先。 */
   readonly context: CanvasRenderingContext2D;
-  readonly keyboard: KeyStateReader;
+  /** 押しているキーと押した瞬間。押した瞬間をいつ忘れるかは、ここ（`Shell`）が決める。 */
+  readonly keyboard: KeyboardState;
   readonly gamepads: () => readonly (PadSnapshot | null)[];
   readonly sounds: SoundBank;
   readonly music: MusicControl;
@@ -71,11 +71,6 @@ export interface ShellTools {
   readonly sound: SoundSetting;
   /** 音の設定を変える。 */
   readonly setSound: (sound: SoundSetting) => void;
-  /**
-   * 操作に使うキーの、ブラウザの既定の動き（矢印と Space でページが動く、など）を止める。
-   * 試合の画面の間は試合の操作のキーを、メニューの間はメニューを動かすキーを止める。
-   */
-  readonly captureKeys: (screen: 'play' | 'menu') => void;
   /** 試合の種を作る。実時間を読むのは起動の入口の役目なので、外から受け取る。 */
   readonly newSeed: () => number;
   /** 通信対戦の画面へ移る（URL に `?relay` を付けて開き直す）。 */
@@ -189,11 +184,8 @@ export class Shell {
     this.#lastSetup = setup;
     const plan = planLocalMatch(setup, this.#tools.newSeed());
     const session = new GameSession(plan.config);
-    const help: KeyHelpEntry[] = [];
     plan.controllers.forEach((controller, index) => {
-      const id = index as PlayerId;
-      session.attach(this.#sourceFor(id, controller, plan.config.seed));
-      if (controller.kind === 'keys') help.push({ playerId: id, help: this.#helpFor(id, controller.layout) });
+      session.attach(this.#sourceFor(index as PlayerId, controller, plan.config.seed));
     });
     const runner = new LocalMatch(session, plan.roster);
     // 試合が決まった幕のボタンは横に並ぶので、カーソルの1グループにする。
@@ -201,7 +193,11 @@ export class Shell {
       pointerButton('もういっかい', () => this.restart(), { data: { action: 'again', nav: 'final' } }),
       pointerButton('タイトルへ', () => this.showMenu(), { data: { action: 'title', nav: 'final' } }),
     ];
-    this.#begin(runner, () => help, () => actions, { paced: true, padOnBanner: plan.controllers.some(drivesPad) });
+    const padInMatch = plan.controllers.some(drivesPad);
+    this.#begin(runner, this.#keyHelp(runner, { padInMatch, canPause: true }), () => actions, {
+      paced: true,
+      padOnBanner: padInMatch,
+    });
     this.#setToolbar([
       speedControl(this.#speed.rate, (rate) => this.#setSpeed(rate)),
       pointerButton('⏸ ポーズ', () => this.togglePause(), { data: { action: 'pause' } }),
@@ -224,8 +220,9 @@ export class Shell {
     // ホストにだけ出す（原型も、次の試合を始められるのはホストだけだった）。押すと合図を送るだけで、
     // 次の試合は中継が配り直した start を受け取ってから始まる。
     const again = [pointerButton('もういっかい', () => runner.rematch(), { data: { action: 'again', nav: 'final' } })];
-    // 自分のプレイヤー番号は、つないで受け取るまで分からない。名札の「あなた」から選ぶ。
-    this.#begin(runner, (source) => this.#localHelp(source), () => (runner.canRematch ? again : []), {
+    // 自分のプレイヤー番号は、つないで受け取るまで分からない。キーの案内は名札の「あなた」だけを出す
+    // （`describeKeyHelp`）。通信対戦ではだれもポーズできない。
+    this.#begin(runner, this.#keyHelp(runner, { padInMatch: true, canPause: false }), () => (runner.canRematch ? again : []), {
       paced: false,
       padOnBanner: true,
     });
@@ -248,14 +245,15 @@ export class Shell {
   /**
    * キーボードやパッドの操作で、メニュー・ロビー・試合が決まった幕のカーソルを動かす。
    *
+   * 1回に押し始めた操作をまとめて渡す（キーボードは1つ、パッドは1回に読んだぶん。`MenuCursor.handle`）。
    * 試合の最中は何もしない（幕にボタンが無いので、カーソルの並びが空になる）。
    * ⚠️ ロビーでは戻る（Escape・B）で何もしない。ぬけるとページを開き直すので、押し間違えると
    * 試合ごと抜けてしまう。ぬけるときは「← ぬける」をマウスで押す。
    */
-  navigate(command: NavCommand): void {
+  navigate(...commands: NavCommand[]): void {
     const root = this.#navRoot();
     // 試合が決まった幕だけは、枠が出ていなくても最初の決定を反映する（原型と同じ。`MenuCursor` の説明を参照）。
-    const result = this.#nav.handle(root, command, root === this.#elements.banner ? 'activate' : 'show');
+    const result = this.#nav.handle(root, commands, root === this.#elements.banner ? 'activate' : 'show');
     if (result.kind === 'back' && this.#match === null) {
       this.#menu.back();
       this.#nav.paint(root);
@@ -271,6 +269,18 @@ export class Shell {
    * 画面のループから、1 tick ぶんの時間が経つごとに呼ばれる。
    *
    * 1台で遊ぶときは、ゲームの速さの倍率ぶんの tick を進める（0.5 倍なら2回に1回）。
+   *
+   * ## 押してすぐ離したキーを忘れる時
+   *
+   * キーボードとパッドは、押した瞬間を残す（押してから離すまでが 1 tick より短くても、爆弾と技を 1 tick は
+   * 押したことにする。`KeyboardWatcher`・`PadChoice`）。忘れるのは、入力を tick へ取り込んだあと
+   * （通信対戦では送ったあと。どちらも `#step` の中の `runner.step()`）だけ。倍速でも1回の押しは 1 tick ぶんになる。
+   * 進めなかった呼び出し（0.5 倍で 0 tick の回・通信対戦で入力を待っている間）では忘れない。忘れると、
+   * 押したことが読まれないまま消える。
+   * ⚠️ ここ（`tick` の末尾）では忘れない。通信対戦は、送る入力を進める tick の中で読む（3 tick 先の入力）ので、
+   * 進めなかった回に末尾で忘れると、押しが読まれない。
+   * 例外は、1台の試合を止めている間（`MatchRunner.stopped`）と試合の外で、そのときは原型と同じく毎フレーム
+   * 忘れる（`draw`）。
    */
   tick(): void {
     const match = this.#current();
@@ -306,6 +316,8 @@ export class Shell {
     const world = hud.world;
     match.renderer.beforeTick(world);
     const events = runner.step();
+    // 入力を取り込んだ（通信対戦では送った）ので、押した瞬間を忘れる（`tick` の説明）。
+    this.#forgetTaps();
     match.presenter.consume(events, world);
     match.banner.onEvents(events, hud);
     match.renderer.afterTick(events, world);
@@ -321,16 +333,18 @@ export class Shell {
    */
   draw(alpha: number): void {
     // パッドは押したことを知らせてくれないので、描くたびに読む。決めた項目が画面を替えることがあるので、
-    // 試合の部品を読むより前に、パッドの操作を反映する。
+    // 試合の部品を読むより前に、パッドの操作を反映する。1回に押し始めた操作は、まとめてカーソルへ渡す。
     // ⚠️ 読むのは毎回。受け付けないときも、前回の状態を更新し続ける（押したままのボタンを、あとで
-    // 新しい押下と取り違えないため。原型も同じ）。
+    // 新しい押下と取り違えないため。原型も同じ）。試合の操作の押した瞬間も、ここで読んだときに残る（`PadChoice`）。
     const commands = this.#padMenu.poll();
-    if (this.#padAccepted()) for (const command of commands) this.navigate(command);
+    if (commands.length > 0 && this.#padAccepted()) this.navigate(...commands);
     const match = this.#current();
     const music = this.#tools.music;
     if (match === null) {
       music.stop();
       this.#paintCursor();
+      // 試合の外で押したキーは忘れる（原型も毎フレーム忘れる。`tick` の説明）。
+      this.#forgetTaps();
       return;
     }
     const { runner } = match;
@@ -343,6 +357,9 @@ export class Shell {
     this.#elements.pause.hidden = !runner.paused;
     runner.afterDraw();
     this.#paintCursor();
+    // 試合が始まる前（通信対戦のロビー）と、1台の試合を止めている間は、押したキーを毎フレーム忘れる
+    // （`tick` の説明。止めている間に押した爆弾のキーで、再開した最初の tick に爆弾を置かない）。
+    if (world === null || runner.stopped) this.#forgetTaps();
     // 試合が終わったとき・止めたとき・通信対戦が止まったとき（ずれ・切断）は曲を止める。
     // tick が進まない間も判断できるよう、描く側で毎回見る。鳴っていれば start は何もしない。
     if (runner.inProgress) music.start();
@@ -390,7 +407,6 @@ export class Shell {
   #showBoard(board: boolean): void {
     this.#elements.menu.hidden = board;
     this.#elements.play.hidden = !board;
-    this.#tools.captureKeys(board ? 'play' : 'menu');
   }
 
   /** いまパッドでカーソルを動かしてよいか。メニューとロビーはいつでも、幕は `padOnBanner` のときだけ。 */
@@ -419,13 +435,28 @@ export class Shell {
     this.#nav.paint(this.#navRoot());
   }
 
-  /** 通信対戦の、この端末の人のキー配置の説明。 */
-  #localHelp(source: HudSource): KeyHelpEntry[] {
-    return source.roster.flatMap((controller, index) => {
-      if (controller.kind !== 'human' || !controller.local) return [];
-      const id = index as PlayerId;
-      return [{ playerId: id, help: this.#helpFor(id, 'solo') }];
-    });
+  /**
+   * 横の板のキーの案内を作る関数（`describeKeyHelp`）。ポーズ中か・パッドを認識しているかは、描くたびに読む。
+   *
+   * @param padInMatch パッドを試合に繋ぐ遊び方か（1人で遊ぶときと通信対戦）
+   * @param canPause この端末でポーズできるか（1台の試合だけ）
+   */
+  #keyHelp(runner: MatchRunner, { padInMatch, canPause }: { padInMatch: boolean; canPause: boolean }): KeyHelpFor {
+    return (source) =>
+      describeKeyHelp({
+        world: source.world,
+        roster: source.roster,
+        padConnected: this.#pads.connected,
+        padInMatch,
+        paused: runner.paused,
+        canPause,
+      });
+  }
+
+  /** 押してすぐ離したキーとボタンの、押した瞬間を忘れる（`tick` の説明）。 */
+  #forgetTaps(): void {
+    this.#tools.keyboard.forgetTaps();
+    this.#pads.forgetTaps();
   }
 
   #endMatch(): void {
@@ -451,10 +482,5 @@ export class Shell {
     const keyboard = new KeyboardInputSource(id, this.#tools.keyboard, KEY_LAYOUTS[controller.layout]);
     if (!drivesPad(controller)) return keyboard;
     return new CombinedInputSource([keyboard, new GamepadInputSource(id, this.#pads)]);
-  }
-
-  #helpFor(id: PlayerId, layout: 'solo' | 'left' | 'right'): KeyHelp {
-    const help = keyHelpFor(`${id + 1}P`, KEY_LAYOUTS[layout]);
-    return layout === 'solo' ? { ...help, lines: [...help.lines, ...GAMEPAD_HELP] } : help;
   }
 }

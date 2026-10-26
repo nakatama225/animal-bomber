@@ -63,6 +63,7 @@ function connectWebSocket(url: string, handlers: WebSocketLinkHandlers): LanLink
  */
 export class LanMatch implements MatchRunner {
   readonly paused = false;
+  readonly stopped = false;
   readonly #client: LockstepClient;
   readonly #link: LanLink;
   readonly #lobby: LobbyView;

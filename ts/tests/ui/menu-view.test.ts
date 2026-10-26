@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { MenuView } from '../../src/platform/ui/MenuView.js';
+import { KEY_HINT_P1, KEY_HINT_P2, KEY_HINT_SOLO } from '../../src/presentation/menu/keyHints.js';
 import type { LocalSetup } from '../../src/presentation/menu/localSetup.js';
 import { MenuFlow, type SoundSetting } from '../../src/presentation/menu/MenuFlow.js';
 
@@ -104,5 +105,16 @@ describe('試合の前の画面', () => {
     const { root, lan } = mount();
     press(root, '[data-choice="lan"]');
     expect(lan).toEqual([1]);
+  });
+
+  it('キャラ選びのキーの案内は原型の文（1人は1人用の1つ、2人は 1P と 2P のそれぞれ）', () => {
+    const { root } = mount();
+    const hints = (): (string | null)[] =>
+      [...root.querySelectorAll('[data-human] .note')].map((note) => note.textContent);
+    press(root, '[data-choice="solo"]');
+    expect(hints()).toEqual([KEY_HINT_SOLO]);
+    press(root, '[data-action="back"]');
+    press(root, '[data-choice="duo"]');
+    expect(hints()).toEqual([KEY_HINT_P1, KEY_HINT_P2]);
   });
 });

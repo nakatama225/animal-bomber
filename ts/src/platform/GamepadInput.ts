@@ -31,12 +31,23 @@ const BUTTON = {
   y: 3,
   l1: 4,
   r1: 5,
+  l2: 6,
+  r2: 7,
+  select: 8,
   start: 9,
   up: 12,
   down: 13,
   left: 14,
   right: 15,
 } as const;
+
+/**
+ * メニューで、カーソルを動かさずに枠を出すだけのボタン（原型の `PAD_BTN` のうち、十字・A・B・Start・Select
+ * 以外。L3424-3432）。原型はパッドのどのボタンの押し始めもメニューのカーソルへ渡すので、枠が出ていなければ
+ * どのボタンでも枠が出る（L3590-3591・L3298-3301）。L3・R3 は原型も名前を持たない（スティックを倒したまま
+ * 押し込んでしまう）ので、ここにも並べない。
+ */
+const FRAME_ONLY_BUTTONS: readonly number[] = [BUTTON.x, BUTTON.y, BUTTON.l1, BUTTON.r1, BUTTON.l2, BUTTON.r2];
 
 /**
  * スティックを倒したと判定するしきい値と、戻ったと判定するしきい値。
@@ -47,47 +58,98 @@ const STICK_ON = 0.5;
 const STICK_OFF = 0.35;
 
 /**
- * ⚠️ トリガ（L2 / R2）は割り当てていない。
+ * ⚠️ トリガ（L2 / R2）は試合の操作に割り当てていない。
  *
  * 技のボタンは複数を OR で見るため、トリガに指を乗せているだけで
  * 押しっぱなしと判定され、長押しのとくぎが暴発しうる。
  * `pressed` が立つしきい値はブラウザの実装によって違うので、
- * 実機で測るまで使わない。
+ * 実機で測るまで使わない（メニューで枠を出すことにだけ使う。`FRAME_ONLY_BUTTONS`）。
  */
+
+/** ボタン1つの状態。`value` はアナログの押し込み（0〜1）。古い実装は持たないことがある。 */
+export interface PadButtonSnapshot {
+  readonly pressed: boolean;
+  readonly value?: number;
+}
 
 /** 読み取ったパッドの状態。テストから差し替えられるよう、配列で受け取る。 */
 export type PadSnapshot = {
   readonly mapping: string;
   readonly connected: boolean;
   readonly index: number;
-  readonly buttons: readonly { readonly pressed: boolean }[];
+  readonly buttons: readonly PadButtonSnapshot[];
   readonly axes: readonly number[];
 };
 
 /**
- * どのパッドをつかんでいるか。メニューの操作と試合の操作が、1つを分け合う。
+ * どのパッドをつかんでいるかと、押した瞬間。メニューの操作と試合の操作が、1つを分け合う。
  *
  * ⚠️ 読む側ごとに持たない。メニューで1番をつかんだあと、試合の側が先頭から探し直すと、
  * あとから点いた0番（家族が電源を入れた、寝ていたパッドが起きた）をつかみ、手元の1番では
  * 操作できなくなる。原型も、つかんだ番号を1つだけ持っていた。
+ *
+ * ## 押した瞬間を、読むたびに残す
+ *
+ * パッドは押したことを知らせてくれないので、読んだときの差分で押した瞬間を作る。メニューの操作は描くたびに
+ * 読む（`PadMenuInput.poll`）ので、ここで差分を取れば、試合が tick を進めないフレーム（0.5 倍の半分の
+ * フレームなど）に押して離したボタンも残る。試合の操作（`GamepadInputSource`）は、爆弾と技のボタンを、
+ * 押しているか、押した瞬間を残しているかで見る（原型も、パッドの押した瞬間を `pressed` に足していた。
+ * L3590-3596）。いつ忘れるかは画面の流れ（`Shell`）が決める（`forgetTaps`）。
  */
 export class PadChoice {
   /** 一度つかんだパッドの番号。途中で別のパッドへ移らないようにする。 */
   #index: number | null = null;
+  /** 前に読んだときに押されていたボタンの番号。 */
+  #previous: ReadonlySet<number> = new Set();
+  /** 押した瞬間を残したボタンの番号（もう離していても）。 */
+  readonly #tapped = new Set<number>();
 
   constructor(private readonly read: () => readonly (PadSnapshot | null)[]) {}
 
   /**
-   * 使うパッドを選ぶ。
+   * 使うパッドを選んで読む。前に読んだときから押されたボタンを、押した瞬間として残す。
    *
    * ⚠️ 先頭が繋がっているとは限らない。実機では2番目に入っていた。
-   * `mapping` が標準のものを探し、一度見つけたらその番号を覚える。
+   * `mapping` が標準のものを探し、一度見つけたらその番号を覚える。覚えた番号のパッドも、
+   * 繋がっていて標準の並びのときだけ使う（原型の `pickPad`。L3484-3491）。
    */
   pick(): PadSnapshot | null {
+    const pad = this.#find();
+    const now = new Set<number>();
+    if (pad !== null) {
+      pad.buttons.forEach((_, index) => {
+        if (held(pad, index)) now.add(index);
+      });
+    }
+    for (const button of now) if (!this.#previous.has(button)) this.#tapped.add(button);
+    this.#previous = now;
+    return pad;
+  }
+
+  /**
+   * パッドを認識しているか（最後に読んだとき、使うパッドが見つかったか。原型の `PAD.on`）。
+   *
+   * 描くたびに読むので、描く側が見る時点では、そのフレームに読んだ結果になる。
+   */
+  get connected(): boolean {
+    return this.#index !== null;
+  }
+
+  /** そのボタンの押した瞬間を残しているか（もう離していても）。 */
+  tapped(button: number): boolean {
+    return this.#tapped.has(button);
+  }
+
+  /** 押した瞬間を忘れる。前に読んだときの状態は消さない（押したままのボタンを、新しい押下と取り違えない）。 */
+  forgetTaps(): void {
+    this.#tapped.clear();
+  }
+
+  #find(): PadSnapshot | null {
     const pads = this.read();
     if (this.#index !== null) {
       const remembered = pads.find((pad) => pad?.index === this.#index);
-      if (remembered != null && remembered.connected) return remembered;
+      if (remembered != null && remembered.connected && remembered.mapping === 'standard') return remembered;
       this.#index = null;
     }
     for (const pad of pads) {
@@ -110,7 +172,7 @@ class PadReader {
   /** 前回スティックが倒れていた向き。戻りのしきい値に使う。 */
   #stick = { x: 0, y: 0 };
 
-  constructor(private readonly choice: PadChoice) {}
+  constructor(readonly choice: PadChoice) {}
 
   /** 使うパッド。`PadChoice.pick` を参照。 */
   pick(): PadSnapshot | null {
@@ -156,8 +218,16 @@ class PadReader {
   }
 }
 
+/**
+ * そのボタンを押しているか。
+ *
+ * `pressed` のほか、`value` が 0.5 を超えていても押したとみなす（原型の `padDown`。L3466-3470）。
+ * `pressed` が立つしきい値はブラウザの実装ごとに違い、アナログのボタンは `pressed` が立たないことがある。
+ */
 function held(pad: PadSnapshot, index: number): boolean {
-  return pad.buttons[index]?.pressed === true;
+  const button = pad.buttons[index];
+  if (button === undefined) return false;
+  return button.pressed || (typeof button.value === 'number' && button.value > 0.5);
 }
 
 /**
@@ -183,10 +253,12 @@ export class GamepadInputSource implements InputSource {
   next(): PlayerInput {
     const pad = this.#reader.pick();
     if (pad === null) return IDLE_INPUT;
+    // 爆弾と技は、押しているか、押した瞬間を残しているか（押してすぐ離したボタンも 1 tick は押したことにする）。
+    const button = (index: number): boolean => held(pad, index) || this.#reader.choice.tapped(index);
     return {
       ...this.#reader.directions(pad),
-      bomb: held(pad, BUTTON.a) || held(pad, BUTTON.r1),
-      action: held(pad, BUTTON.b) || held(pad, BUTTON.x) || held(pad, BUTTON.y) || held(pad, BUTTON.l1),
+      bomb: button(BUTTON.a) || button(BUTTON.r1),
+      action: button(BUTTON.b) || button(BUTTON.x) || button(BUTTON.y) || button(BUTTON.l1),
       // とくぎを直に出すボタンは割り当てない（原型の人間は長押しでしか出せない。`PlayerInput.special`）。
       special: false,
     };
@@ -195,8 +267,14 @@ export class GamepadInputSource implements InputSource {
 
 /**
  * ゲームパッドでメニューを動かす。十字キーかスティックで動かし、A で決め、B で戻る（原型と同じ）。
+ * Start・Select はそれぞれの操作として、ほかのボタン（`FRAME_ONLY_BUTTONS`）は枠を出すだけの操作として渡す。
  *
- * 押した瞬間は、前回読んだときの状態との差分だけで作る。
+ * 押した瞬間は、前回読んだときの状態との差分だけで作る。1回に押し始めた操作は、まとめて返す
+ * （カーソルが原型と同じ順で見る。`MenuCursor.handle`）。
+ *
+ * 枠を出すだけのボタン（`FRAME_ONLY_BUTTONS`）は、ボタンの番号ごとに押し始めを見る（原型はボタンごとに
+ * 押し始めを作る。L3590-3591）。操作の名前（`other`）でまとめてから比べると、X を押したまま Y を押し始めても、
+ * `other` が前回にもあるので押し始めにならない。
  *
  * ⚠️ 前回の状態を、画面が替わったときに消さない。消すと、A で「つぎへ」を押して次の画面へ
  * 移ったとき、押したままの A が新しい押下に見えて、次の画面の項目まで押してしまう。原型も
@@ -205,6 +283,8 @@ export class GamepadInputSource implements InputSource {
 export class PadMenuInput {
   readonly #reader: PadReader;
   #previous: ReadonlySet<NavCommand> = new Set();
+  /** 前回読んだときに押されていた、枠を出すだけのボタンの番号。 */
+  #previousFrameOnly: ReadonlySet<number> = new Set();
 
   /** @param choice つかむパッド。試合の操作（`GamepadInputSource`）と同じものを渡す */
   constructor(choice: PadChoice) {
@@ -215,6 +295,7 @@ export class PadMenuInput {
   poll(): NavCommand[] {
     const pad = this.#reader.pick();
     const now = new Set<NavCommand>();
+    const frameOnly = new Set<number>();
     if (pad !== null) {
       const directions = this.#reader.directions(pad);
       for (const direction of ['up', 'down', 'left', 'right'] as const) {
@@ -222,9 +303,14 @@ export class PadMenuInput {
       }
       if (held(pad, BUTTON.a)) now.add('confirm');
       if (held(pad, BUTTON.b)) now.add('back');
+      if (held(pad, BUTTON.start)) now.add('start');
+      if (held(pad, BUTTON.select)) now.add('select');
+      for (const index of FRAME_ONLY_BUTTONS) if (held(pad, index)) frameOnly.add(index);
     }
     const started = [...now].filter((command) => !this.#previous.has(command));
+    if ([...frameOnly].some((index) => !this.#previousFrameOnly.has(index))) started.push('other');
     this.#previous = now;
+    this.#previousFrameOnly = frameOnly;
     return started;
   }
 }
@@ -255,7 +341,7 @@ export function readBrowserGamepads(): readonly (PadSnapshot | null)[] {
           mapping: pad.mapping,
           connected: pad.connected,
           index: pad.index,
-          buttons: pad.buttons.map((button) => ({ pressed: button.pressed })),
+          buttons: pad.buttons.map((button) => ({ pressed: button.pressed, value: button.value })),
           axes: [...pad.axes],
         },
   );

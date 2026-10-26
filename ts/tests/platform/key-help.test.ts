@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { keyHelpFor, keyName, menuHelp, PAD_MENU_HELP } from '../../src/platform/keyHelp.js';
-import { PLAYER1_KEYS, PLAYER2_KEYS, SOLO_KEYS } from '../../src/platform/Keyboard.js';
+import { keyName, menuHelp, PAD_MENU_HELP } from '../../src/platform/keyHelp.js';
 import { describeManual } from '../../src/platform/ui/manual.js';
+import { KEY_HINT_P1, KEY_HINT_P2, KEY_HINT_SOLO } from '../../src/presentation/menu/keyHints.js';
 
-describe('キー配置の説明', () => {
+describe('キーの呼び方', () => {
   it('キーの呼び方を縮める', () => {
     expect(['KeyW', 'ArrowUp', 'Space', 'Slash', 'ShiftLeft', 'Digit1'].map(keyName)).toEqual([
       'W',
@@ -14,28 +14,6 @@ describe('キー配置の説明', () => {
       '左Shift',
       '1',
     ]);
-  });
-
-  it('1人のときは、WASD と矢印を組ごとに並べる', () => {
-    expect(keyHelpFor('1P', SOLO_KEYS).lines).toEqual([
-      'うごく W A S D ／ ↑ ← ↓ →',
-      'ばくだん Space Enter Z /',
-      '技 E Q 左Shift 右Shift（長押しでとくぎ）',
-    ]);
-  });
-
-  it('2人のときは、それぞれのキーだけを出す', () => {
-    expect(keyHelpFor('1P', PLAYER1_KEYS).lines[0]).toBe('うごく W A S D');
-    expect(keyHelpFor('2P', PLAYER2_KEYS).lines).toEqual([
-      'うごく ↑ ← ↓ →',
-      'ばくだん Enter /',
-      '技 . , 右Shift（長押しでとくぎ）',
-    ]);
-  });
-
-  it('説明は配置の表から作る（表を変えれば説明も変わる）', () => {
-    const custom = { ...SOLO_KEYS, bomb: ['KeyX'] };
-    expect(keyHelpFor('1P', custom).lines[1]).toBe('ばくだん X');
   });
 });
 
@@ -49,6 +27,15 @@ describe('遊び方の説明', () => {
     // ぞうは押した瞬間に鼻水を吹く（原型の通常技）。
     expect(lineOf('ぞう')).not.toContain('通常技は無く');
     expect(lineOf('もぐら')).toContain('通常技は無く、押すとすぐとくぎが出る');
+  });
+
+  it('そうさの説明は、キャラ選びと同じ原型の固定の文（割り当てた J と Option は書かない）', () => {
+    const linesOf = (title: string): readonly string[] =>
+      describeManual().find((section) => section.title === title)?.lines ?? [];
+    expect(linesOf('そうさ（1人で遊ぶとき・通信対戦）')).toEqual([KEY_HINT_SOLO]);
+    expect(linesOf('そうさ（1台で2人のとき）').slice(0, 2)).toEqual([`1P ${KEY_HINT_P1}`, `2P ${KEY_HINT_P2}`]);
+    const keyLines = [...linesOf('そうさ（1人で遊ぶとき・通信対戦）'), ...linesOf('そうさ（1台で2人のとき）')].join('\n');
+    expect(keyLines).not.toMatch(/\bJ\b|Option|Alt/);
   });
 });
 

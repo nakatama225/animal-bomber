@@ -46,7 +46,8 @@ describe('キーボードとゲームパッドをまとめる', () => {
       buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: i === 0 })),
       axes: [0, 0, 0, 0],
     };
-    const keyboard = new KeyboardInputSource(0, { anyOf: (codes) => codes.includes('KeyD') }, SOLO_KEYS);
+    const held = (codes: readonly string[]): boolean => codes.includes('KeyD');
+    const keyboard = new KeyboardInputSource(0, { anyOf: held, buttonAnyOf: held }, SOLO_KEYS);
     const gamepad = new GamepadInputSource(0, new PadChoice(() => [pad]));
     const playerInput = new CombinedInputSource([keyboard, gamepad]).next(makeWorld());
     expect(playerInput).toMatchObject({ right: true, bomb: true, up: false });

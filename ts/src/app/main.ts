@@ -1,6 +1,6 @@
 import { FrameLoop } from '../platform/FrameLoop.js';
 import { readBrowserGamepads } from '../platform/GamepadInput.js';
-import { GAME_KEYS, KeyboardWatcher, MENU_KEYS, navCommandOf } from '../platform/Keyboard.js';
+import { KeyboardWatcher, navCommandOf } from '../platform/Keyboard.js';
 import { loadSound, saveSound } from '../platform/preferences.js';
 import { defaultRelayAddress, parseRelayAddress } from '../platform/WebSocketLink.js';
 import { Music } from '../presentation/audio/Music.js';
@@ -89,7 +89,6 @@ function main(): void {
         applySound(chosen);
         saveSound(chosen);
       },
-      captureKeys: (screen) => keyboard.capture(screen === 'play' ? GAME_KEYS : MENU_KEYS),
       // 種は試合ごとに変えたいが、ルールの層で乱数や時刻に触れない。
       // 実時間を読むのはブラウザに近いこの層の役目なので、ここで作る。
       // 通信対戦では、ホストの種が全員に配られる。

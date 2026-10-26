@@ -36,7 +36,7 @@ function mount(): {
   let relay: WebSocketLinkHandlers | null = null;
   const match = new LanMatch({
     address: 'relay.local:8777',
-    keyboard: { anyOf: () => false },
+    keyboard: { anyOf: () => false, buttonAnyOf: () => false },
     pads: new PadChoice(() => []),
     lobby,
     status,

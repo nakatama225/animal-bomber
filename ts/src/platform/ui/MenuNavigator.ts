@@ -33,18 +33,19 @@ export class MenuNavigator {
   }
 
   /**
-   * 操作を1つ受ける。決定なら、その項目を押す。
+   * 1回ぶんの操作を受ける。決定なら、その項目を押す。
    *
    * @param root いま操作できる画面の要素（メニュー・ラウンドの間の幕）
+   * @param commands この回に押し始めた操作（キーボードは1つ、パッドはまとめて。`MenuCursor.handle`）
    * @param hiddenConfirm 枠が出ていないときの決定をどう扱うか（`MenuCursor` の説明を参照）
    * @returns 何をしたか。`back` のときに戻るのは呼ぶ側の役目（どこへ戻るかは画面ごとに違う）
    */
-  handle(root: HTMLElement, command: NavCommand, hiddenConfirm: HiddenConfirm = 'show'): NavResult {
+  handle(root: HTMLElement, commands: readonly NavCommand[], hiddenConfirm: HiddenConfirm = 'show'): NavResult {
     this.#noticeScreen(root);
     // 枠が消えていたら、どこも指していない扱いにする（枠を出した所へは、見える所まで動かす）。
     const before = this.#cursor.shown ? this.#current(root) : undefined;
     const groups = groupsIn(root);
-    const result = this.#cursor.handle(command, groups.map((group) => group.length), hiddenConfirm);
+    const result = this.#cursor.handle(commands, groups.map((group) => group.length), hiddenConfirm);
     if (result.kind === 'activate') {
       const target = groups[result.group]?.[result.item];
       if (target !== undefined) activate(target);
