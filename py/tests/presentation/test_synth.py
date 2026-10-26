@@ -76,7 +76,7 @@ class Test値の予定:
         np.testing.assert_allclose(automate(events, 1.0, times), expected, rtol=1e-9)
 
     def test_ちょうど半分の時刻では_2つの値の相乗平均(self) -> None:
-        """指数の変化（直線ではない）であることを、式を使わずに確かめる。"""
+        """指数の変化（直線ではない）であることを、式を使わずに確認する。"""
         times = np.array([0.0, 0.05, 0.1])
         values = automate((SetValue(0.01, 0.0), ExponentialRamp(1.0, 0.1)), 1.0, times)
         np.testing.assert_allclose(values, [0.01, 0.1, 1.0], rtol=1e-12)
@@ -117,7 +117,7 @@ class Test波形:
         """素朴に角のある波形を標本にすると、折り返した高さに山が出る。
 
         ナイキスト周波数（24000 Hz）より上は標本からは見えないので、折り返して出るはずの
-        高さが静かなことで確かめる。
+        高さが静かなことで確認する。
         """
         spectrum = _spectrum(oscillate(wave, np.full(RATE, float(frequency)), RATE))
         peak = float(spectrum[frequency])
@@ -127,7 +127,7 @@ class Test波形:
     def test_周波数が上がって倍音がナイキスト周波数を超えたら_そこから足さない(
         self,
     ) -> None:
-        """前半 4000 Hz・後半 9000 Hz ののこぎり波で確かめる。
+        """前半 4000 Hz・後半 9000 Hz ののこぎり波で確認する。
 
         後半では 3 番目から上の倍音がナイキスト周波数を超える（27000・36000・45000・
         54000 Hz）。足すと 21000・12000・3000・6000 Hz に折り返す。前半ではどれも
@@ -200,7 +200,7 @@ def _biquad_gain(
     """仕様 §1.13.5 の式から出した、周波数 f での |H|。
 
     `q_db` は Q をデシベルで読むか。lowpass・highpass はデシベルで読む（§1.13.2）。
-    わざと逆に読んだ値も出せるようにして、テストが読み方の違いを見分けることを確かめる。
+    わざと逆に読んだ値も出せるようにして、テストが読み方の違いを見分けることを確認する。
     """
     w0 = 2 * math.pi * f0 / RATE
     alpha = math.sin(w0) / (2 * 10 ** (q / 20)) if q_db else math.sin(w0) / (2 * q)

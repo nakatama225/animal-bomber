@@ -154,10 +154,10 @@ def _recurse(
     a1: FloatArray,
     a2: FloatArray,
 ) -> FloatArray:
-    """係数を a0 で割ったあとの漸化式を、標本1つずつ回す。
+    """係数を a0 で割ったあとの漸化式を、標本1つずつ計算する。
 
     前の出力を使うので numpy でまとめて計算できない。音を焼く時間のほとんどがここに
-    かかる。numpy の配列を1つずつ読むと遅いので、Python の list にしてから回す。
+    かかる。numpy の配列を1つずつ読むと遅いので、Python の list にしてから繰り返す。
     """
     out: list[float] = []
     x1 = x2 = y1 = y2 = 0.0

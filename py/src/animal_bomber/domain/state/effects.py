@@ -68,7 +68,7 @@ class EffectBag:
     """かかっている状態と、その残り時間。
 
     中身は状態の種類から残り tick への dict で持つ。⚠️ dict を順に取り出さず、
-    `EffectKind` の定義の順で回す（入れた順に左右されないように）。
+    `EffectKind` の定義の順で走査する（入れた順に左右されないように）。
     """
 
     __slots__ = ("_remaining",)

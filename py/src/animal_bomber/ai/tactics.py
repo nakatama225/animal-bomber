@@ -235,8 +235,8 @@ def _fox_line(ctx: CpuContext, facing: Direction) -> BombOption | None:
     cells = _line_cells(ctx, facing)
     if not cells:
         return None
-    # ⚠️ この版は一列のあとに間隔を置く（原型には無い。直すのは Python 版を一通り作り
-    # 終えてから）。間隔の最中は並べられないので、足元に置く。
+    # ⚠️ この版は一列のあとに間隔を置く（原型には無い。修正するのは Python 版を一通り
+    # 作り終えてから）。間隔の最中は並べられないので、足元に置く。
     if ctx.me.ability_cooldown > 0:
         return None
     power = power_of(ctx.me)

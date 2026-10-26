@@ -176,7 +176,7 @@ class Test切断:
         assert notice == {"t": "peer_left", "seat": 1, "host": False}
 
     async def test_ホストが抜けたら試合は続けられないので全員切る(self):
-        # ホスト権威の設計上、ホストが落ちたら誰も盤面を進められない。
+        # ホスト権威の設計上、ホストが切断されたら誰も盤面を進められない。
         room = Room(max_seats=3)
         host = FakeConnection()
         guest1 = FakeConnection()

@@ -55,9 +55,9 @@ SLIME_FLY_TICKS: Final = Tick(21)
 HOP_INTERVAL_MIN: Final = 19
 """跳ねる間隔のいちばん短いもの（tick。両端を含む）。
 
-原型は 0.30〜0.40 秒の乱数（SLIME_HOP_MIN・SLIME_HOP_MAX）を引き、1/60 秒ずつ減らして
-0 を切った回に跳ぶ。0.30 + 0.10r 秒は 19〜24 回目に 0 を切る（r がちょうど 0 のときだけ
-18 回目）ので、19〜24 tick から等しく引く（TypeScript 版と同じ）。
+原型は 0.30〜0.40 秒の乱数（SLIME_HOP_MIN・SLIME_HOP_MAX）を取り出し、1/60 秒ずつ
+減らして 0 を切った回に跳ぶ。0.30 + 0.10r 秒は 19〜24 回目に 0 を切る（r がちょうど 0 の
+ときだけ 18 回目）ので、19〜24 tick から一様に取り出す（TypeScript 版と同じ）。
 """
 
 HOP_INTERVAL_MAX: Final = 24
@@ -73,7 +73,7 @@ HOP_MIN: Final = 6
 """区切りの数の下限（原型の SLIME_HOP_N_MIN）。
 
 区切りごとに1つ減らし、0 になった区切りで爆発する。跳ねるのはそれより1回少ない（原型も、
-6〜8 を引いて 5〜7 回跳ねる）。
+6〜8 を取り出して 5〜7 回跳ねる）。
 """
 
 HOP_MAX: Final = 8
@@ -115,7 +115,7 @@ def stick_out_tongue(world: WorldState, player: PlayerState) -> Started:
     出せないときは、出せなかったことだけを知らせる（画面の通知と操作の音のため。原型
     L2498）。技を出したことにはならず、間隔も始まらない。
 
-    ⚠️ 良いものも悪いものも区別なく掴む。かえるは効果が2倍になるので、何を引くか分から
+    ⚠️ 良いものも悪いものも区別なく掴む。かえるは効果が2倍になるので、何を掴むか分から
     ないまま伸ばすのは博打になる。選べるようにすると、2倍という長所だけが残って短所が
     消える（TypeScript 版の注記）。
     """
@@ -143,8 +143,8 @@ def advance_tongue(world: WorldState, player: PlayerState, tongue: Tongue) -> Pr
     """舌を 1 tick 進める（原型の updateTongue・tongueBurnCheck）。
 
     伸ばしている間は動けない。何かに当たるか伸びきったら、同じ速さで引っ込める。掴んだ
-    アイテムは、舌が戻りきったときに効く。掴んだ瞬間は掴んだ音だけ、拾った音は効いた
-    とき（原型も、効かせる処理の中で鳴らす）。
+    アイテムは、舌が戻りきったときに効果が出る。掴んだ瞬間は掴んだ音だけ、拾った音は
+    効果が出たとき（原型も、効果を適用する処理の中で鳴らす）。
 
     伸びている舌の上に爆風が来ると焼き切れる。焼けたかは 1 tick の最後に見る
     （`check_tongue_burn`）。
@@ -158,7 +158,7 @@ def advance_tongue(world: WorldState, player: PlayerState, tongue: Tongue) -> Pr
             continue
         tongue.length -= 1
         if tongue.length <= 0:
-            # 戻りきった。掴んでいたものがあれば、ここで効く（どのマスにも無いので
+            # 戻りきった。掴んでいたものがあれば、ここで効果が出る（どのマスにも無いので
             # マスは None。煙は出さない）。
             if tongue.caught is not None:
                 events.append(ItemTaken(cell=None, kind=tongue.caught, taker=player.id))
@@ -185,9 +185,9 @@ def check_tongue_burn(
 
 
 def _extend(world: WorldState, player: PlayerState, tongue: Tongue) -> list[SimEvent]:
-    """1マス伸ばす。止まるものに当たったら戻り始める。
+    """1マス伸ばす。舌を止めるものに当たったら戻り始める。
 
-    止まるものは、見る順に、空きでないマス・爆弾・ほかのプレイヤー・アイテム。
+    舌を止めるものは、見る順に、空きでないマス・爆弾・ほかのプレイヤー・アイテム。
     壁の向こうへは届かない。爆弾と、盤面の上のほかのプレイヤーでも止まる（その向こうの
     アイテムは取らない）。伸びきったかは1マス伸びるたびに、その時の長さで見る（伸ばして
     いる間に焼けた舌が1マス戻れば、そのぶん伸びる。原型も1マスごとに長さを読む）。
@@ -259,7 +259,7 @@ def advance_burnt_tongue(world: WorldState, scar: BurntTongue) -> Progress:
 
 
 def throw_slime(world: WorldState, player: PlayerState) -> Started:
-    """とくぎ。粘膜爆弾を投げる。区切りの数（6〜8）を引いて作る。
+    """とくぎ。粘膜爆弾を投げる。区切りの数（6〜8）を取り出して作る。
 
     落ちる先は、正面3マス先から手前へ順に見て、最初に見つかった空きマス。どれも空いて
     いなければ足元に落とす。⚠️ 3マス先に決め打ちすると、盤面の端で外側を向いて投げた
@@ -309,7 +309,7 @@ def advance_slime(world: WorldState, slime: SlimeBomb) -> Progress:
 
 
 def _start_interval(world: WorldState, slime: SlimeBomb) -> None:
-    """次の区切りまでの間隔を引く。"""
+    """次の区切りまでの間隔を取り出す。"""
     slime.interval = Tick(world.rng.between(HOP_INTERVAL_MIN, HOP_INTERVAL_MAX + 1))
     slime.timer = slime.interval
 
@@ -318,7 +318,7 @@ def _hop(world: WorldState, slime: SlimeBomb) -> None:
     """乱数の順に向きを試し、跳べる最初の向きへ跳ぶ。どこにも跳べなければその場に留まる。
 
     跳べるのは、内側のマス（外周ではない）で、爆弾が無いところ。柱の上にも乗る。
-    ⚠️ 1つの向きだけを引いて、駄目なら留まる形にしない。爆弾や外周のそばでは留まって
+    ⚠️ 1つの向きだけを取り出して、駄目なら留まる形にしない。爆弾や外周のそばでは留まって
     ばかりになる。原型も、向きを混ぜた順に試していた。原型の混ぜ方（比べた結果に乱数を
     返す並べ替え）は並びが実行環境しだいなので、この版は種から決まる混ぜ方にしてある。
     """
@@ -360,7 +360,7 @@ def _burst(world: WorldState, slime: SlimeBomb) -> list[SimEvent]:
     後ろ）。この版も `world.bombs` の後ろに足し、1 tick の 5.（`systems/blast.py` の
     `detonate_expired`）が並びの順に起こすので、原型と同じ時点になる。ここで起こすと、
     次の4つが原型と変わる（TypeScript 版と同じ。`tests/abilities/test_frog.py` の
-    「粘膜爆弾が爆発する番」で確かめている）。
+    「粘膜爆弾が爆発する番」で確認している）。
 
     - 同じ tick に導火線が尽きるほかの爆弾より先に爆発する。ブロックを壊すのは連鎖の
       最後なので、同じ壊せるブロックに別々の連鎖が届くと、その先まで腕が伸びるのが

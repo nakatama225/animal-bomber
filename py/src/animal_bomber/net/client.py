@@ -14,7 +14,7 @@
 ## 試合が終わったあと
 
 接続は閉じない。`LockstepDriver` が入力と要約の交換を続け、決着が端末ごとに
-食い違っていないかを確かめ続ける。⚠️ 終わった瞬間に閉じると、終わっていない端末は
+食い違っていないかを確認し続ける。⚠️ 終わった瞬間に閉じると、終わっていない端末は
 抜けたプレイヤーを CPU に替えて進み続け、ずれが見つからなくなる。
 
 ## 同じ接続での次の試合
@@ -261,7 +261,7 @@ class LockstepClient:
                 self._phase = replace(phase, present=_sorted((*phase.present, seat)))
                 self._send_shared()
             case HostSettings(config=config):
-                # 中継はホストの設定しか流さない。ホスト自身には返さない。
+                # 中継はホストの設定しか転送しない。ホスト自身には返さない。
                 if phase.seat != HOST:
                     self._phase = replace(phase, host_settings=config)
             case PeerLeft(seat=seat):

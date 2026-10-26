@@ -1,15 +1,15 @@
 """1回のフレームで何 tick 進めても、試合の結果が変わらないことの検査。
 
-実時間が試合の計算に漏れていないことを確かめる。`simulation.step()` は経過時間を
+実時間が試合の計算に漏れていないことを確認する。`simulation.step()` は経過時間を
 受け取らないので、構造の上では漏れようがない。この検査は、その構造が保たれていることを
 見る。誰かが `step(dt)` の形へ戻したり、実時間から速さを計算する処理を足したりすると
 失敗する。原型ではここが守られておらず、「倍速にすると1回のキー入力が2〜3回として
 処理される」不具合が出た。
 
-本物のフレームを回す輪（`shell/loop.py` の `frames`）を、偽の時計で回す。待ちの遅れを
-台本で与えて、1回のフレームで進める tick の数を 0・1・2・7・15（上限で、超えたぶんを
-捨てる）と揺らし、台本どおりの試合の記録を流す。比べる相手は、輪を通さずに 1 tick ずつ
-流した結果（`scenario.replay`）。
+本物のフレームを繰り返す輪（`shell/loop.py` の `frames`）を、偽の時計で実行する。
+待ちの遅れを台本で与えて、1回のフレームで進める tick の数を 0・1・2・7・15（上限で、
+超えたぶんを捨てる）と揺らし、台本どおりの試合の記録を再生する。比べる相手は、輪を
+通さずに 1 tick ずつ再生した結果（`scenario.replay`）。
 """
 
 import pytest
@@ -34,9 +34,9 @@ LATE = [0, TICK_NS * 3 // 2, 0, TICK_NS * 13 // 2, 0, 20 * TICK_NS, 0]
 def play_through_loop(
     log: InputLog, lateness: list[int], ticks: int = TICKS
 ) -> tuple[WorldState, list[int]]:
-    """記録を、輪が返す tick の数ずつ流す。試合通算の時刻が `ticks` に届いたら止める。
+    """記録を輪が返す tick の数ずつ再生し、試合通算の時刻が `ticks` に届いたら止める。
 
-    台本の遅れは繰り返し使う。返すのは、流し終えた状態と、フレームごとの tick の数。
+    台本の遅れは繰り返し使う。返すのは、再生し終えた状態と、フレームごとの tick の数。
     """
     world = new_world()
     sources: list[InputSource] = [
@@ -69,7 +69,7 @@ class Test時間の刻み方:
         assert hash_world(world) == hash_world(replay(log))
 
     def test_台本の遅れで_1回に進めるtickの数が揺れている(self) -> None:
-        """上の確かめが「どのフレームも 1 tick」で素通りしていないことの前提。
+        """上の検査が「どのフレームも 1 tick」で素通りしていないことの前提。
 
         上限を超えたフレーム（15 tick）の次は 1 tick に戻ること（境目を引き直せている
         こと）も見る。
@@ -83,7 +83,7 @@ class Test時間の刻み方:
         assert after_drop and set(after_drop) == {1}
 
     def test_進めたtickの数が違えば_結果は変わる(self) -> None:
-        """上の確かめが「何をしても同じ値」で通ってしまわないための対照。"""
+        """上の検査が「何をしても同じ値」で通ってしまわないための対照。"""
         _, log = play_and_record()
         shorter, _ = play_through_loop(log, LATE, ticks=TICKS - 100)
         assert hash_world(shorter) != hash_world(replay(log))

@@ -1,6 +1,6 @@
 """アイテム・一時的な状態・被弾の検査。
 
-TypeScript 版の段階 3 の `tests/systems/item-damage.test.ts` と同じことを確かめ、境目
+TypeScript 版の段階 3 の `tests/systems/item-damage.test.ts` と同じことを確認し、境目
 （効果の切れる tick・無敵の切れる tick）と、1 tick の中の順（拾う・被弾）を足してある。
 """
 
@@ -199,7 +199,7 @@ class Testアイテムの効果:
         assert apply_item(world, player, ItemKind.CHICKEN) == []
         assert player.special_charges == 1
 
-    def test_うんこは悪い状態のどれか1つをかけ_乱数を1回引く(self) -> None:
+    def test_うんこは悪い状態のどれか1つをかけ_乱数を1回取り出す(self) -> None:
         world = make_world()
         player = world.players[0]
         before = world.rng.calls
@@ -219,7 +219,7 @@ class Test悪い状態の作用:
         _add(player, EffectKind.SLOW, 4)
         assert speed_of(player) < normal
 
-    def test_超スローの上にとまれないを重ねても_超スローは効き続ける(self) -> None:
+    def test_超スローの上にとまれないを重ねても_超スローは適用され続ける(self) -> None:
         """とまれないは速さに下限を敷く。下限に超スローの倍率を掛けないと速くなる。"""
         world = make_world()
         runaway_only, both = world.players
@@ -229,7 +229,7 @@ class Test悪い状態の作用:
         assert speed_of(both) < speed_of(runaway_only)
 
     def test_とまれないは速さの下限を敷く(self) -> None:
-        """前の確かめが「重ねるほど遅い」だけで通ってしまわないための対照。"""
+        """前の検査が「重ねるほど遅い」だけで通ってしまわないための対照。"""
         world = make_world()
         plain, runaway = world.players
         _add(runaway, EffectKind.RUNAWAY, 4)
@@ -386,7 +386,7 @@ class Test悪い状態の作用:
     def test_勝手に設置は_動く前のマスに置く(self) -> None:
         """拍の tick にマスの境目をまたいでも、置くのは今までいたマス。
 
-        原型は効果の処理の中で全員ぶんの勝手に設置を済ませてから、各プレイヤーを動かす
+        原型は効果の処理の中で全員ぶんの勝手に設置を処理してから、各プレイヤーを動かす
         （TypeScript 版の「勝手に設置は、その tick に動く前のマスに置く」と同じ場面）。
         """
         world = make_world()
@@ -401,8 +401,8 @@ class Test悪い状態の作用:
     def test_ボタンで置く爆弾は_動いたあとのマスに置く(self) -> None:
         """原型の humanUpdate も、動いてから爆弾のボタンを見る。
 
-        ボタンの爆弾と違って動く前に置くのは、勝手に設置だけ（原型と同じ）。直す前から
-        通る対照（ボタンの爆弾を動く前へ移す変更を捕まえる）。
+        ボタンの爆弾と違って動く前に置くのは、勝手に設置だけ（原型と同じ）。
+        修正する前から通る対照（ボタンの爆弾を動く前へ移す変更を検出する）。
         """
         world = make_world()
         clear_board(world)
@@ -454,7 +454,7 @@ class Test悪い状態の作用:
     def test_同じtickでは_全員の勝手に設置をボタンの爆弾より先に置く(self) -> None:
         """番号の小さいプレイヤーがボタンで置いても、拍のプレイヤーの爆弾が先に並ぶ。
 
-        原型は効果の処理で全員ぶんの勝手に設置を済ませてから、入力の処理でボタンを見る。
+        原型は効果の処理で全員ぶんの勝手に設置を処理してから、入力の処理でボタンを見る。
         誰も動かない場面でも、並び（同じ tick に導火線が尽きたときの爆発の順）と識別子が
         変わる（TypeScript 版の同じ名前のテストと同じ場面）。
         """
@@ -606,7 +606,9 @@ class Testアイテムを焼く_落とす:
         assert [item.cell for item in world.items] == [Cell(3, 1)]
 
     @pytest.mark.parametrize("seed", range(1, 9))
-    def test_抽選は出るかで1回_出るなら種類で1回_乱数を引く(self, seed: int) -> None:
+    def test_抽選は出るかで1回_出るなら種類で1回_乱数を取り出す(
+        self, seed: int
+    ) -> None:
         world = make_world(seed)
         before = world.rng.calls
         events = roll_drop(world, Cell(3, 1))
@@ -697,7 +699,7 @@ class Testうんこのアイテム:
         )
         assert [bomb.cell for bomb in world.bombs] == [Cell(6, 3)]
 
-    def test_爆心の上にあれば_向きを試合の乱数で1回だけ引いて選ぶ(self) -> None:
+    def test_爆心の上にあれば_試合の乱数を1回だけ取り出して向きを選ぶ(self) -> None:
         world = _poop_arena()
         poop = _drop(world, Cell(3, 3), ItemKind.POOP)
         before = world.rng.calls
@@ -804,7 +806,7 @@ class Test被弾:
         assert player.hp == 0
 
     def test_当たった瞬間に_爆弾を置いたプレイヤーを控える(self) -> None:
-        """倒れてから爆風を引き直すと、その頃には爆風が消えていて誰か分からない。"""
+        """倒れてから爆風を探し直すと、その頃には爆風が消えていて誰か分からない。"""
         world = make_world()
         clear_board(world)
         target, other = world.players
@@ -814,14 +816,14 @@ class Test被弾:
         advance(world, only_for(world, 0, IDLE), 200)
         assert target.last_hit_by == 1
 
-    def test_爆風が重なったマスでは_あとから置かれた爆風の持ち主が当てたことになる(
+    def test_爆風が重なったマスでは_あとから置かれた爆風の持ち主が当てた扱いになる(
         self,
     ) -> None:
         """相手の爆風に誘爆された自分の爆弾のマスで当たったら、自爆として数える。
 
         原型が爆風の持ち主を控えていたのは、自爆の割合を測るため。3つの台本
         （`test_simulation_ts.py`）は、別々のプレイヤーの爆風が重なったマスで当たる場面を
-        通らないので、ここで確かめる（TypeScript 版の同じ名前のテストと同じ場面）。
+        通らないので、ここで確認する（TypeScript 版の同じ名前のテストと同じ場面）。
         """
         world = make_world()
         clear_board(world)
@@ -935,8 +937,8 @@ class Test被弾:
         assert isinstance(event, ItemDropped)
         assert event.cell == Cell(6, 5)
 
-    def test_どこにも置けなければ吐き出さないが_種類の乱数は1回引く(self) -> None:
-        """引く回数が置けたかどうかで変わると、状態の突き合わせがずれる。"""
+    def test_どこにも置けなければ吐き出さないが_種類の乱数は1回取り出す(self) -> None:
+        """取り出す回数が置けたかどうかで変わると、状態の突き合わせがずれる。"""
         world = make_world()
         clear_board(world)
         player = world.players[0]

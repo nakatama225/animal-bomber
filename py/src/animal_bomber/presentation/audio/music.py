@@ -126,7 +126,7 @@ class LoopMusic:
         self._volume = 1.0
         self._playing = False
         self._started = 0.0
-        """いま鳴らしている1周の頭を鳴らした（ことになる）時刻（秒）。"""
+        """いま鳴らしている1周の頭を鳴らしたとみなす時刻（秒）。"""
         self._current: pygame.mixer.Sound | None = None
         """いまチャンネルで鳴らしている音（1周の途中から始まるように回したものもある）。"""
 

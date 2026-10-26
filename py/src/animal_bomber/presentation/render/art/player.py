@@ -179,7 +179,7 @@ def draw_player(
     """プレイヤーを描く（原型の drawPlayer）。
 
     `now` は描く時刻（盤面の時刻。tick の間の小数もとる。体の動きと掘る身ぶりに使う）。
-    被弾の揺れの間は、見た目の乱数を2つ引く。
+    被弾の揺れの間は、見た目の乱数を2つ取り出す。
     """
     tile = layout.tile
     x, y = layout.px(look.x), layout.py(look.y)

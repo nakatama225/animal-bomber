@@ -130,7 +130,7 @@ class Test粒子:
         ids=["四角い粒", "薄れた四角い粒", "絵文字"],
     )
     def test_四角い粒と絵文字は_描いた絵と同じ(self, look: ParticleLook) -> None:
-        """一辺は描く面の画素ごとの値（5px・7.5px）にして、丸めが入らないようにする。"""
+        """一辺は描く面の画素ごとの値（5px・7.5px）にして、丸めを避ける。"""
         art = BakedArt(LAYOUT)
         box = (
             LAYOUT.px(look.x) - 30,

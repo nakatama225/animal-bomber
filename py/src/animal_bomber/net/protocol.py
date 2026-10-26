@@ -10,7 +10,7 @@ TypeScript 版は同じ表を `ts/src/net/protocol.ts` にもう一度書き、�
 （`server/tests/test_protocol_sync.py`）がそのファイルを文字列として読んで突き合わせる。
 この版は中継と同じ言語なので、表を写さない。写さなければ、表どうしは食い違わない。
 
-この版が書くのは、表の項目をどの型で持つかと、読むときの確かめだけ。型と表が
+この版が書くのは、表の項目をどの型で持つかと、読むときの検査だけ。型と表が
 食い違っていないかは `tests/net/test_protocol.py` が両向きに見る（この版が書き出す項目が
 表と同じか。表の項目名だけで組んだメッセージを、この版が読めるか）。
 
@@ -22,7 +22,7 @@ TypeScript 版は同じ表を `ts/src/net/protocol.ts` にもう一度書き、�
 試合を作ることが、ロックステップの前提そのもの）。
 
 次のものは、TypeScript 版も断る（JavaScript の型と `JSON.parse`、それに整数と下限の
-確かめ。`ts/src/net/protocol.ts` の `FieldReader.int`）が、Python ではそのまま通るので、
+検査。`ts/src/net/protocol.ts` の `FieldReader.int`）が、Python ではそのまま通るので、
 明示して断る。
 
 - `true`・`false` を整数の項目に置いたもの（Python では `bool` が `int` の仲間）
@@ -30,7 +30,7 @@ TypeScript 版は同じ表を `ts/src/net/protocol.ts` にもう一度書き、�
   なる）
 - 負の数の入力のビット（`PlayerInput` は負の数を補数として受け付ける）
 
-次のものは、TypeScript 版に無い確かめ。
+次のものは、TypeScript 版に無い検査。
 
 - 小数（`1.0`）を整数の項目に置いたもの（JavaScript では `1` と同じ値だが、Python では
   `float` になる）
@@ -84,7 +84,7 @@ class ProtocolError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class LanSettings:
-    """試合の設定として、ホストが全員へ配るもの。中継はこれを読まずに流す。"""
+    """試合の設定として、ホストが全員へ配るもの。中継はこれを読まずに転送する。"""
 
     match: MatchConfig
     """試合の設定。開始位置の並び（`spawn_order`）はいつも None（番号の順の隅）。"""
@@ -141,7 +141,7 @@ class SendInput:
 
 @dataclass(frozen=True, slots=True)
 class SendHash:
-    """ある tick を進めたあとの状態の要約と、試合の乱数を引いた回数（種類 `hash`）。"""
+    """tick を進めたあとの状態の要約と、試合の乱数を取り出した回数（種類 `hash`）。"""
 
     tick: MatchTick
     hash: int
@@ -246,7 +246,7 @@ class Desync:
 class HostSettings:
     """ホストが始まる前に配った設定（種類 `settings`）。
 
-    中継が、ホスト以外の全員へそのまま流す。
+    中継が、ホスト以外の全員へそのまま転送する。
     """
 
     config: LanSettings
@@ -347,7 +347,7 @@ def parse_relay_message(text: str) -> RelayMessage:
         case "desync":
             return Desync(read.integer("tick", 0), read.reports("reports"))
         case "settings":
-            # 画面に出すだけでも、始めるときの設定と同じく確かめる。読めないのは相手の
+            # 画面に出すだけでも、始めるときの設定と同じく検査する。読めないのは相手の
             # 版が違うときで、そのまま始めても `start` で止まる。
             return HostSettings(decode_lan_settings(read.raw("config")))
         case _:
@@ -465,7 +465,7 @@ def _finite(text: str) -> float:
 
 
 class _Fields:
-    """1つのメッセージの項目を、型を確かめながら取り出す。"""
+    """1つのメッセージの項目を、型を確認しながら取り出す。"""
 
     __slots__ = ("_data", "_kind")
 

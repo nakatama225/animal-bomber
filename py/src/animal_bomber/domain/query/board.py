@@ -2,7 +2,7 @@
 
 試合を進める処理（`systems/`）から切り離してあるのは、CPU の判断（段階 6）からも同じ
 問いを投げるため。「このマスは通れるか」を移動の処理と CPU が別々に書くと、片方だけ
-直したときに食い違う。
+修正したときに食い違う。
 """
 
 import math
@@ -65,8 +65,8 @@ def is_solid_for(
     （爆風は `systems/blast.py` の `detonate` が盤面を直接見て伸ばす）。
 
     Args:
-        world: 調べる状態。
-        cell: 調べるマス。盤面の外は通れない。
+        world: 対象の状態。
+        cell: 対象のマス。盤面の外は通れない。
         player: 省略すると「誰にとっても通れないか」を返す（いまは、省略して呼ぶのは
             テストだけ。src の中には無い）。
     """
@@ -114,7 +114,7 @@ def body_collides(
 
     何が通れないかはプレイヤーによって違う（爆弾の通り抜け・壊せるブロックを抜けられる
     動物）。その判断は `is_solid_for` にまとめてあり、ここは体の形の計算だけを持つ。
-    歩く処理（`systems/movement.py`）と、技で押しのけられる先の確かめが同じ判定を使う。
+    歩く処理（`systems/movement.py`）と、技で押しのけられる先の確認が同じ判定を使う。
     別々に書くと、押しのけだけ壁の中へ入れてしまう、といった食い違いが出る
     （TypeScript 版の `bodyCollides` と同じ）。
 
@@ -155,5 +155,5 @@ def is_standing_on(player: PlayerState, bomb: Bomb) -> bool:
 
 
 def player_by_id(world: WorldState, player_id: PlayerId) -> PlayerState | None:
-    """プレイヤー番号からプレイヤーを引く。盤面にいなければ None。"""
+    """プレイヤー番号からプレイヤーを取得する。盤面にいなければ None。"""
     return next((player for player in world.players if player.id == player_id), None)

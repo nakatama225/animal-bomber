@@ -71,7 +71,7 @@ def line_bombs(world: WorldState, player: PlayerState) -> Started:
     失う。前から置けば後ろへ下がれる（TypeScript 版の注記）。
 
     爆弾を置けない状態（「爆弾おけない」で「勝手に設置」が無い、など）なら並べない。
-    ボタンの爆弾と同じ確かめ（`can_place_bomb`）を通す（原型の foxLineShot も入口で
+    ボタンの爆弾と同じ検査（`can_place_bomb`）を通す（原型の foxLineShot も入口で
     見ていた）。1つも置けなければ、間隔は始まらない。
     """
     if player.ability_cooldown > 0 or not can_place_bomb(player):
@@ -133,9 +133,9 @@ def advance_foxfire(world: WorldState, fire: Foxfire) -> Progress:
     L2679-2682 ので、当たりの輪 L2685 に残らない）。
 
     ⚠️ 原型は炎を後ろから（新しいものから）動かす（L2667）が、ここは出た順に動かす。
-    動きはほかの炎を読まずイベントも出さないので、順は結果に効かない。動く間にイベントを
-    出すか、ほかの炎を読むようにしたら、`state/actors.py` の `newest_first` で原型の順に
-    揃える。
+    動きはほかの炎を読まずイベントも出さないので、順は結果に影響しない。動く間に
+    イベントを出すか、ほかの炎を読むようにしたら、`state/actors.py` の `newest_first` で
+    原型の順に揃える。
     """
     fire.elapsed = Tick(fire.elapsed + 1)
     if fire.elapsed > FOXFIRE_LIFETIME:
@@ -153,10 +153,10 @@ def settle_foxfire(world: WorldState, fire: Foxfire) -> list[SimEvent]:
     """乗っているマスの相手に当たる（原型の updateFoxfires の当たりの輪 L2685-2694）。
 
     同じ tick の炎が全部動いたあとに、古い炎から呼ばれる（`systems/actors.py`）。原型も
-    全部の炎を動かしてから、別の輪で配列を前から回して当たりを見る。動いてすぐ当たる形に
-    すると、古い炎の当たりで相手が倒れたとき、同じ tick に動く新しい炎はその相手を
-    追わない（追う先は盤面にいる相手だけ）。原型では、当たりを見る前に、新しい炎はもう
-    その相手のほうへ進んでいる。
+    全部の炎を動かしてから、別の輪で配列を前から順に走査して当たりを見る。動いてすぐ
+    当たる形にすると、古い炎の当たりで相手が倒れたとき、同じ tick に動く新しい炎は
+    その相手を追わない（追う先は盤面にいる相手だけ）。原型では、当たりを見る前に、新しい
+    炎はもうその相手のほうへ進んでいる。
 
     乗っているマスにいる相手（放ったプレイヤー以外）に、毎 tick 当たる。当たっても消え
     ない。当たった相手は被弾のあとの無敵に入るので、同じ相手に続けて当たることはない。

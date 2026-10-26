@@ -65,7 +65,7 @@ class Test危険の地図:
         assert danger.at(Cell(3, 1)) == 10
 
     def test_届かない爆弾は巻き込まない(self) -> None:
-        """前の確かめが「全部を最小の時刻にしているだけ」で通らないための対照。"""
+        """前の検査が「全部を最小の時刻にしているだけ」で通らないための対照。"""
         world = make_world()
         clear_board(world)
         player = world.players[0]

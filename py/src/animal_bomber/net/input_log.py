@@ -1,11 +1,11 @@
-"""操作の記録と、記録を流す窓口・記録する窓口。
+"""操作の記録と、記録を再生する窓口・記録する窓口。
 
 試合を再現するのに要るのは「種」と「誰がいつ何を押したか」だけで、盤面もプレイヤーの
 座標も保存しない。同じ入力からは必ず同じ結果になるので、記録から状態を作り直せる。
 
 この仕組みを段階 1 で作るのは、あとで通信対戦を作るときに、送るものがちょうどこの記録と
-同じ形になるため。記録を流す窓口を、通信で届いた操作を流す窓口に差し替えれば済む
-（段階 9。`net/confirmed.py` の `NetworkInputSource`）。
+同じ形になるため。記録を再生する窓口を、通信で届いた操作を渡す窓口に差し替えれば
+済む（段階 9。`net/confirmed.py` の `NetworkInputSource`）。
 
 ## 変わった時点だけを持つ
 
@@ -20,8 +20,9 @@
 
 通信対戦で途中で抜けたプレイヤーは、その入力を記録から最後に使う tick
 （`departed_after`）を持つ。本物の端末（`net/lockstep.py` の `LockstepDriver`）は、その
-次の tick から CPU に任せ、記録を流す窓口も同じ tick から代わりの窓口に任せる。これが
-無いと、記録はそのプレイヤーの最後の入力を返し続けるので、例外も出ずに別の試合になる。
+次の tick から CPU に任せ、記録を再生する窓口も同じ tick から代わりの窓口に任せる。
+これが無いと、記録はそのプレイヤーの最後の入力を返し続けるので、例外も出ずに別の
+試合になる。
 
 ⚠️ 似た値が2つある。中継が知らせる `peer_left` の `lastTick` は、抜けたプレイヤーの
 入力を中継が最後に配った tick。`departed_after` は、その入力を記録から最後に使う
@@ -91,7 +92,7 @@ class InputLog:
                 頼まれた tick より前のとき（入力が同じで何も足さなかった呼び出しも
                 含む）。tick は進む向きにしか渡らないはずなので、前へ戻るのは呼び出し
                 側の誤り（盤面の時刻を渡した、など）。同じ tick は受け付ける（あとの
-                入力が効く）。
+                入力が有効）。
         """
         if tick < 0:
             raise ValueError(f"記録する tick が負: {tick}")
@@ -154,7 +155,7 @@ class InputLog:
         """`tick` の時点で、そのプレイヤーが代わりの窓口に替わっているか。
 
         `departed_after` の次の tick から替わる。本物の端末（`NetworkInputSource`）と、
-        記録を流す窓口（`ReplayInputSource`）は、どちらもこの判定で替える。
+        記録を再生する窓口（`ReplayInputSource`）は、どちらもこの判定で替える。
         """
         last = self._departed_after.get(player_id)
         return last is not None and tick > last
@@ -168,7 +169,7 @@ class InputLog:
         最後に `|departed:プレイヤー番号,tick;…`（tick は `departed_after`。プレイヤー
         番号の順）を足す。抜けたプレイヤーを変わった時点の区画と別に書くのは、入力が
         1つも配られないうちに抜けたプレイヤーは、変わった時点の区画を持たないため。
-        読んで確かめられることを優先し、圧縮はしていない。形は TypeScript 版の記録と
+        読んで検証できることを優先し、圧縮はしていない。形は TypeScript 版の記録と
         同じ。
         """
         sections = [
@@ -195,8 +196,8 @@ class InputLog:
         `encode` が書く字面と並び（区画はプレイヤー番号の順、項目は tick の順、抜けた
         プレイヤーの区画は最後に1つだけで、その中もプレイヤー番号の順）から外れたものは
         断る。ただし次の2つは受け付ける。同じ tick の項目が続くのは `record` も書く形
-        （あとの値を使う）。同じビットの項目が続くのは、`record` は書かないが、流し
-        直したときの入力が変わらない。
+        （あとの値を使う）。同じビットの項目が続くのは、`record` は書かないが、再生
+        したときの入力が変わらない。
 
         最後に記録を頼まれた tick は文字列に残らない。そのため、戻した記録に `record` で
         書き足すときは、区画の最後の項目の tick と比べる（その tick と、元の記録で最後に
@@ -276,10 +277,10 @@ def _decode_departures(log: InputLog, body: str) -> None:
 class Replacement:
     """抜けたプレイヤーの代わりの窓口を、初めて任せるときに1度だけ作って使い続ける。
 
-    本物の端末も記録を流す窓口も、`InputLog.replaced_at` が真になった tick から
+    本物の端末も記録を再生する窓口も、`InputLog.replaced_at` が真になった tick から
     これに任せる。作るのは初めて任せる tick（決着のあとの待ちは入力を集めないので、
     そこに当たると、替わった tick より後になる）。CPU は作るときに盤面を読まず、乱数も
-    自分のものしか引かないので、いつ作っても同じ手を指す（TypeScript 版の
+    自分のものからしか取り出さないので、いつ作っても同じ手を指す（TypeScript 版の
     `ReplayInputSource` の注記と同じ）。1度作ったら作り直さない（CPU は考えた内容を
     覚えている）。
     """
@@ -303,7 +304,7 @@ class Replacement:
 
 
 class ReplayInputSource:
-    """記録を流す窓口。
+    """記録を再生する窓口。
 
     キーボードや CPU と同じ資格で、入力を集めるもの（`InputGatherer`）に繋ぐ。
     繋ぎ替えるのはここ1か所だけで、ルールの層は変わらない。
@@ -321,11 +322,11 @@ class ReplayInputSource:
         log: InputLog,
         replacement: ReplacementFactory | None = None,
     ) -> None:
-        """記録を流す窓口を作る。
+        """記録を再生する窓口を作る。
 
         Args:
-            player_id: 流すプレイヤー。
-            log: 流す記録。
+            player_id: 再生するプレイヤー。
+            log: 再生する記録。
             replacement: 抜けたプレイヤーを受け持つ窓口の作り方。本物の端末と同じもの
                 を渡す（通信対戦なら、同じ設定で `net/lan_cpu.py` の
                 `lan_cpu_source`）。記録でこのプレイヤーが途中で抜けているなら必ず
@@ -333,7 +334,7 @@ class ReplayInputSource:
 
         Raises:
             ValueError: 記録でこのプレイヤーが途中で抜けているのに、`replacement` が
-                無いとき。流し直しの途中で止まるより、始める前に止まるほうが原因に近い。
+                無いとき。再生の途中で止まるより、始める前に止まるほうが原因に近い。
         """
         if log.departed_after(player_id) is not None and replacement is None:
             raise ValueError(
@@ -361,7 +362,7 @@ class ReplayInputSource:
 class RecordingInputSource:
     """記録する窓口。包んだ窓口の入力を記録しながら、そのまま通す。
 
-    試合の間これで包んでおけば、あとから記録を取り出して流し直せる。包まれた窓口は、
+    試合の間これで包んでおけば、あとから記録を取り出して再生できる。包まれた窓口は、
     記録されていることを知らない。
     """
 

@@ -3,7 +3,7 @@
 固定値（`legacy_art_ops.json`）は、原型（`legacy/animal-bomber.html`）を node で
 読み込み、canvas を「呼ばれた命令と状態の代入を順に記録する偽物」に替えて、描く関数を
 いろいろな入力（マス 44 と 60）で呼んで書き出したもの。`Math.random` は決めた値の列に
-差し替え、引いた値も記録してある。リポジトリのいちばん上で次を走らせると作り直せる
+差し替え、取り出した値も記録してある。リポジトリのいちばん上で次を走らせると作り直せる
 （何度作っても同じものになる）。
 
     node py/tools/legacy_oracle/legacy_art.js py/tests/presentation/legacy_art_ops.json
@@ -11,8 +11,8 @@
 原型の入力は秒だが、固定値の入力は tick の数で割り切れる値にしてあり、tick の数も
 書き出してある（`elapsedTicks`・`fuseTicks`・`remainingTicks`・`bornTicks`・
 `meltTicks` など）。この版の描く関数には tick の数から作った試合の状態を渡し、原型と
-同じ列が出るかを見る。乱数を引くケースは、原型と同じ値の列を見た目の乱数に差し、同じ
-順・同じ数だけ引くかも見る。
+同じ列が出るかを見る。乱数を取り出すケースは、原型と同じ値の列を見た目の乱数に差し、同じ
+順・同じ数だけ取り出すかも見る。
 
 体・頭・尻尾・目・角の丸い四角は、原型では drawPlayer の中で呼ばれる。drawPlayer は
 足元の影・色の輪・状態の印も描くので、固定値にはこれらの部品を直接呼んだケースも
@@ -267,7 +267,9 @@ def test_原型と同じ命令の列を出す(case: dict[str, Any]) -> None:
     DRAWERS[case["fn"]](canvas, case["inputs"], CosmeticRng(scripted))
     problem = mismatch(canvas.ops, case["ops"])
     assert problem is None, problem
-    assert scripted.used == case["random"], "見た目の乱数を引いた値と回数が原型と違う"
+    assert scripted.used == case["random"], (
+        "見た目の乱数を取り出した値と回数が原型と違う"
+    )
 
 
 def test_CPUのプレイヤーは_長押しの長さが0の原型と同じ命令の列を出す() -> None:
@@ -315,11 +317,11 @@ def test_固定値の描く関数は_写したものか次の段のものだけ(
     assert (checked, skipped) == (276, 0)
 
 
-def test_無敵の点滅の両方の向きを確かめている() -> None:
+def test_無敵の点滅の両方の向きを確認している() -> None:
     """固定値に、点滅で薄くなっているケースと濃いケースの両方があること。
 
     floor(残り × 14) が偶数のとき薄くなる。初めは薄くなるはずのケースの残りが 0.7 秒
-    （floor(9.8) = 9）で、薄くなる側を確かめていなかった。
+    （floor(9.8) = 9）で、薄くなる側を確認していなかった。
     """
     blinking = [
         case["inputs"]["player"]["invuln"]

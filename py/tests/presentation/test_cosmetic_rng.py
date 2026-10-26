@@ -7,8 +7,8 @@ import pytest
 from animal_bomber.presentation.cosmetic_rng import CosmeticRng, ScriptedRandom
 
 
-def test_差した値の列を_頭から順に引く() -> None:
-    """原型の Math.random が返した値を、同じ順に引けること（描く関数の突き合わせ）。"""
+def test_差した値の列を_頭から順に取り出す() -> None:
+    """原型の Math.random の値を、同じ順に取り出せること（描く関数の突き合わせ）。"""
     scripted = ScriptedRandom([0.25, 0.5, 0.75])
     rng = CosmeticRng(scripted)
     assert [rng.random(), rng.random()] == [0.25, 0.5]
@@ -16,7 +16,7 @@ def test_差した値の列を_頭から順に引く() -> None:
 
 
 def test_差した値を使い切ったら例外にする() -> None:
-    """原型より多く引いたことに気づけるように、黙って別の値を返さない。"""
+    """原型より多く取り出したことに気づけるように、黙って別の値を返さない。"""
     rng = CosmeticRng(ScriptedRandom([0.5]))
     rng.random()
     with pytest.raises(IndexError, match="使い切った"):

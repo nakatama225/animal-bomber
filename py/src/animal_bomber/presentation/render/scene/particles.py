@@ -1,8 +1,9 @@
 """粒子の出し方と動かし方（原型の puff・destroySoft・kill・hop と update の粒子の輪）。
 
-出し方の式と、見た目の乱数を引く順は原型と同じにする。原型の粒子は object の項目を
+出し方の式と、見た目の乱数を取り出す順は原型と同じにする。原型の粒子は object の項目を
 書いた順に作るので、1つの粒子の中では x・y・vx・vy・life・sz の順に、式に乱数がある
-ものだけ引く（固定値 `tests/presentation/legacy_particles.json` と突き合わせてある）。
+ものだけ取り出す（固定値 `tests/presentation/legacy_particles.json` と突き合わせて
+ある）。
 
 位置と速さはマス、大きさは px（原型の sz）。動かし方は原型の update と同じで、
 1 tick（1/60 秒）ごとに、寿命を減らし、位置を速さぶん進め、縦の速さに重力を足す。
@@ -155,7 +156,7 @@ def advanced(particles: Sequence[Particle]) -> list[Particle]:
 def puff(cell: Cell, color: str, text: str, rng: CosmeticRng) -> list[Particle]:
     """煙（原型の puff）。マスの中央から、絵文字が1つ浮き上がり、四角い粒が6つ散る。
 
-    見た目の乱数を 24 個引く（粒1つに4個）。
+    見た目の乱数を 24 個取り出す（粒1つに4個）。
     """
     x, y = cell.col + 0.5, cell.row + 0.5
     out = [Particle(x, y, 0.0, -1.2, 0.6, color, 20, text)]
@@ -169,9 +170,10 @@ def puff(cell: Cell, color: str, text: str, rng: CosmeticRng) -> list[Particle]:
 
 
 def debris(cell: Cell, rng: CosmeticRng) -> list[Particle]:
-    """壊れたブロックの破片（原型の destroySoft）。7 つ。見た目の乱数を 42 個引く。
+    """壊れたブロックの破片（原型の destroySoft）。7 つ。見た目の乱数を 42 個取り出す。
 
-    原型はこのあとアイテムの抽選に乱数を引くが、それはルールの層の乱数（`roll_drop`）。
+    原型はこのあとアイテムの抽選に乱数を取り出すが、それはルールの層の乱数
+    （`roll_drop`）。
     """
     out = []
     for _ in range(7):
@@ -188,7 +190,7 @@ def debris(cell: Cell, rng: CosmeticRng) -> list[Particle]:
 def knocked_out(x: float, y: float, animal: Animal, rng: CosmeticRng) -> list[Particle]:
     """倒れたとき（原型の kill）。体の色の粒 16 個と、回りながら浮かぶ動物の顔 1 つ。
 
-    (x, y) は倒れたプレイヤーの位置（マス）。見た目の乱数を 64 個引く。
+    (x, y) は倒れたプレイヤーの位置（マス）。見た目の乱数を 64 個取り出す。
     """
     color = look_of(animal).color
     out = []
@@ -206,7 +208,7 @@ def knocked_out(x: float, y: float, animal: Animal, rng: CosmeticRng) -> list[Pa
 def scooped(cell: Cell, text: str, rng: CosmeticRng) -> list[Particle]:
     """突進で吸い込んだ良いアイテム（原型の chargeSweep）。絵文字が上へ舞う 3 つ。
 
-    見た目の乱数を 9 個引く。
+    見た目の乱数を 9 個取り出す。
     """
     out = []
     for _ in range(3):
@@ -220,7 +222,7 @@ def scooped(cell: Cell, text: str, rng: CosmeticRng) -> list[Particle]:
 def splash(cell: Cell, facing: Direction, rng: CosmeticRng) -> list[Particle]:
     """鼻水の水しぶき（原型の elephantSnot）。届いたマス1つにつき 4 つ。
 
-    吹いた向きへ飛ぶ。見た目の乱数を 20 個引く。
+    吹いた向きへ飛ぶ。見た目の乱数を 20 個取り出す。
     """
     dx, dy = facing.delta
     out = []
@@ -235,7 +237,7 @@ def splash(cell: Cell, facing: Direction, rng: CosmeticRng) -> list[Particle]:
 
 
 def hop_dust(x: float, y: float, rng: CosmeticRng) -> list[Particle]:
-    """跳んで着いた所の土ぼこり（原型の hop）。6 つ。見た目の乱数を 18 個引く。
+    """跳んで着いた所の土ぼこり（原型の hop）。6 つ。見た目の乱数を 18 個取り出す。
 
     (x, y) は着いたプレイヤーの位置（マス）。粒は足元（0.3 マス下）から出る。
     """

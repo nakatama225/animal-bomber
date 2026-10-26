@@ -68,7 +68,7 @@ class Test数値の違い:
         assert missing == [Animal.MOLE]
 
 
-class Testアイテムの効き方:
+class Testアイテムの効果:
     def test_かえるは良いアイテムの効果が2倍(self) -> None:
         world = make_world(2468, (Animal.FROG, Animal.RABBIT))
         frog, rabbit = world.players
@@ -95,8 +95,8 @@ class Testアイテムの効き方:
         apply_item(world, frog, ItemKind.CHICKEN)
         assert frog.special_charges == 2
 
-    def test_突進で押しつけられた悪いアイテムも_かえるには2倍で効く(self) -> None:
-        """原型の applyItem は、効く側の動物の倍率を中で引く。
+    def test_突進で押しつけられた悪いアイテムも_かえるには2倍で作用する(self) -> None:
+        """原型の applyItem は、効果を受ける側の動物の倍率を中で参照する。
 
         TypeScript 版は、この場面で倍率を掛けない。
         """

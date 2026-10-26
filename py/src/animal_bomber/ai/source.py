@@ -16,11 +16,11 @@
 5. 危なくなったのに逃げていない、逃げ先が危なくなった、なら間隔を待たずに考え直す。
    間隔が来ていれば考え直す
 6. 滑っている間は、歩かず、爆弾も置かず、歩いたあとの技も無い（原型は滑って帰る）
-7. 経路を1歩。爆弾を置きたい計画なら、逃げ切れるかを確かめて置く。最後に歩いたあとの技
+7. 経路を1歩。爆弾を置きたい計画なら、逃げ切れるかを確認して置く。最後に歩いたあとの技
    （戦い方の `after_move`）
 
 どれも、tick の始めの盤面を見て決める。ルールの層は、この入力を 動く → 爆弾 → 技 の順で
-効かせるので、原型の CPU が1フレームの中で 歩く → 置く → とくぎ と呼んでいたのと同じ順に
+適用するので、原型の CPU が1フレームの中で 歩く → 置く → とくぎ と呼んでいたのと同じ順に
 なる。
 
 ## 外周にいる間と、記憶を作り直すとき
@@ -33,12 +33,12 @@
 
 ## ⚠️ 乱数は CPU 専用のものを持つ
 
-試合の乱数（`world.rng`）を引かない。引くと、CPU が何回考えたかでアイテムの抽選が
-変わり、同じ操作でも同じ試合にならなくなる。CPU の判断も種から決まるので、同じ種・
+試合の乱数（`world.rng`）を取り出さない。取り出すと、CPU が何回考えたかでアイテムの
+抽選が変わり、同じ操作でも同じ試合にならなくなる。CPU の判断も種から決まるので、同じ種・
 同じ盤面なら CPU は毎回同じ手を指す。通信対戦で各端末が CPU を動かしても、全員が同じ手を
 得る。
 
-乱数を引く順は TypeScript 版（`src/ai/CpuInputSource.ts`）と同じ。見落としの抽選 →
+乱数を取り出す順は TypeScript 版（`src/ai/CpuInputSource.ts`）と同じ。見落としの抽選 →
 考える前の技の抽選 → 計画（攻めに踏み切るか・うろつく先の遠さ）→ 歩いたあとの技の
 抽選。
 """
@@ -158,7 +158,7 @@ class CpuInputSource:
 
     @property
     def memory(self) -> CpuMemory:
-        """いまの記憶。テストで判断の中身を確かめるために見せている（書き換えない）。"""
+        """いまの記憶。テストで判断の中身を確認するために見せている（書き換えない）。"""
         return self._memory
 
     def next_input(self, world: WorldState, tick: MatchTick) -> PlayerInput:
@@ -173,7 +173,7 @@ class CpuInputSource:
         # negiHit（L2337-2356）も p.ai に触らない。開始位置や当てた相手の位置へ移った
         # あとも、次に考え直すまでは前の経路の先のマスへ歩き、置き直さない記憶・爆弾を
         # 控える残り・判断の間隔の揺らぎ（jitter）も続けて使う。捨てると CPU の乱数を
-        # 1つ余計に引く（jitter の引き直し）ので、その後の判断がすべてずれる。
+        # 1つ余計に取り出す（jitter を乱数で決め直す）ので、その後の判断がすべてずれる。
         if world is not self._world:
             self._world = world
             self._memory = fresh_memory(self._rng)
@@ -236,7 +236,7 @@ class CpuInputSource:
 
         self._replan_if_needed(ctx)
 
-        # 滑っている間は操作が効かない。原型の CPU は滑らせて、そのフレームを終える。
+        # 滑っている間は操作が無効。原型の CPU は滑らせて、そのフレームを終える。
         buttons = early.button if early is not None and used_early else PlayerInput.IDLE
         if me.effects.has(EffectKind.SLIDE):
             return _Intent(None, buttons)

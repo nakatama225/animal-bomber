@@ -1,4 +1,4 @@
-"""フレームを回す輪（`shell/loop.py`）を、実時間を使わずに回すための偽の時計。"""
+"""フレームを繰り返す輪（`shell/loop.py`）を実時間なしで実行するための偽の時計。"""
 
 from collections.abc import Iterable
 

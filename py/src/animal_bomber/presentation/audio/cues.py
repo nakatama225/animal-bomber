@@ -1,4 +1,4 @@
-"""イベントの中身（状態・アイテム・動物・技の途中の瞬間）から、鳴らす音を引く表。
+"""イベントの中身（状態・アイテム・動物・技の途中の瞬間）に、鳴らす音を対応づける表。
 
 どの場面で鳴らすか（1 tick ぶんのイベントの並びの見分け）は
 `presentation/presenter.py`、ここは種類ごとにどの音を当てるかだけを持つ。どれも
@@ -46,7 +46,7 @@ def effect_sound(kind: EffectKind) -> SoundName:
 
 
 def taken_sound(kind: ItemKind) -> SoundName | None:
-    """アイテムが効いたときの音。悪いアイテムは鳴らさない（None）。
+    """アイテムの効果が出たときの音。悪いアイテムは鳴らさない（None）。
 
     原型の `applyItem` は、爆弾・火・靴で `item`、チキンで `chicken` を鳴らし、バナナ・
     たまねぎ・うんこは、かかった状態の音（`slip`・`cry`・`poop`）だけを鳴らす。この版

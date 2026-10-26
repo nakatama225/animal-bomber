@@ -1,4 +1,4 @@
-"""起動の入口。部品を集めて、画面の流れ（`app/shell.py` の `Shell`）を回すだけにする。
+"""起動の入口。部品を集めて、画面の流れ（`app/shell.py` の `Shell`）を実行するだけ。
 
 この層に条件分岐が増えてきたら、それは下の層のどれかに置き場所が見つかっていない
 ということなので、ここで処理せず置き場所を探す（TypeScript 版の `app/main.ts` と同じ）。
@@ -7,8 +7,8 @@
 2. 音の出口の形を決めて pygame を始め、画面の大きさから窓の寸法を決めて窓を開く
    （`window_layout`）
 3. 部品を集める（キーボード・パッド・画面の文・音・曲・試合の種・中継につなぐ関数）
-4. 実時間を tick の数に換え（`shell/loop.py` の `frames`）、フレームごとに `Shell` を
-   1回回して、描いた面を窓へ1回貼る。窓を閉じたら終わる
+4. 実時間を tick の数に換え（`shell/loop.py` の `frames`）、フレームごとに `Shell` に
+   1フレームぶん処理させて、描いた面を窓へ1回貼る。窓を閉じたら終わる
 
 起動は、py/ で `uv run python -m animal_bomber.app.main`。タイトルから、1台の遊び方
 （1人 vs CPU×3・2人 vs CPU×2・2人タイマン）か「LAN対戦」を選ぶ。通信対戦は、中継
@@ -20,7 +20,7 @@ Mac）を付けて起動すると、すぐその中継につなぐ（docs/10-通
 
 ⚠️ 窓を開いて遊んで検証していない。絵を窓に出して見たことも、音を鳴らして聞いた
 ことも、2台の Mac で通信対戦をしたことも無い。テストは SDL の dummy ドライバで、窓を
-開かず、音も出さずに数フレーム回す。
+開かず、音も出さずに数フレーム実行する。
 """
 
 import argparse
@@ -207,7 +207,7 @@ def run(
     events: Callable[[], list[pygame.event.Event]] = pygame.event.get,
     clock: Callable[[], float] = now_ms,
 ) -> None:
-    """フレームを回す。窓を閉じると戻る。
+    """フレームを1つずつ処理する。窓を閉じると戻る。
 
     Args:
         screen: 窓の面（`pygame.display.set_mode` が返したもの）。
@@ -226,7 +226,7 @@ def run(
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    """窓を開いて、タイトルから回す（`--relay` があれば、すぐ中継につなぐ）。"""
+    """窓を開いて、タイトルから始める（`--relay` があれば、すぐ中継につなぐ）。"""
     args = parse_args(argv)
     preset_mixer()
     pygame.init()

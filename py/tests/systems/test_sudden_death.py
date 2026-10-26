@@ -63,7 +63,7 @@ from tests.helpers import advance, clear_board, grant_special, make_world, only_
 
 THREE = (Animal.RABBIT, Animal.ELEPHANT, Animal.MOLE)
 CONFIG = MatchConfig(seed=777, animals=THREE)
-"""延長戦を入れた既定の設定。"""
+"""延長戦を有効にした既定の設定。"""
 
 
 def session(**overrides: object) -> GameSession:
@@ -351,8 +351,8 @@ class Test延長戦の準備:
             )
         ]
 
-    def test_乱数を引かない(self) -> None:
-        """盤面を作り直すと乱数を引く。延長戦に入った試合だけ以降の抽選がずれる。"""
+    def test_乱数を取り出さない(self) -> None:
+        """盤面を作り直すと乱数を取り出す。延長戦に入った試合だけ以降の抽選がずれる。"""
         world = make_world(3, THREE)
         calls = world.rng.calls
         enter_sudden_death(world, (0, 1, 2), SuddenDeathReason.TIME_UP)

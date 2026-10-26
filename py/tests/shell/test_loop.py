@@ -1,4 +1,4 @@
-"""フレームを回す輪（`shell/loop.py`）の検査。実時間は使わず、偽の時計で回す。
+"""フレームを繰り返す輪（`shell/loop.py`）の検査。実時間は使わず、偽の時計で実行する。
 
 試合の結果が刻み方に左右されないことは `tests/determinism/test_pacing.py` が見る。
 ここで見るのは、経過時間を tick の数に換える計算と、待つ時刻の決め方と、待ち方の3つ。
@@ -47,14 +47,14 @@ class Test経過時間をtickの数に換える:
             total += accumulator.consume(elapsed)
         assert total == 60
 
-    def test_何時間回しても_進んだtickの合計は経過時間どおり(self) -> None:
+    def test_何時間実行しても_進んだtickの合計は経過時間どおり(self) -> None:
         """端数を整数で積むので、合計が経過時間から割り算で出した値とちょうど同じになること。
 
         16_666_666・16_666_667・16_666_667 ナノ秒（3回でちょうど 50 ms、3 tick）を
         繰り返し、3 時間ぶん渡す。積んだ端数が tick の境目にちょうど届く回が何度も来る。
         TypeScript 版と同じくミリ秒の小数で積む形では、境目に届いた回をわずかに手前と
         数えることがあり、合計は 1 つ足りない 647_999 になった（2026-10-03 に
-        確かめた）。
+        確認した）。
         """
         accumulator = TickAccumulator()
         steps = list(
@@ -102,7 +102,7 @@ class Test経過時間をtickの数に換える:
         assert accumulator.ns_to_next_tick() == TICK_CEIL_NS - 5_000_000
 
 
-class Testフレームの回し方:
+class Testフレームの進め方:
     def test_最初のフレームは待たずに0tickを返す(self) -> None:
         fake = FakeTime()
         assert next(frames(fake.clock, fake.wait)) == 0
@@ -111,7 +111,7 @@ class Testフレームの回し方:
     def test_遅れなければ_毎回1tick進み_待つ時刻はtickの境目からずれない(
         self,
     ) -> None:
-        """600 フレーム（10 秒）回しても、待つ時刻が境目にちょうど乗り続けること。
+        """600 フレーム（10 秒）実行しても、待つ時刻が境目にちょうど乗り続けること。
 
         前の時刻に 1 tick の長さを足していく形だと、16_666_666.66… ナノ秒が割り切れず、
         待つ時刻が少しずつずれていく。
@@ -168,7 +168,7 @@ class Test待ち方:
     def test_既定の待ち方は_眠る(self) -> None:
         """README とモジュールの説明に書いた決めと、コードの既定が食い違わないこと。
 
-        変えるときは、README の数と決めも直す（AGENTS.md）。
+        変えるときは、README の数と決めも修正する（AGENTS.md）。
         """
         default = inspect.signature(frames).parameters["wait"].default
         assert default is sleep_until
@@ -210,7 +210,7 @@ class Test待ち方:
         assert len(last) == 6
 
     def test_眠ってから空回りは_予定の2ms前まで眠り_残りを空回りで待つ(self) -> None:
-        """眠る長さを、上限でなくちょうどの値で確かめる。
+        """眠る長さを、上限でなくちょうどの値で確認する。
 
         上限だけを見ていると、`SPIN_MARGIN_NS` を2倍にしても通る。2 ms という値も
         固定する（README の待ち方の表の「予定の 2 ms 前まで眠り」の行は、この値で
@@ -251,8 +251,8 @@ class Testゲーム速度:
         speed = GameSpeed(0.5)
         assert [speed.take(1) for _ in range(6)] == [0, 1, 0, 1, 0, 1]
 
-    def test_端数は持ち越し_長く回しても合計は倍率どおり(self) -> None:
-        """1.25 倍で 400 フレーム回すと、ちょうど 500 回。"""
+    def test_端数は持ち越し_長く実行しても合計は倍率どおり(self) -> None:
+        """1.25 倍で 400 フレーム実行すると、ちょうど 500 回。"""
         speed = GameSpeed(1.25)
         steps = [speed.take(1) for _ in range(400)]
         assert set(steps) == {1, 2}

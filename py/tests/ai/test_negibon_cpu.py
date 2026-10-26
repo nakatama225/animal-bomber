@@ -356,7 +356,7 @@ class Test外周にいるCPU:
         """原型 L2414-2420。
 
         左辺の上の端（71.5）から、1 列目の相手へ。上辺の位置 0 は、またげば 0.5、左辺の
-        位置 69 は 2.5。またいで上辺へ進んだことを、位置で直に確かめる（またがなければ
+        位置 69 は 2.5。またいで上辺へ進んだことを、位置で直に確認する（またがなければ
         左辺を下がり、10 tick 後は 70.58 にいる）。10 tick 目はまだ撃つ前（構えて撃つの
         は 40 tick 目ごろ。当たると盤面へ戻り、外周の位置が無くなる）。
         """
@@ -538,7 +538,7 @@ class Test盤面にいるCPUと葱:
     ) -> None:
         """原型 planCPU L2090。
 
-        CPU は (5,5) の中央（x=5.5）。葱が 5.9 を飛べば射線の左に立つことになるが、右の
+        CPU は (5,5) の中央（x=5.5）。葱が 5.9 を飛ぶなら CPU は射線の左にいるが、右の
         (6,5) へよけて射線を横切る。
         """
         world, _ = leek_incoming()
@@ -626,7 +626,7 @@ class Test盤面にいるCPUと葱:
         assert not revived(events)
         assert cpu.position.x < 5.5
 
-    def test_標準の並びにも_葱をよける規則が逃げるの次に入っている(self) -> None:
+    def test_標準の並びにも_葱をよける規則が逃げるの次に並んでいる(self) -> None:
         world, cpu = leek_incoming()
         run(world, cpu_of(), 120)
         assert isinstance(cpu.life, Alive)
@@ -650,8 +650,8 @@ class Test記憶を作り直すのはラウンドの盤面が替わったとき�
         """原型の enterSuddenDeath（L4435-4465）は p.ai に触らない。
 
         延長戦では盤面を作り直さず、全員を開始位置へ移す。次に考え直すまでは、移る前の
-        経路の先のマスへ歩く。作り直すと判断の間隔の揺らぎ（jitter）を引き直し、CPU の
-        乱数が1つ進む。
+        経路の先のマスへ歩く。作り直すと判断の間隔の揺らぎ（jitter）を乱数で決め直し、
+        CPU の乱数が1つ進む。
         """
         world = make_world(3, (Animal.RABBIT, Animal.ELEPHANT))
         source = after_first_bomb(world)
@@ -670,7 +670,7 @@ class Test記憶を作り直すのはラウンドの盤面が替わったとき�
     def test_外周から戻っても_倒れる前の記憶を持ち越す(self) -> None:
         """原型の negiHit（L2337-2356）は p.ai に触らない。
 
-        作り直さないので、判断の間隔の揺らぎも引き直さない。
+        作り直さないので、判断の間隔の揺らぎも乱数で決め直さない。
         """
         world = make_world(3, (Animal.RABBIT, Animal.ELEPHANT))
         cpu, foe = world.players

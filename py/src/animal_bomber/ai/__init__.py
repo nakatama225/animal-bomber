@@ -16,6 +16,6 @@ CPU は、キーボードやゲームパッドと同じく、1 tick ごとに入
 | `follow.py` | 経路を押す向きに変える |
 | `context.py`・`memory.py`・`plan.py`・`levels.py`・`margins.py` | 判断に使うもの |
 
-⚠️ 乱数は CPU 専用の `Rng` を持ち、試合の乱数（`world.rng`）を引かない。CPU の判断も
+⚠️ 乱数は CPU 専用の `Rng` を持ち、試合の乱数（`world.rng`）を取り出さない。CPU の判断も
 種から決まるので、同じ種・同じ盤面なら CPU は毎回同じ手を指す。
 """

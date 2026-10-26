@@ -23,8 +23,8 @@
 
 識別子（`world.ids`）はこの順に発番されるので、順を変えると識別子も状態の要約も変わる。
 TypeScript 版と同じ順にしてある。順のそれぞれは `tests/systems/test_bomb.py` の順の
-テストが、全体は TypeScript 版と同じ台本を流す `tests/systems/test_simulation_ts.py` が
-確かめる。
+テストが、全体は TypeScript 版と同じ台本を実行する `tests/systems/test_simulation_ts.py`
+が検証する。
 """
 
 from collections import deque
@@ -63,10 +63,10 @@ class Detonation:
     """壊れたブロックの位置。初めて爆風が届いた順に並び、同じマスは1回だけ入る。
 
     ⚠️ 1つの連鎖の中で、別々の爆弾の爆風が同じブロックに届いても、1回だけ入れる。
-    壊れたブロックごとにアイテムを落とす抽選を引くので、重なると同じマスにアイテムが
+    壊れたブロックごとにアイテムを落とすかを抽選するので、重なると同じマスにアイテムが
     2つ出うる。原型は、ブロックを壊す関数（destroySoft）の入口で「もう壊れていれば
     帰る」ので1回だけ。この版は一覧に入れるときに除く（TypeScript 版も同じ。段階 3
-    から 2026-10-04 まで重なって入り、抽選を2回引いていた）。
+    から 2026-10-04 まで重なって入り、2回抽選していた）。
     """
     events: tuple[SimEvent, ...]
     """この連鎖で起きたイベント（焼けたアイテム・壊れたブロック・落ちたアイテム）。"""
@@ -128,7 +128,7 @@ def detonate(world: WorldState, first: Bomb) -> Detonation:
             if arm.stopped_by_soft and arm.cell not in destroyed:
                 destroyed.append(arm.cell)
 
-    # ⚠️ 順が2つの意味で効く。
+    # ⚠️ 順が2つの意味で結果に影響する。
     # 1. 爆風に触れたアイテムを焼くのが先、ブロックを壊すのがあと。逆にすると、いま
     #    壊したブロックから出たアイテムを同じ爆風ですぐ焼いてしまい、アイテムが
     #    出てこなくなる。

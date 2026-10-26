@@ -39,12 +39,12 @@ def progress_of(remaining: int) -> float:
 
 
 def flicker_size(tile: float, k: float, rng: CosmeticRng) -> float:
-    """ちらつく白い芯の一辺（px）。見た目の乱数を1つ引く。"""
+    """ちらつく白い芯の一辺（px）。見た目の乱数を1つ取り出す。"""
     return tile * (0.16 + 0.2 * rng.random()) * k
 
 
 def draw_blast(canvas: Canvas, layout: Layout, blast: Blast, rng: CosmeticRng) -> None:
-    """爆風を描く（原型の drawBlast）。見た目の乱数を1つ引く。"""
+    """爆風を描く（原型の drawBlast）。見た目の乱数を1つ取り出す。"""
     k = blast_progress(blast)
     canvas.save()
     draw_blast_fire(canvas, layout, blast.cell.col, blast.cell.row, k)
@@ -82,7 +82,7 @@ def draw_blast_fire(
 def draw_blast_flicker(
     canvas: Canvas, layout: Layout, col: int, row: int, k: float, rng: CosmeticRng
 ) -> None:
-    """ちらつく白い芯。見た目の乱数を1つ引く。"""
+    """ちらつく白い芯。見た目の乱数を1つ取り出す。"""
     draw_blast_flicker_sized(
         canvas, layout, col, row, k, flicker_size(layout.tile, k, rng)
     )

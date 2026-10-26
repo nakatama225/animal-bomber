@@ -10,14 +10,14 @@ TypeScript 版の `ts/src/net/protocol.ts` と**同じ約束を、もう一方�
 
 Python 版（`py/`）は、下の表を写さずに import する
 （`py/src/animal_bomber/net/protocol.py`）。表の種類や項目を変えたら、Python 版の型も
-直す（食い違いは `py/tests/net/test_protocol.py` が見つける）。
+修正する（食い違いは `py/tests/net/test_protocol.py` が見つける）。
 
 ## 中継が読む項目
 
 中継は `input` の `tick` `match` と、`hash` の `tick` `hash` `rngCalls` `match` を読む。
 どれも「数を比べる・最後に配った tick を覚える・いまの試合のものかを見る」ためだけで、
 その数が試合の中で何を意味するかは知らない。入力のビット（`bits`）も、試合の設定（`config`）も、
-中身を見ずにそのまま流す。始まる前の設定（`settings`）も同じで、見るのは送り主が
+中身を見ずにそのまま転送する。始まる前の設定（`settings`）も同じで、見るのは送り主が
 ホストか・試合が始まる前か、だけ。
 
 ## 項目名の書き方
@@ -47,7 +47,7 @@ FROM_PEER: dict[str, tuple[str, ...]] = {
     "start": ("config",),
     # ある tick の自分の入力。1 tick に1通、tick の昇順に送る。match はいまの試合の番号
     "input": ("tick", "bits", "match"),
-    # ある tick を進めたあとの状態の要約と、試合の乱数を引いた回数、いまの試合の番号
+    # ある tick を進めたあとの状態の要約と、試合の乱数を取り出した回数、いまの試合の番号
     "hash": ("tick", "hash", "rngCalls", "match"),
     # 始まる前に、ホストがロビーで選んでいる設定。ゲストの画面に出すだけで、
     # 試合は start から作る
@@ -68,7 +68,7 @@ FROM_RELAY: dict[str, tuple[str, ...]] = {
     "input": ("seat", "tick", "bits", "match"),
     # 同じ tick の要約が食い違った。reports は全員ぶんの報告
     "desync": ("tick", "reports"),
-    # ホストの settings を、始まる前だけ、ホスト以外の全員へそのまま流したもの
+    # ホストの settings を、始まる前だけ、ホスト以外の全員へそのまま転送したもの
     "settings": ("config",),
 }
 """中継から端末へ届くメッセージの種類と、`t` 以外の項目。"""

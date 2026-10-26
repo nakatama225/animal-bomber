@@ -55,7 +55,7 @@ def blast_reach(world: WorldState, center: Cell, power: int) -> BlastReach:
     """爆風の届く範囲を求める。
 
     Args:
-        world: 調べる状態。盤面のブロックだけを見る。
+        world: 対象の状態。盤面のブロックだけを見る。
         center: 爆弾のマス。
         power: 各方向へ届くマス数。
     """

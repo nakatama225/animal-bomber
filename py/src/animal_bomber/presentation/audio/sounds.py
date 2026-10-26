@@ -3,7 +3,7 @@
 名前は原型の効果音の表（`legacy/animal-bomber.html` の `SE`）と1対1にしてある。値は
 原型の名前そのもの（`"breakBlock"` など）。原型に無い音を足さず、原型の音を1つも
 落とさないことを、`tests/presentation/test_sound_table.py` が原型を読み込んで書き出した
-固定値と突き合わせて確かめている。
+固定値と突き合わせて検証している。
 """
 
 from enum import Enum

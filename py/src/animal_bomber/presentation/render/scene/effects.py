@@ -238,7 +238,7 @@ class EffectField:
                         self._puff(cell, color, item_emoji(kind))
                 case ItemTaken(cell=taken_at, kind=kind, swept=swept):
                     if taken_at is None:
-                        # 舌で引き寄せて効いたもの。原型も煙を出さない。
+                        # 舌で引き寄せて効果が出たもの。原型も煙を出さない。
                         continue
                     cell = taken_at
                     if swept:

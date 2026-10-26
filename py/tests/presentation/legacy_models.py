@@ -1,7 +1,7 @@
 """原型の更新の式（1/60 秒ずつ足し引きする小数の値）を、1 tick ずつ真似るもの。
 
 試合の状態から描く関数の入力へ写す関数（`render/views/`）が、原型の値と同じになるかを
-確かめるために使う（`test_views.py`）。原型の関数の名前と、写した行の意味を添える。
+確認するために使う（`test_views.py`）。原型の関数の名前と、写した行の意味を添える。
 小数の足し引きは原型と同じ倍精度で、同じ順に行う（誤差まで同じになる）。
 """
 
@@ -78,10 +78,10 @@ class LegacySlime:
     def update(self, next_interval: Callable[[], int]) -> bool:
         """原型の updateSlimes を 1 tick。爆発したら False。
 
-        原型は跳ねる間隔を 0.30〜0.40 秒の乱数で引く。この版のルールの層は同じ間隔を
-        tick の整数で引くので（`domain/abilities/frog.py` の `HOP_INTERVAL_MIN`）、
-        `next_interval()` でルールの層が引いた tick の数を受け取り、ちょうどその回数目に
-        0 を切る秒（tick の数 − 0.5 tick）にする。
+        原型は跳ねる間隔を 0.30〜0.40 秒の乱数で取り出す。この版のルールの層は同じ間隔を
+        tick の整数で取り出すので（`domain/abilities/frog.py` の `HOP_INTERVAL_MIN`）、
+        `next_interval()` でルールの層が取り出した tick の数を受け取り、ちょうどその
+        回数目に 0 を切る秒（tick の数 − 0.5 tick）にする。
         """
         if self.phase == "fly":
             self.t += DT

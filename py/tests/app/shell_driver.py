@@ -1,4 +1,4 @@
-"""画面の流れ（`app/shell.py` の `Shell`）を、台本のイベントで回すための手伝い。
+"""画面の流れ（`app/shell.py` の `Shell`）を、台本のイベントで実行するための手伝い。
 
 窓は開かない（`Shell` は窓の大きさの `pygame.Surface` に描くだけ）。音・曲・パッド・
 中継は偽物に差し替え、何を鳴らしたか・何を送ったかを控える。時刻（ms）はフレームごとに
@@ -118,7 +118,7 @@ def key_event(
 
 @dataclass
 class Driver:
-    """`Shell` を1台ぶん回す。"""
+    """1台ぶんの `Shell` を実行する。"""
 
     relay: str | None = None
     connect: Callable[[str], RelayConnection] = refuse
@@ -170,7 +170,7 @@ class Driver:
     def frame(
         self, *events: pygame.event.Event, ticks: int = 1, ms: float = FRAME_MS
     ) -> bool:
-        """時刻を `ms` 進めて、1フレーム回す。"""
+        """時刻を `ms` 進めて、1フレーム実行する。"""
         self.now += ms
         return self.shell.frame(ticks, list(events), self.now)
 
@@ -216,7 +216,7 @@ class Driver:
         raise AssertionError(f"「{label}」が無い: {labels}")
 
     def click_at(self, pos: tuple[int, int], ticks: int = 0) -> None:
-        """`pos` をマウスで押して離すフレームを1つ回す。
+        """`pos` をマウスで押して離すフレームを1つ実行する。
 
         既定の `ticks` は 0（押したフレームに試合を進めない）。実機の輪は、最初の
         フレームのほかは 1 以上を返すので、押したフレームの進め方を見るときは 1 を渡す。
@@ -229,21 +229,21 @@ class Driver:
         self.frame(pygame.event.Event(pygame.MOUSEMOTION, pos=pos, rel=(0, 0)), ticks=0)
 
     def press_at(self, pos: tuple[int, int]) -> None:
-        """`pos` でマウスの左のボタンを押す（離さない）フレームを1つ回す。"""
+        """`pos` でマウスの左のボタンを押す（離さない）フレームを1つ実行する。"""
         down = pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=pos, button=1)
         self.frame(down, ticks=0)
 
     def release_at(self, pos: tuple[int, int]) -> None:
-        """`pos` でマウスの左のボタンを離すフレームを1つ回す。"""
+        """`pos` でマウスの左のボタンを離すフレームを1つ実行する。"""
         up = pygame.event.Event(pygame.MOUSEBUTTONUP, pos=pos, button=1)
         self.frame(up, ticks=0)
 
     def leave_window(self) -> None:
-        """マウスが窓の外へ出たフレームを1つ回す。"""
+        """マウスが窓の外へ出たフレームを1つ実行する。"""
         self.frame(pygame.event.Event(pygame.WINDOWLEAVE), ticks=0)
 
     def lose_focus(self) -> None:
-        """窓から離れた（ほかのアプリへ移った）フレームを1つ回す。"""
+        """窓から離れた（ほかのアプリへ移った）フレームを1つ実行する。"""
         self.frame(pygame.event.Event(pygame.WINDOWFOCUSLOST), ticks=0)
 
     def rect_of(self, label: str) -> pygame.Rect:

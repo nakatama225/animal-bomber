@@ -6,7 +6,7 @@
 作り直さない。ラウンドが決まったかを見るのはここ、延長戦の準備は
 `systems/sudden_death.py`、次のラウンドの盤面を作るのは試合を進める側
 （`app/session.py` の `GameSession`）にしてある。`step()` の中で盤面が丸ごと入れ替わる
-と、「1回呼ぶと 1 tick 進む」の約束が崩れ、記録の流し直しが追えなくなる。
+と、「1回呼ぶと 1 tick 進む」の約束が崩れ、記録の再生が追えなくなる。
 
 ## 判定の順（原型の checkEnd・TypeScript 版の `RoundSystem`）
 

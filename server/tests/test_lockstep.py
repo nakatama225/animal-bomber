@@ -117,7 +117,7 @@ class Test始める:
             await room.join(FakeConnection())
 
     def test_試合中の断りは定員いっぱいと同じ扱いで閉じられる(self):
-        # main.py のハンドラは RoomFullError だけを捕まえて接続を閉じる
+        # main.py のハンドラは RoomFullError だけを捕捉して接続を閉じる
         assert issubclass(MatchInProgressError, RoomFullError)
 
     async def test_始まる前の入力は配らない(self):
@@ -228,7 +228,7 @@ class Test始まる前の設定:
         for ws in peers:
             await room.join(ws)
 
-        # 中継は中身を読まない。試合の設定として読めない値でも、そのまま流す
+        # 中継は中身を読まない。試合の設定として読めない値でも、そのまま転送する
         config = {"match": {"seed": 0}, "note": [1, 2]}
         await room.route(HOST_SEAT, json.dumps({"t": "settings", "config": config}))
 
@@ -281,7 +281,7 @@ class Test入力を配る:
         assert len(messages(peers[1], "input")) == 1
         assert len(messages(peers[2], "input")) == 1
 
-    async def test_入力のビットは中身を見ずに流す(self):
+    async def test_入力のビットは中身を見ずに転送する(self):
         room, peers = await started_room(2)
 
         await room.route(1, input_message(0, bits="読まない"))
@@ -293,7 +293,7 @@ class Test入力を配る:
         # ⚠️ True も捨てる。Python では bool が int の仲間なので、明示して外している
         room, peers = await started_room(2)
 
-        # 試合の番号は合わせておく（番号の違いで捨てられて、tick を確かめる前に通ってしまわないように）
+        # 試合の番号は合わせておく（番号の違いで捨てられて、tick を確認する前に通ってしまわないように）
         message = {"t": "input", "tick": tick, "bits": 0, "match": 1}
         await room.route(1, json.dumps(message))
 
@@ -316,7 +316,7 @@ class Test入力を配る:
     @pytest.mark.parametrize(
         "raw",
         [
-            # 試合の番号は合わせておく（番号の違いで捨てられて、読む段階の確かめを通らないように）
+            # 試合の番号は合わせておく（番号の違いで捨てられて、読む段階の検査を通らないように）
             '{"t": "input", "tick": 0, "bits": NaN, "match": 1}',
             '{"t": "input", "tick": 0, "bits": Infinity, "match": 1}',
             '{"t": "input", "tick": 0, "bits": 1e400, "match": 1}',
@@ -479,7 +479,7 @@ class Test状態の突き合わせ:
         for ws in peers:
             assert messages(ws, "desync") == [expected]
 
-    async def test_乱数を引いた回数だけが違っても_ずれとして知らせる(self):
+    async def test_乱数を取り出した回数だけが違っても_ずれとして知らせる(self):
         # 要約が衝突して同じ値になっても、乱数の回数で気づける
         room, peers = await started_room(2)
 
@@ -544,7 +544,7 @@ class Test状態の突き合わせ:
 
         await room.route(0, json.dumps(broken))
         # 預かってもいないこと（文字列の "19" を別の tick として預かると、
-        # 整数の 19 と並べられずに後で落ちる）
+        # 整数の 19 と並べられずに後で例外になる）
         assert not room._pending
         await room.route(1, hash_message(19, 2))
 
@@ -574,7 +574,7 @@ class Test黙った相手:
         詳しい理由は `relay.SEND_TIMEOUT` と `test_relay_dead_guest.py` を見ること。
 
         ⚠️ ロックステップの通信量では、回線が切れても待ち行列はふつう埋まらない
-        （切れた人へ送るのは小さな入力が数通だけ）。そちらは接続の見張りが切る。
+        （切れた人へ送るのは小さな入力が数通だけ）。そちらは接続の生存確認が切る。
         `test_integration.py` の実ソケットのテストで見ている。
         """
         room = LockstepRoom(max_seats=4)

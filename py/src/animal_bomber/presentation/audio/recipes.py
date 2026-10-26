@@ -7,7 +7,7 @@
 
 ⚠️ 数値は原型の式のまま書いてある（`523.25 * 2 ** (s / 12)` など）。半音の数の表に
 書き換えないこと。原型を読み込んで書き出した固定値
-（`tests/presentation/legacy_sound_values.json`）と突き合わせて確かめていて、式を
+（`tests/presentation/legacy_sound_values.json`）と突き合わせて検証していて、式を
 変えると、どこで原型から離れたのかを追えなくなる。
 """
 

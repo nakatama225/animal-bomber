@@ -1,6 +1,7 @@
 """操作の記録の検査。
 
-記録・引き方・文字列との行き来・記録を流す窓口と記録する窓口・途中で抜けたプレイヤー。
+記録と取得・文字列との行き来・記録を再生する窓口と記録する窓口・
+途中で抜けたプレイヤー。
 """
 
 import pytest
@@ -22,14 +23,14 @@ def ticks(*values: int) -> list[MatchTick]:
     return [MatchTick(value) for value in values]
 
 
-class Test記録を流す窓口と記録する窓口:
-    """窓口が、盤面の時刻（`world.now`）ではなく、渡された試合通算の時刻で引くこと。
+class Test記録を再生する窓口と記録する窓口:
+    """窓口が、盤面の時刻（`world.now`）ではなく、渡された試合通算の時刻で取得すること。
 
-    段階 1 では2つの時刻がいつも同じ値なので、台本どおりの試合を流しても違いが出ない。
-    盤面の時刻が 0 のまま、試合通算の時刻だけを進めた値を渡して確かめる。
+    段階 1 では2つの時刻がいつも同じ値なので、台本どおりの試合を実行しても違いが出ない。
+    盤面の時刻が 0 のまま、試合通算の時刻だけを進めた値を渡して確認する。
     """
 
-    def test_記録を流す窓口は_渡された試合通算の時刻で引く(self) -> None:
+    def test_記録を再生する窓口は_渡された試合通算の時刻で取得する(self) -> None:
         world = make_world()
         log = InputLog.decode("0:0,8;50,2")
         source = ReplayInputSource(0, log)
@@ -86,7 +87,7 @@ class Test記録:
         for tick, player_input in expected.items():
             assert log.at(MatchTick(tick), 0) is player_input, tick
 
-    def test_同じtickに2つ記録したら_両方を持ち_あとのほうが効く(self) -> None:
+    def test_同じtickに2つ記録したら_両方を持ち_あとのほうが有効になる(self) -> None:
         log = InputLog()
         log.record(MatchTick(5), 0, PlayerInput.UP)
         log.record(MatchTick(5), 0, PlayerInput.DOWN)
@@ -284,7 +285,7 @@ class _CountingSource:
         return PlayerInput.ACTION
 
 
-class Test記録を流す窓口と抜けたプレイヤー:
+class Test記録を再生する窓口と抜けたプレイヤー:
     def test_抜けたプレイヤーは_最後に使うtickの次から代わりの窓口に任せる(
         self,
     ) -> None:

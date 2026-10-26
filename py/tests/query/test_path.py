@@ -27,10 +27,10 @@ class Test経路の探し方:
         )
         assert path == [Cell(2, 1), Cell(3, 1), Cell(4, 1), Cell(5, 1)]
 
-    def test_同じ長さの経路は_隣を右左下上の順に調べて選ぶ(self) -> None:
+    def test_同じ長さの経路は_隣を右左下上の順に探索して選ぶ(self) -> None:
         """(3,3) から (5,1) へは 右右上上 と 上上右右 の2通り（(4,2) は柱）。
 
-        右を上より先に調べるので 右右上上（原型の bfsPath と同じ）。
+        右を上より先に探索するので 右右上上（原型の bfsPath と同じ）。
         """
         world = make_world(3)
         clear_board(world)
@@ -39,7 +39,7 @@ class Test経路の探し方:
         )
         assert path == [Cell(4, 3), Cell(5, 3), Cell(5, 2), Cell(5, 1)]
 
-    def test_出発点そのものは目的地として調べない(self) -> None:
+    def test_出発点そのものは目的地として判定しない(self) -> None:
         world = make_world()
         clear_board(world)
         assert (

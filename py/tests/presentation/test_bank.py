@@ -1,7 +1,7 @@
 """効果音を焼いておく `PygameSoundBank` の検査。
 
 音を出さない音の出口（SDL の dummy）で mixer を開いて焼く（`conftest.py` の `mixer`）。
-聞いて確かめてはいない。長さと高さは、焼いた中身を読んで確かめる。
+聞いて確認してはいない。長さと高さは、焼いた中身を読んで確認する。
 """
 
 import os
@@ -66,7 +66,7 @@ def test_連鎖した爆発は_連鎖数によらず同じ別の音(mixer: int) 
     assert chained is bank.sound_of(SoundName.EXPLODE, 5)
     assert chained is not single
     assert samples_of(chained).tolist() != samples_of(single).tolist()
-    # 連鎖数は爆発の音にだけ効く。
+    # 連鎖数は爆発の音にだけ反映される。
     assert bank.sound_of(SoundName.PLACE, 3) is bank.sound_of(SoundName.PLACE)
 
 
@@ -101,7 +101,7 @@ def test_mixerが開いていなければ_何も鳴らさないものを返す()
 def test_音の出口が無い機械では_初期化が通り_何も鳴らさないものになる() -> None:
     """`pygame.init()` は mixer を開けなくても例外にせず進む。そのときも遊べる。
 
-    無い音の出口を名指しして、別のプロセスで確かめる（このプロセスの mixer を
+    無い音の出口を指定して、別のプロセスで確認する（このプロセスの mixer を
     壊さない）。
     """
     code = (

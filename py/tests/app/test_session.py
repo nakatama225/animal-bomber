@@ -1,6 +1,6 @@
 """試合の進行（ラウンドの終わり・勝ち数・決着のあとの待ち・ラウンドの始まり）の検査。
 
-TypeScript 版の `tests/systems/round.test.ts` と同じことを確かめ、ラウンドの始まりに
+TypeScript 版の `tests/systems/round.test.ts` と同じことを確認し、ラウンドの始まりに
 押していた爆弾のボタン（41be1eb）と、決着のあとの待ち（546880b）を足してある。
 """
 
@@ -92,7 +92,7 @@ class Testラウンドの進行:
     def test_延長戦を切ってあれば_時間切れは引き分けにする(self) -> None:
         """体力の多いほうを勝ちにすると、始まってから隅で待つのがいちばん強くなる。
 
-        延長戦を入れてあれば、時間切れで延長戦に入る
+        延長戦を有効にしてあれば、時間切れで延長戦に入る
         （`tests/systems/test_sudden_death.py`）。
         """
         session = _session(round_limit=Tick(3), sudden_death=False)

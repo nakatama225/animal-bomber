@@ -222,7 +222,7 @@ def draw_body_motion(
         canvas.fill_style = fur
         # ⚠️ 不透明度を 1 に戻す（いまの値に掛けない）。無敵の点滅で下げた不透明度は、
         # このあとの腕と頭では 1 に戻る。原型がこう書いているので、そのまま写す
-        # （TypeScript 版は、元の値に戻す形に直している）。
+        # （TypeScript 版は、元の値に戻す形に修正している）。
         canvas.global_alpha = 0.85
         canvas.begin_path()
         canvas.ellipse(

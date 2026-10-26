@@ -32,9 +32,10 @@
 ので、使うときは失敗の出力に出る `("<ファイル>", "<値> <module>")` の形の組を
 `ALLOWED` に足す。
 
-⚠️ 見つけられない書き方もある。名前を文字列で引く書き方（`getattr(tick, "MatchTick")`・
-`globals()[...]`・型を文字列で渡す `cast("MatchTick", x)`）と、`type(clock.now)(x)` の
-ように `MatchTick` の名前を書かずに値を作る書き方。
+⚠️ 見つけられない書き方もある。名前を文字列で参照する書き方
+（`getattr(tick, "MatchTick")`・`globals()[...]`・型を文字列で渡す
+`cast("MatchTick", x)`）と、`type(clock.now)(x)` のように `MatchTick` の名前を書かずに
+値を作る書き方。
 """
 
 import ast

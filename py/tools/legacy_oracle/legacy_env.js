@@ -10,7 +10,7 @@ const HTML = process.env.LEGACY_HTML
 const src = fs.readFileSync(HTML, 'utf8');
 let code = [...src.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1])[0];
 
-/* ---------- 乱数：種つきの列に差し替える（原型の Math.random を引く順を、Python の見た目の乱数に渡せるように） ---------- */
+/* ---------- 乱数：種つきの列に差し替える（原型の Math.random を取り出す順を、Python の見た目の乱数に渡せるように） ---------- */
 let randomQueue = null;   // 配列を入れると、その順に返す（使い切ったら例外）
 let randomLog = null;     // 配列を入れると、返した値を足していく
 function seededRandom() {
@@ -182,7 +182,7 @@ global.__X = {
 const realRandom = Math.random;
 Math.random = seededRandom;
 randomQueue = [];
-// 読み込むときに Math.random を引く所があれば、ここで列を足す必要がある。
+// 読み込むときに Math.random を取り出す所があれば、ここで列を足す必要がある。
 randomQueue = Array.from({ length: 100000 }, (_, i) => ((i * 0.6180339887498949) % 1));
 new Function(code)();
 randomQueue = null;

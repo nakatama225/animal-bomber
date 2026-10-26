@@ -11,7 +11,7 @@ from animal_bomber.domain.core.rng import Rng
 # TypeScript 版の `Rng`（ts/src/domain/core/Rng.ts）が、同じ種で出した最初の5つの値。
 # node で1度だけ出して貼った。Python の整数は桁あふれしないので、状態を進める式の
 # 切り落とし（加算と2つの掛け算）を1か所でも忘れると、ここが食い違う。
-# 種の切り落としは、下の負の種と 32 ビットを超える種のテストで確かめる。
+# 種の切り落としは、下の負の種と 32 ビットを超える種のテストで確認する。
 TS_FIRST_VALUES = {
     12345: [
         0.9797282677609473,
@@ -53,7 +53,7 @@ class TestTypeScript版と同じ並び:
     def test_負の種は_下位32ビットとして扱う(self) -> None:
         """TypeScript 版は `seed >>> 0` で、-1 を 0xFFFFFFFF として扱う。"""
         rng = Rng(-1)
-        # 引く前の状態も 0 以上 2 の 32 乗未満であること（`Rng.state` の約束）。
+        # 取り出す前の状態も 0 以上 2 の 32 乗未満であること（`Rng.state` の約束）。
         # -1 のまま持つと、同じ並びを出すのに `state` の値が違い、リプレイの
         # 突き合わせで食い違って見える。
         assert rng.state == 0xFFFFFFFF
@@ -65,7 +65,7 @@ class TestTypeScript版と同じ並び:
     def test_順を入れ替えた結果も_TypeScript版と同じになる(self) -> None:
         rng = Rng(2024)
         assert rng.shuffled(range(1, 11)) == [10, 3, 1, 2, 8, 4, 5, 6, 7, 9]
-        # 10 個の順を入れ替えると 9 回引く（最後の1つは選ぶ余地が無い）。
+        # 10 個の順を入れ替えると 9 回取り出す（最後の1つは選ぶ余地が無い）。
         assert rng.calls == 9
 
     def test_列から選んだ結果も_TypeScript版と同じになる(self) -> None:
@@ -102,7 +102,7 @@ class TestRng:
         for _ in range(10_000):
             assert 0 <= rng.random() < 1
 
-    def test_引いた回数を数えている(self) -> None:
+    def test_取り出した回数を数えている(self) -> None:
         rng = Rng(1)
         assert rng.calls == 0
         rng.random()
@@ -135,9 +135,9 @@ class TestRng:
         assert values == {5, 6, 7, 8}
 
     def test_chance_は0なら必ず外れ_1なら必ず当たる(self) -> None:
-        """0 と 1 でも1回引く。
+        """0 と 1 でも1回取り出す。
 
-        引かずに返すと TypeScript 版と引く回数がずれ、以降の並びが全部ずれる。
+        取り出さずに返すと TypeScript 版と取り出す回数がずれ、以降の並びが全部ずれる。
         """
         rng = Rng(11)
         assert not any(rng.chance(0) for _ in range(1000))
@@ -163,7 +163,7 @@ class TestRng:
         a = Rng(2024).shuffled(source)
         b = Rng(2024).shuffled(source)
         assert a == b
-        # 混ざっていること自体も確かめる。そのまま返していたら意味がない。
+        # 混ざっていること自体も確認する。そのまま返していたら意味がない。
         assert a != source
         assert sorted(a) == source
 
@@ -177,7 +177,9 @@ class TestRng:
         assert Rng(7).shuffled(tuple(source)) == first
 
     @pytest.mark.parametrize("items", [[], [7]])
-    def test_要素が1つ以下なら_順を入れ替えても引かない(self, items: list[int]) -> None:
+    def test_要素が1つ以下なら_順を入れ替えても取り出さない(
+        self, items: list[int]
+    ) -> None:
         rng = Rng(5)
         result = rng.shuffled(items)
         assert result == items
@@ -200,7 +202,7 @@ class TestRng:
         assert rng.state == before  # 元は進んでいない
         assert [rng.random() for _ in range(5)] == predicted
 
-    def test_clone_は引いた回数を引き継がない(self) -> None:
+    def test_clone_は取り出した回数を引き継がない(self) -> None:
         rng = Rng(1)
         rng.random()
         rng.random()

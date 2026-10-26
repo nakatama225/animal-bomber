@@ -22,7 +22,7 @@ def make_world(
     前の tick の入力だけを、ラウンドの途中の状態（だれも何も押していない）にする。
     ラウンドの始まりは爆弾と技のボタンを押していた扱い（`HELD_AT_ROUND_START`）なので、
     そのままだと、押した瞬間を見るテストがどれも 1 tick 待つ形になる。ラウンドの
-    始まりの扱いは `tests/app/test_session.py` で `create_world` から確かめる。
+    始まりの扱いは `tests/app/test_session.py` で `create_world` から確認する。
 
     ⚠️ 技のボタンの「とくぎを出し終えた扱い」（`action_fired` の True）は、ラウンドの
     始まりのまま残る。長押しのとくぎを見るテストは、まず 1 tick 離してから押す。
@@ -68,7 +68,7 @@ def advance(
 
 
 def clear_board(world: WorldState) -> None:
-    """壊せるブロックを全部取り除く。爆風の伸び方や動きを確かめやすくするため。"""
+    """壊せるブロックを全部取り除く。爆風の伸び方や動きを確認しやすくするため。"""
     for cell, tile in list(world.board.cells()):
         if tile is Tile.SOFT:
             world.board.put(cell, Tile.EMPTY)

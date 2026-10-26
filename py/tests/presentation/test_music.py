@@ -1,7 +1,7 @@
 """曲（`score.py`・`music.py`）の検査。1周の長さ・音符の位置・はみ出しの折り返し・鳴らす場面。
 
 音は出さない（SDL の dummy の音の出口）。原型の刻みと同じ部品と値の動きを作ることは
-`test_sound_table.py` が確かめている。
+`test_sound_table.py` が確認している。
 """
 
 import random
@@ -120,7 +120,7 @@ class Test1周:
     def test_いまの曲は_1周の終わりからはみ出さない(self) -> None:
         """最後の音符（刻み 14 のベース）は 1.68 秒で止まり、1周（1.739 秒）に収まる。
 
-        はみ出しを頭に足す仕組みは、下の作った譜面で確かめる（いまの曲だけでは、足す
+        はみ出しを頭に足す仕組みは、下の作った譜面で確認する（いまの曲だけでは、足す
         仕組みが壊れていても気づけない）。
         """
         rendered = mix(loop_voices(), RATE, white_noise(random.Random(1), RATE))
@@ -138,7 +138,7 @@ class Test折り返し:
         np.testing.assert_array_equal(fold(np.array([1.0, 2.0]), 4), [1, 2, 0, 0])
 
     def test_終わり際に鳴らし始めた音符の残りは_1周の頭で鳴る(self) -> None:
-        """1周の終わりの 0.05 秒前に、0.14 秒の音符を置いた譜面で確かめる。"""
+        """1周の終わりの 0.05 秒前に、0.14 秒の音符を置いた譜面で確認する。"""
         length = loop_frames(RATE)
         late = note_voice(220.0, length / RATE - 0.05, 0.14, Wave.SQUARE, 0.5)
         rendered = mix([late], RATE, np.zeros(RATE))

@@ -78,7 +78,7 @@ class Test移動:
         ]
 
     def test_壁で進めなくても_押した向きを向く(self) -> None:
-        """原型も、動く前に向きを変える。上の確かめは、どれも進める所で押している。"""
+        """原型も、動く前に向きを変える。上の検査は、どれも進める所で押している。"""
         world = make_world()
         player = world.players[0]
         # 上の外周の壁に体が触れる位置（1 + 0.36）。始めは下を向いている。
@@ -198,7 +198,7 @@ class Test速さ:
             (13, (EffectKind.SLOW,), Tile.SOFT, 0.664524),
         ],
     )
-    def test_ブロックの中では0点18倍_超スローは効き_とまれないは効かず_下限は0点42(
+    def test_ブロックの中では0点18倍_超スローは有効_とまれないは無効_下限は0点42(
         self, shoes: int, effects: tuple[EffectKind, ...], tile: Tile, expected: float
     ) -> None:
         mole = make_world(animals=(Animal.MOLE, Animal.FOX)).players[0]

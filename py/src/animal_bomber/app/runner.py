@@ -38,7 +38,7 @@ class MatchRunner(Protocol):
 
     @property
     def config(self) -> MatchConfig | None:
-        """試合の設定（技の音を選ぶのに、動物を引く）。始まっていなければ None。"""
+        """試合の設定（技の音を選ぶのに、動物を参照する）。始まっていなければ None。"""
         ...
 
     @property

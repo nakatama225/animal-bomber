@@ -1,4 +1,4 @@
-"""通信で届いた入力と、それを試合に流す窓口。"""
+"""通信で届いた入力と、それを試合に渡す窓口。"""
 
 from animal_bomber.domain.core.tick import MatchTick
 from animal_bomber.domain.input.player_input import PlayerInput
@@ -23,7 +23,7 @@ class ConfirmedInputs:
 
     ⚠️ `InputLog.at` だけでは足りない。`at` は記録の無い tick に「直前の入力が続いて
     いる」を返すので、まだ届いていない tick を読んでもそれらしい値が返る。届く前に進める
-    と、その端末だけ違う入力で試合を進めて黙ってずれる。届いたかどうかは、ここで確かめて
+    と、その端末だけ違う入力で試合を進めて黙ってずれる。届いたかどうかは、ここで確認して
     から読む。
 
     入力は tick の順に1つずつ届く約束になっている（1 tick に1通、飛ばさない）。飛んだら
@@ -80,24 +80,24 @@ class ConfirmedInputs:
 
         途中で抜けたプレイヤーと、その入力を最後に使う tick も、`LockstepDriver` が
         ここに書く。時刻は試合通算の時刻なので、`ReplayInputSource` で1台の試合として
-        流し直せる。CPU の枠の操作は入っていないので、同じ設定から作り直す。抜けた
-        プレイヤーは、記録を流す窓口に同じ CPU の作り方を渡せば、`departed_after` の
+        再生できる。CPU の枠の操作は入っていないので、同じ設定から作り直す。抜けた
+        プレイヤーは、記録を再生する窓口に同じ CPU の作り方を渡せば、`departed_after` の
         次の tick から CPU に替わる。
         """
         return self._log
 
 
 class NetworkInputSource:
-    """通信で届いた入力を流す窓口。
+    """通信で届いた入力を渡す窓口。
 
-    キーボード・CPU・記録を流す窓口と同じ資格で試合に繋がる。
+    キーボード・CPU・記録を再生する窓口と同じ資格で試合に繋がる。
 
     ⭐ 自分の端末で操作しているプレイヤーも、この窓口を通す。自分の入力も相手と同じ
     だけ遅らせて使わないと、自分の手元でだけ先に動いて試合がずれる。
 
     途中で抜けたプレイヤーは、記録の `replaced_at` が真になった tick から、代わりの窓口
-    （CPU）に任せる。記録を流す窓口（`ReplayInputSource`）と同じ判定なので、通信対戦の
-    記録を1台で流し直しても、同じ tick で替わる。TypeScript 版は、進める側
+    （CPU）に任せる。記録を再生する窓口（`ReplayInputSource`）と同じ判定なので、
+    通信対戦の記録を1台で再生しても、同じ tick で替わる。TypeScript 版は、進める側
     （`LockstepDriver`）が試合の窓口を繋ぎ替える。この版は窓口の中で替えるので、試合の
     側（`GameSession`）に窓口を差し替える口が要らない。
     """

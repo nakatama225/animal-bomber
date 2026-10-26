@@ -9,7 +9,7 @@
 
     events = step(world, inputs)
     presenter.consume(events, world)  # 遊ぶとき
-    # 試合を何千回も回して測るときは、何も書かない
+    # 試合を何千回も実行して測るときは、何も書かない
 
 音を消す設定も、テスト用のモードも要らない。
 
@@ -25,7 +25,7 @@
 - 技が一列に並べた爆弾は、何本でも置く音1回（原型の `placeLineBombs`）
 - 優勝が決まったラウンドは、優勝の音だけ（原型の `endGame`）
 
-同じ音を一定時間まとめて1回にする仕組み（TypeScript 版は 0.03 秒）は入れず、原型が
+同じ音を一定時間まとめて1回にする仕組み（TypeScript 版は 0.03 秒）は実装せず、原型が
 1回しか鳴らさない所は、上のように場面を見分けて1回にする。
 
 ラウンドが決まった tick は、勝ち・引き分け・優勝の音の直前に曲を止める（原型の
@@ -65,8 +65,8 @@ L2269）。どのプレイヤーを人間が操作しているかはルールの
 
 `_handle`・`_notify` と、種類ごとの音の表（`audio/cues.py`）は `match` で種類ごとに
 分け、最後に `assert_never` を置いてある。イベントや状態の種類を1つ足すと、扱いを
-書き忘れた所が mypy で失敗する。足した側が、音を当てるか・何と出すかを必ず1度は
-決めることになる。TypeScript 版は `switch` と `never` で同じことをしている。
+書き忘れた所が mypy で失敗する。足した側は、音を当てるか・何と出すかを必ず1度は
+決める。TypeScript 版は `switch` と `never` で同じことをしている。
 """
 
 from collections.abc import Callable, Iterable, Sequence
@@ -164,8 +164,9 @@ RosterOf: TypeAlias = Callable[[], Roster]
 AnimalOf: TypeAlias = Callable[[PlayerId], Animal | None]
 """そのプレイヤーの動物。技の音を動物ごとに選ぶのに使う。
 
-技を使ったイベント（`TechniqueUsed`）はプレイヤーの番号しか運ばないので、引く関数を
-外から渡す（TypeScript 版は盤面そのものを渡している）。分からなければ None を返す。
+技を使ったイベント（`TechniqueUsed`）はプレイヤーの番号しか運ばないので、動物を取得する
+関数を外から渡す（TypeScript 版は盤面そのものを渡している）。分からなければ None を
+返す。
 """
 
 
@@ -212,7 +213,7 @@ class _Tick:
         ⚠️ 被弾の処理（`domain/systems/damage.py` の `hurt`）が、被弾・吐き出した
         アイテム・倒れた、の順にイベントを並べることに頼っている。並びを変えると、
         吐き出す音が鳴らなくなる（`tests/presentation/test_presenter.py` の、試合を
-        進めて確かめるテストが失敗する）。
+        進めて検証するテストが失敗する）。
         """
         following = self.events[index + 1 : index + 2]
         return any(
@@ -579,7 +580,7 @@ class Presenter:
         return not isinstance(self._controller(player), Cpu)
 
     def _animal(self, player: PlayerId, world: WorldState | None) -> Animal | None:
-        """そのプレイヤーの動物。渡された関数で分からなければ、盤面から引く。"""
+        """そのプレイヤーの動物。渡された関数で分からなければ、盤面から取得する。"""
         animal = self._animal_of(player)
         if animal is None and world is not None and player < len(world.players):
             animal = world.players[player].animal

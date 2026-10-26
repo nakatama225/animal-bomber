@@ -147,10 +147,10 @@ def clamp_scroll(offset: int, content: int, view: int) -> int:
 
 
 def positions_of(groups: Sequence[MenuGroup]) -> dict[int, tuple[int, int]]:
-    """項目（の `id`）から、カーソルの位置（グループ, 項目）を引く表。
+    """項目（の `id`）から、カーソルの位置（グループ, 項目）を取得する表。
 
     同じ画面の中身（`ScreenView`）の中では、グループと画面の部品が同じ項目を持つので、
-    部品を置きながら項目の位置を引ける。
+    部品を置きながら項目の位置を取得できる。
     """
     return {
         id(item): (group_index, item_index)

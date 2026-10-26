@@ -76,9 +76,9 @@ class FrameScene:
 
 
 def shake_offset(shake: float, rng: CosmeticRng) -> tuple[float, float] | None:
-    """画面の揺れのずれ（px）。揺れが小さければ None（乱数を引かない）。
+    """画面の揺れのずれ（px）。揺れが小さければ None（乱数を取り出さない）。
 
-    揺れるときは、見た目の乱数を横・縦の順に2つ引く（原型と同じ順）。
+    揺れるときは、見た目の乱数を横・縦の順に2つ取り出す（原型と同じ順）。
     """
     if shake <= SHAKE_FROM:
         return None
@@ -90,7 +90,7 @@ def draw_frame(
 ) -> None:
     """1枚の絵を描く（原型の draw）。
 
-    見た目の乱数は、画面の揺れ・爆風・被弾の揺れの順に引く。
+    見た目の乱数は、画面の揺れ・爆風・被弾の揺れの順に取り出す。
     """
     draw_background(canvas, layout)
     canvas.save()

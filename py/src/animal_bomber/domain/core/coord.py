@@ -52,7 +52,7 @@ class Direction(Enum):
 
     列挙の順（上・右・下・左）は TypeScript 版の `DIRECTIONS` と同じ。順で答えが変わる
     探し方（爆風を伸ばす順・CPU の経路探し・CPU が隣のマスを比べる順）は、原型と同じ
-    右・左・下・上の `SCAN_ORDER` で回す。
+    右・左・下・上の `SCAN_ORDER` の順に走査する。
 
     ⚠️ `set` に入れて取り出さない。`Enum` の要素の hash は名前の文字列の hash なので、
     取り出す順がプロセスごとに変わる。4方向を順に扱うときは `Direction` そのもの
@@ -79,7 +79,7 @@ class Direction(Enum):
 SCAN_ORDER: Final = (Direction.RIGHT, Direction.LEFT, Direction.DOWN, Direction.UP)
 """原型（`legacy/animal-bomber.html` の `DIRS`）と同じ右・左・下・上の順。
 
-順で答えが変わる探し方は、この順で回す。爆風を伸ばす順（`query/blast_reach.py`）は、
+順で答えが変わる探し方は、この順で走査する。爆風を伸ばす順（`query/blast_reach.py`）は、
 爆風が重なったマスで当てたプレイヤーを決める。CPU の経路探し（`query/path.py`）は、
 同じ長さの経路がいくつもあるとき、どれを選ぶかを決める（TypeScript 版の `SCAN_ORDER`）。
 

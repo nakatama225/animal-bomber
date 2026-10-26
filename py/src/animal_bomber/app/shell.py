@@ -1,4 +1,4 @@
-"""画面の流れを回す（起動の幕 → タイトル → … → 試合 → 幕 → 次のラウンドなど）。
+"""画面の流れを実行する（起動の幕 → タイトル → … → 試合 → 幕 → 次のラウンドなど）。
 
 幕のあとは、次のラウンド・もういっかい・タイトルのどれか。
 
@@ -312,7 +312,7 @@ class _ToastNotices:
 
 
 class Shell:
-    """画面の流れを回す（モジュールの説明）。"""
+    """画面の流れを実行する（モジュールの説明）。"""
 
     def __init__(
         self, tools: ShellTools, *, relay: str | None = None, started_ms: float = 0.0
@@ -460,7 +460,7 @@ class Shell:
     def frame(
         self, ticks: int, events: Sequence[pygame.event.Event], now_ms: float
     ) -> bool:
-        """1フレームぶん回す（モジュールの説明の順）。
+        """1フレームぶん処理する（モジュールの説明の順）。
 
         Args:
             ticks: 輪（`shell/loop.py` の `frames`）が返した、実時間で進んだ tick の数。
@@ -798,7 +798,7 @@ class Shell:
         """中継につなぐ。先に5匹とも絵を描いておく（どの動物が出るかはホストが決める）。
 
         つないだあとに描くと、その間ほかの端末がこの端末の入力を待って止まる。つなぐ間
-        （名前を引く・つなぐのを待つ）は窓が止まるので、先に何をしているかを出す
+        （名前を解決する・つなぐのを待つ）は窓が止まるので、先に何をしているかを出す
         （`shell/relay_link.py` の説明）。
         """
         self._prepare(tuple(Animal))
@@ -973,7 +973,7 @@ class Shell:
             events = runner.step()
             world = runner.world
             assert world is not None, "進めたのに盤面が無い"
-            # 秒読みと曲を、イベントの音より先に回す（原型と同じ順。原型は update の
+            # 秒読みと曲を、イベントの音より先に処理する（原型と同じ順。原型は update の
             # 頭で秒読みを鳴らし、曲はラウンドの最初の update より前に鳴らし始める）。
             for observer in game.observers:
                 observer.observe(world, events)

@@ -9,8 +9,8 @@
 型検査では見つからない。
 
 突進は移動・破壊・取得・被弾の4つに同時に割り込むので、いちばん特別扱いを誘いやすい。
-共通の処理に突進の名前が無いまま書けていることを、ここで見張る（TypeScript 版の
-`guards.test.ts` の「動物の追加が閉じていること」と同じ見張り方）。
+共通の処理に突進の名前が無いまま書けていることを、ここで検査する（TypeScript 版の
+`guards.test.ts` の「動物の追加が閉じていること」と同じ検査の仕方）。
 
 ⚠️ ファイルの文字列をそのまま見ていて、コードとコメントを区別しない。コメントに動物の
 名前を書くだけでも失敗する。原型の逸話を書くときも動物の名前は出さず、「ブロックを通り
@@ -41,7 +41,7 @@ KIND_NAMES = (
 )
 """動物の名前と、振る舞い・盤面の物のクラスの名前。
 
-列挙と union から作るので、種類を足すと見張る名前も増える。
+列挙と union から作るので、種類を足すと検査する名前も増える。
 """
 
 KIND_WORDS = re.compile(
@@ -81,10 +81,10 @@ class Test種類が閉じていること:
         ]
         assert offenders == []
 
-    def test_見張るファイルに_試合を進める処理と問い合わせとイベントが入っている(
+    def test_検査するファイルに_試合を進める処理と問い合わせとイベントが入っている(
         self,
     ) -> None:
-        """見張るファイルの一覧が空だと、上の確かめは何も見ずに通る。"""
+        """検査するファイルの一覧が空だと、上の検査は何も見ずに通る。"""
         names = {path.relative_to(DOMAIN.parent).as_posix() for path in watched()}
         assert {
             "domain/systems/actions.py",
@@ -102,8 +102,8 @@ class Test種類が閉じていること:
         } <= names
         assert "ai/tactics.py" not in names
 
-    def test_見張る言葉が_種類を扱うファイルには現れる(self) -> None:
-        """前の確かめが「その言葉がどこにも無いだけ」で通ってしまわないための対照。"""
+    def test_検査する言葉が_種類を扱うファイルには現れる(self) -> None:
+        """前の検査が「その言葉がどこにも無いだけ」で通ってしまわないための対照。"""
         for path in (
             DOMAIN / "abilities/elephant.py",
             DOMAIN / "abilities/techniques.py",
@@ -111,8 +111,8 @@ class Test種類が閉じていること:
         ):
             assert KIND_WORDS.search(path.read_text(encoding="utf-8")), path.name
 
-    def test_見張る名前に_どの種類も入っている(self) -> None:
-        """列挙や union から名前を取り出しそこねると、見張りが黙って狭くなる。"""
+    def test_検査する名前に_どの種類も入っている(self) -> None:
+        """列挙や union から名前を取り出しそこねると、検査の範囲が黙って狭くなる。"""
         assert len(KIND_NAMES) == len(Animal) + len(get_args(Action)) + len(
             get_args(Actor)
         )

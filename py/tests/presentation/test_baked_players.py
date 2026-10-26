@@ -76,7 +76,7 @@ LAYOUT = Layout(50)
 
 NOW = Tick(640)
 IX, IY = 331, 381
-"""プレイヤーの中心（px。整数にして、貼る位置の丸めが入らないようにする）。"""
+"""プレイヤーの中心（px。整数にして、貼る位置の丸めが発生しないようにする）。"""
 
 BOX = (IX - 70.0, IY - 75.0, IX + 70.0, IY + 40.0)
 _PAINTS = {"fill", "stroke", "fillRect", "strokeRect", "fillText", "strokeText"}
@@ -221,7 +221,7 @@ class Testゲージと印:
 
 
 class Test被弾の揺れ:
-    def test_体を乱数2つぶんずらして貼り_乱数の引き方は描いた絵と同じ(self) -> None:
+    def test_体を乱数2つぶんずらして貼り_乱数の取り出し方は描いた絵と同じ(self) -> None:
         """揺れの幅は 4px（原型の drawPlayer）。
 
         乱数は 0.75 と 0.25 にして、ずれを整数の px（右へ 1・上へ 1）にする（体を貼る

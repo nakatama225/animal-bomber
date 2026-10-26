@@ -3,10 +3,10 @@
 同じ盤面と見た目だけの値を、取っておいた絵を貼る `Renderer` と、描く関数を直接呼ぶ手本の
 `draw_frame` の両方で描き、画素を比べる（差の幅は `frame_scenes.py` の説明）。見た目の
 乱数（画面の揺れ・爆風のちらつき・被弾の揺れ）は同じ値の列を両方に差し、同じ順に同じ数
-だけ引くかも見る。
+だけ取り出すかも見る。
 
 段に丸めたことのずれは、取っておく絵の検査（`test_baked*.py`・
-`test_quantization_bounds.py`）が上限を確かめてある。ここでは並べる順・揺れ・不透明度を
+`test_quantization_bounds.py`）が上限を確認してある。ここでは並べる順・揺れ・不透明度を
 見るので、段をごく細かくして丸めのずれを消し（`fine_levels`）、位置は整数の px に乗る
 場面にする（マス 50 なら盤面の左上が 31px で、マスの中央が整数の px になる）。
 """
@@ -209,7 +209,9 @@ def lanes_and_leeks(*, pit: bool = True) -> tuple[WorldState, FixedVisuals]:
 
 @pytest.mark.usefixtures("fine_levels")
 class Test手本と同じ絵:
-    def test_ふだんの1枚は_手本と同じ順と揺れで描き_乱数を同じ順に引く(self) -> None:
+    def test_ふだんの1枚は_手本と同じ順と揺れで描き_乱数を同じ順に取り出す(
+        self,
+    ) -> None:
         world, visuals, randoms = ordinary()
         art = BakedArt(LAYOUT)
         before = hash_world(world)
@@ -354,7 +356,7 @@ class Test手本と同じ絵:
         wanted, _ = direct_image(LAYOUT, world, visuals, [])
         assert frame_mismatches(got, wanted, FADED) != (0, 0)
 
-    def test_止まった盤面でも_描くたびに揺れの乱数を2つ引いて揺らす(self) -> None:
+    def test_止まった盤面でも_描くたびに揺れの乱数を2つ取り出して揺らす(self) -> None:
         """決着のあとの待ちの間は、盤面も揺れの幅も止まったまま、描くたびに揺らす。"""
         world, visuals, randoms = ordinary()
         art = BakedArt(LAYOUT)
@@ -383,7 +385,7 @@ class Test手本と同じ絵:
         wanted, _ = direct_image(LAYOUT, world, visuals, [0.625, 0.125, *tail])
         assert_same_frame(got, wanted, FADED)
 
-    def test_揺れが小さければ_揺れの乱数を引かない(self) -> None:
+    def test_揺れが小さければ_揺れの乱数を取り出さない(self) -> None:
         world, visuals, randoms = ordinary()
         visuals.shake = 0.2
         got, used = renderer_image(BakedArt(LAYOUT), world, visuals, randoms[2:])
@@ -396,7 +398,7 @@ class Test手本と同じ絵:
 def test_倒れたプレイヤーは描かない() -> None:
     """原型の drawPlayer は、退場したプレイヤーでは最初に帰る。
 
-    被弾の揺れの乱数も引かない。
+    被弾の揺れの乱数も取り出さない。
     """
     world, visuals, randoms = ordinary()
     art = BakedArt(LAYOUT)

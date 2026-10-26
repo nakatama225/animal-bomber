@@ -99,14 +99,14 @@ def place_bomb_at(world: WorldState, player: PlayerState, cell: Cell) -> Bomb | 
 
 
 def spawn_bomb(world: WorldState, player: PlayerState, cell: Cell) -> Bomb:
-    """確かめずに、そのマスへそのプレイヤーの爆弾を1つ生やす。
+    """確認せずに、そのマスへそのプレイヤーの爆弾を1つ生やす。
 
     技が爆発を起こすため（跳ね回る爆弾の爆発）に使う。手持ちを使い切っていても生やす
     （原型の spawnBomb も手持ちを見ない）。生やした爆弾も盤面に出ている数に数えるので、
     起こして取り除けば、ここで足したぶんは差し引きで戻る。⚠️ 呼ぶ側の技が、生やした直後
     にも数を1つ戻すことがある（原型にそういう技があり、同じ数え方にしてある）。その
     ときは差し引きで1つ少なくなる（0 で止める）。
-    ⚠️ 置けるかの確かめが要る場面（プレイヤーの操作で置く）では `place_bomb_at` を使う。
+    ⚠️ 置けるかの確認が要る場面（プレイヤーの操作で置く）では `place_bomb_at` を使う。
     """
     # 置いたプレイヤー自身だけでなく、体の中心がそのマスにある全員を通り抜けの対象にする
     # （TypeScript 版と同じ。原型との違いと理由は `Bomb.pass_through`）。
@@ -128,7 +128,7 @@ def remove_bomb(world: WorldState, bomb: Bomb) -> None:
 
     二度呼ばれても、数を二度減らさない。いまの呼び方では二度呼ばれない（連鎖では
     `Bomb.chained` の印で同じ爆弾を二度積まず、別の連鎖に取り除かれた爆弾は
-    `systems/blast.py` が飛ばす）。ここは念のための確かめ（原型の removeBomb と同じ）。
+    `systems/blast.py` が飛ばす）。ここは念のための確認（原型の removeBomb と同じ）。
     """
     if bomb not in world.bombs:
         return

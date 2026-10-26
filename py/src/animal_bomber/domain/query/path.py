@@ -7,7 +7,7 @@ CPU の判断（段階 6）が使う（TypeScript 版の `query/PathFinder.ts`�
 ここでは複雑さに見合わない。
 
 隣のマスは原型の bfsPath と同じ右・左・下・上の順（`core/coord.py` の `SCAN_ORDER`）で
-調べる。同じ長さの経路がいくつもあるとき、どれを返すかはこの順で決まる。
+探索する。同じ長さの経路がいくつもあるとき、どれを返すかはこの順で決まる。
 """
 
 from collections.abc import Callable, Sequence
@@ -62,7 +62,7 @@ def find_path(
 ) -> list[Cell] | None:
     """`start` から、`goal` を満たすマスまでの最短経路。
 
-    出発点そのものは目的地として調べない（原型の bfsPath の `dist>0`）。
+    出発点そのものは目的地として判定しない（原型の bfsPath の `dist>0`）。
 
     Returns:
         出発点の次のマスから目的地までの並び。見つからなければ None。

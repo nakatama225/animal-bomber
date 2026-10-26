@@ -3,7 +3,7 @@
 鳴らす場面と回数は、原型（`legacy/animal-bomber.html`）の効果音の呼び出しに合わせてある。
 テストの説明に、合わせた呼び出しの行番号（L…）を書く。イベントの並べ方に頼る所
 （被弾のあとの吐き出し・技が並べた爆弾・優勝の tick）は、作ったイベントの並びのほかに、
-試合を実際に進めて出たイベントでも確かめる。
+試合を実際に進めて出たイベントでも確認する。
 """
 
 from collections.abc import Mapping, Sequence
@@ -150,7 +150,7 @@ class Test爆弾と爆発:
         """技を出したプレイヤーの爆弾の並びが途切れたら、その先は技が並べたものではない。
 
         1 tick の処理の順では起きない並びだが、見分ける規則（同じプレイヤーの爆弾が
-        技のすぐあとに続く）そのものを確かめる。
+        技のすぐあとに続く）そのものを確認する。
         """
         events: list[SimEvent] = [
             TechniqueUsed(player=1, special=False),
@@ -163,7 +163,7 @@ class Test爆弾と爆発:
         ]
 
     def test_一列置きを試合で出すと_置く音は1回(self) -> None:
-        """試合の処理が、技を出したイベントのすぐあとに並べた爆弾を続けることの確かめ。"""
+        """試合の処理が、技を出したイベントのすぐあとに並べた爆弾を続けることの確認。"""
         world = make_world(animals=(Animal.FOX, Animal.RABBIT))
         clear_board(world)
         fox = world.players[0]
@@ -338,7 +338,7 @@ class Test被弾:
     def test_試合で爆風に当たると_原型と同じ音(
         self, hp: int, expected: list[SoundName]
     ) -> None:
-        """被弾の処理が、被弾・吐き出したアイテム・倒れた、の順に並べることの確かめ。"""
+        """被弾の処理が、被弾・吐き出したアイテム・倒れた、の順に並べることの確認。"""
         world = make_world()
         clear_board(world)
         player = world.players[0]
@@ -390,7 +390,7 @@ class Test被弾:
     def test_体当たりは_押しつけた状態の音_体当たりの音_被弾の音(self) -> None:
         """原型の updateCharge（L2874-2882）に合わせる。
 
-        抱えていた悪いアイテムを applyItem で1つずつ効かせ（それぞれの状態の音）、
+        抱えていた悪いアイテムを applyItem で1つずつ適用し（それぞれの状態の音）、
         そのあと `SE.charge()` と hurt。
         """
         events: list[SimEvent] = [
@@ -523,7 +523,7 @@ class Testラウンドの終わり:
     def test_試合を進めて決めると_原型と同じ音(
         self, wins_to_take: int, expected: list[SoundName]
     ) -> None:
-        """ラウンドの終わりと試合の終わりが、同じ tick のイベントに並ぶことの確かめ。
+        """ラウンドの終わりと試合の終わりが、同じ tick のイベントに並ぶことの確認。
 
         2P を、体力が尽きる爆風で倒す（倒れる被弾でも、アイテムは吐き出す）。倒れた 2P
         は外周へ回るが、盤面に1人だけ残るので、外周を待たずにその tick に決まる。

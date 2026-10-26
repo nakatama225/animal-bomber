@@ -67,7 +67,7 @@ def can_dig_at(world: WorldState, cell: Cell) -> bool:
 
     掘れないのは3つ。マスが空いていない（壊せるブロックの中）、もう穴がある、爆弾がある。
     ⚠️ アイテム（とくぎで撒かれたうんこも）の上には掘れる。原型が見るのもこの3つだけ。
-    ⚠️ 掘り始めの確かめで、掘り終わりには使わない。掘り終わりは爆弾を見ない
+    ⚠️ 掘り始めの確認で、掘り終わりには使わない。掘り終わりは爆弾を見ない
     （`finish_dig`）。
     """
     if world.board.at(cell) is not Tile.EMPTY:
@@ -104,8 +104,8 @@ def advance_dig(world: WorldState, player: PlayerState, digging: Dig) -> Progres
 def finish_dig(world: WorldState, player: PlayerState, digging: Dig) -> list[SimEvent]:
     """掘り終わった時点で穴ができる。途中で打ち切られたときは何も残らない。
 
-    掘り終わりにも確かめ直す。2匹が同じマスを同時に掘ると、先に掘り終えた側の穴がもう
-    ある。⚠️ 確かめ直すのはマスと穴の2つだけで、爆弾は見ない（原型の updateDigging）。
+    掘り終わりにも確認し直す。2匹が同じマスを同時に掘ると、先に掘り終えた側の穴がもう
+    ある。⚠️ 確認し直すのはマスと穴の2つだけで、爆弾は見ない（原型の updateDigging）。
     掘っている間に同じマスへ爆弾を置かれても、その下に穴ができる。爆弾を見るのは
     掘り始め（`can_dig_at`）だけ。
 

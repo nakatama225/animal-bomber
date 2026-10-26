@@ -1,4 +1,4 @@
-"""粒子と画面の揺れが、原型と同じ式・同じ乱数の引き方で出ることの検査。
+"""粒子と画面の揺れが、原型と同じ式・同じ乱数の取り出し方で出ることの検査。
 
 固定値（`legacy_particles.json`）は、原型（`legacy/animal-bomber.html`）を node で
 読み込み、粒子と揺れを出す関数（puff・destroySoft・kill・hurt・hop・elephantSnot・chargeSweep・
@@ -12,7 +12,7 @@ explodeChain・updateNegis・negiHit・negibonCutoff・updateFoxfires・enterSud
 この版では、粒子はイベントから作る（`scene/effects.py`）。どのケースも、原型のその場面に
 あたるイベント（と盤面）を作って `EffectField` に渡し、原型が使った乱数の列を見た目の
 乱数に差して、同じ粒子（位置・速さ・寿命・色・大きさ・文字・回るか）と揺れが出るかを見る。
-原型が使った乱数のうち、ルールの層が引くもの（ブロックのあとのアイテムの抽選・被弾で
+原型が使った乱数のうち、ルールの層が取り出すもの（ブロックのあとのアイテムの抽選・被弾で
 吐き出すアイテムの種類）は外して差す。
 """
 
@@ -166,7 +166,7 @@ class Test煙:
         run(CASES["puff #b98a5a 🍌"], [ItemTaken(AT, ItemKind.BANANA, 0)])
 
     def test_舌で引き寄せたアイテムには出さない(self) -> None:
-        """原型の updateTongue は、引き寄せたアイテムを効かせるだけで煙を出さない。"""
+        """原型の updateTongue は、引き寄せたアイテムを適用するだけで煙を出さない。"""
         field = EffectField(CosmeticRng(ScriptedRandom([])))
         field.apply(world_with(), [ItemTaken(None, ItemKind.FIRE, 0)], None)
         assert field.particles == []
@@ -226,7 +226,7 @@ class Test煙:
 
 class Test破片と揺れ:
     def test_壊れたブロックの破片(self) -> None:
-        """原型は破片の 42 個のあとにアイテムの抽選の乱数を引く（ルールの層の乱数）。"""
+        """原型は破片の 42 個のあとに、ルールの層の乱数でアイテムを抽選する。"""
         case = CASES["destroySoft"]
         assert len(case["random"]) - 42 in (1, 2)
         field = run(
@@ -408,7 +408,7 @@ class Test葱ボンと延長戦:
         run(CASES["kill to negibon"], [PlayerDown(0, None, Point(7.5, 9.5))], world)
 
     def test_同じtickに寿命で消える炎が2つあると_新しい炎の煙から出す(self) -> None:
-        """原型の updateFoxfires は炎の並びを後ろから回す（見た目の乱数を引く順）。
+        """原型の updateFoxfires は炎を後ろから処理する（見た目の乱数を取り出す順）。
 
         描く側は、前の tick にあって消えた炎から煙を出す（`scene/actors.py`）。煙を
         出した tick の最後に、粒子を 1 tick 進める（原型の update の最後と同じ）。

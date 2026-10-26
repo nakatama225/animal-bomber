@@ -21,12 +21,12 @@ uv run tools/verify.sh   # ruff → ruff format --check → mypy --strict → li
 
 `uv run python tools/bench_render.py` で、いちばん重い場面を本物の描画の層（`Renderer`）で描いて、
 描画時間を測れます。窓は開きません（SDL の dummy ドライバで描きます。`tests/tools/test_bench_render.py` が
-確かめています）。場面は `tools/bench_match_scene.py`、合格基準は `tools/bench_gate.py`、測った結果と
+検証しています）。場面は `tools/bench_match_scene.py`、合格基準は `tools/bench_gate.py`、測った結果と
 経緯は README の Design Choice 1. にあります。
 
 - 描画の層で毎フレームの描き方（貼る絵の作り方・半透明の掛け方・描く数・場面の揺れ方など）を変えたら、
-  測り直して README の数字も直してください。場面が貼る数を数えるテスト
-  （`tests/tools/test_bench_match_scene.py`）が失敗したら、その数も直します
+  測り直して README の数字も更新してください。場面が貼る数を数えるテスト
+  （`tests/tools/test_bench_match_scene.py`）が失敗したら、その数も更新します
 - 段階 0 の測定（描画の層を作る前に、代わりの絵で描いた場面）は `tools/bench_scene.py`・
   `bench_sprites.py`・`bench_particles.py` に残してあります。フレームの間の待ち方の測定
   （`tools/bench_pacing.py`）がこの場面を描きます。README の段階 0 の数字はこの場面で測ったものなので、
@@ -39,7 +39,7 @@ uv run tools/verify.sh   # ruff → ruff format --check → mypy --strict → li
   薄めないでください。重く、しきい値を超えた回がありました。貼るたびに薄めるのと同じ整数の
   不透明度ごとに薄めた写しを作っておき、薄めずに貼ります（`render/sprites.py` の
   `SpriteCache.faded`）。段を粗くして丸めると見た目が変わります。例外は回りながら浮かぶ顔で、
-  回した絵を毎フレーム作り直し、薄めた形の絵にしてから重ねます（数が少ないので重さに効きません）
+  回した絵を毎フレーム作り直し、薄めた形の絵にしてから重ねます（数が少ないので重さに影響しません）
 - ⛔ 窓の面へ直接描かないでください。アルファの桁の無い面に描き、窓の面へは 1 フレームに
   1 回だけ貼ります（合否はこの形で測って決めました。窓の面がアルファの桁を持つ形式だと、
   直接描く形は重くなります。`app/main.py` の `run` と `app/shell.py` の描く面）
@@ -79,12 +79,12 @@ uv run tools/verify.sh   # ruff → ruff format --check → mypy --strict → li
 
 - 試合の状態は読むだけにしてください。書き換えると、画面を出したときだけ試合が変わります
   （`tests/presentation/test_render_match.py` が、描く前と後で状態の要約が変わらないことを見ます）。
-  試合の乱数（`world.rng`）も引きません
-- 見た目の乱数は `presentation/cosmetic_rng.py` の `CosmeticRng` から引いてください。`random` を
-  直に使わないでください。テストは原型が引いた値の列を差して、同じ順・同じ数だけ引くかを見ます
+  試合の乱数（`world.rng`）も取り出しません
+- 見た目の乱数は `presentation/cosmetic_rng.py` の `CosmeticRng` から取り出してください。`random` を
+  直に使わないでください。テストは原型が取り出した値の列を差して、同じ順・同じ数だけ取り出すかを見ます
   （画面の揺れ → 爆風 → 被弾の揺れの順。`art/frame.py` の `draw_frame` と `render/renderer.py`）
 - 描く関数（`render/art/`）は、原型の canvas の命令の列と同じにします。命令・値・見た目の乱数を
-  引く順を変えると `tests/presentation/test_legacy_art.py` が失敗します。毎フレームはそれを
+  取り出す順を変えると `tests/presentation/test_legacy_art.py` が失敗します。毎フレームはそれを
   取っておいた絵（`render/baked/`）を貼って描き、手本の `draw_frame` と画素で比べます
   （`test_renderer.py`）。描く順を変えるときは、`draw_frame` と `Renderer` を同じく変えます
 - 薄れる絵は、原型の `globalAlpha` と同じく塗る命令ごとに薄めます。命令が重なる絵をまとめて
@@ -94,7 +94,7 @@ uv run tools/verify.sh   # ruff → ruff format --check → mypy --strict → li
   渡してください（外周の鍋は不透明度を自分で決めるので渡さない）
 - 取っておく絵の段の数（`PULSE_LEVELS` など）を変えるときは、ずれの上限のテスト
   （`tests/presentation/test_quantization_bounds.py`）と、取っておいた絵の検査（`test_baked*.py`）も
-  直します。段の数は、先にずれの上限を決めてから出します（定数の docstring に上限を書く）
+  修正します。段の数は、先にずれの上限を決めてから出します（定数の docstring に上限を書く）
 - 試合の状態に無い見た目だけの値（粒子・画面の揺れ・歩いた距離・被弾の揺れ・粘膜爆弾を投げた
   位置・炎の通った跡・1つ前の tick の値）は、`render/scene/` の `SceneTracker` が 1 tick ごとに
   数えます。1つ前の tick の値は、ゲーム速度が整数でないときに描く値を混ぜるためのもので、盤面に
@@ -110,7 +110,7 @@ uv run tools/verify.sh   # ruff → ruff format --check → mypy --strict → li
   描く時刻の値にします（残りを決めた tick と 0 には足さない。同じファイル）
 - 原型の命令の列の固定値（`tests/presentation/legacy_art_ops.json`）・音の表の固定値
   （`legacy_sound_values.json`）・粒子の固定値（`legacy_particles.json`）は、原型を node で
-  読み込んで書き出したものです。手で直さず、リポジトリのいちばん上で書き出し直してください。
+  読み込んで書き出したものです。手で修正せず、リポジトリのいちばん上で書き出し直してください。
   どれも何度作っても同じものになります
 
 ```sh
@@ -121,15 +121,15 @@ node py/tools/legacy_oracle/legacy_particles.js py/tests/presentation/legacy_par
 
 ## フレームの間の待ち方
 
-`uv run python tools/bench_pacing.py` で、フレームを回す輪（`src/animal_bomber/shell/loop.py`）の
+`uv run python tools/bench_pacing.py` で、フレームを繰り返す輪（`src/animal_bomber/shell/loop.py`）の
 待ち方を比べて測れます（窓は開きません。2 分半ほど）。決め方は `tools/bench_pacing_rule.py`、
 測った結果と経緯は README の Design Choice の 7. にあります。
 
 - 既定の待ち方（`frames` の `wait`）は眠る（`sleep_until`）です。測る前に書いた決め方では空回りが
   選ばれましたが、遅れの上限 2 ms を外して眠るにしました（理由は README の 7. と `shell/loop.py`）
-- 既定を変えるときは、README の数と決めも直してください。`tests/shell/test_loop.py` の
+- 既定を変えるときは、README の数と決めも修正してください。`tests/shell/test_loop.py` の
   `test_既定の待ち方は_眠る` は既定の関数だけを見るので失敗します。そのテストの期待と名前も新しい
-  既定に直し、ここで名前を指している所も直します
+  既定に合わせて修正し、ここで名前を指している所も修正します
 - ⛔ 既定を空回り（`spin_until`）に戻さないでください。待つ間も CPU のコアを1つ使い続け、ほかの
   Python のスレッドも GIL の受け渡しを待たされます。遊べる段階で動きが引っかかって見えたら、
   先に原因（描画の重さか、待ちの遅れか）を測ってから決めます
@@ -155,13 +155,13 @@ app → shell → presentation → net → ai → content → domain
 - `domain/query/` は読むだけです。状態を書き換えず、`domain/systems/` を import しません
   （CPU の判断（`ai/`）も同じ問い合わせを使うため）
 - 1 tick の処理は `domain/systems/` に処理ごとのモジュールとして置き、`simulation.py` の
-  `step()` に順に並べます。並びは原型の update と同じで、プレイヤーごとに済ませる処理は
+  `step()` に順に並べます。並びは原型の update と同じで、プレイヤーごとに実行する処理は
   1人ぶんの関数（`move_player`・`place_for` など）として出し、`step()` のプレイヤーごとの
   輪の中で呼びます。並べる順の理由は `simulation.py` のモジュールの説明に、並びと同じ
   番号で書いてください。並びを変えたら `tests/systems/test_tick_order.py`（原型を測った
-  答え）が失敗するので、原型の並びと食い違っていないかを確かめてください
+  答え）が失敗するので、原型の並びと食い違っていないかを確認してください
 - 動物の技（`domain/abilities/`）は、`domain/systems/` の基本の操作（爆発させる・傷つける・
-  アイテムを効かせる・爆弾を置く）を呼びます。`domain/systems/` から `domain/abilities/` を
+  アイテムの効果を適用する・爆弾を置く）を呼びます。`domain/systems/` から `domain/abilities/` を
   import してよいのは、技を呼び分ける `actions.py` と盤面の物を進める `actors.py` だけです
   （ほかから import すると、読み込みが循環します）。`domain/state/` は `domain/abilities/` を
   import しません（振る舞いと盤面の物の状態は `state/` に、振る舞いは `abilities/` に置く）
@@ -196,7 +196,7 @@ ruff の禁止（TID251）は全体に掛け、使ってよい層（`presentatio
 禁じる。ruff と import-linter の両方）と `MEMBERS_BANNED`（中の一部を禁じる。ruff だけ）が
 正です。禁止を足す・外すときは、`pyproject.toml` の2か所とこの一覧を同じく変えてください。
 食い違うと `test_guards.py` の `test_設定の禁止は_この一覧と等しい` が失敗します。
-`test_guards.py` は、違反したファイルを書き出して本物の検査コマンドが失敗することも確かめています。
+`test_guards.py` は、違反したファイルを書き出して本物の検査コマンドが失敗することも検証しています。
 
 set の反復は、import でも構文木でも止められません。`tests/determinism/test_hashseed.py` が、
 台本どおりの試合（`tests/determinism/scenario.py`）を文字列の hash の種を変えた2つの
@@ -214,7 +214,7 @@ set の反復は、import でも構文木でも止められません。`tests/de
   （記録の `net/input_log.py` の `_decode_entry` と、通信で届いたメッセージの `net/protocol.py` の
   `_Fields.tick`）だけです。ほかで呼んだり、`MatchTick` を値として使ったり
   すると `tests/boundary/test_match_tick.py` が失敗します。試合を進める側は `MatchClock` を持ち、1 tick 進め終えたら `advance()` を呼びます
-  （フレームを回す輪は数えません。理由は `shell/loop.py`）。呼んでよい場所を足すときは、そのテストの
+  （フレームを繰り返す輪は数えません。理由は `shell/loop.py`）。呼んでよい場所を足すときは、そのテストの
   `ALLOWED` に足し、理由を書いてください
 - `tests/determinism/test_golden.py` は、台本どおりの試合の状態の要約を固定値と比べます。
   ルールを変えて試合の結果が変わったら失敗します。変わることが意図どおりなら値を出し直して
@@ -232,13 +232,13 @@ set の反復は、import でも構文木でも止められません。`tests/de
   （試合は `create_session` で作らせる）。⛔ 自分のプレイヤーにキーボードを直に繋がないで
   ください。自分の手元でだけ操作が早く試合に入り、試合がずれます
 - 抜けたプレイヤーを CPU に替える tick は、記録の `InputLog.replaced_at` だけで決めます
-  （本物の端末と記録の流し直しが、同じ tick で替わるため）。替わる判定をほかに足さないで
+  （本物の端末と記録の再生が、同じ tick で替わるため）。替わる判定をほかに足さないで
   ください
 - この層はソケットを持ちません（中継とつなぐ実物は `shell/relay_link.py`）。テストは中継の
   代わり（`tests/net/fake_relay.py`）で何台ぶんでも同じプロセスの中で動かします。本物の中継を
   立てるテストは `tests/relay_server.py` を使い、待つ所には必ず制限時間を置きます
 - 画面の流れ（`app/shell.py` の `Shell`）は、1台の試合も通信対戦も `app/runner.py` の
-  `MatchRunner` の形で回します。⛔ 入力が揃っていない tick を進めないでください
+  `MatchRunner` の形で実行します。⛔ 入力が揃っていない tick を進めないでください
   （`ready` を見る）。押してすぐ離したキーを忘れる `keyboard.end_tick()` は、進めた tick の
   あとにだけ呼びます（進めなかったフレームで呼ぶと、押したことが読まれないまま消えます）。
   例外は、1台の試合をわざと止めている間（ポーズ・ラウンドの幕・決まった試合。
@@ -252,8 +252,8 @@ set の反復は、import でも構文木でも止められません。`tests/de
   複数行なら要約の下を1行空け、閉じの引用符は単独の行に置きます。関数・クラス・モジュールは
   ruff（D205・D209・D212）が、定数や項目の下の docstring は `tests/boundary/test_docstrings.py` が
   見ます
-- `docs/` の Markdown に書いた REPL の例（`>>>` の行）は、pytest が走らせて値を確かめます。
-  ルールを変えて値が変わったら、例の値も直してください
+- `docs/` の Markdown に書いた REPL の例（`>>>` の行）は、pytest が走らせて値を検証します。
+  ルールを変えて値が変わったら、例の値も修正してください
 
 ## イベント（`domain/events.py`）
 
@@ -266,23 +266,23 @@ set の反復は、import でも構文木でも止められません。`tests/de
 - TypeScript 版と比べる固定値（`tests/systems/test_simulation_ts.py`・
   `test_techniques_ts.py`・`tests/app/test_session_ts.py`）は、同じコミットの TypeScript 版
   （`ts/`）の `domain/` と `app/GameSession.ts` を写し、この版にまだ無いものを止めて、同じ
-  台本を流して出したものです。TypeScript 版を直したら、その形を写して出し直します。ルールの
+  台本を実行して出したものです。TypeScript 版を修正したら、その形を写して出し直します。ルールの
   層で止めているものは、いまはありません（段階 7 まで止めていた葱ボンと延長戦は、段階 8 で
-  入れたので、写しも試合の設定の既定どおり入れます）。
+  実装したので、写しも試合の設定の既定どおり有効にします）。
   もう1つ、写しでは全員が下を向いて始まる形にします（この版は原型と同じく全員が下を向く。
   TypeScript 版は下の隅のプレイヤーが上を向く）。写しには、振る舞いの中身を文字列にする関数
   （`debugEncode`）も足します（TypeScript 版の振る舞いは中身を外へ見せないため）。
   行の形（`tests/ts_rows.py`）を変えるときは、写しの台本の行の形も同じく変え、変える前の形で
-  いまの固定値と1字も違わず出せることを確かめてから出し直します（台本の写し違いと、振る舞いの
+  いまの固定値と1字も違わず出せることを確認してから出し直します（台本の写し違いと、振る舞いの
   違いを分けるため）。
-  段階 4 までは、段階のコミットにあとからの直しを当てて出していましたが、段階 5 で、その
-  間に入った名前の置き換え（696e1f9）と葱ボン・延長戦（段階 8）のために直しが当たらなく
-  なったので、直しが全部入った HEAD から出す形に替えました。
-  段階を進めて出し直すときは、その段階で入る仕組み（葱ボン・延長戦など）を写しで止める
+  段階 4 までは、段階のコミットにあとからの修正を当てて出していましたが、段階 5 で、その
+  間にコミットした名前の置き換え（696e1f9）と葱ボン・延長戦（段階 8）のために修正が当たらなく
+  なったので、修正をすべて反映した HEAD から出す形に替えました。
+  段階を進めて出し直すときは、その段階で実装する仕組み（葱ボン・延長戦など）を写しで止める
   のをやめ、止めたものと理由をテストの説明に書いてください
 - CPU の固定値（`tests/ai/test_cpu_ts.py` が読む `tests/ai/ts_cpu_values.json`）も同じ形で
-  出します。写すものに `ai/` を足し、CPU だけの試合を流して、tick ごとの入力と 100 tick ごとの
-  盤面を出します。CPU の判断の規則・順・乱数を引く順のどれかを変えると失敗します。写しの
+  出します。写すものに `ai/` を足し、CPU だけの試合を実行して、tick ごとの入力と 100 tick ごとの
+  盤面を出します。CPU の判断の規則・順・乱数を取り出す順のどれかを変えると失敗します。写しの
   CPU で止めているものはありません（外周の操縦と、飛んでくる葱をよける規則も写しのまま動かす）。
   4つ目の試合（葱ボンと延長戦）は決定性の台本の `play_cpu_negibon_match` と同じ試合で、
   種と長さは `scenario.py` の定数を両方が読みます
@@ -296,11 +296,11 @@ set の反復は、import でも構文木でも止められません。`tests/de
   逸話を書くときも、動物の名前を出さず能力で書いてください（「ブロックを通り抜ける動物」）。
   外周の処理（`systems/negibon.py`）も、葱（盤面の物）の種類を書きません。葱を作るのは
   `state/actors.py` の `shot_from_lane`、外周を閉じるときに消すかは同じファイルの
-  `ends_with_lanes`（性質）です（`domain/abilities/` を import せずに済ませるため。
+  `ends_with_lanes`（性質）です（`domain/abilities/` を import せずに済むようにするため。
   `docs/09-葱ボンと延長戦.md`）。盤面の CPU が飛んでくる葱をよける規則（`ai/behaviors.py`）も、
   葱かどうかを同じファイルの `lane_shot` に聞きます
 - `tests/systems/test_match_invariants.py` は、試合を通して崩れない約束（同じマスにアイテムが
-  2つ並ばない）を毎 tick 確かめます。約束を崩す仕組みを足すときは、約束のほうから決め直して
+  2つ並ばない）を毎 tick 検査します。約束を崩す仕組みを足すときは、約束のほうから決め直して
   ください
 
 ## 動物の能力を追加するとき
@@ -320,14 +320,14 @@ catch-all（`case _:`）を足して黙らせないでください。
   モジュールを足し、`techniques.py` の `match` に書きます
 - ⛔ 試合を進める処理（`domain/systems/`）に、動物や振る舞いの種類で分ける処理を足さない
   でください。振る舞いが移動・爆弾・拾う・被弾に割り込むときは、`ActionTraits` に性質を
-  足し、処理はその性質だけを見ます（突進が特別扱いなしで書けているのが、この形の確かめ
-  です）
+  足し、処理はその性質だけを見ます（突進を特別扱いなしで書けていることが、この形の検証に
+  なっています）
 - CPU の戦い方は `ai/tactics.py` の `tactic_of` の `match` に書きます。動物を足すと、ここも
   mypy が失敗します
 
 ## CPU の判断（`ai/`）
 
-- CPU は入力を返すだけです。試合の状態を書き換えず、試合の乱数（`world.rng`）も引きません
+- CPU は入力を返すだけです。試合の状態を書き換えず、試合の乱数（`world.rng`）も取り出しません
   （`tests/ai/test_cpu.py` が、入力を返す前と後で状態の要約が同じことを見ます）。CPU の乱数は
   `CpuInputSource` が持つ `Rng` です
 - 判断の規則は `ai/behaviors.py` に関数を1つ書き、`ai/chain.py` の `DEFAULT_CHAIN` に並べます。
@@ -337,6 +337,6 @@ catch-all（`case _:`）を足して黙らせないでください。
 - 外周にいる CPU は、判断の並びを通らず `ai/pilot.py` の `NegibonPilot` が入力を決めます。
   記憶（`ai/memory.py`）と外周の操縦を作り直すのは、ラウンドの盤面が替わったときだけです。
   延長戦に入ったとき・外周から戻ったときに作り直さないでください（原型も作り直さない。
-  作り直すと判断の間隔の揺らぎを引き直して CPU の乱数が1つ進み、`test_cpu_ts.py` が失敗します）
-- 規則を変えると、乱数を引く順が変わることがあります。TypeScript 版と比べるテスト
-  （`tests/ai/test_cpu_ts.py`）が失敗したら、TypeScript 版も同じく変えたかを確かめてください
+  作り直すと判断の間隔の揺らぎを乱数で決め直して CPU の乱数が1つ進み、`test_cpu_ts.py` が失敗します）
+- 規則を変えると、乱数を取り出す順が変わることがあります。TypeScript 版と比べるテスト
+  （`tests/ai/test_cpu_ts.py`）が失敗したら、TypeScript 版も同じく変えたかを確認してください

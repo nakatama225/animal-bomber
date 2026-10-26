@@ -130,7 +130,7 @@ class Test掘る:
         press_special(world, 0)
         advance(world, idle(world), 100)
         press_special(world, 0)
-        # 2回目は掘り始めない。掘り終わりの確かめだけに任せると、何も生まない掘りで
+        # 2回目は掘り始めない。掘り終わりの判定だけに任せると、何も生まない掘りで
         # 90 tick 動けなくなる。
         assert mole.action is None
         advance(world, idle(world), 100)
@@ -186,7 +186,7 @@ class Test掘る:
     def test_掘っている途中に同じマスへ爆弾を置かれても_掘り終わりに穴ができる(
         self,
     ) -> None:
-        """原型の掘り終わりは、マスと穴だけを確かめ直し、爆弾は見ない。
+        """原型の掘り終わりは、マスと穴だけを確認し直し、爆弾は見ない。
 
         原型の答え（掘り始めて 5・30・85 フレーム目に置く）：どれも掘り終わりに (5, 5)
         に穴が1つ、爆発のあとも残り、踏むと落ちる。
@@ -394,7 +394,7 @@ class Test落ちる:
             assert len(scattered) == 21
 
     def test_突進中に落ちたら_抱えていたものを止まった所の左右へ撒く(self) -> None:
-        """原型の updateCharge の chargeDrop。抱えていたものは自分には効かない。"""
+        """原型の updateCharge の chargeDrop。抱えていたものは自分には作用しない。"""
         cases = (
             ((ItemKind.ONION,), [(ItemKind.ONION, Cell(12, 3))]),
             (

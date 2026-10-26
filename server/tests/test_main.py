@@ -53,7 +53,7 @@ class TestTS版の置き場所:
         assert ts_dir is not None
         assert ts_dir.parts[-2:] == ("ts", "dist")
         # 末尾の2つだけでは、別の場所の ts/dist（server/ts/dist など）を指していても通る。
-        # 根がリポジトリであることを、そこにあるはずのものから確かめる。
+        # 根がリポジトリであることを、そこにあるはずのものから確認する。
         root = ts_dir.parents[1]
         assert (root / "server" / "pyproject.toml").is_file()
         assert (root / "legacy" / "animal-bomber.html").is_file()
@@ -174,7 +174,7 @@ def test_MAX_SEATSは4人枠(html_path):
     # Phase 3 の 2人固定から Phase 4 で4人へ広げた変更が、
     # run() の呼び出し側にも実際に反映されていることの確認
     # （relay.Room 側のデフォルトを変えただけで main.py 側の明示指定を
-    #   直し忘れる、という事故が実際に一度起きたので置いている）
+    #   修正し忘れる、という事故が実際に一度起きたので置いている）
     assert MAX_SEATS == 4
 
 
@@ -272,7 +272,7 @@ async def test_渡したTS版の置き場所を_ts_の下で配る(html_path, tm
 
 
 async def test_TS版が無いときも_ソケットまで案内が届く(html_path, tmp_path):
-    # 応答を作るだけのテストでは、送る時点（状態行を書くとき）の例外が見えない。実際に送って確かめる。
+    # 応答を作るだけのテストでは、送る時点（状態行を書くとき）の例外が見えない。実際に送って確認する。
     head, body = await _get_ts_through_socket(html_path, tmp_path / "none")
 
     assert head.startswith(b"HTTP/1.1 404 Not Found\r\n")

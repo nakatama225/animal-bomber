@@ -7,7 +7,7 @@ AudioBufferSourceNode）・削る仕組み（BiquadFilterNode。ノイズだけ�
 
 `Voice` は2か所で使う。1つは原型との突き合わせで、原型を node で読み込んで書き出した
 固定値（`tests/presentation/legacy_sound_values.json`）と、部品の種類・値の予定・
-止める時刻まで同じかを確かめる。もう1つは `synth.py` で、同じ予定を Web Audio の仕様の
+止める時刻まで同じかを確認する。もう1つは `synth.py` で、同じ予定を Web Audio の仕様の
 意味どおりに読んで音の配列にする。間に別の形を挟まないので、突き合わせた予定が
 そのまま鳴る。
 """

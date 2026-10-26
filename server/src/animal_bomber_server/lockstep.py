@@ -1,4 +1,4 @@
-"""ロックステップの中継。全員の入力を全員へ流し、状態の要約を突き合わせる。
+"""ロックステップの中継。全員の入力を全員へ転送し、状態の要約を突き合わせる。
 
 ## 原型の中継（`relay.Room`）との違い
 
@@ -19,8 +19,8 @@
 
 ## 中継は試合を知らないまま、ずれを見つける
 
-各端末は 20 tick ごとに、状態の要約（ハッシュ）と試合の乱数を引いた回数を送ってくる。
-中継は同じ tick の報告が全員ぶん揃ったら、数が一致するかだけを見る。
+各端末は 20 tick ごとに、状態の要約（ハッシュ）と試合の乱数を取り出した回数を
+送ってくる。中継は同じ tick の報告が全員ぶん揃ったら、数が一致するかだけを見る。
 一致しなければ `desync` を全員へ配る。
 
 中継は、その数が何を要約したものかを知らない。爆弾が何秒で爆発するかも、
@@ -109,7 +109,8 @@ class LockstepRoom(Room):
     match: int = field(default=0, init=False)
     # プレイヤー番号ごとの、入力を最後に配り始めた tick（配っている最中のものを含む）。
     _last_tick: dict[int, int] = field(default_factory=dict, init=False)
-    # tick ごとの、揃うのを待っている報告。プレイヤー番号 → (要約, 乱数を引いた回数)。
+    # tick ごとの、揃うのを待っている報告。
+    # プレイヤー番号 → (要約, 乱数を取り出した回数)。
     _pending: dict[int, dict[int, tuple[int, int]]] = field(
         default_factory=dict, init=False
     )
@@ -223,11 +224,11 @@ class LockstepRoom(Room):
     async def _forward_settings(
         self, sender_seat: int, data: dict[str, object]
     ) -> None:
-        """ホストがロビーで選んでいる設定を、始まる前だけ、ホスト以外の全員へ流す。
+        """ホストがロビーで選んでいる設定を、始まる前だけ、ホスト以外の全員へ転送する。
 
         ゲストの画面に出すためだけのもの。試合は `start` の設定から作るので、中継は
         設定を覚えない。あとから入った人には、`peer_joined` を受けたホストが配り直す。
-        中身（`config`）は読まずにそのまま流す。
+        中身（`config`）は読まずにそのまま転送する。
         """
         if sender_seat != HOST_SEAT or self.started:
             return
@@ -238,7 +239,7 @@ class LockstepRoom(Room):
     async def _forward_input(self, sender_seat: int, data: dict[str, object]) -> None:
         """送り主の番号を書き足して、送り主以外の全員へ配る。
 
-        `bits`（入力のビット）は読まずにそのまま流す。
+        `bits`（入力のビット）は読まずにそのまま転送する。
         """
         tick = _int(data, "tick")
         if (

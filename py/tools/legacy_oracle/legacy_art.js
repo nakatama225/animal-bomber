@@ -1,5 +1,5 @@
 /* 原型の描く関数を、いろいろな入力で呼んで、canvas へ出した命令の列を JSON に書き出す。
-   Python 版の描く関数が、同じ入力で同じ命令の列を出すかを確かめる正解に使う。
+   Python 版の描く関数が、同じ入力で同じ命令の列を出すかを検証する正解に使う。
    node legacy_art.js <出力.json> */
 const env = require('./legacy_env.js');
 const { X, rec } = env;
@@ -111,7 +111,7 @@ for (const tile of TILES) {
 const ANIMAL_KEYS = ['rabbit', 'elephant', 'mole', 'fox', 'frog'];
 const DIRS = ['down', 'up', 'left', 'right'];
 function playerOf(key, over) {
-  // makePlayer は CPU の揺らぎに Math.random を1つ引く（描画には関わらない）
+  // makePlayer は CPU の揺らぎに Math.random を1つ取り出す（描画には関わらない）
   env.setRandom([0.5]);
   const p = X.makePlayer({ id: 0, label: '1P', animal: key, spawn: { x: 5, y: 5 } });
   env.setRandom(null);
@@ -148,7 +148,7 @@ for (const tile of TILES) {
 const T0 = 44;
 // 無敵の点滅（消える側と出る側）。floor(invuln×14) が偶数のとき薄くなる。
 // 0.75 は floor(10.5) = 10 で薄く、0.65 は floor(9.1) = 9 で薄くならない。
-// （初めは消える側も 0.7 にしていたが、floor(9.8) = 9 で薄くならず、薄くなる側を確かめていなかった）
+// （初めは消える側も 0.7 にしていたが、floor(9.8) = 9 で薄くならず、薄くなる側を確認していなかった）
 playerCase('rabbit-invuln-dim', T0, 300, playerOf('rabbit', { invuln: 0.75 }));
 playerCase('rabbit-invuln-lit', T0, 300, playerOf('rabbit', { invuln: 0.65 }));
 // ブロックの中を通っている（薄く描く）。点滅で薄いときは、薄いほう（0.35）を採る
@@ -159,7 +159,7 @@ for (const dir of ['down', 'left']) {
   playerCase(`elephant-pitfall-${dir}`, T0, 300, playerOf('elephant', { dir, effects: { pitfall: 1.8 } }));
 }
 playerCase('fox-pitfall-60', 60, 300, playerOf('fox', { dir: 'up', effects: { pitfall: 2.9 } }));
-// 被弾の揺れ（乱数を2つ引く）
+// 被弾の揺れ（乱数を2つ取り出す）
 playerCase('frog-hurt', T0, 300, playerOf('frog', { hurtFlash: 0.2 }));
 // 状態の印（3つまで）
 playerCase('rabbit-icons', T0, 300, playerOf('rabbit', { chicken: 'rabbit',
@@ -255,7 +255,7 @@ for (const tile of TILES) {
 }
 
 /* ---------- ここから下は、drawPlayer の中で呼ばれる部品を単独で呼ぶケース ----------
-   drawPlayer は足元の影・色の輪・状態の印も描くので、体・頭・尻尾・目だけを先に確かめるために
+   drawPlayer は足元の影・色の輪・状態の印も描くので、体・頭・尻尾・目だけを先に確認するために
    部品を直接呼ぶ。上の 187 通りは並びも数も変えない。 */
 
 /* ---------- roundRect（角の丸みが辺の半分より大きい形・幅 0 も） ---------- */

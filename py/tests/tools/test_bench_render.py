@@ -5,10 +5,10 @@
 測定は開発のたびには走らせないので、壊れていても気づきにくい。
 
 どれも別のプロセスで走らせる（このプロセスで pygame の画面を初期化しないため。
-`runner.py`）。ほとんどは小さな場面を数フレームだけ描く。判定に使う行を確かめるものは、
+`runner.py`）。ほとんどは小さな場面を数フレームだけ描く。判定に使う行を確認するものは、
 マス 60 を描く。試合の前に絵を描いておく所は飛ばす（`runner.py` の `SKIP_PREBUILD`）が、
 絵を出たときに描くので1本 3 秒ほどかかる。測る範囲と列の値は `test_bench_measure.py`、
-描き方の数は `test_bench_match_scene.py` が確かめる。
+描き方の数は `test_bench_match_scene.py` が確認する。
 """
 
 import os
@@ -47,13 +47,13 @@ class TestBenchRender:
         assert 0 <= stats["p50_ms"] <= stats["p99_ms"] <= stats["max_ms"]
         assert stats["cpu_p99_ms"] >= 0 and stats["over_frame"] >= 0
         # フレームが 100 より少ないうえ、判定に使う行（マス 60 の四角い粒と光の玉）も
-        # 測っていないので、合否は出さない（フレームの数の確かめが先に効く）。
+        # 測っていないので、合否は出さない（先にフレームの数の判定で外れる）。
         assert report["gate_passed"] is None
 
     def test_判定に使う行を測ると_合否を出す(self) -> None:
         """判定に使う行を見つけ損ねて、測ったのに合否が出ない（None）事故を防ぐ。
 
-        別の行で合否を出すずれは、`test_bench_gate.py` が値で確かめる。
+        別の行で合否を出すずれは、`test_bench_gate.py` が値で確認する。
         合否そのものは機械と負荷で変わるので、ここでは見ない。
         """
         completed = run_patched(
@@ -105,8 +105,8 @@ class TestBenchRender:
     def test_環境変数で別のドライバを指定されても_窓を開かない(self) -> None:
         """環境に実際の窓を開くドライバの名前が入っていても、dummy で描くこと。
 
-        存在しない名前を入れて確かめる。上書きが外れると SDL の初期化が失敗して、
-        このテストが失敗する。実在するドライバの名前で確かめると、上書きが外れた
+        存在しない名前を入れて確認する。上書きが外れると SDL の初期化が失敗して、
+        このテストが失敗する。実在するドライバの名前で確認すると、上書きが外れた
         ときに本当に窓が開いてしまう。
         """
         env = {**os.environ, "SDL_VIDEODRIVER": "no-such-driver"}

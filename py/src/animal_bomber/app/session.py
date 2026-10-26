@@ -6,7 +6,7 @@
 `create_world`、延長戦の準備は `domain/systems/sudden_death.py`、1 tick 進めるのは
 `simulation.step`。`GameSession` はそれを呼ぶ順を
 知っているだけで、ゲームのルールを持たない。束ねる場所を1つにしておくと、遊ぶとき・
-記録を流し直すとき・試合をたくさん回して測るときで、同じ形の呼び出しになる。
+記録を再生するとき・試合をたくさん実行して測るときで、同じ形の呼び出しになる。
 
 ## 起動の層に置く
 
@@ -48,7 +48,7 @@ class GameSession:
 
         Args:
             config: 試合の設定。
-            sources: プレイヤーごとの入力の窓口。キーボードでも CPU でも記録を流す
+            sources: プレイヤーごとの入力の窓口。キーボードでも CPU でも記録を再生する
                 窓口でも、同じ形で受け取る。
         """
         self._config = config

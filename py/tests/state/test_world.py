@@ -129,7 +129,7 @@ def _flip_board(world: WorldState) -> None:
 
 
 def _draw(world: WorldState) -> None:
-    # 見た目の処理がルールの乱数を引いてしまった場合を捕まえる。
+    # 見た目の処理がルールの乱数を取り出してしまった場合を検出する。
     world.rng.random()
 
 
@@ -220,7 +220,7 @@ def _ability_cooldown(world: WorldState) -> None:
 
 
 def _with_charge(world: WorldState) -> WorldState:
-    """プレイヤー 1 が突進している状態。振る舞いの中身を変える確かめの土台。"""
+    """プレイヤー 1 が突進している状態。振る舞いの中身を変える検証の土台。"""
     world.players[1].action = Charge(direction=Direction.UP, remaining=Tick(300))
     return world
 
@@ -244,7 +244,7 @@ def _charge_carried(world: WorldState) -> None:
 
 
 def _with_bomb_and_blast(world: WorldState) -> WorldState:
-    """爆弾と爆風を1つずつ置いた状態。爆弾と爆風の中身を変える確かめの土台。"""
+    """爆弾と爆風を1つずつ置いた状態。爆弾と爆風の中身を変える検証の土台。"""
     world.bombs.append(
         Bomb(
             id=world.ids.take(),
@@ -296,7 +296,7 @@ def _bomb_chained(world: WorldState) -> None:
 
 
 def _bomb_pass_through(world: WorldState) -> None:
-    # 数が同じでも、誰が通れるかが違えば値が変わる（いまの移動には効かないが、
+    # 数が同じでも、誰が通れるかが違えば値が変わる（いまの移動には影響しないが、
     # 段階 5・6 で通れるかを尋ねる処理が読む）。
     world.bombs[0].pass_through = {1}
 
@@ -318,7 +318,7 @@ def _blast_remaining(world: WorldState) -> None:
 
 
 def _with_item(world: WorldState) -> WorldState:
-    """アイテムを1つ置いた状態。アイテムの中身を変える確かめの土台。"""
+    """アイテムを1つ置いた状態。アイテムの中身を変える検証の土台。"""
     world.items.append(Item(id=world.ids.take(), cell=Cell(3, 1), kind=ItemKind.FIRE))
     return world
 
@@ -350,7 +350,7 @@ def _item_expiring(world: WorldState) -> None:
 
 
 def _with_actors(world: WorldState) -> WorldState:
-    """盤面の物を2つ置いた状態。盤面の物の中身と並びを変える確かめの土台。"""
+    """盤面の物を2つ置いた状態。盤面の物の中身と並びを変える検証の土台。"""
     world.actors.append(Pit(cell=Cell(3, 3), owner=0))
     world.actors.append(Foxfire(cell=Cell(5, 5), owner=1))
     return world
@@ -651,7 +651,7 @@ class Test状態の要約:
         assert hash_world(world) != hashed
 
     def test_同じ長さでも_かかっている状態の種類が違えば_値が変わる(self) -> None:
-        """残り時間を種類の定義の順に並べて混ぜるので、どの種類かも値に効く。"""
+        """残り時間を種類の定義の順に並べて混ぜるので、どの種類かも値に反映される。"""
         slow = make_world()
         reverse = make_world()
         slow.players[0].effects.add(EffectKind.SLOW, Tick(10), Tick(30))

@@ -70,8 +70,8 @@ def lanes_open(world: WorldState) -> bool:
     （L4288）で残り時間 G.time から1フレームぶんを先に引き、倒れたプレイヤーの行き先
     （kill の L1700 → negibonAvailable の L2364）も、外周を閉じるか（update の最後の
     checkEnd の L4411 → negibonCutoff の L2359）も、引いたあとの値で比べる。`now` を
-    進めるのは `step()` の最後なので、`step()` の中の `now` で数えると1 tick 多く残って
-    いることになり、3:00 なら残り60秒ちょうどの tick（now=7199）に倒れたプレイヤーが
+    進めるのは `step()` の最後なので、`step()` の中の `now` で数えると残りが1 tick
+    多くなり、3:00 なら残り60秒ちょうどの tick（now=7199）に倒れたプレイヤーが
     外周へ回ってしまう（原型はその場で退場）。
 
     ⚠️ 7:00 の設定だけは、原型が外周を閉じるのが1 tick 遅い（21601 回目の update）。

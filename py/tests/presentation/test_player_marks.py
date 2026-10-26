@@ -77,13 +77,13 @@ class Test印:
 
 
 class Test画面の揺れ:
-    def test_しきい以下なら揺らさず_乱数も引かない(self) -> None:
+    def test_しきい以下なら揺らさず_乱数も取り出さない(self) -> None:
         source = ScriptedRandom([])
         assert shake_offset(0.2, CosmeticRng(source)) is None
         assert shake_offset(0.1, CosmeticRng(source)) is None
         assert source.used == []
 
-    def test_しきいを超えたら_横と縦の順に乱数を2つ引く(self) -> None:
+    def test_しきいを超えたら_横と縦の順に乱数を2つ取り出す(self) -> None:
         source = ScriptedRandom([0.75, 0.25])
         assert shake_offset(0.4, CosmeticRng(source)) == (0.1, -0.1)
         assert source.used == [0.75, 0.25]

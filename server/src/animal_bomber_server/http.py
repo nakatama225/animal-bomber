@@ -25,7 +25,7 @@ TypeScript 版は `ts/` で `npm run build` した出力（`ts/dist`）を、`/t
 `/` とそれ以外の道は、これまでどおり原型の HTML を返す（原型の遊び方を変えない）。
 
 ⚠️ 配るファイルは、道を配る場所の中で解決してから、
-解決した先が配る場所の中にあるかを確かめる。
+解決した先が配る場所の中にあるかを確認する。
 `..` や `%2e%2e`、絶対パスを混ぜた道で、配る場所の外のファイルを読ませない。
 """
 
@@ -135,7 +135,7 @@ def _serve_ts(ts_dir: Path | None, relative: str) -> Response:
         # NUL を含む道は、ファイルの場所として解決できない
         # （解決しようとすると例外になる）。
         return _text_response(404, "Not Found")
-    # 絶対パスを混ぜた道は、つなげた時点で配る場所を離れる。解決した先で確かめる。
+    # 絶対パスを混ぜた道は、つなげた時点で配る場所を離れる。解決した先で確認する。
     target = (root / name).resolve()
     if not target.is_relative_to(root) or not target.is_file():
         return _text_response(404, "Not Found")

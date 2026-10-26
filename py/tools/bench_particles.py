@@ -68,7 +68,7 @@ class _Particle:
 class Particles:
     """1種類の粒子 `count` 個と、回りながら浮かぶ顔 `spinners` 個。
 
-    作る前に `pygame.display.set_mode` を済ませておく（準備の絵を画面と同じ画素の
+    作る前に `pygame.display.set_mode` を呼んでおく（準備の絵を画面と同じ画素の
     形式に直すため）。
     """
 
@@ -87,9 +87,9 @@ class Particles:
         self._squares = [solid(tile, color) for color in SQUARE_COLORS]
         self._glow = radial(tile * 1.2, GLOW_STOPS, radius_scale=0.52 / 1.2)
         # 薄れる絵を先に作っておく形（fade が "baked"）。貼るたびに薄める形と同じ
-        # 整数の不透明度（0〜204）ごとに1枚ずつ作り、同じ式で引く。段を粗くして
-        # 丸めると、貼るたびに薄める形と見た目が変わる（33 段にしたときは、画素の差が
-        # 最大 5 あった）。
+        # 整数の不透明度（0〜204）ごとに1枚ずつ作り、同じ式で出した不透明度の1枚を
+        # 貼る。段を粗くして丸めると、貼るたびに薄める形と見た目が変わる（33 段に
+        # したときは、画素の差が最大 5 あった）。
         self._faded_glows: list[pygame.Surface] = []
         if fade == "baked":
             top = _glow_alpha(1.0)

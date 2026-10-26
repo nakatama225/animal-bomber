@@ -202,7 +202,7 @@ def walk_step(
 
 
 def _moving_state(player: PlayerState, seen: PlayerSnapshot) -> PlayerState:
-    """動いたときの速さを出すための、tick の初めのプレイヤーの写し（速さに効く所だけ）。
+    """移動の速さを出すための、tick の初めのプレイヤーの写し（速さに影響する所だけ）。
 
     状態の残りが 1 のものは、この tick の初めに切れる（`EffectBag.advance`）。
     """

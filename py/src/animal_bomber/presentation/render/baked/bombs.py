@@ -194,7 +194,7 @@ class BlastSprites:
         rng: CosmeticRng,
         offset: tuple[int, int] = (0, 0),
     ) -> None:
-        """爆風を `target` に貼る。見た目の乱数を1つ引く（原型と同じ）。
+        """爆風を `target` に貼る。見た目の乱数を1つ取り出す（原型と同じ）。
 
         `offset` は画面の揺れなどで全体をずらす px。
         """

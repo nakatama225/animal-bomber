@@ -175,7 +175,7 @@ def negibon_look_from(raw: dict[str, Any]) -> NegibonLook:
 
     位置と撃つ向きは、この版の外周の式（`lane_spot`）で外周の位置（negiT）から出す。
     原型の negiPos の答え（`pos`）とは、向きが同じことをここで、位置が同じことを命令の
-    列の比べで確かめる。
+    列の比べで確認する。
     """
     spot = lane_spot(raw["negiT"])
     assert spot.facing is DIRECTIONS[raw["pos"]["dir"]]

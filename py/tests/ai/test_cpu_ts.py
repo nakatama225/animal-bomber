@@ -1,16 +1,16 @@
 """CPU どうしの試合が、TypeScript 版の CPU と同じ手になることの検査。
 
-CPU だけの試合を `GameSession` で流し、tick ごとの CPU の入力（プレイヤー番号の順の
+CPU だけの試合を `GameSession` で実行し、tick ごとの CPU の入力（プレイヤー番号の順の
 ビット）と、100 tick ごとの試合の進み・盤面の状態（`tests/ts_rows.py` の
 `world_rows`）・その間に起きたイベントの並びを比べる。CPU の判断の順・規則・乱数を
-引く順のどれかが違えば、入力がずれた tick で失敗する。
+取り出す順のどれかが違えば、入力がずれた tick で失敗する。
 
 ## 期待する値の出どころ
 
 期待する値は `ts_cpu_values.json`。同じコミットの TypeScript 版の `domain/`・
 `app/GameSession.ts`・`ai/` を写し、全員が下を向いて始まる形にして
-（`tests/systems/test_simulation_ts.py` の説明と同じ）、同じ試合を流して出したもの。
-葱ボンと延長戦は TypeScript 版の既定どおり入れる（はじめの3試合は 4000 tick のうちに
+（`tests/systems/test_simulation_ts.py` の説明と同じ）、同じ試合を実行して出したもの。
+葱ボンと延長戦は TypeScript 版の既定どおり有効にする（はじめの3試合は 4000 tick のうちに
 延長戦には入らない。倒れたプレイヤーは外周へ回る）。写しの CPU で止めているものは無い
 （外周の操縦と、盤面で飛んでくる葱をよける規則も、写しのまま動かす）。
 
@@ -99,7 +99,7 @@ def play(
     ticks: int,
     round_limit: Tick = LONG_ROUND,
 ) -> tuple[str, list[dict[str, object]]]:
-    """CPU だけの試合を流し、詰めた入力の列と区切りごとの値を返す。"""
+    """CPU だけの試合を実行し、詰めた入力の列と区切りごとの値を返す。"""
     config = MatchConfig(
         seed=seed,
         animals=animals,
@@ -220,7 +220,7 @@ def _first_difference(expected: str, actual: str) -> str:
         ),
     ],
 )
-def test_同じ試合を流すと_TypeScript版のCPUと同じ手になる(
+def test_同じ試合を実行すると_TypeScript版のCPUと同じ手になる(
     name: str,
     seed: int,
     animals: tuple[Animal, ...],

@@ -1,7 +1,7 @@
 """CPU の判断の検査（TypeScript 版の CPU のテストと同じ場面）。
 
-CPU の手が TypeScript 版と同じかは `test_cpu_ts.py` が試合ごと確かめる。ここでは、原型
-（`legacy/animal-bomber.html` の cpuUpdate・planCPU）に合わせた決まりを1つずつ確かめる。
+CPU の手が TypeScript 版と同じかは `test_cpu_ts.py` が試合ごと確認する。ここでは、原型
+（`legacy/animal-bomber.html` の cpuUpdate・planCPU）に合わせた決まりを1つずつ確認する。
 TypeScript 版の `tests/ai/cpu.test.ts`・`cpu-legacy.test.ts` と同じ場面を選んだ。
 """
 
@@ -97,7 +97,10 @@ def arena(animal: Animal, other: Animal = Animal.RABBIT, seed: int = 3) -> World
 
 class TestCPUは入力を返すだけ:
     def test_入力を返す前と後で_試合の状態が変わらない(self) -> None:
-        """要約には試合の乱数を引いた回数も入るので、試合の乱数に触れていないことも分かる。"""
+        """要約には試合の乱数を取り出した回数も入る。
+
+        そのため、試合の乱数に触れていないことも分かる。
+        """
         animals = (Animal.RABBIT, Animal.ELEPHANT, Animal.FOX, Animal.FROG)
         world = make_world(7, animals)
         sources = [cpu(ONI, cpu_seed(7, p.id), p.id) for p in world.players]
@@ -173,7 +176,7 @@ class Test攻める:
 
     @pytest.mark.parametrize("seed", [1, 2, 3, 4, 5])
     def test_開幕の袋小路でも_5秒以内に爆弾を置く(self, seed: int) -> None:
-        """原型で「袋小路では置かない」を入れたところ、40秒のあいだ1個も置かなくなった。"""
+        """原型で「袋小路では置かない」を追加したところ、40秒のあいだ1個も置かなくなった。"""
         world = make_world(seed, (Animal.RABBIT, Animal.ELEPHANT))
         events = run(world, cpu(HARD, cpu_seed(seed, 0)), seconds_to_ticks(5))
         assert any(isinstance(e, BombPlaced) and e.owner == 0 for e in events)
@@ -726,7 +729,7 @@ class Test判断の規則:
         plan = hunt(ctx)
         assert plan is not None and plan.mode is CpuMode.HUNT and plan.want_bomb
 
-    def test_うろつく先の遠さは_マスを調べるたびに引き直す(self) -> None:
+    def test_うろつく先の遠さは_マスを確認するたびに乱数で決め直す(self) -> None:
         ctx = context(arena(Animal.RABBIT), Cell(9, 7))
         before = ctx.rng.calls
         wander(ctx)

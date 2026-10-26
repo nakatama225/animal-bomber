@@ -121,7 +121,7 @@ FRAME_MS = 1000 / 60
 
 
 class MatchScene:
-    """1 フレームずつ描ける場面。作る前に `pygame.display.set_mode` を済ませておく。"""
+    """1 フレームずつ描ける場面。作る前に `pygame.display.set_mode` を呼んでおく。"""
 
     def __init__(self, spec: MatchSceneSpec, rng: random.Random) -> None:
         self._spec = spec

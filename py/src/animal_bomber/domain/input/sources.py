@@ -19,8 +19,8 @@ class InputSource(Protocol):
     |---|---|---|
     | キーボード・ゲームパッド | `shell/` | 段階 4 |
     | CPU | `ai/` | 段階 6 |
-    | 記録を流す | `net/` | 段階 1（`net/input_log.py`） |
-    | 通信で届いた操作を流す | `net/` | 段階 9 |
+    | 記録を再生する | `net/` | 段階 1（`net/input_log.py`） |
+    | 通信で届いた操作を渡す | `net/` | 段階 9 |
 
     継承の宣言は要らない。`player_id` と `next_input` を持つクラスなら、何でも窓口
     として渡せる（形が合わなければ mypy が失敗する）。`player_id` は読むだけの
@@ -28,7 +28,7 @@ class InputSource(Protocol):
     満たせる。
 
     将来 CPU を機械学習や強化学習に替える場合も、足すのはこの窓口の実装1つで、ルールの
-    層には手を入れない。そのとき守る約束は3つ。
+    層は変更しない。そのとき守る約束は3つ。
 
     1. 盤面を直接書き換えず、入力を返すだけにする
     2. 状態は読むだけにする（`world` を受け取るが書き換えない）
@@ -46,10 +46,10 @@ class InputSource(Protocol):
 
         Args:
             world: いまの状態。⚠️ 読むだけ。ここで書き換えると、入力を集める順で結果が
-                変わり、記録の流し直しも通信対戦も成り立たなくなる。
+                変わり、記録の再生も通信対戦も成り立たなくなる。
             tick: 試合通算の時刻（試合が始まってから数えた tick 数）。記録と通信は
-                この時刻で引く。盤面の時刻（`world.now`）とは別のもの（`core/tick.py`
-                の `MatchTick`）。
+                この時刻で参照する。盤面の時刻（`world.now`）とは別のもの
+                （`core/tick.py` の `MatchTick`）。
         """
         ...
 
@@ -75,7 +75,7 @@ class EitherSource:
     sources: tuple[InputSource, ...]
 
     def __post_init__(self) -> None:
-        """合わせる窓口が、どれも同じプレイヤーの窓口かを確かめる。
+        """合わせる窓口が、どれも同じプレイヤーの窓口かを確認する。
 
         Raises:
             ValueError: ほかのプレイヤーの窓口が混ざっているとき。混ざったまま
@@ -98,7 +98,7 @@ class EitherSource:
 class InputGatherer:
     """窓口を集めて、1 tick ぶんの入力をまとめて取り出す。
 
-    プレイヤーごとに窓口が違ってよい。人間1人と CPU 3人でも、人間2人と記録を流す窓口
+    プレイヤーごとに窓口が違ってよい。人間1人と CPU 3人でも、人間2人と記録を再生する窓口
     2つでも、ルールの層からは区別がつかない。
     """
 
@@ -109,7 +109,7 @@ class InputGatherer:
 
         Raises:
             ValueError: 同じプレイヤーの窓口が2つあるとき。あとの窓口で黙って上書き
-                すると、どちらの操作が効いているのか分からなくなる。
+                すると、どちらの操作が有効なのか分からなくなる。
         """
         by_player: dict[PlayerId, InputSource] = {}
         for source in sources:

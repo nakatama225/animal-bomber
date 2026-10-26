@@ -299,7 +299,7 @@ class Test試合の設定:
 
     @pytest.mark.parametrize("count", [0, 5])
     def test_動物が1から4匹の外(self, count: int) -> None:
-        """体力と CPU の強さは動物と同じ数にして、数の確かめだけで断ることを見る。"""
+        """体力と CPU の強さは動物と同じ数にして、数の確認だけで断ることを見る。"""
         config = {
             **config_with(animals=["rabbit"] * count, startingHp=[2] * count),
             "cpu": ["normal"] * count,
@@ -320,7 +320,7 @@ class Test試合の設定:
         with pytest.raises(ProtocolError):
             decode_lan_settings(config)
 
-    def test_CPUの強さはそのプレイヤーのものを引く(self) -> None:
+    def test_CPUの強さはそのプレイヤーのものを取得する(self) -> None:
         assert [cpu_level_of(SETTINGS, p) for p in (0, 1, 2, 3)] == list(SETTINGS.cpu)
 
     def test_設定に無いプレイヤーのCPUの強さは止める(self) -> None:
@@ -343,7 +343,7 @@ class _Connection:
 
 
 class Test中継が実際に送るものを読める:
-    """中継の部屋に、この版が書き出すメッセージを流し、届いたものを全部この版で読む。
+    """中継の部屋に、この版が書き出すメッセージを送り、届いたものを全部この版で読む。
 
     表とこの版が合っていても、中継が別の項目名で書いていれば読めない。中継の側の
     突き合わせ（`server/tests/test_protocol_sync.py`）は TypeScript 版の表との比べ
@@ -373,7 +373,10 @@ class Test中継が実際に送るものを読める:
         assert [m.tick for m in desyncs] == [19, 19, 19]
 
     async def _play(self) -> list[object]:
-        """3人で始め、入力・食い違う要約・切断までを流す。届いたものを読んで返す。"""
+        """3人で始め、入力・食い違う要約・切断までを部屋へ送る。
+
+        届いたものを読んで返す。
+        """
         room = LockstepRoom(max_seats=4)
         peers = [_Connection() for _ in range(3)]
         for connection in peers:

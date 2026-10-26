@@ -57,7 +57,7 @@ def _default_ts_dir() -> Path | None:
     ⚠️ PyInstaller で固めた `.app` には、いまは入れていない（spec を変えていない）。
     入っていなければ None を返し、`/ts/` は「この中継には入れていない」と案内する
     （ビルドの仕方を案内しても、`.app` はリポジトリのビルドの出力を読まない）。
-    入れるには spec の `datas` に足して作り直し、実機で確かめる必要がある。
+    入れるには spec の `datas` に足して作り直し、実機で検証する必要がある。
     """
     bundle_dir = getattr(sys, "_MEIPASS", None)
     if bundle_dir:
@@ -108,8 +108,8 @@ def make_handler(room: Room, lockstep: LockstepRoom | None = None):
     それ以外は原型（ホスト権威）の中継（`room`）。2つは別の部屋で、
     互いのメッセージは混ざらない。
 
-    やることは3つだけ: プレイヤー番号を割り当てる・届いたメッセージを右から左へ流す・
-    切れたらその番号を空ける。ゲームのルールはここにも一切出てこない。
+    やることは3つだけ: プレイヤー番号を割り当てる・届いたメッセージを右から左へ
+    転送する・切れたらその番号を空ける。ゲームのルールはここにも一切出てこない。
 
     番号を決めるとき、ホストの0番はサーバと同じマシンから来た接続のために
     **空けて待つ**（`reserve_host_seat=True`）。「サーバを起動した人がホスト」
@@ -145,12 +145,12 @@ def make_handler(room: Room, lockstep: LockstepRoom | None = None):
 
 
 LIVENESS_INTERVAL = 1.0
-"""ロックステップの接続が応答するかを確かめる間隔（秒）。"""
+"""ロックステップの接続が応答するかを確認する間隔（秒）。"""
 
 LIVENESS_TIMEOUT = 2.0
 """応答を待つ秒数。これを過ぎたら、その接続は回線が切れたものとして切る。
 
-同じ LAN の往復は 1〜3ms なので、2秒は桁で余る。見張りの間隔と合わせて、
+同じ LAN の往復は 1〜3ms なので、2秒は桁で余る。生存確認の間隔と合わせて、
 回線が切れてから3秒ほどで残りの人に `peer_left` が届く。
 """
 
@@ -163,10 +163,10 @@ async def watch_liveness(
     """応答しなくなった接続を切る。ロックステップの部屋の接続にだけ使う。
 
     ⛔ ロックステップでは、原型の中継が頼っている「送れなければ外す」
-    （`relay.SEND_TIMEOUT`）が効かない。回線が切れた人の入力が止まると、
+    （`relay.SEND_TIMEOUT`）が機能しない。回線が切れた人の入力が止まると、
     残りの人も入力を待って止まり、何も送らなくなる。切れた人へ送るのは小さな入力が
     数通だけなので、送信の待ち行列が埋まらず、送る処理は時間切れにならない。
-    そのままだと `websockets` の既定の keepalive（20秒ごとに確かめ、20秒待つ）が
+    そのままだと `websockets` の既定の keepalive（20秒ごとに確認し、20秒待つ）が
     切るまで、**全員の画面が30〜50秒止まる**。
 
     原型の部屋では使わない。原型はホストが毎フレーム盤面を送るので、
@@ -189,7 +189,8 @@ async def watch_liveness(
 async def serve_lockstep(lockstep: LockstepRoom, ws: ServerConnection) -> None:
     """ロックステップの部屋に入った接続1本ぶんの一生を扱う。
 
-    原型の部屋との違いは3つ。応答しない接続を見張って切る（`watch_liveness`）。
+    原型の部屋との違いは3つ。
+    応答を定期的に確認し、応答しない接続を切る（`watch_liveness`）。
     送れずに外した接続が、あとで同じ番号に入った人を巻き込まないようにする。
     切れた接続を例外として記録しない。
     """
@@ -214,7 +215,7 @@ async def serve_lockstep(lockstep: LockstepRoom, ws: ServerConnection) -> None:
                 break
             await lockstep.route(seat, message)
     except ConnectionClosed:
-        # 見張りが切った接続。切れたことは下で扱う
+        # 生存確認（watch_liveness）が切った接続。切れたことは下で扱う
         pass
     finally:
         watcher.cancel()
@@ -278,7 +279,7 @@ async def _serve_until_stopped(
     Note:
         イベントループも `Event` も、この関数の**中で作る**必要がある。
         別スレッドで先に作ってしまうと「作られたループ」と
-        「実際に回っているループ」が食い違い、`Event.set()` が
+        「実際に実行中のループ」が食い違い、`Event.set()` が
         届かなくなる（asyncio のオブジェクトは作られたループに紐づく）。
     """
     loop_box["loop"] = asyncio.get_running_loop()

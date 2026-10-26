@@ -44,7 +44,7 @@ class WorldState:
     （`state/match.py` の `MatchState`。次のラウンドの盤面の種は、ラウンドの番号から
     導く）。
 
-    ここに何かを足すときは、それが結果を左右するかを決めることになる。左右しないものを
+    ここに何かを足すときは、それが結果を左右するかを先に決める。左右しないものを
     足すと、通信対戦で突き合わせるものが無駄に増える。左右するものを足したら、
     `hash_world` にも足す（足さないと、その値がずれても気づけない）。
 
@@ -104,7 +104,7 @@ HELD_AT_ROUND_START: Final = PlayerInput.BOMB | PlayerInput.ACTION
 間も押し続けていれば、実際の試合でも起きる。原型も、決着の幕を Space で送った押下が次の
 ラウンドの最初に届いて同じことが起き、ラウンドの始まりに押下の記録を消していた
 （`legacy/animal-bomber.html` の startRound）。押したまま始まったボタンは、一度離して
-押し直すと効く（TypeScript 版は段階 11e の 41be1eb で直した）。
+押し直すと有効になる（TypeScript 版は段階 11e の 41be1eb で修正した）。
 
 技のボタンの長押し（とくぎ）は、`PlayerState.action_fired` の始めの値（True）が止める
 （原型の startRound も同じ）。
@@ -128,8 +128,8 @@ def create_world(
 ) -> WorldState:
     """ラウンドの始まりの状態を作る。ラウンドごとに作り直す（`app/session.py`）。
 
-    ⚠️ 乱数を引く順が結果を決めるので、盤面を先に作る。あとでプレイヤーを置く処理が
-    乱数を引くようになっても、同じ種から同じ盤面ができるように。
+    ⚠️ 乱数を取り出す順が結果を決めるので、盤面を先に作る。あとでプレイヤーを置く処理が
+    乱数を取り出すようになっても、同じ種から同じ盤面ができるように。
 
     向きは全員が下で始まる（原型と同じ。TypeScript 版は、下の隅から始まるプレイヤーが
     上を向く）。体力・火力・同時に置ける爆弾の数には、動物ごとの上乗せを足す
@@ -182,7 +182,7 @@ def create_world(
 
 
 def _spawn_corners(count: int, spawn_order: Sequence[int] | None) -> tuple[int, ...]:
-    """プレイヤー番号の順に、始める隅の番号を返す。並びを渡されたら確かめる。"""
+    """プレイヤー番号の順に、始める隅の番号を返す。並びを渡されたら確認する。"""
     if spawn_order is None:
         return tuple(range(count))
     order = tuple(spawn_order)
@@ -200,10 +200,10 @@ def hash_world(world: WorldState) -> int:
     """状態を1つの数値に要約する。リプレイの検証と、通信対戦の突き合わせに使う。
 
     ⚠️ 混ぜる順が結果を決めるので、ここで決めた順を変えない。変えると、ずれていないのに
-    ずれたと判定される（並べ替えたら、固定値のテストの値も直す）。
+    ずれたと判定される（並べ替えたら、固定値のテストの値も修正する）。
 
-    乱数は状態と引いた回数の両方を混ぜる。引いた回数がずれていれば「ルールの乱数を余計に
-    引いた／引かなかった」に絞れる。
+    乱数は状態と取り出した回数の両方を混ぜる。取り出した回数がずれていれば「ルールの
+    乱数を余計に取り出した／取り出さなかった」に絞れる。
     """
     hasher = StateHasher()
     hasher.add_int(world.now)
@@ -250,7 +250,7 @@ def hash_world(world: WorldState) -> int:
             .add_bool(bomb.chained)
             .add_int(len(bomb.pass_through))
         )
-        # 誰が通り抜けられるか。いまの移動には効かないが、段階 5・6 で通れるかを
+        # 誰が通り抜けられるか。いまの移動には影響しないが、段階 5・6 で通れるかを
         # 尋ねる処理が読む（`Bomb.pass_through`）。set は取り出す順が決まらないので、
         # 並べ替えてから混ぜる。
         for player_id in sorted(bomb.pass_through):

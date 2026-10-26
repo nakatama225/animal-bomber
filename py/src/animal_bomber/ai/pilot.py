@@ -223,7 +223,7 @@ def _shortest_way(start: float, goal: float) -> float:
 def _keys_for(spot: LaneSpot, direction: int) -> PlayerInput:
     """外周をその向きへ進むために押す向き。
 
-    どの辺で何を押すとどちらへ進むかは、人間の操作と同じ変換（`lane_step`）から逆に引く。
+    どの辺で何を押すとどちらへ進むかは、人間の操作と同じ変換（`lane_step`）から逆算する。
     別に表を持つと、人間と CPU で外周の進み方が食い違ったときに気づけない。向きは定義の
     順（上・右・下・左。TypeScript 版の `DIRECTIONS` と同じ）に試す。
     """

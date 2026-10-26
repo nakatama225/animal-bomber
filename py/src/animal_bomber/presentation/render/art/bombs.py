@@ -53,9 +53,9 @@ def bomb_look(bomb: Bomb, now: float, behind: float = 0.0) -> BombLook:
     （0.5 倍では、tick をまたぐフレームだけ脈の位相が大きく跳ぶ）。
 
     ⚠️ 脈打ちの位相は、原型と同じくラウンドの経過時間（G.elapsed）に、爆発が近づくほど
-    上がる周波数を掛けて作る。TypeScript 版は置いてからの時間に直した（経過時間が長いと
-    1 tick ごとの位相の飛びが大きく、脈打ちがばらばらに跳ねて見えるため）。この版は
-    原型に合わせる。
+    上がる周波数を掛けて作る。TypeScript 版は置いてからの時間に修正した（経過時間が
+    長いと 1 tick ごとの位相の飛びが大きく、脈打ちがばらばらに跳ねて見えるため）。
+    この版は原型に合わせる。
     """
     elapsed = seconds(now)
     k = 1 - (seconds(bomb.fuse + behind) / BOMB_FUSE_SECONDS)  # 0→1

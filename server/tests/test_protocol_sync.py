@@ -1,6 +1,6 @@
 """ロックステップの約束が、Python と TypeScript で食い違っていないか。
 
-同じ約束を2つの言語で書くと、片方だけを直して食い違う。食い違いは実行するまで
+同じ約束を2つの言語で書くと、片方だけを修正して食い違う。食い違いは実行するまで
 見えず、症状は「接続できるのに始まらない」「たまに止まる」として出る。
 
 ここでは3か所を突き合わせる。
@@ -43,7 +43,7 @@ def ts_source() -> str:
 def ts_table(name: str, source: str | None = None) -> dict[str, tuple[str, ...]]:
     """`export const NAME = { 種類: ['項目', ...], ... } as const;` を読み出す。
 
-    書き方が崩れていたら、読み飛ばさずに落とす。読み飛ばすと、
+    書き方が崩れていたら、読み飛ばさずに失敗させる。読み飛ばすと、
     食い違いがあっても「一致した」ことになる。
     """
     text = ts_source() if source is None else source
@@ -136,7 +136,10 @@ class Test中継が実際に扱うもの:
         assert [m["tick"] for m in sent if m["t"] == "desync"] == [19, 19, 19]
 
     async def _play(self) -> list[dict]:
-        """3人で始め、入力・食い違う要約・切断までを流す。届いたものを全部返す。"""
+        """3人で始め、入力・食い違う要約・切断までを部屋へ送る。
+
+        届いたものを全部返す。
+        """
         room = LockstepRoom(max_seats=4)
         peers = [FakeConnection() for _ in range(3)]
         for ws in peers:

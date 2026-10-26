@@ -5,8 +5,9 @@
 
 規則は動物を知らない。動物によって違う所は `tactics.py` の戦い方に聞く。
 
-⚠️ 乱数を引く規則がある（攻めに踏み切るか・うろつく先の遠さ）。引く順は TypeScript 版と
-同じにしてある。並びを変えると、CPU の手も TypeScript 版と比べる値も変わる。
+⚠️ 乱数を取り出す規則がある（攻めに踏み切るか・うろつく先の遠さ）。取り出す順は
+TypeScript 版と同じにしてある。並びを変えると、CPU の手も TypeScript 版と比べる値も
+変わる。
 """
 
 from collections.abc import Callable
@@ -302,8 +303,8 @@ def break_blocks(ctx: CpuContext) -> CpuPlan | None:
 def wander(ctx: CpuContext) -> CpuPlan:
     """やることが無いときは、少し離れたマスへ歩く。かならず計画を返す（連鎖の最後）。
 
-    行き先の遠さは、マスを調べるたびに引き直す（原型の `d>=2+rnd(4)`）。遠さを1回だけ
-    決めると、同じマスを往復しがちになる。
+    行き先の遠さは、マスを確認するたびに乱数で決め直す（原型の `d>=2+rnd(4)`）。
+    遠さを1回だけ決めると、同じマスを往復しがちになる。
     """
 
     def far(_cell: Cell, distance: int) -> bool:

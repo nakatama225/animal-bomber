@@ -51,10 +51,10 @@ OFF_BOARD_MARGIN: Final = 1.5
 
 
 def advance_leek(world: WorldState, leek: Leek) -> Progress:
-    """葱を 1 tick 進め、ぶつかったものを調べる。
+    """葱を 1 tick 進め、ぶつかったものを判定する。
 
     1 tick に進む距離（`LEEK_SPEED`）はマスの 4 分の 1 より短いので、1 tick に1回だけ
-    調べてもマスを飛び越えない（原型は 0.25 マスごとに区切って進めるが、1フレームでは
+    判定してもマスを飛び越えない（原型は 0.25 マスごとに区切って進めるが、1フレームでは
     1回になる）。寿命が尽きる tick も、動いてぶつかったかを見てから消す（原型も
     動かしてから寿命を引く）。
     """
@@ -71,7 +71,7 @@ def advance_leek(world: WorldState, leek: Leek) -> Progress:
 
 
 def _collide(world: WorldState, leek: Leek) -> list[SimEvent] | None:
-    """ぶつかったものを調べる。
+    """ぶつかったものを判定する。
 
     止まったならイベント（空のこともある）、飛び続けるなら None を返す。
     """

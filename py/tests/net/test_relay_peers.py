@@ -2,7 +2,7 @@
 
 2台は、文字列の hash の種（`PYTHONHASHSEED`）を変えたプロセスで動かす。ルールの層に
 set の反復が紛れ込むと、プロセスごとに試合が変わり、中継が状態の要約の食い違いを
-知らせる（`tests/determinism/test_hashseed.py` と同じ見張りを、通信対戦の形で行う）。
+知らせる（`tests/determinism/test_hashseed.py` と同じ検査を、通信対戦の形で行う）。
 
 プロセスには窓も音も無い（既定の設定を読む `app/lan.py` が pygame を読み込むが、窓も
 音の出口も開かない）。この端末の操作は台本で、残りの枠は設定どおりの CPU。どちらの

@@ -3,7 +3,7 @@
 ## やり方
 
 全員が同じ試合を手元で進める。送り合うのは 1 tick ぶんの入力だけで、盤面は送らない。
-同じ種・同じ入力なら、全員の手元で同じ試合になる（段階 1 で作った記録の流し直しと同じ
+同じ種・同じ入力なら、全員の手元で同じ試合になる（段階 1 で作った記録の再生と同じ
 理屈）。
 
 1. tick T を進める前に、人間全員の tick T の入力が届いているかを見る。1人でも届いて
@@ -29,7 +29,7 @@
 中継が知らせた `lastTick` までは届いた入力で進め、その次の tick から CPU に任せる。
 全員の端末で同じ tick に替わる。抜けたプレイヤーと `lastTick` は、届いた入力の記録
 （`log`）に書き、窓口（`NetworkInputSource`）はその記録を見て替わる。記録を1台で
-流し直すときも、同じ tick で CPU に替わる。
+再生するときも、同じ tick で CPU に替わる。
 
 ## 試合が終わったあとも、入力と要約の交換を続ける
 
@@ -42,7 +42,7 @@
 ## 時刻は通信の時刻（試合通算の tick）
 
 このクラスは、自分で試合通算の時刻（`MatchClock`）を数える。試合が終わるまでは試合の
-時刻（`GameSession.clock`）と同じ値で、進めるたびに同じことを確かめる。試合が終わった
+時刻（`GameSession.clock`）と同じ値で、進めるたびに同じことを確認する。試合が終わった
 あとは、試合の時刻は止まり、こちらだけが進む。⚠️ 盤面の時刻（`world.now`）は使わない
 （ラウンドごとに 0 へ戻る。`domain/core/tick.py` の `MatchTick`）。
 """
@@ -152,7 +152,7 @@ class LockstepDriver:
         link: PeerLink,
         match: int,
     ) -> None:
-        """試合を作り、人間のプレイヤー全員に、通信で届いた入力を流す窓口を繋ぐ。
+        """試合を作り、人間のプレイヤー全員に、通信で届いた入力を渡す窓口を繋ぐ。
 
         Args:
             create_session: プレイヤーごとの窓口から試合を作る関数。
@@ -341,7 +341,7 @@ class LockstepDriver:
         return self._inputs.log.departed_after(player_id) is not None
 
     def _advance(self, tick: MatchTick) -> list[SimEvent]:
-        """試合を 1 tick 進める。試合の時刻と通信の時刻が揃っているかを先に確かめる。"""
+        """試合を 1 tick 進める。試合の時刻と通信の時刻が揃っているかを先に確認する。"""
         now = self._session.clock.now
         if now != tick:
             raise LockstepError(
@@ -386,5 +386,5 @@ class LockstepDriver:
     def _send_hash(self, tick: MatchTick) -> None:
         world = self._session.world
         # ⭐ 要約（hash_world）にも乱数の回数は混ざっているが、別に載せる。回数が
-        # 食い違っていれば「どこかで乱数を余計に引いた」と、ずれの種類まで分かる。
+        # 食い違っていれば「どこかで乱数を余計に取り出した」と、ずれの種類まで分かる。
         self._link.send(SendHash(tick, hash_world(world), world.rng.calls, self._match))

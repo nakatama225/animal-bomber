@@ -1,6 +1,6 @@
 """通信対戦の試合の配線（`app/lan.py` の `LanMatch`）の検査。
 
-中継との接続は、届くものを手で流す代わり（`_Connection`）にする。ホストが送った
+中継との接続は、届くものをテストが手で積む代わり（`_Connection`）にする。ホストが送った
 `start` を中継と同じく配り返す（`echo_start`）。
 """
 
@@ -237,7 +237,7 @@ class Test始める:
         assert not match.can_rematch
         assert not match.rematch()
         assert len([m for m in connection.sent if isinstance(m, RequestStart)]) == 1
-        # 試合が決まったことにする（既定の設定は3勝で優勝なので、試合を回すと長い）。
+        # 試合が決まったことにする（既定の設定は3勝で優勝なので、試合を進めると長い）。
         phase.session.match.finished = True
         assert not match.in_progress
         assert match.can_rematch

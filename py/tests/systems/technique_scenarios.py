@@ -3,7 +3,7 @@
 TypeScript 版と比べる `test_techniques_ts.py` と、起動のしかたを変えて突き合わせる
 `tests/determinism/test_hashseed.py` が使う。⚠️ 台本や盤面を変えると
 `ts_technique_values.json` の固定値と食い違う。変えるときは、TypeScript 版の写しに同じ
-台本を流して固定値を出し直す（`test_techniques_ts.py` の説明）。
+台本を実行して固定値を出し直す（`test_techniques_ts.py` の説明）。
 
 どの台本も、壊せるブロックを列も行も 4 で割って 3 余るマスだけに減らし、列と行の和が
 4 で割り切れる空きマスにアイテムを並べ、4人を盤面の真ん中に寄せて始める（隅から
@@ -19,12 +19,12 @@ TypeScript 版と比べる `test_techniques_ts.py` と、起動のしかたを�
 - 「体当たり」：ぞう・きつね・ぞう・かえる。ぞうが突進を続け、ほかは止まっている。
   体当たりが当たる・押しのける・抱えたものを撒く、を通る
 
-種は、TypeScript 版の写しで1から順に流し、上の場面をすべて通る、いちばん小さい種を
+種は、TypeScript 版の写しで1から順に実行し、上の場面をすべて通る、いちばん小さい種を
 選んだ。ルールを変えると通る場面も変わるので、固定値を出し直すたびに選び直す（うんこが
 焼けずに吹き飛ぶようにしたとき、前の種では体当たり・鼻水で爆弾を消す・舌が焼き切れる、を
 通らなくなった。技のボタンの読み方を原型に合わせたあとは、「とくぎ」が舌で掴む・抱えた
 ものを撒く、を、「体当たり」が体当たりを、通らなくなり、59 と 11 に替えた）。通るかは
-`test_scenario_coverage.py` が確かめる。
+`test_scenario_coverage.py` が確認する。
 """
 
 from collections.abc import Callable
@@ -174,7 +174,7 @@ SCENARIOS: Final = (
 
 
 def set_up(scenario: TechniqueScenario) -> WorldState:
-    """台本を流す前の盤面（モジュールの説明）。"""
+    """台本を実行する前の盤面（モジュールの説明）。"""
     world = create_world(scenario.seed, scenario.animals)
     for cell, tile in list(world.board.cells()):
         if tile is Tile.SOFT:
@@ -198,7 +198,7 @@ def set_up(scenario: TechniqueScenario) -> WorldState:
 
 
 def play(scenario: TechniqueScenario, ticks: int = TICKS) -> WorldState:
-    """台本を `ticks` だけ流した盤面。"""
+    """台本を `ticks` だけ実行した盤面。"""
     world = set_up(scenario)
     for tick in range(ticks):
         simulation.step(

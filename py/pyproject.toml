@@ -13,7 +13,7 @@ requires-python = ">=3.11"
 # animal-bomber-server は LAN 対戦の中継サーバ（リポジトリの server/）。通信の層（net/）が、
 # メッセージの約束の表を写さずにそのまま import する（約束を1つに保つため。
 # net/protocol.py の説明）。下の [tool.uv.sources] で server/ を直に指すので、server/ を
-# 直せば、入れ直さずにこちらにも入る。websockets は中継とつなぐ所（shell/relay_link.py）が
+# 修正すれば、入れ直さずにこちらにも反映される。websockets は中継とつなぐ所（shell/relay_link.py）が
 # 使う（中継と同じ下限）。
 dependencies = [
     "animal-bomber-server",
@@ -39,7 +39,7 @@ packages = ["src/animal_bomber"]
 
 [tool.pytest.ini_options]
 # docs/ の Markdown に書いた REPL の例（`>>>` で始まる行）も、書いたとおりの値が出るかを
-# 確かめる。例が古くなると失敗する。
+# 検証する。例が古くなると失敗する。
 testpaths = ["tests", "docs"]
 addopts = ["--doctest-glob=*.md"]
 # 補助のスクリプト（tools/）のうち pygame を使わないものを、テストが直接 import する。

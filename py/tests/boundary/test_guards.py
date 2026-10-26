@@ -1,21 +1,22 @@
-"""層の境界を守る検査が、実際に違反を見つけることの確認。
+"""層の境界の検査が、実際に違反を見つけることの確認。
 
 この実装には「ルールの層は乱数・実時間・描画・環境で結果が違いうる計算を自前で使わない」
 「依存を逆流させない」「種類の分岐を書き忘れない」「盤面の時刻と試合通算の時刻を
 取り違えない」「docstring の形をそろえる」という約束があり、それぞれを ruff（TID251 と
 D205・D209・D212）・import-linter・mypy の設定や型として書いてある。
 
-⚠️ 設定を書いただけでは、それが効いているかは分からない。設定の書き方を間違えていても、
-違反が無ければ検査は緑のまま通る。**緑のまま通る検査は何も防いでいない。**
+⚠️ 設定を書いただけでは、それが機能しているかは分からない。
+設定の書き方を間違えていても、違反が無ければ検査は緑のまま通る。
+**緑のまま通る検査は何も防いでいない。**
 そのためここでは、わざと違反したファイルを `src/` の下に書き出し、本物の検査コマンドが
-失敗することと、出力に書き出したファイルと違反した規則が名指しされることを確かめてから、
+失敗することと、出力に書き出したファイルと違反した規則が表示されることを確認してから、
 ファイルを消す。
 
 禁じるものの一覧は、`banned_names.py` の `MODULES_BANNED` と `MEMBERS_BANNED` が正で、
-`pyproject.toml` の設定がこれと等しいことも確かめる。次のどれをしても、ここが失敗する。
+`pyproject.toml` の設定がこれと等しいことも確認する。次のどれをしても、ここが失敗する。
 
 - 設定から禁止を1つ消す・名前を変える（片方の検査からだけ消した場合も）
-- 一覧に足さずに、設定にだけ禁止を足す（書き出して確かめていない禁止ができる）
+- 一覧に足さずに、設定にだけ禁止を足す（書き出して確認していない禁止ができる）
 - import-linter の禁止を掛ける範囲を、`domain/` より狭める
 - import-linter の「文と値を作る側は描く側を import しない」から、`presentation/hud/`
   か `presentation/menu/` を外す
@@ -163,7 +164,7 @@ def probe() -> Iterator[Probe]:
         written.clean()
 
 
-class Test境界を守る検査:
+class Test境界の検査:
     def test_違反が無ければ_どの検査も通る(self) -> None:
         """下のテストの前提。
 
@@ -197,7 +198,7 @@ class Test境界を守る検査:
         assert sorted(contract["forbidden_modules"]) == sorted(DRAWING_SIDE)
 
     def test_ルールの層で禁じたものを使うと_ruffが失敗する(self, probe: Probe) -> None:
-        """禁じたものがすべて、禁じた理由とともに名指しされる。"""
+        """禁じたものがすべて、禁じた理由とともに出力に表示される。"""
         names = MODULES_BANNED + MEMBERS_BANNED
         reasons = ruff_bans()
         # 並べ替え（I001）と未使用（F401）は黙らせ、禁止（TID251）だけが出るようにする。
@@ -355,7 +356,10 @@ class Test境界を守る検査:
             assert code in result.output, code
 
     def test_描画の層では_乱数と実時間を使ってよい(self, probe: Probe) -> None:
-        """禁止が層を選んで効いていること。全体に効いていると、描画が書けない。"""
+        """禁止が層を選んで適用されていること。
+
+        全体に適用されていると、描画が書けない。
+        """
         probe.write("presentation", "import random\nimport time\n\n_ = random, time\n")
         for result in (ruff(), lint_imports()):
             assert not result.failed, result.output

@@ -156,9 +156,9 @@ class ActorTracker:
         if before is None:
             return []
         burned_out: list[Cell] = []
-        # 新しく出たものから見る。原型の updateFoxfires は炎の並びを後ろから回すので、
-        # 同じ tick に2つ以上の炎が消えると、新しい炎の煙から出る（見た目の乱数を引く
-        # 順）。
+        # 新しく出たものから見る。原型の updateFoxfires は炎の並びを後ろから走査する
+        # ので、同じ tick に2つ以上の炎が消えると、新しい炎の煙から出る（見た目の乱数
+        # を取り出す順）。
         for seen in reversed(before.actors):
             if any(seen.actor is actor for actor in world.actors):
                 continue

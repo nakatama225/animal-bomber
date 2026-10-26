@@ -147,7 +147,7 @@ class Test応答しない接続が複数あっても遅れない:
         """接続自身のハンドラから外される経路（route を通らない）。
 
         ⭐ このとき「まだ生きている扱いだが実は黙っている接続」が残っていることがある
-        （ルータが落ちて全員同時に無音になった直後など）。退出の知らせを
+        （ルータが止まって全員同時に無音になった直後など）。退出の知らせを
         1人ずつ順に送ると、そこでまた人数ぶん待たされる。
         """
         room = Room(max_seats=5)
@@ -180,7 +180,7 @@ class Test後始末:
         assert host.received == []                  # peer_left が二重に飛ばない
 
     async def test_通知の相手が死んでいてもleaveは返る(self):
-        """ホストが先に落ちている状態でゲストが抜けるときの経路。"""
+        """ホストが先に切断されている状態でゲストが抜けるときの経路。"""
         room = Room(max_seats=4)
         host, guest = MuteConnection(), FakeConnection()
         await room.join(host)

@@ -1,8 +1,8 @@
-"""画面の流れ（`app/shell.py` の `Shell`）を、台本のイベントで通しで回す検査。
+"""画面の流れ（`app/shell.py` の `Shell`）を、台本のイベントで通しで実行する検査。
 
-TypeScript 版の `tests/ui/shell.test.ts`（本物の GameSession を回す通し）に当たる。
+TypeScript 版の `tests/ui/shell.test.ts`（本物の GameSession を実行する通し）に当たる。
 キー・パッド・マウス・中継の代わり（`tests/net/fake_relay.py`）のイベントを順に渡し、
-本物の試合（`GameSession`・`LockstepClient`）を回す。窓は開かない（`Shell` は窓の
+本物の試合（`GameSession`・`LockstepClient`）を実行する。窓は開かない（`Shell` は窓の
 大きさの面に描くだけ）。音・曲・パッドは偽物（`shell_driver.py`）。
 
 原型（`legacy/animal-bomber.html`）の決まりと、記録に残る事故に結びつくものを選んだ：
@@ -1143,7 +1143,7 @@ class Testラウンドの幕:
 
         原型の startRound も位置を置き直す。0.5 倍では、ラウンドを決めたフレームで
         持ち越した端数を使い切るので、押したフレームは新しい盤面を 1 tick も進めない
-        （押すフレームは、実機と同じく輪が 1 tick を返す形で回す）。控えが前の
+        （押すフレームは、実機と同じく輪が 1 tick を返す形で実行する）。控えが前の
         ラウンドのままだと、前のラウンドの最後の位置と混ぜて描き、次のフレームで
         開始位置へ跳ぶ。
         """
@@ -1491,7 +1491,7 @@ class Testラウンドの幕:
         原型はページごとスクロールし、幕の `backdrop-filter` は画面に見えている所だけを
         ぼかすので、隠れた時計の明滅は見えないだけで、止まる所は無い。横の板を下の端
         までスクロールしてから残り 20 秒で決めた幕を出し、明滅の周期の半分ずつ3フレーム
-        回す。幕を描くたびに数字を渡さず（渡すと、窓の外の四角を写そうとして例外で
+        実行する。幕を描くたびに数字を渡さず（渡すと、窓の外の四角を写そうとして例外で
         止まる）、幕の間の絵は幕を出したフレームのまま。
         """
         driver = Driver()
@@ -2283,7 +2283,7 @@ class Testゲームの速さ:
 
         原型も、止めている間は位置を動かさない。整数の倍率（混ぜない）と整数でない倍率
         （混ぜる）の間で替えても、止めている間は割合を替えない。つまみを押すフレームは、
-        実機と同じく輪が 1 tick を返す形で回す。
+        実機と同じく輪が 1 tick を返す形で実行する。
         """
         driver = Driver()
         runner = start_local(driver)
@@ -3153,7 +3153,7 @@ class LanPair:
         return connection
 
     def settle(self) -> None:
-        """届くものを届け、両方を（進めずに）回す。"""
+        """届くものを届け、両方を（進めずに）実行する。"""
         for _ in range(3):
             self.relay.deliver()
             self.host.frame(ticks=0)
@@ -3170,7 +3170,7 @@ class LanPair:
         return host, guest
 
     def step(self, frames: int = 1) -> None:
-        """両方を1フレームずつ回す（それぞれ、入力が揃っていれば 1 tick 進む）。"""
+        """両方を1フレームずつ実行する（それぞれ、入力が揃っていれば 1 tick 進む）。"""
         for _ in range(frames):
             self.relay.deliver()
             self.host.frame()
@@ -3426,7 +3426,7 @@ class Test通信対戦:
     def test_入力が揃わなければ進めず_押した瞬間を残し_揃ったら爆弾を置く(
         self,
     ) -> None:
-        """ゲストを回さない間、ホストは 2P の入力を待って止まる。
+        """ゲストのフレームを実行しない間、ホストは 2P の入力を待って止まる。
 
         待っているフレームで押してすぐ離した爆弾のキーは忘れない（忘れると、届いた
         あとの tick で押したことにならない。py/AGENTS.md の「通信対戦」）。
@@ -3477,7 +3477,7 @@ class Test通信対戦:
         pair = LanPair()
         host, _ = pair.start()
         # ゲストは `--relay` を付けて起動したので、起動の幕が消えきる（0.45 秒）まで
-        # 回す。
+        # 実行する。
         pair.step(30)
         assert frame_colors(pair.host.shell.canvas) == [LINE] * 8
         assert frame_colors(pair.guest.shell.canvas) == [LINE] * 8

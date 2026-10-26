@@ -133,7 +133,7 @@ class _Listener:
     """遊ぶときと同じ配線と順で、秒読み・曲・`Presenter` に渡す。
 
     進めたあとの盤面を秒読みと曲に、イベントを `Presenter` に渡す。同じ tick の中では、
-    遊ぶときの順（`app/shell.py` の `Shell._advance`）と同じく、秒読みと曲を先に回し、
+    遊ぶときの順（`app/shell.py` の `Shell._advance`）と同じく、秒読みと曲を先に処理し、
     そのあとでイベントの音を鳴らす（原型も秒読みが先）。曲を止めるのは `Presenter`
     （勝ち・引き分け・優勝の音の直前。`app/shell.py` の `Shell._begin_game` と同じ
     配線）。

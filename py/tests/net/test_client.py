@@ -1,7 +1,7 @@
 """中継につないでから試合が終わるまでの流れの検査。
 
-TypeScript 版の `tests/net/client.test.ts` と同じ場面を、この版で確かめる。中継から
-届くメッセージは、表の項目名で組んだ文字列を手で流す（`relay`）。
+TypeScript 版の `tests/net/client.test.ts` と同じ場面を、この版で確認する。中継から
+届くメッセージは、表の項目名で組んだ文字列を、テストが手で渡す（`relay`）。
 """
 
 import json

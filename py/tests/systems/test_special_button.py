@@ -41,7 +41,7 @@ def duel(
 
 
 def press_for(world: WorldState, ticks: int, pressed: set[int]) -> list[SimEvent]:
-    """0番が、`pressed` に入っている tick（1 から数える）だけ SPECIAL を押して流す。"""
+    """0番が、`pressed` の tick（1 から数える）だけ SPECIAL を押して進める。"""
     events: list[SimEvent] = []
     for t in range(1, ticks + 1):
         held = SPECIAL if t in pressed else PlayerInput.IDLE

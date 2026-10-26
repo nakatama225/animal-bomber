@@ -161,7 +161,7 @@ def frame_scene(
     同じ関数を両方で使うと、状態から絵の入力に変える所が崩れても、画素の比べは両方が
     同じく崩れて通る。
     `lane_spot` は、原型の negiPos と同じ位置と向きを出すことを `test_legacy_art.py` が
-    確かめている（`legacy_inputs.py` の `negibon_look_from`）。原型の drawNegibons も、
+    確認している（`legacy_inputs.py` の `negibon_look_from`）。原型の drawNegibons も、
     外周の位置を negiPos に通した位置と向き（L5416-5417・L5437）、葱の位置と飛ぶ向き
     （L5446）で描く。撃つ間隔の残り（`lane_cooldown_left`）は `test_views.py` が見る。
     """

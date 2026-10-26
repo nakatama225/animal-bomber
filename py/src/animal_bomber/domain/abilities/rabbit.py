@@ -88,7 +88,7 @@ def advance_scatter(world: WorldState, scatter: Scatter) -> Progress:
 
     撒いたものはふつうのうんこのアイテムで、撒いたプレイヤーを覚えている
     （`Item.scattered_by`）。ほかのプレイヤーが踏むと、うんこを拾ったときと同じ抽選で
-    悪い状態がかかる。撒いたプレイヤー自身は踏んでも効かない（自分の周りに壁を作って
+    悪い状態がかかる。撒いたプレイヤー自身は踏んでも効果が無い（自分の周りに壁を作って
     立てこもれる）。爆風では消えず、60 秒で消える。
     """
     scatter.elapsed = Tick(scatter.elapsed + 1)

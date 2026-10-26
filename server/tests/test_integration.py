@@ -196,7 +196,10 @@ async def running_both():
 
 
 async def recv(ws) -> str:
-    """受け取る。届かなければ待ち続けずに落とす（届かない不具合でテストが止まらないように）。"""
+    """受け取る。届かなければ待ち続けずに失敗させる。
+
+    届かない不具合でテストが止まらないようにするため。
+    """
     return await asyncio.wait_for(ws.recv(), timeout=2.0)
 
 
@@ -304,7 +307,7 @@ async def test_応答しなくなった接続は数秒で切り_残った人に�
     """回線が切れた人がいると、残りの人は入力を待って止まる。
 
     ロックステップでは送る量が少なく、送る処理が時間切れにならないので、
-    接続の見張り（`watch_liveness`）が切る。見張りが無いと、既定の keepalive が
+    接続の生存確認（`watch_liveness`）が切る。生存確認が無いと、既定の keepalive が
     切るまで30〜50秒、全員が止まる。
     """
     monkeypatch.setattr(main_module, "LIVENESS_INTERVAL", 0.2)

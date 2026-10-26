@@ -6,12 +6,12 @@
 式の順を入れ替えたり、細かく分ける回数を変えたりすると、最後の桁がずれて失敗する。
 
 期待する値は、TypeScript 版の段階 1（コミット 905e871）の `Simulation` に同じ台本を
-流して出したもの。台本は、行き来・曲がり角・斜め押し・靴の段数の違う4人を含む。
+実行して出したもの。台本は、行き来・曲がり角・斜め押し・靴の段数の違う4人を含む。
 段階 1 には動物ごとの違いが無いので、速さの倍率が 1 で、壊せるブロックを抜けない動物
-（きつね・かえる）で流す。倍率の掛かった動き（うさぎ・ぞう・もぐら）は、段階 5 の
-TypeScript 版と比べる `test_simulation_ts.py` で確かめる。
+（きつね・かえる）で実行する。倍率の掛かった動き（うさぎ・ぞう・もぐら）は、段階 5 の
+TypeScript 版と比べる `test_simulation_ts.py` で確認する。
 ⚠️ 原型の値ではない。分ける回数の決め方と動かす順が原型と違うので、速さの違う
-プレイヤーがいると原型とは位置がずれる（`systems/movement.py` の「原型と違えた所」）。
+プレイヤーがいると原型とは位置がずれる（`systems/movement.py` の「原型と違う所」）。
 """
 
 from collections.abc import Callable
@@ -136,7 +136,7 @@ CASES: list[tuple[int, tuple[Animal, ...], list[int], Script, list[list[object]]
 
 
 @pytest.mark.parametrize(("seed", "animals", "shoes", "script", "expected"), CASES)
-def test_同じ台本を流すと_TypeScript版と同じ位置になる(
+def test_同じ台本を実行すると_TypeScript版と同じ位置になる(
     seed: int,
     animals: tuple[Animal, ...],
     shoes: list[int],

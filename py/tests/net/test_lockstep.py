@@ -2,12 +2,12 @@
 
 同じ試合になる・遅らせて使う・待つ・ずれを見つける・抜けたプレイヤー・同じ接続での
 次の試合。TypeScript 版の `tests/net/lockstep.test.ts` と同じ場面を、この版で
-確かめる。中継は同じプロセスの中の代わり（`fake_relay.py`）で、本物の中継とつなぐのは
+確認する。中継は同じプロセスの中の代わり（`fake_relay.py`）で、本物の中継とつなぐのは
 `test_relay_peers.py`。
 
 ⚠️ 「食い違い 0 件」だけを見ない。1 tick も進まなくても、全員が何もしなくても、CPU を
 繋ぎ忘れても、要約は一致する。比べた件数・相手の操作が届いて動いたこと・CPU が動いた
-ことを、別に確かめる（TypeScript 版のレビューで見つかった空振り）。
+ことを、別に確認する（TypeScript 版のレビューで見つかった空振り）。
 """
 
 from collections.abc import Sequence
@@ -109,9 +109,9 @@ def compare_hashes(a: Peer, b: Peer) -> tuple[list[int], int]:
 def replay_against(
     host: Peer, log: InputLog, config: LanSettings, humans: Sequence[PlayerId]
 ) -> tuple[list[int], int]:
-    """届いた入力の記録を1台の試合で流し直し、本物の端末の要約と tick ごとに比べる。
+    """届いた入力の記録を1台の試合で再生し、本物の端末の要約と tick ごとに比べる。
 
-    最後の盤面だけを比べると、最後のラウンドしか見ないことになる（途中のラウンドが
+    最後の盤面だけを比べると、最後のラウンドしか見ない（途中のラウンドが
     時間切れの引き分けだと、勝ち数にも差が出ない）。
     """
 
@@ -127,7 +127,7 @@ def replay_against(
     replay = GameSession(config.match, sources)
     mismatched: list[int] = []
     compared = 0
-    # 流し直す側の試合が先に終わると時刻が進まなくなるので、回数に上限を置く。
+    # 再生する側の試合が先に終わると時刻が進まなくなるので、回数に上限を置く。
     for _ in range(10_000):
         tick = replay.clock.now
         if tick >= host.session.clock.now:
@@ -303,7 +303,7 @@ class Testロックステップ:
         relay, peers = start_match(2)
         fast, slow = peers
 
-        # ⚠️ 回数に上限を置く。どちらも進めなくなる不具合が入ったとき、テストが終わら
+        # ⚠️ 回数に上限を置く。どちらも進めなくなる不具合があると、テストが終わら
         # なくなる。
         for _ in range(2000):
             if slow.session.clock.now >= 600:
@@ -322,9 +322,9 @@ class Testロックステップ:
     def test_試合が実際に使った入力は_そのtickに届いた入力と同じ(self) -> None:
         """2ラウンド目以降も、試合が使った入力と届いた入力の記録を tick ごとに比べる。
 
-        全端末が同じく時刻を取り違えると（ラウンドごとに 0 へ戻る `world.now` で引く、
-        など）、要約は一致したまま、押したキーが試合に入らなくなる。要約の比較では見つからない
-        ので、試合が実際に使った入力（`previous_input`）を比べる。
+        全端末が同じく時刻を取り違えると（ラウンドごとに 0 へ戻る `world.now` で記録を
+        取得する、など）、要約は一致したまま、押したキーが試合に入らなくなる。要約の
+        比較では見つからないので、試合が実際に使った入力（`previous_input`）を比べる。
         """
         config = settings(round_limit=Tick(240), sudden_death=False)
         relay, peers = start_match(2, config)
@@ -352,8 +352,8 @@ class Testロックステップ:
         # 以降でしか見えない。
         assert later_rounds > 100
 
-    def test_通信対戦の記録を1台で流し直すと_同じ試合になる(self) -> None:
-        """ラウンドをまたいでも。記録と流す窓口は、どちらも通算の tick で引く。"""
+    def test_通信対戦の記録を1台で再生すると_同じ試合になる(self) -> None:
+        """ラウンドをまたいでも。記録と再生の窓口は、どちらも通算の tick を使う。"""
         config = settings(round_limit=Tick(240), sudden_death=False)
         relay, peers = start_match(2, config)
         host = peers[0]
@@ -452,7 +452,7 @@ class Testずれを見つける:
         assert host.driver.now == 10 + HASH_INTERVAL * 3
         assert relay.agreed == [19, 39, 59]
 
-    def test_要約と一緒に_試合の乱数を引いた回数も送る(self) -> None:
+    def test_要約と一緒に_試合の乱数を取り出した回数も送る(self) -> None:
         sent = _Sent()
         driver, session = lone_driver(humans=(0,), link=sent)
         driver.start()
@@ -489,16 +489,16 @@ class Test抜けたプレイヤー:
         assert host.session.world.players[2].position != before
         assert host.driver.waiting_for() == []
 
-    def test_途中で抜けたプレイヤーがいた試合も_記録を1台で流し直すと同じ試合になる(
+    def test_途中で抜けたプレイヤーがいた試合も_記録を1台で再生すると同じ試合になる(
         self,
     ) -> None:
         """抜けたプレイヤーには、CPU が選ばない押し方（上下左右を全部）をさせておく。
 
         本物の端末は、抜けたプレイヤーを lastTick の次の tick から CPU に替える。記録に
-        その tick が無いと、流す窓口はその最後の操作を返し続け、例外も出ずに別の試合に
-        なる。CPU に替える tick が1つずれると、その tick に使った入力が食い違い、要約
-        （使った入力も混ぜる）に出る。普通に歩かせると、替わった直後の CPU がたまたま
-        同じ向きを選び、ずれが見えないことがある。
+        その tick が無いと、再生する窓口はその最後の操作を返し続け、例外も出ずに別の
+        試合になる。CPU に替える tick が1つずれると、その tick に使った入力が食い違い、
+        要約（使った入力も混ぜる）に出る。普通に歩かせると、替わった直後の CPU が
+        たまたま同じ向きを選び、ずれが見えないことがある。
         """
         every = PlayerInput.UP | PlayerInput.DOWN | PlayerInput.LEFT | PlayerInput.RIGHT
 
@@ -522,7 +522,7 @@ class Test抜けたプレイヤー:
         assert host.session.clock.now > 1100
         assert host.session.match.round >= 3
 
-        # 文字列にして戻した記録でも流し直せる。
+        # 文字列にして戻した記録でも再生できる。
         log = host.driver.log
         for replayed in (log, InputLog.decode(log.encode())):
             mismatched, compared = replay_against(host, replayed, config, (0, 1, 2))

@@ -237,9 +237,9 @@ class Test炎の進み方:
 class Test同じtickの炎どうし:
     """原型の updateFoxfires は、全部の炎を動かしてから、別の輪で当たりを見る。
 
-    動かす輪は L2667-2683、当たりの輪は L2685-2694（配列を前から回す）。期待値は、原型を
-    node で読み込み、炎を直に積んで 1/60 秒ずつ動かして測ったもの（TypeScript 版の
-    `tests/abilities/foxfire.test.ts` と同じ場面）。
+    動かす輪は L2667-2683、当たりの輪は L2685-2694（配列を前から順に処理する）。
+    期待値は、原型を node で読み込み、炎を直に積んで 1/60 秒ずつ動かして測ったもの
+    （TypeScript 版の `tests/abilities/foxfire.test.ts` と同じ場面）。
     """
 
     def test_古い炎が相手を倒すtickに_新しい炎もその相手のほうへ一歩進む(self) -> None:
@@ -268,7 +268,7 @@ class Test同じtickの炎どうし:
         """原型：11 フレーム目に、0番の古い炎が 1番に、1番の新しい炎が 0番に当たる。
 
         被弾のたびに吐き出すアイテムは (9, 7) → (3, 7) の順に積まれた（当たりの輪は炎の
-        配列を前から回す。L2685）。
+        配列を前から順に処理する。L2685）。
         """
         world, (p0, p1) = arena((Animal.FOX, Animal.FOX))
         place(p0, Cell(3, 7))
@@ -425,7 +425,7 @@ def line(effects: tuple[EffectKind, ...]) -> tuple[list[Cell], int]:
     fox.max_bombs = 3
     for effect in effects:
         fox.effects.add(effect, Tick(240), Tick(720))
-    # 勝手に設置の拍は来ないようにする（技の確かめだけを見る）。
+    # 勝手に設置の拍は来ないようにする（技の判定だけを見る）。
     fox.autobomb_wait = Tick(99)
     simulation.step(world, idle(world))
     simulation.step(world, only_for(world, 0, ACTION))

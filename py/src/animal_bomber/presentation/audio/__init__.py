@@ -7,7 +7,7 @@
 1. 表（`recipes.py`・`added_recipes.py`・曲は `score.py`）… 原型の `SE` と `BGM` の
    数値と式
 2. 値の動き（`voices.py`）… 原型の `tone()`・`noiseBurst()`・`BGM.note` が Web Audio に
-   入れていた予定。原型を node で読み込んで書き出した固定値と、同じ予定かを確かめる
+   入れていた予定。原型を node で読み込んで書き出した固定値と、同じ予定かを確認する
 3. 合成（`synth.py`）… 予定を Web Audio の仕様の式で読み、音の配列にする
 4. 焼く（`bank.py`・`music.py`）… pygame の mixer の周波数で焼き、鳴らすときは再生だけ
 

@@ -216,7 +216,7 @@ class Test撒く順と時刻:
 class Test撒いたうんこ:
     """原型の poro のアイテム。"""
 
-    def test_撒いたプレイヤー自身は踏んでも効かず残る_ほかは消えて抽選がかかる(
+    def test_撒いたプレイヤー自身は踏んでも作用せず残る_ほかは消えて抽選がかかる(
         self,
     ) -> None:
         world, rabbit, frog = arena((Animal.RABBIT, Animal.FROG))
@@ -268,7 +268,7 @@ class Test撒いたうんこ:
                 break
         assert (placed_at, gone_at) == (1, 3602)
 
-    def test_かえるの舌で掴め_かえるに効く(self) -> None:
+    def test_かえるの舌で掴め_かえるに作用する(self) -> None:
         world, frog, rabbit = arena((Animal.FROG, Animal.RABBIT))
         place(frog, Cell(3, 7))
         frog.facing = Direction.RIGHT
@@ -351,7 +351,7 @@ class Test撒く範囲:
         assert len(cells) == 19
 
     def test_2つが同じtickに同じマスへ撒くと_新しいほうのうんこになる(self) -> None:
-        """原型の updatePoroporos は配列を後ろから回す（L2756）。
+        """原型の updatePoroporos は配列を後ろから順に処理する（L2756）。
 
         原型の答え：中心 (5, 7) の古い撒く本体と (7, 7) の新しい撒く本体を同じ update
         から撒くと、新しいほうが先に撒き、古いほうはアイテムのあるマスを飛ばす（L2768）。

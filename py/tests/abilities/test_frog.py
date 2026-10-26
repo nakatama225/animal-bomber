@@ -278,8 +278,8 @@ class Test粘膜爆弾の時間:
     ) -> None:
         """原型の答え（300 の種）：21 フレーム目に着地する。
 
-        最初に跳ぶのは 40〜45 フレーム目、跳ねる間隔は 19〜24 フレーム。6〜8 を引いて、
-        跳ねるのは 5〜7 回。
+        最初に跳ぶのは 40〜45 フレーム目、跳ねる間隔は 19〜24 フレーム。区切りの数は
+        6〜8 から乱数で取り出し、跳ねるのは 5〜7 回。
         """
         first_hops: set[int] = set()
         intervals: set[int] = set()
@@ -397,7 +397,7 @@ def tongue_scene(blocker: str, item_col: int) -> tuple[int, list[Cell], bool]:
     return frog.power - power, [item.cell for item in world.items], frog.action is None
 
 
-class Test舌が止まるもの:
+class Test舌を止めるもの:
     """原型の updateTongue。"""
 
     def test_爆弾の向こうのアイテムは取らない(self) -> None:
@@ -468,7 +468,7 @@ class Test舌の長さと時間:
             run_tongue(world, frog, tongue_of(frog))
             assert frog.power - before == gained, f"{distance} マス先"
 
-    def test_掴んだアイテムは23tick目に盤面から消え_戻りきった46tick目に効く(
+    def test_掴んだアイテムは23tick目に盤面から消え_戻りきった46tick目に作用する(
         self,
     ) -> None:
         """3 マス先。"""
@@ -544,7 +544,9 @@ class Test舌の長さと時間:
             check_tongue_burn(world, frog, tongue)
             assert frog.effects.remaining(EffectKind.STUN) == after, f"前に {before}"
 
-    def test_掴んで戻る途中で焼き切れると_掴んでいたものは焦げて効かない(self) -> None:
+    def test_掴んで戻る途中で焼き切れると_掴んでいたものは焦げて効果が無い(
+        self,
+    ) -> None:
         world, frog = frog_at()
         world.items.append(
             Item(id=world.ids.take(), cell=Cell(7, 5), kind=ItemKind.FIRE)
@@ -625,12 +627,12 @@ class Test舌の長さと時間:
             got = (end, frog.power - before, len(world.items))
             assert got == expected, f"{regen_in} tick で戻る"
 
-    def test_掴んだ瞬間は掴んだことだけを知らせ_拾ったことは効いたtickに知らせる(
+    def test_掴んだ瞬間は掴んだことだけを知らせ_拾ったことは作用したtickに知らせる(
         self,
     ) -> None:
         """原型：掴んだところでは tongueCatch の音だけ。
 
-        拾った音は、戻りきって効いたときに鳴る。戻る途中で焼き切れたら、効かないので
+        拾った音は、戻りきって作用したときに鳴る。戻る途中で焼き切れたら、作用しないので
         拾ったことも知らせない。
         """
 
@@ -666,7 +668,7 @@ class Test舌の長さと時間:
 class Test倒れたかえるの舌:
     """原型の toNegibon L2255・退場 L1700・update L4320-4322・L4395・negiHit L2347。
 
-    原型は倒れても舌を消さず、舌を進めるのは盤面にいるプレイヤーだけ、焼けたかの確かめは
+    原型は倒れても舌を消さず、舌を進めるのは盤面にいるプレイヤーだけ、焼けたかの判定は
     状態を問わず全員を見る。葱で盤面へ戻るときは、かかった状態と舌を消す（L2347-2348。
     TypeScript 版の `tests/abilities/frog.test.ts` の「倒れたかえるの舌」と同じ場面）。
     """
@@ -891,16 +893,16 @@ class Test粘膜爆弾が爆発する番:
 
 
 class Test同じtickに跳ねる粘膜爆弾の順:
-    """原型の updateSlimes は配列を後ろから回す（L2949）。"""
+    """原型の updateSlimes は配列を後ろから順に処理する（L2949）。"""
 
-    def test_新しく投げたほうが先に_跳ぶ先と次の間隔の乱数を引く(
+    def test_新しく投げたほうが先に_跳ぶ先と次の間隔の乱数を取り出す(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """原型：古い A と新しい B が同じ update に跳ねると、B が先に乱数を引く。
+        """原型：古い A と新しい B が同じ update に跳ねると、B が先に乱数を取り出す。
 
-        B の番に跳ぶ先（L2970）と間隔（L2979）を引き終えてから、A の番に引く（種 7・11・
-        300 で、どれも B → A）。原型の乱数は列が違うので、どちらの番に引いたかで比べる
-        （TypeScript 版と同じ場面）。
+        B の番に跳ぶ先（L2970）と間隔（L2979）を取り出し終えてから、A の番に取り出す
+        （種 7・11・300 で、どれも B → A）。原型の乱数は列が違うので、どちらの番に
+        取り出したかで比べる（TypeScript 版と同じ場面）。
         """
         world, _, _ = arena()
         older = SlimeBomb(cell=Cell(5, 5), owner=0, hops_left=5)
@@ -920,7 +922,7 @@ class Test同じtickに跳ねる粘膜爆弾の順:
         draws: list[str] = []
 
         class Recording(Rng):
-            """どちらの番に引いたかを書き留めて、いつも 0 を返す試合の乱数。
+            """どちらの番に取り出したかを書き留めて、いつも 0 を返す試合の乱数。
 
             2つの間隔がそろうので、同じ tick に着地して、同じ tick に跳ねる。
             """

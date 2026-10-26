@@ -1,5 +1,5 @@
 /* 原型の効果音 36 種と BGM の 32 刻みを鳴らし、作られた部品（発音・削り・音量）と
-   その値の動きを JSON に書き出す。Python 版の音の表が原型と同じ値かを確かめる正解に使う。
+   その値の動きを JSON に書き出す。Python 版の音の表が原型と同じ値かを検証する正解に使う。
    node legacy_sound.js <出力.json> */
 const env = require('./legacy_env.js');
 const { X, audio, chainOf } = env;

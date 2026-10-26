@@ -324,5 +324,6 @@ class _Hooks:
         return self._local_source(player_id)
 
     def cpu_source(self, player_id: PlayerId, settings: LanSettings) -> InputSource:
-        # 強さと種は、ホストが配った設定から引く。全員の端末で同じ CPU が同じ手を指す。
+        # 強さと種は、ホストが配った設定から取得する。全員の端末で同じ CPU が同じ手を
+        # 指す。
         return lan_cpu_source(player_id, settings)

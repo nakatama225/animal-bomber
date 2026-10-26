@@ -5,8 +5,8 @@
 ## 書体を探す
 
 原型の画面の書体は `"Hiragino Maru Gothic ProN","Hiragino Sans",system-ui`（原型 L17）。
-pygame の `match_font` は、書体の名前をファイル名から作った鍵で引くので、この Mac では
-ファイル名が日本語のヒラギノに届かず、中国語の簡体字向けの Hiragino Sans GB を拾う
+pygame の `match_font` は、書体の名前をファイル名から作った鍵で検索するので、この Mac
+ではファイル名が日本語のヒラギノに届かず、中国語の簡体字向けの Hiragino Sans GB を拾う
 （X11 の fc-list が無い macOS では、鍵をファイル名から作る）。そこで、色つきの絵文字の
 書体（`canvas/text.py` の
 `EMOJI_FONT_CANDIDATES`）と同じく、ファイルの場所の一覧で探す。一覧のどれも無い環境では、

@@ -4,7 +4,7 @@
 ## --onedir を選ぶ理由（--onefile にしない）
 
 --onefile は実行のたびに `/var/folders` 配下へ全展開してから起動するため、
-起動が遅く、しかも macOS の `.app` バンドル構造（Contents/MacOS/ に実行体、
+起動が遅く、macOS の `.app` バンドル構造（Contents/MacOS/ に実行体、
 Contents/Resources/ にリソース、という決まった形）とも相性が悪い。
 --onedir は「フォルダの中に実行体と付属ファイルがそのまま並ぶ」構造なので、
 `.app` バンドルへそのまま素直に収まる。
@@ -25,7 +25,7 @@ Contents/Resources/ にリソース、という決まった形）とも相性が
 ASCII 名（`animal-bomber-server`）に変えたところ問題なく署名できた
 （`codesign --verify --strict` が通る）ため、実行体名だけ ASCII に固定した。
 `EXE(name=...)` は実行体名、`BUNDLE(name=...)` は `.app` フォルダ名で、
-両者は独立して指定できる——ここを利用して見た目は変えず内側だけ直している。
+両者は独立して指定できる——ここを利用して見た目は変えず内側だけ修正している。
 """
 
 import os

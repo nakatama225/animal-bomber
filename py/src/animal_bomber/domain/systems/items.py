@@ -2,10 +2,10 @@
 
 動物ごとの違い（効果が2倍になる）は、拾ったプレイヤーの動物の倍率
 （`AnimalStats.item_multiplier`）で掛ける。⚠️ 倍率は効果をかける関数（`apply_item`）の
-中で、効く側のプレイヤーから引く。足元で拾った・技で引き寄せた・体当たりで押しつけ
-られた、のどれで効いても同じ倍率になる（原型の applyItem も、効く側の動物の倍率を中で
-引く）。TypeScript 版は倍率を呼び出し側から渡す形で、呼ぶ側が効く側の倍率を引いて渡す
-（3f3ccab から体当たりでも同じ）ので、結果は同じ。
+中で、効果を受けるプレイヤーから取得する。足元で拾った・技で引き寄せた・体当たりで
+押しつけられた、のどれで効果が出ても同じ倍率になる（原型の applyItem も、効果を受ける
+動物の倍率を中で取得する）。TypeScript 版は倍率を呼び出し側から渡す形で、呼ぶ側が効果を
+受ける側の倍率を取得して渡す（3f3ccab から体当たりでも同じ）ので、結果は同じ。
 
 ⚠️ この処理は動物の種類を知らない（`tests/boundary/test_closed_kinds.py`）。動物の名前を
 書かず、能力で書く。
@@ -61,7 +61,7 @@ SPIT_RING = (
 )
 """被弾したプレイヤーがアイテムを吐き出すマスを探す順（足元からの列と行の差）。
 
-足元から近い順に、決まった順で試す。乱数で選ぶと、引く回数が状況で変わり、状態の
+足元から近い順に、決まった順で試す。乱数で選ぶと、取り出す回数が状況で変わり、状態の
 突き合わせがずれる。原型と同じ順。
 """
 
@@ -96,8 +96,8 @@ def pick_up_for(world: WorldState, player: PlayerState) -> list[SimEvent]:
     item = item_at(world, cell)
     if item is None:
         return []
-    # 撒いたプレイヤー自身は、自分の撒いたものを踏んでも拾わない（効かず、残る。
-    # 原型の pickupCheck）。鼻水で溶けている最中のものは、誰が踏んでも効かない。
+    # 撒いたプレイヤー自身は、自分の撒いたものを踏んでも拾わない（効果が無く、残る。
+    # 原型の pickupCheck）。鼻水で溶けている最中のものは、誰が踏んでも効果が無い。
     if item.scattered_by == player.id or item.melting_until is not None:
         return []
     world.items.remove(item)
@@ -136,7 +136,7 @@ def remove_expired(world: WorldState) -> list[SimEvent]:
 def roll_drop(world: WorldState, cell: Cell) -> list[SimEvent]:
     """壊れたブロックのマスに、確率でアイテムを落とす。
 
-    出るかどうかで乱数を1回、出るなら種類で1回引く。
+    出るかどうかで乱数を1回、出るなら種類で1回取り出す。
     """
     if not world.rng.chance(DROP_CHANCE):
         return []
@@ -165,7 +165,8 @@ def apply_item(
 ) -> list[SimEvent]:
     """アイテムの効果を、そのプレイヤーにかける。
 
-    効く側の動物の倍率（`AnimalStats.item_multiplier`）を掛ける（モジュールの説明）。
+    効果を受ける動物の倍率（`AnimalStats.item_multiplier`）を掛ける
+    （モジュールの説明）。
 
     Args:
         world: 盤面の状態。
@@ -237,7 +238,7 @@ def spit_power_up(world: WorldState, player: PlayerState) -> list[SimEvent]:
     （TypeScript 版の注記）。
 
     1周目は爆風の無いマスを探し、見つからなければ爆風の上でもよいとする。どこにも
-    置けなければ吐き出さない（種類を決める乱数は、それでも1回引く）。
+    置けなければ吐き出さない（種類を決める乱数は、それでも1回取り出す）。
     """
     kind = world.rng.choice(POWER_UP_KINDS)
     origin = player.position.cell()

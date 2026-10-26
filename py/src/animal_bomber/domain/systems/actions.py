@@ -24,7 +24,7 @@ humanUpdate と同じ）。
 （`PlayerState.action_fired`）。届いた tick に出せなければ（動けない・チキンが無い・
 ボタンを受け付けない振る舞いの最中）、その押し方のとくぎはそれきり。離すと数え直す。
 
-## ラウンドの始まりに押していたボタンは、一度離すまで効かない
+## ラウンドの始まりに押していたボタンは、一度離すまで無効
 
 ラウンドの始まりは、前の tick にボタンを押していた扱い（押した瞬間にならない。
 `state/world.py` の `HELD_AT_ROUND_START`）と、とくぎを出し終えた扱い（`action_fired` の
@@ -40,7 +40,7 @@ humanUpdate と同じ）。
 
 続いている振る舞いを進める（`advance_for`）のと、ボタンを見て技を出す（`watch_for`）
 のは、1 tick の中で番が違う。原型は、プレイヤーごとの効果の処理の中で技を進め、全員ぶん
-済ませたあとの、プレイヤーごとの入力の処理（動く → 爆弾を置く → 技を始める）で技を
+処理したあとの、プレイヤーごとの入力の処理（動く → 爆弾を置く → 技を始める）で技を
 出す。どちらの番で呼ぶかは `systems/simulation.py` が決める（TypeScript 版の
 `ActionSystem` と同じ）。
 
@@ -103,7 +103,7 @@ def after_damage(world: WorldState) -> list[SimEvent]:
 
     盤面にいるプレイヤーと、盤面を離れても止めて残す振る舞い
     （`ActionTraits.stays_off_board`）を持つプレイヤーを見る。終わったら後始末を呼んで
-    外す。原型の L4395 は、状態を問わず全員について焼けたかを確かめる。倒れた tick にも
+    外す。原型の L4395 は、状態を問わず全員について焼けたかを確認する。倒れた tick にも
     見るので、倒した爆風が止まった振る舞いに触れていれば、その tick のうちに終わる
     （原型も被弾 L4393 のすぐあとに見る）。
     """
@@ -183,7 +183,10 @@ def _watch_button(
 
 
 def _accepts(player: PlayerState) -> bool:
-    """技のボタンが効くか。動けない間と、ボタンを受け付けない振る舞いの最中は効かない。"""
+    """技のボタンが有効な状態か。
+
+    動けない間と、ボタンを受け付けない振る舞いの最中は無効。
+    """
     if is_frozen(player):
         return False
     return player.action is None or not traits_of(player.action).blocks_buttons

@@ -6,7 +6,7 @@ import json
 
 
 class FakeConnection:
-    """`Room` が要求する `send`/`close` だけを持つ軽い代役。
+    """`Room` が使う `send`/`close` だけを持つ軽い代役。
 
     実物のソケットを使わずに `Room` のプレイヤー番号の割り当て・転送ロジックだけを検査する。
     受け取ったメッセージは `received` に溜めておき、テストから覗ける。

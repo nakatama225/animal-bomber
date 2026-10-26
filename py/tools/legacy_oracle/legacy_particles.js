@@ -1,6 +1,6 @@
 /* 原型が粒子と画面の揺れを出す所を、決まった乱数の列で呼び、使った乱数・出た粒子・揺れを
    JSON に書き出す。Python 版の粒子を出す関数が、同じ乱数の列で同じ粒子と揺れを出すかを
-   確かめる正解に使う。使った乱数には、ルールの層が引くもの（ブロックのあとのアイテムの抽選・
+   検証する正解に使う。使った乱数には、ルールの層が取り出すもの（ブロックのあとのアイテムの抽選・
    被弾で吐き出すアイテムの種類）も入る（読む側が外す）。
    node legacy_particles.js <出力.json> */
 const env = require('./legacy_env.js');
@@ -58,7 +58,7 @@ run('destroySoft', { fn: 'destroySoft', x: 3, y: 3 }, () => X.destroySoft(3, 3),
 for (const key of ['rabbit', 'elephant', 'mole', 'fox', 'frog']) {
   const p = playerOf(key, { cx: 7.5, cy: 9.5 });
   X.players = [p];
-  // 葱ボンへ回らないよう、時間切れ間際にしておく（toNegibon は乱数を引かないが、念のため外す）
+  // 葱ボンへ回らないよう、時間切れ間際にしておく（toNegibon は乱数を取り出さないが、念のため外す）
   X.G.time = 1;
   run(`kill ${key}`, { fn: 'kill', animal: key, cx: 7.5, cy: 9.5 }, () => X.kill(p));
 }
@@ -143,7 +143,7 @@ for (const [why, negi, setup] of [
     if (p.state !== 'NEGIBON') throw new Error('外周へ回らなかった');
   }, () => { X.players = [p]; X.G.time = 100; });
 }
-// 同じ update に寿命で消える狐火が2つ。原型は後ろから（新しいものから）回すので、煙もその順。
+// 同じ update に寿命で消える狐火が2つ。原型は後ろから（新しいものから）順に処理するので、煙もその順。
 run('updateFoxfires two expire', { fn: 'updateFoxfires', expire: [[3, 5], [9, 7]] }, () => {
   X.updateFoxfires(DT);
   if (X.foxfires.length !== 0) throw new Error('狐火が消えなかった');

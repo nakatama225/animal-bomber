@@ -3,10 +3,10 @@
 ## 何を書き換えてよいか
 
 - `world`（試合の状態）… **読むだけ**。書き換えると、入力を返す前に試合が進んだことに
-  なり、記録の流し直しと通信対戦の前提が崩れる
+  なり、記録の再生と通信対戦の前提が崩れる
 - `memory`（CPU 自身の記憶）… 書き換えてよい
-- `rng`（CPU 専用の乱数）… 引いてよい。試合の乱数とは別物なので、CPU が何回引いても
-  盤面やアイテムの抽選は変わらない
+- `rng`（CPU 専用の乱数）… 取り出してよい。試合の乱数とは別物なので、CPU が何回
+  取り出しても盤面やアイテムの抽選は変わらない
 
 1 tick ごとに作り直す。前の tick の値を持ち越さない。
 """
@@ -71,12 +71,12 @@ class CpuContext:
         """この tick にそのボタンを押せるか。
 
         ルールの層は「前の tick は押していない」ときだけ押したと読む。前の tick に押した
-        ボタンは、この tick に押しても効かない。
+        ボタンは、この tick に押しても無効。
         """
         return button not in self.me.previous_input
 
     def willing(self) -> bool:
-        """攻めの判断に踏み切るか。強さの `aggression` の確率で True。乱数を1回引く。"""
+        """攻めに踏み切るか。強さの `aggression` の確率で True。乱数を1回取り出す。"""
         return self.rng.chance(self.level.aggression)
 
     def skill_ready(self) -> bool:
@@ -84,7 +84,7 @@ class CpuContext:
 
         ⚠️ 外れたら少し待つ。使える場面で毎 tick 抽選すると、確率 0.7 でも1秒のうちに
         ほぼ確実に当たり、実質 100% になる。待つことで「弱い CPU はとくぎを使い
-        損ねる」が実際に効く。待っている間は乱数を引かない。
+        損ねる」が実際に機能する。待っている間は乱数を取り出さない。
         """
         if self.memory.skill_cool > 0:
             return False

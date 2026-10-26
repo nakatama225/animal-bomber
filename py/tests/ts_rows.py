@@ -1,6 +1,6 @@
 """状態とイベントを、TypeScript 版の出力と同じ形の行にする（比べるテストで使う）。
 
-固定値は TypeScript 版の写しに同じ台本を流して出した JSON（`tests/systems/
+固定値は TypeScript 版の写しに同じ台本を実行して出した JSON（`tests/systems/
 ts_simulation_values.json`・`tests/systems/ts_technique_values.json`・
 `tests/app/ts_session_values.json`）。ここで作る行の並びと、固定値を出した node の
 スクリプトの並びは揃えてある。
@@ -158,7 +158,8 @@ def world_rows(world: WorldState) -> dict[str, object]:
 
     プレイヤー（位置・向き・状態・体力・無敵の切れる tick・一時的な状態・とくぎを持って
     いるかと回数・強さ・「勝手に設置」の待ち・技の振る舞いと長押しと間隔）・盤面の爆弾と
-    爆風とアイテム（識別子も）・盤面の物・盤面の中身・発番した識別子の数・乱数を引いた回数。
+    爆風とアイテム（識別子も）・盤面の物・盤面の中身・発番した識別子の数・乱数を
+    取り出した回数。
     """
     return {
         "players": [

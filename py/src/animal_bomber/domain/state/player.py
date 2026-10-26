@@ -115,7 +115,7 @@ class PlayerState:
 
     id: PlayerId
     animal: Animal
-    """動物の種類。数値の違いは `rules/animals.py`、技は `domain/abilities/` で引く。"""
+    """動物の種類。数値の違いは `rules/animals.py`、技は `domain/abilities/` にある。"""
     position: Point
     """盤面上の位置（マス単位の連続座標）。"""
     facing: Direction
@@ -241,7 +241,7 @@ def speed_of(player: PlayerState, standing_on: Tile = Tile.EMPTY) -> float:
        （`RUNAWAY_SPEED_FLOOR_RATIO`）。掛けないと、超スローを踏んだあとに「とまれない」を
        踏んだプレイヤーが速くなる
     4. 壊せるブロックの中（壁の中も）にいれば、1. を `IN_BLOCK_SPEED_RATIO` 倍したものに
-       置き換え、「超スロー」だけを掛け直す（「とまれない」は効かない）
+       置き換え、「超スロー」だけを掛け直す（「とまれない」は作用しない）
     5. 最後に下限（`MIN_SPEED`）と上限（`MAX_SPEED`）で挟む
 
     ⚠️ 上限で止めるのは最後。先に止めると、靴で上限を超えるほど速い動物が「超スロー」を

@@ -90,7 +90,7 @@ Paint = str | Gradient
 
 
 def check_radius(*radii: float) -> None:
-    """円・楕円・角の丸みの半径が負でないかを確かめる。
+    """円・楕円・角の丸みの半径が負でないかを確認する。
 
     Raises:
         ValueError: 負の半径があるとき。ブラウザは例外（IndexSizeError）を出すので、

@@ -235,7 +235,7 @@ class Test突進中の被弾:
         assert before - player.hp == CHARGE_DAMAGE_CAP == 1
 
     def test_突進していなければ_減らない(self) -> None:
-        """前の確かめが「いつも減る」で通らないための対照。"""
+        """前の検証が「いつも減る」で通らないための対照。"""
         world = elephant_world()
         player = world.players[0]
         before = player.hp
@@ -252,7 +252,7 @@ class Test突進中の被弾:
         assert traits_of(elephant.action).damage_cap == CHARGE_DAMAGE_CAP
 
     def test_葱は当たらない(self) -> None:
-        """原型の isUntouchable は突進を見る（isBlastProof は見ない。上の確かめの対）。
+        """原型の isUntouchable は突進を見る（isBlastProof は見ない。上の検証の対）。
 
         跳び上がっている間も葱は当たらない（`tests/systems/test_negibon.py`）。
         """
@@ -270,7 +270,7 @@ class Test突進中の被弾:
         assert len(world.bombs) == before
 
     def test_突進中は_勝手に設置の拍が来ても置かない_拍は進む(self) -> None:
-        """原型の canPlaceBomb は突進の最中を止め、勝手に設置もこの確かめを通る。"""
+        """原型の canPlaceBomb は突進の最中を止め、勝手に設置もこの判定を通る。"""
         world = elephant_world()
         player = world.players[0]
         trigger_charge(world)
@@ -473,7 +473,10 @@ class Test突進で押しのける先:
         assert abs(target.position.x - 20.6) < 1e-5
 
     def test_対照_ブロックを抜けられる相手は_ブロックの中へ押される(self) -> None:
-        """原型の答え：f16。押す先の確かめに、押される側の抜けられる判定を使っているか。"""
+        """原型の答え：f16。
+
+        押す先を確認するときに、押される側の抜けられる判定を使っているか。
+        """
         _, first, _, tiles, _ = knock(15, 19, victim=Animal.MOLE, soft=20)
         assert first == 16
         assert tiles[16] is Tile.SOFT
@@ -498,7 +501,7 @@ def ram(victim_animal: Animal) -> tuple[int | None, int | None]:
         player.invulnerable_until = Tick(0)
     elephant.position = Cell(3, 5).center()
     victim.position = Cell(8, 5).center()
-    # 傷は見ない（ぶつけたアイテムは無敵でも効く）。
+    # 傷は見ない（ぶつけたアイテムは無敵でも作用する）。
     victim.invulnerable_until = Tick(9999)
     put_item(world, Cell(4, 5), ItemKind.ONION)
     elephant.action = Charge(direction=Direction.RIGHT, remaining=CHARGE_DURATION)
@@ -665,7 +668,7 @@ class Test鼻水噴射:
         assert gone_at == 27
         assert world.items == [scattered]
 
-    def test_溶けている間のうんこは_踏んでも効かない(self) -> None:
+    def test_溶けている間のうんこは_踏んでも効果が無い(self) -> None:
         world, _, rabbit = snot_world()
         put_item(world, Cell(4, 7), ItemKind.POOP)
         snot(world)
@@ -748,7 +751,7 @@ REVIVE_ORDERS = [
 
 戻った無敵（`REVIVE_INVULNERABLE`）は 144 tick。原型は 2.4 秒から 1/60 を引き続けて
 145 回目に 0 になるので、受ける側の番号が小さい並びでは1つ短い（実数で数えた tick の
-ままにした差）。番号が大きい並びは、体当たりの確かめの番にまだ無敵が減っていないので、
+ままにした差）。番号が大きい並びは、体当たりの判定の番にまだ無敵が減っていないので、
 1 tick 長く守られる。
 """
 
@@ -756,7 +759,7 @@ REVIVE_ORDERS = [
 class Test体当たりと無敵の切れ目:
     """原型は効果の輪（L4296）で、プレイヤーごとに無敵を減らしてから（L4297）突進を進める（L4323）。
 
-    そのため、突進する側より番号の大きい相手は、体当たりの確かめ（L2882 の
+    そのため、突進する側より番号の大きい相手は、体当たりの判定（L2882 の
     `q.invuln<=0`）では、その update の無敵がまだ減っていないので1 tick 長く守られ、
     体当たりで傷を受けると、同じ update のうちにあとから自分の番で1回減るので1 tick 早く
     切れる。原型は無敵から 1/60 を引き続け、爆風の無敵 1.25 秒は 75 回目に 0 になる。

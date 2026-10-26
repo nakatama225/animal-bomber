@@ -49,7 +49,8 @@ class Test盤面を作る:
         rng = Rng(seed)
         board = build_board(rng, SPAWN_CELLS)
         assert board.encode() == TS_BOARDS[seed]
-        # 置かないと決まっているマスでは乱数を引かない（引くと、そのあとが全部ずれる）。
+        # 置かないと決まっているマスでは乱数を取り出さない（取り出すと、そのあとが
+        # 全部ずれる）。
         assert rng.calls == DRAWN_CELLS
 
     def test_外周と_列も行も偶数のマスは_壊せない壁(self) -> None:
@@ -71,7 +72,7 @@ class Test盤面を作る:
                     assert board.at(cell) in (Tile.EMPTY, Tile.HARD), cell
 
     def test_種が違えば違う盤面になる(self) -> None:
-        # 上の確かめが「どの種でも同じ盤面」で通ってしまわないための対照。
+        # 上の検査が「どの種でも同じ盤面」で通ってしまわないための対照。
         a = build_board(Rng(1), SPAWN_CELLS).encode()
         b = build_board(Rng(2), SPAWN_CELLS).encode()
         assert a != b
