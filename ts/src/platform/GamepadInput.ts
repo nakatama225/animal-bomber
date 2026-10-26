@@ -233,7 +233,7 @@ export class PadMenuInput {
  * ブラウザからパッドを読む。
  *
  * ⚠️ `navigator` の有無だけで判定しない。Node にも `navigator` は
- * 存在し、`getGamepads` だけが無い。関数があるかまで確かめる。
+ * 存在し、`getGamepads` だけが無い。関数があるかまで確認する。
  *
  * ⚠️ 読み取りの例外は握りつぶし、パッドは無いものとして扱う。gamepad を許していない別オリジンの
  * iframe などでは `getGamepads` が SecurityError を投げる。描くたびに読むので、投げたままにすると

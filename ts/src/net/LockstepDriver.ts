@@ -10,7 +10,7 @@ import type { HashReport, PeerLink, RelayMessage } from './protocol.js';
 /**
  * 自分の入力を何 tick 遅らせて使うか。
  *
- * tick T に押した操作は、全員の手元で tick T+3 に効く。3 tick（50ms）あれば、
+ * tick T に押した操作は、全員の手元で tick T+3 に反映される。3 tick（50ms）あれば、
  * 同じ LAN の往復（1〜3ms）に中継での転送を足しても、相手の入力は使う前に届く。
  * 届くのを待って止まることがほぼ無い。
  *
@@ -83,13 +83,13 @@ export interface LockstepOptions {
  *
  * 試合の側（`GameSession` と `Simulation`）には、このクラスのための分岐が1つも無い。
  * 人間のプレイヤーに繋ぐ窓口を、キーボードから `NetworkInputSource` に替えただけ。
- * 段階1で操作の出どころを窓口1つに絞っておいたことが、ここで効いている。
+ * そうできるのは、段階1で操作の出どころを窓口1つに絞っておいたため。
  *
  * ## 抜けた人
  *
  * 中継が知らせた `lastTick` までは届いた入力で進め、その次の tick から
  * `replacement` の窓口（CPU）に替える。全員の端末で同じ tick に替わる。
- * 抜けた人と `lastTick` は、届いた入力の記録（`log`）に書く。記録を1台で流し直すときも、
+ * 抜けた人と `lastTick` は、届いた入力の記録（`log`）に書く。記録を1台で再生するときも、
  * 同じ tick で CPU に替えられる。
  *
  * ## 試合が終わったあとも、入力と要約の交換を続ける
@@ -111,7 +111,7 @@ export class LockstepDriver implements MatchClock {
   #tick = 0;
 
   /**
-   * 人間のプレイヤー全員に、通信で届いた入力を流す窓口を繋ぐ。
+   * 人間のプレイヤー全員に、通信で届いた入力を渡す窓口を繋ぐ。
    *
    * @throws Error 試合がもう進んでいるとき、自分が人間の一覧にいないとき
    */
@@ -202,7 +202,7 @@ export class LockstepDriver implements MatchClock {
     const finished = session.match.finished;
 
     this.#replaceDeparted(t);
-    // 試合が終わったあとの操作は何にも効かないので、何も押していない入力を送る。
+    // 試合が終わったあとの操作は何にも反映されないので、何も押していない入力を送る。
     this.#sendLocal(t + INPUT_DELAY, finished ? IDLE_INPUT : local.next(session.world));
     const events = finished ? [] : this.#advance(t);
     this.#tick += 1;
@@ -246,7 +246,7 @@ export class LockstepDriver implements MatchClock {
     return this.#inputs.log;
   }
 
-  /** 試合を1 tick 進める。試合の tick と通信の tick が揃っていることを確かめてから。 */
+  /** 試合を1 tick 進める。試合の tick と通信の tick が揃っていることを確認してから。 */
   #advance(tick: number): SimEvent[] {
     const { session } = this.#options;
     if (session.elapsed !== tick) {
@@ -300,7 +300,7 @@ export class LockstepDriver implements MatchClock {
   #sendHash(tick: number): void {
     const world = this.#options.session.world;
     // ⭐ 要約（hashWorld）にも乱数の回数は混ざっているが、別に載せる。
-    // 回数が食い違っていれば「どこかで乱数を余計に引いた」と、ずれの種類まで分かる。
+    // 回数が食い違っていれば「どこかで乱数を余計に取り出した」と、ずれの種類まで分かる。
     this.#options.link.send({
       t: 'hash',
       tick,

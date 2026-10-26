@@ -52,7 +52,7 @@ export class NullNoticeSink implements NoticeSink {
  * `switch` のすべての分岐を通ったあとに `assertNever` を置いてある。
  * イベントを1種類足すと、そこへ到達しうるようになり
  * 「`never` に代入できない」というコンパイルエラーになる。
- * 足した側が、音を当てるかどうかを必ず1度は考えることになる。
+ * 足した側は、音を当てるかどうかを必ず1度は考える。
  *
  * ## ラウンドと試合の決着は通知に出さない
  *
@@ -66,7 +66,7 @@ export class Presenter {
   ) {}
 
   /**
-   * @param world イベントが起きた盤面。誰の技かから動物を引くのに使う
+   * @param world イベントが起きた盤面。誰の技かから動物を取得するのに使う
    */
   consume(events: readonly SimEvent[], world: Readonly<WorldState>): void {
     // 優勝が決まった tick には、ラウンドの終わりと試合の終わりが一緒に来る。

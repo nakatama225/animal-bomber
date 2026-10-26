@@ -11,7 +11,7 @@ import type { WorldState } from '../state/WorldState.js';
  *
  * ボタンで置く爆弾（`BombSystem`）と分けてあるのは、置く時期が違うから。原型は効果の
  * 時間を進める処理の中で、プレイヤーごとに「そのプレイヤーの技を進める → そのプレイヤーの
- * 勝手に設置」と回し、そのあとで各プレイヤーを入力で動かして技を始める（`legacy/animal-bomber.html`
+ * 勝手に設置」と順に処理し、そのあとで各プレイヤーを入力で動かして技を始める（`legacy/animal-bomber.html`
  * の update）。ボタンの爆弾は動いたあとに見る（humanUpdate）。
  *
  * `Simulation` は、プレイヤーごとに技を進めた直後にこれを呼ぶ。新しく技を始めるのと、入力で

@@ -11,7 +11,7 @@
  * どの強さでも同じ。
  *
  * 両端の強さ（おに と よわい）で勝ち数が逆転していないことは
- * `tests/ai/balance.test.ts` で確かめている。4段階すべての順はまだ確かめていない。
+ * `tests/ai/balance.test.ts` で確認している。4段階すべての順はまだ確認していない。
  */
 export interface CpuLevel {
   readonly key: CpuLevelKey;

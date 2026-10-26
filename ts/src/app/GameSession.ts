@@ -17,7 +17,7 @@ import { Simulation } from '../domain/systems/Simulation.js';
  * 1試合ぶんの進行をまとめた窓口。
  *
  * 呼び出し側が知る必要があるのは `tick()` と `world` だけになる。
- * 内側で `Simulation` を回し、ラウンドが終われば盤面を作り直し、
+ * 内側で `Simulation` を実行し、ラウンドが終われば盤面を作り直し、
  * 勝利数を数える。
  *
  * ## ここが束ねているだけで、判断を持たないこと
@@ -28,7 +28,7 @@ import { Simulation } from '../domain/systems/Simulation.js';
  * その順番を知っているだけで、ゲームのルールを持たない。
  *
  * 束ねる場所を1つ作っておくと、遊ぶとき・記録を再生するとき・
- * 大量に試合を回すときで、同じ形の呼び出しになる。
+ * 大量に試合を実行するときで、同じ形の呼び出しになる。
  */
 /**
  * ラウンドが決まってから、次の盤面を作るまでの間。
@@ -61,8 +61,8 @@ export class GameSession {
   /**
    * 盤面を作る。
    *
-   * 動物ごとの初期値をここで引いて渡している。状態を作る側が
-   * 能力の表を引くと、依存が逆流する。
+   * 動物ごとの初期値をここで取得して渡している。状態を作る側が
+   * 能力の表を参照すると、依存が逆流する。
    */
   #makeWorld(): WorldState {
     return createWorld({
@@ -162,7 +162,7 @@ export class GameSession {
   }
 }
 
-/** 動物ごとの、始まりの上乗せを引く。 */
+/** 動物ごとの、始まりの上乗せを取得する。 */
 export function startingBonusOf(animal: string): StartingBonus {
   const ability = abilityOf(animal);
   return { hp: ability.hpBonus, power: ability.powerBonus, bombs: ability.bombBonus };

@@ -73,7 +73,7 @@ describe('鼻水噴射（原型 elephantSnot）', () => {
     expect(itemCells(world)).toEqual(['poop(撒いた)@5,7']);
   });
 
-  it('溶けている間のうんこは、踏んでも効かない', () => {
+  it('溶けている間のうんこは、踏んでも効果が無い', () => {
     const { world, rabbit, sim } = arena();
     world.items.push({ id: world.ids.take(), cell: { col: 4, row: 7 }, kind: 'poop' });
     snot(world, sim);

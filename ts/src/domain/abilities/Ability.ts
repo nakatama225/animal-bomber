@@ -11,11 +11,11 @@ import type { ActiveAction } from './ActiveAction.js';
  * ## 拡張に開いた形にしている
  *
  * 6匹目を追加するときに触るのは、**その動物のファイルと登録の1行だけ**。
- * 既存の動物にも、移動・爆弾・被弾の処理にも手を入れない。
+ * 既存の動物にも、移動・爆弾・被弾の処理にも変更を加えない。
  *
  * 原型では、動物の違いが能力フラグ（`jump` / `tongue` / `lineBomb` など）を
  * 見る `if` として、移動・爆弾・被弾・描画それぞれの中に散っていた。
- * 追加のたびに全部を見つけて直す必要があり、見落とすとその動物だけ
+ * 追加のたびに全部を見つけて修正する必要があり、見落とすとその動物だけ
  * 特定の場面で反応しない。
  *
  * ⚠️ 交換しているもの：**能力の一覧がコード上のどこにも現れない**。
@@ -99,7 +99,7 @@ export function registerAbility(ability: Ability): void {
   REGISTRY.set(ability.key, ability);
 }
 
-/** 登録された能力を引く。未登録なら undefined。 */
+/** 登録された能力を取得する。未登録なら undefined。 */
 export function lookupAbility(key: string): Ability | undefined {
   return REGISTRY.get(key);
 }

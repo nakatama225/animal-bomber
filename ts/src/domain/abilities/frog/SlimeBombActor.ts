@@ -18,8 +18,8 @@ const FLY_TICKS: Tick = tick(21);
 /**
  * 跳ねる間隔の、いちばん短いものと長いもの（両端を含む）。
  *
- * 原型は 0.30〜0.40 秒の乱数（SLIME_HOP_MIN・SLIME_HOP_MAX）を引き、1/60 秒ずつ減らして 0 を切った回に跳ぶ。
- * 0.30 + 0.10r 秒は 19〜24 回目に 0 を切る（r がちょうど 0 のときだけ 18 回目）ので、19〜24 tick から等しく引く。
+ * 原型は 0.30〜0.40 秒の乱数（SLIME_HOP_MIN・SLIME_HOP_MAX）を取り出し、1/60 秒ずつ減らして 0 を切った回に跳ぶ。
+ * 0.30 + 0.10r 秒は 19〜24 回目に 0 を切る（r がちょうど 0 のときだけ 18 回目）ので、19〜24 tick から等しい確率で選ぶ。
  */
 const HOP_INTERVAL_MIN = 19;
 const HOP_INTERVAL_MAX = 24;
@@ -32,7 +32,7 @@ const THROW_DISTANCE = 3;
 
 /**
  * 区切りの数の下限と上限。区切りごとに1つ減らし、0 になった区切りで爆発する。
- * 跳ねるのはそれより1回少ない（原型も、6〜8 を引いて 5〜7 回跳ねる）。
+ * 跳ねるのはそれより1回少ない（原型も、6〜8 を乱数で決めて 5〜7 回跳ねる）。
  */
 const HOP_MIN = 6;
 const HOP_MAX = 8;
@@ -53,8 +53,8 @@ export class SlimeBombActor implements WorldActor {
   readonly kind = 'slime';
   readonly turn = ACTOR_TURNS.slime;
   /**
-   * 同じ tick の粘膜爆弾は、新しく投げたものから進める。原型の updateSlimes の L2949 と同じ（配列を後ろから回す）。
-   * 2つ以上が同じ tick に着地したり跳ねたりすると、間隔（L2958・L2979）と跳ぶ先（L2970）の乱数を新しいものから引く。
+   * 同じ tick の粘膜爆弾は、新しく投げたものから進める。原型の updateSlimes の L2949 と同じ（配列を後ろから順に処理する）。
+   * 2つ以上が同じ tick に着地したり跳ねたりすると、間隔（L2958・L2979）と跳ぶ先（L2970）の乱数を新しいものから取り出す。
    * 同じ tick に2つ以上が爆発すると、生やす爆弾の並び（5. で爆発する順）も新しいものから。
    */
   readonly newestFirst = true;
@@ -111,7 +111,7 @@ export class SlimeBombActor implements WorldActor {
   }
 
   /**
-   * 区切りの数（6〜8。跳ねるのはそれより1回少ない）を引いて作る。
+   * 区切りの数（6〜8。跳ねるのはそれより1回少ない）を乱数で決めて作る。
    *
    * 落ちる先は、正面3マス先から手前へ順に見て、最初に見つかった空きマス。
    * どれも空いていなければ足元に落とす。
@@ -156,7 +156,7 @@ export class SlimeBombActor implements WorldActor {
     return { events: [{ type: 'techniqueMoment', player: this.shooter.id, moment: 'slimeHopped' }], done: false };
   }
 
-  /** 次の区切りまでの間隔を引く。 */
+  /** 次の区切りまでの間隔を乱数で決める。 */
   #startInterval(world: WorldState): void {
     this.#interval = tick(world.rng.range(HOP_INTERVAL_MIN, HOP_INTERVAL_MAX + 1));
     this.#timer = this.#interval;
@@ -167,7 +167,7 @@ export class SlimeBombActor implements WorldActor {
    *
    * 向きは縦横斜めの8つ（原型の SLIME_DIRS）。跳べるのは、内側のマス（外周の葱ボンの通り道ではない）で、
    * 爆弾が無いところ。柱の上にも乗る。
-   * ⚠️ 1つの向きだけを引いて、駄目なら留まる形にしない。爆弾や外周のそばでは留まってばかりになる。
+   * ⚠️ 1つの向きだけを乱数で選んで、駄目なら留まる形にしない。爆弾や外周のそばでは留まってばかりになる。
    * 原型も、向きを混ぜた順に試していた（updateSlimes）。原型の混ぜ方（比較の関数に乱数を返す並べ替え）は
    * 並びが実行環境しだいなので、この版は種から決まる混ぜ方にしてある。
    */
@@ -210,10 +210,10 @@ export class SlimeBombActor implements WorldActor {
    * - ふつうの爆弾の腕がこのマスに届いても、その連鎖に入らない（別の連鎖になり、重なるマスの爆風の持ち主が変わる）
    * - その tick に寿命の尽きるうんこ（1 tick の 4.）が爆風に触れると、消える前に吹き飛び、残る長さを数え直す
    * - 同じ tick にあとから進める粘膜爆弾が、その爆風に触れてすぐ爆発する（原型ではまだ爆風が無い）
-   * いずれも `tests/abilities/frog.test.ts` の「粘膜爆弾が爆発する番」で確かめている。
+   * いずれも `tests/abilities/frog.test.ts` の「粘膜爆弾が爆発する番」で確認している。
    *
    * 同じ tick に2つ以上が爆発するときは、新しく投げたものから生やす（`newestFirst`。原型の updateSlimes も
-   * 配列を後ろから回す L2949）。`world.bombs` の並びも 5. で爆発する順も、原型と同じく新しいものが先になる。
+   * 配列を後ろから順に処理する L2949）。`world.bombs` の並びも 5. で爆発する順も、原型と同じく新しいものが先になる。
    */
   #burst(world: WorldState): SimEvent[] {
     const blocked = (cell: Cell): boolean =>

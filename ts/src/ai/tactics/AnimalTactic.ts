@@ -7,7 +7,7 @@ import type { BombOption, CpuButton } from '../CpuPlan.js';
  *
  * - `button` … 押すボタン
  * - `endsTurn` … 使った tick はほかに何もしない（考え直さず、歩かず、爆弾も置かない）
- * - `when` … この tick に使うか。前の tick に同じボタンを押していたら呼ばれない（押した瞬間でしか効かないので）
+ * - `when` … この tick に使うか。前の tick に同じボタンを押していたら呼ばれない（押した瞬間にだけ有効なので）
  */
 export interface EarlyTechnique {
   readonly button: Extract<CpuButton, 'action' | 'special'>;
@@ -98,7 +98,7 @@ export function registerTactic(tactic: AnimalTactic): void {
   tactics.set(tactic.animal, tactic);
 }
 
-/** 登録された戦い方を引く。無ければ undefined。 */
+/** 登録された戦い方を取得する。無ければ undefined。 */
 export function lookupTactic(animal: string): AnimalTactic | undefined {
   return tactics.get(animal);
 }

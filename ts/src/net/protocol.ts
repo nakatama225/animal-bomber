@@ -63,7 +63,7 @@ export const REPORT_FIELDS = ['seat', 'hash', 'rngCalls'] as const;
 /**
  * 試合の設定として、ホストが全員へ配るもの。
  *
- * 中継はこれを読まずに流す。
+ * 中継はこれを読まずに転送する。
  */
 export interface LanSettings {
   readonly match: MatchConfig;
@@ -158,7 +158,7 @@ export type RelayMessage =
     }
   | { readonly t: 'desync'; readonly tick: number; readonly reports: readonly HashReport[] }
   | {
-      /** ホストが始まる前に配った設定。中継が、始まる前だけ、ホスト以外の全員へそのまま流す。 */
+      /** ホストが始まる前に配った設定。中継が、始まる前だけ、ホスト以外の全員へそのまま転送する。 */
       readonly t: 'settings';
       readonly config: LanSettings;
     };
@@ -195,7 +195,7 @@ export function encodePeerMessage(message: PeerMessage): string {
 export function parseRelayMessage(text: string): RelayMessage {
   const data = parseObject(text);
   const raw = data['t'];
-  // ⚠️ `in` で調べない。`'toString' in FROM_RELAY` は真になる。
+  // ⚠️ `in` で判定しない。`'toString' in FROM_RELAY` は真になる。
   if (typeof raw !== 'string' || !Object.hasOwn(FROM_RELAY, raw)) {
     throw new ProtocolError(`知らない種類のメッセージ: ${String(raw)}`);
   }
@@ -232,7 +232,7 @@ export function parseRelayMessage(text: string): RelayMessage {
     case 'desync':
       return { t: 'desync', tick: read.int('tick', 0), reports: read.reports('reports') };
     case 'settings':
-      // 画面に出すだけでも、始めるときの設定と同じく確かめる。読めないのは相手の版が違うときで、
+      // 画面に出すだけでも、始めるときの設定と同じく検証する。読めないのは相手の版が違うときで、
       // そのまま始めても `start` で止まる。
       return { t: 'settings', config: parseLanSettings(read.raw('config')) };
     default:
@@ -312,7 +312,7 @@ export function playerIdOf(seat: unknown): PlayerId {
   throw new ProtocolError(`プレイヤー番号が 0〜3 の整数ではない: ${String(seat)}`);
 }
 
-/** 1つのメッセージの項目を、型を確かめながら取り出す。 */
+/** 1つのメッセージの項目を、型を検証しながら取り出す。 */
 class FieldReader {
   constructor(
     private readonly data: Readonly<Record<string, unknown>>,

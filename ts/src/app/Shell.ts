@@ -59,7 +59,7 @@ export interface MusicControl {
   readonly setSpeed: (multiplier: number) => void;
 }
 
-/** 外から受け取る道具。ブラウザの API に触れるものは、起動の入口が作って渡す。 */
+/** 外から受け取るもの。ブラウザの API に触れるものは、起動の入口が作って渡す。 */
 export interface ShellTools {
   /** 盤面を描く先。 */
   readonly context: CanvasRenderingContext2D;
@@ -97,14 +97,14 @@ interface ActiveMatch extends MatchParts {
    * つないだあとで分かる。ホストにだけ「もういっかい」を出す）。
    */
   readonly finalActions: () => readonly HTMLElement[];
-  /** ゲームの速さの倍率を効かせるか。1台で遊ぶときだけ。通信対戦は全員が同じ速さで進める。 */
+  /** ゲームの速さの倍率を適用するか。1台で遊ぶときだけ。通信対戦は全員が同じ速さで進める。 */
   readonly paced: boolean;
   /**
    * 試合が決まった幕を、パッドで動かせるか。パッドを試合に繋いだとき（1人で遊ぶとき。`drivesPad`）と
    * 通信対戦のとき（原型と同じ）。
    *
    * 1台で2人のときは（CPU の有無によらず）、パッドを試合に繋がない。幕でも受け付けないのは、机に置いた
-   * パッドに肘が当たっただけで次の試合が始まらないようにするため（原型の注意書き）。キーボードは効く。
+   * パッドに肘が当たっただけで次の試合が始まらないようにするため（原型の注意書き）。キーボードは受け付ける。
    */
   readonly padOnBanner: boolean;
 }
@@ -235,12 +235,12 @@ export class Shell {
     this.#setToolbar([pointerButton('ぬける', () => this.#tools.leaveLan(), { data: { action: 'leave' } })]);
   }
 
-  /** 同じ選択で、新しい試合を始める（種は変わる）。1台で遊んだあとだけ効く。 */
+  /** 同じ選択で、新しい試合を始める（種は変わる）。1台で遊んだあとだけ有効。 */
   restart(): void {
     if (this.#lastSetup !== null) this.startLocal(this.#lastSetup);
   }
 
-  /** 止める・再開する（1台で遊ぶときだけ効く）。 */
+  /** 止める・再開する（1台で遊ぶときだけ有効）。 */
   togglePause(): void {
     this.#match?.runner.togglePause();
   }
@@ -254,7 +254,7 @@ export class Shell {
    */
   navigate(command: NavCommand): void {
     const root = this.#navRoot();
-    // 試合が決まった幕だけは、枠が出ていなくても最初の決定を効かせる（原型と同じ。`MenuCursor` の説明を参照）。
+    // 試合が決まった幕だけは、枠が出ていなくても最初の決定を反映する（原型と同じ。`MenuCursor` の説明を参照）。
     const result = this.#nav.handle(root, command, root === this.#elements.banner ? 'activate' : 'show');
     if (result.kind === 'back' && this.#match === null) {
       this.#menu.back();
@@ -321,7 +321,7 @@ export class Shell {
    */
   draw(alpha: number): void {
     // パッドは押したことを知らせてくれないので、描くたびに読む。決めた項目が画面を替えることがあるので、
-    // 試合の部品を読むより前に済ませる。
+    // 試合の部品を読むより前に、パッドの操作を反映する。
     // ⚠️ 読むのは毎回。受け付けないときも、前回の状態を更新し続ける（押したままのボタンを、あとで
     // 新しい押下と取り違えないため。原型も同じ）。
     const commands = this.#padMenu.poll();

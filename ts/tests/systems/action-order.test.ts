@@ -364,7 +364,7 @@ describe('技を進める・勝手に設置・技を始める、の順（原型 
   });
 
   it('番号の大きいプレイヤーの突進が拍のプレイヤーにぶつかると、置いた爆弾を同じ tick に起爆する', () => {
-    // 原型：1人ずつ「技を進める → 勝手に設置」を回すので、1P の拍が 2P の突進より先。
+    // 原型：1人ずつ「技を進める → 勝手に設置」を順に処理するので、1P の拍が 2P の突進より先。
     const world = arena(['rabbit', 'elephant']);
     const [rabbit, elephant] = world.players as [PlayerState, PlayerState];
     rabbit.position = { x: 3.5, y: 1.5 };

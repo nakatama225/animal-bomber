@@ -66,9 +66,9 @@ function compareHashes(a: Peer, b: Peer): { mismatched: number[]; compared: numb
 }
 
 /**
- * 届いた入力の記録を1台の試合で流し直し、本物の端末の要約と tick ごとに比べる。
+ * 届いた入力の記録を1台の試合で再生し、本物の端末の要約と tick ごとに比べる。
  *
- * 最後の盤面だけを比べると、最後のラウンドしか見ないことになる（途中のラウンドが
+ * 最後の盤面だけを比べると、最後のラウンドしか見ない（途中のラウンドが
  * 時間切れの引き分けだと、勝ち数にも差が出ない）。
  */
 function replayAgainst(
@@ -149,7 +149,7 @@ describe('ロックステップ', () => {
     }
   });
 
-  it('押した操作は、3 tick 遅れて効く', () => {
+  it('押した操作は、3 tick 遅れて反映される', () => {
     // 21 回目に読まれた（= tick 20 を進めたときの）操作だけ爆弾を押す。0 回目は始まったときに読まれる。
     const script = (_id: PlayerId, call: number): PlayerInput => press({ bomb: call === 21 });
     const { relay, peers } = startMatch(2, settings(), script);
@@ -165,7 +165,7 @@ describe('ロックステップ', () => {
     expect(log.at(20 + INPUT_DELAY + 1, 0).bomb).toBe(false);
   });
 
-  it('押したまま始まった爆弾と技のボタンは、1ラウンド目でも離すまで効かない', () => {
+  it('押したまま始まった爆弾と技のボタンは、1ラウンド目でも離すまで無効', () => {
     // ⚠️ 最初の INPUT_DELAY tick を何も押していない入力で埋めると、tick 0 に「離した」が届き、
     // tick 3 に押していた内容が「押した瞬間」として届いて、押したまま始まった人が開始位置に爆弾を置く。
     // ホストが Enter で「はじめる」を押し、その Enter がまだ押されている、という普通の始め方で起きる。
@@ -217,7 +217,7 @@ describe('ロックステップ', () => {
     const { relay, peers } = startMatch(2);
     const [fast, slow] = peers as [Peer, Peer];
 
-    // ⚠️ 回数に上限を置く。どちらも進めなくなる不具合が入ったとき、テストが終わらなくなる。
+    // ⚠️ 回数に上限を置く。どちらも進めなくなる不具合が混入したとき、テストが終わらなくなる。
     for (let round = 0; round < 2000 && slow.session.elapsed < 600; round += 1) {
       for (let i = 0; i < 7; i += 1) fast.step();
       slow.step();
@@ -232,8 +232,8 @@ describe('ロックステップ', () => {
   });
 
   it('試合が実際に使った入力は、その tick に届いた入力と同じ（2ラウンド目以降も）', () => {
-    // 全端末が同じく時刻を取り違えると（ラウンドごとに 0 へ戻る world.now で引く、など）、
-    // 要約は一致したまま、押したキーが効かなくなる。要約の比較では見つからないので、
+    // 全端末が同じく時刻を取り違えると（ラウンドごとに 0 へ戻る world.now で参照する、など）、
+    // 要約は一致したまま、押したキーが反映されなくなる。要約の比較では見つからないので、
     // 試合が実際に使った入力（previousInput）を、届いた入力の記録と tick ごとに比べる。
     const config = settings({ roundLimit: tick(240), suddenDeath: false });
     const { relay, peers } = startMatch(2, config);
@@ -259,8 +259,8 @@ describe('ロックステップ', () => {
     expect(laterRounds).toBeGreaterThan(100);
   });
 
-  it('通信対戦の記録を1台で流し直すと、同じ試合になる（ラウンドをまたいでも）', () => {
-    // 届いた入力の記録と、記録を流す窓口は、どちらも試合通算の tick で引く。
+  it('通信対戦の記録を1台で再生すると、同じ試合になる（ラウンドをまたいでも）', () => {
+    // 届いた入力の記録と、記録を再生する窓口は、どちらも試合通算の tick で参照する。
     const config = settings({ roundLimit: tick(240), suddenDeath: false });
     const { relay, peers } = startMatch(2, config);
     const [host] = peers as [Peer, Peer];
@@ -355,7 +355,7 @@ describe('ずれを見つける', () => {
     expect(relay.agreed).toEqual([19, 39, 59]);
   });
 
-  it('要約と一緒に、試合の乱数を引いた回数も送る', () => {
+  it('要約と一緒に、試合の乱数を取り出した回数も送る', () => {
     const sent: PeerMessage[] = [];
     const session = new GameSession(settings().match);
     const driver = new LockstepDriver({
@@ -402,7 +402,7 @@ describe('抜けた人', () => {
     expect(phase.kind === 'playing' && phase.driver.waitingFor()).toEqual([]);
   });
 
-  it('途中で抜けた人がいた試合も、届いた入力の記録を1台で流し直すと同じ試合になる', () => {
+  it('途中で抜けた人がいた試合も、届いた入力の記録を1台で再生すると同じ試合になる', () => {
     // 本物の端末は、抜けた人を lastTick の次の tick から CPU に替える。記録にその tick が無いと、
     // 再生の窓口はその人の最後の操作を返し続け、例外も出ずに別の試合になる。
     // 抜ける人には、CPU が選ばない押し方（上下左右を全部）をさせておく。CPU に替える tick が
@@ -414,7 +414,7 @@ describe('抜けた人', () => {
     const { relay, peers } = startMatch(3, config, script);
     const [host, guest] = peers as [Peer, Peer, Peer];
     runTogether(relay, peers, 100);
-    // 前提：抜ける時点で、抜ける人は盤面にいて、その押し方をしている（倒れていると入力が効かない）。
+    // 前提：抜ける時点で、抜ける人は盤面にいて、その押し方をしている（倒れていると入力が反映されない）。
     expect(host.session.world.players[2]!.life.kind).toBe('alive');
     expect(host.session.world.players[2]!.previousInput).toEqual(all);
     relay.leave(2);
@@ -424,7 +424,7 @@ describe('抜けた人', () => {
     expect(host.session.elapsed).toBeGreaterThan(1100);
     expect(host.session.match.round).toBeGreaterThanOrEqual(3);
 
-    // 文字列にして戻した記録でも流し直せる。
+    // 文字列にして戻した記録でも再生できる。
     for (const log of [host.driver.log, InputLog.decode(host.driver.log.encode())]) {
       const { mismatched, compared } = replayAgainst(host, log, config, [0, 1, 2]);
       expect(compared).toBeGreaterThan(1100);

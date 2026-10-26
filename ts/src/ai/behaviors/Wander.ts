@@ -10,7 +10,7 @@ export const WANDER: CpuBehavior = {
   name: 'wander',
 
   decide(ctx) {
-    // 行き先の遠さは、マスを調べるたびに引き直す（原型の `d>=2+rnd(4)`）。遠さを1回だけ決めると、
+    // 行き先の遠さは、マスを判定するたびに乱数で決め直す（原型の `d>=2+rnd(4)`）。遠さを1回だけ決めると、
     // 同じマスを往復しがちになる。
     const far = (_cell: unknown, distance: number): boolean => distance >= 2 + ctx.rng.int(4);
     const path =

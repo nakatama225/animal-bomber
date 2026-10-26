@@ -29,7 +29,7 @@ import type { WorldState } from '../state/WorldState.js';
  *
  * 各 System が見るのは下の7つの性質だけで、**何の振る舞いかは見ない**。
  * 動物を追加しても `src/domain/systems/` には1行も足さない。
- * これが守られているかは `tests/boundary/guards.test.ts` が見張る。
+ * これが守られているかは `tests/boundary/guards.test.ts` が検査する。
  */
 export interface ActiveAction {
   /** 記録と表示のための名前。System はこれで分岐しない。 */
@@ -70,7 +70,7 @@ export interface ActiveAction {
    *
    * ⚠️ 自分で扱う振る舞いがふつうの拾いも通すと、自分の拾いのあとに同じ tick のうちに
    * 足元へ来たアイテム（ほかの振る舞いが撒いた・押しのけられた先にあった）を、
-   * 自分の扱い方を通さずにそのまま効かせてしまう。原型も、突進の最中だけふつうの拾いを
+   * 自分の扱い方を通さずにそのまま適用してしまう。原型も、突進の最中だけふつうの拾いを
    * 飛ばしていた（update の `if (!p.effects.charge) pickupCheck(p);`）。
    */
   readonly sweepsItems: boolean;
@@ -78,12 +78,12 @@ export interface ActiveAction {
   /**
    * true なら、持ち主が盤面を離れても（倒れて外周へ回った・退場した）外さずに、その場で止めておく。省くと false。
    *
-   * 止めている間は進めない（`tick` を呼ばない）が、爆風に触れたかの確かめ（`afterDamage`）は続ける。外れるのは、
+   * 止めている間は進めない（`tick` を呼ばない）が、爆風に触れたかの確認（`afterDamage`）は続ける。外れるのは、
    * `afterDamage` が終わりを返したとき・葱で盤面へ戻るとき（`swapPlaces`。後始末は呼ばない）・延長戦・
    * ラウンドの始まり。
    *
    * 原型の舌のばしがこの形なので、それと同じにするための性質。原型は倒れても舌を消さず（toNegibon L2255）、
-   * 舌を進めるのは盤面にいるプレイヤーだけ（update L4320-4322）、焼けたかの確かめは状態を問わず全員を見る（L4395）。
+   * 舌を進めるのは盤面にいるプレイヤーだけ（update L4320-4322）、焼けたかの確認は状態を問わず全員を見る（L4395）。
    * そのため、倒れたあとに止まった舌の上へ爆風が来ると焼けて、そのラウンドの舌が短くなる。
    * false のもの（突進・穴掘り）は、盤面を離れた次の tick に後始末を呼んで外す（`ActionSystem`）。
    */

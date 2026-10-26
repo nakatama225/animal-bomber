@@ -14,7 +14,7 @@ import { clearBoard, makeWorld } from '../helpers.js';
 /*
  * 盤面の物の要約（`encode`）は、状態の要約（`hashWorld`）に混ぜて、通信対戦のずれを見つけるのに使う。
  * 状態が進んでも要約が変わらない盤面の物があると、その物の進み方が端末ごとにずれても見つからない。
- * どの盤面の物も、1 tick 進むたびに要約が変わることを確かめる（Python 版は `tests/state/test_world.py` の
+ * どの盤面の物も、1 tick 進むたびに要約が変わることを確認する（Python 版は `tests/state/test_world.py` の
  * 項目ごとの表）。
  */
 
@@ -50,7 +50,7 @@ describe('盤面の物の要約（encode）', () => {
       expect(hashWorld(world), `${t + 1} tick 目`).not.toBe(hash);
       advanced += 1;
     }
-    // 1 tick で終わってしまうと、確かめにならない。
+    // 1 tick で終わってしまうと、確認にならない。
     expect(advanced).toBeGreaterThanOrEqual(5);
   });
 

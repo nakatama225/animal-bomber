@@ -182,7 +182,7 @@ describe('きつね：爆弾を置くときは一列に並べる（原型 cpuUpd
   });
 
   it('歩きながら置くときは、歩いた向きに並べる（原型も経路を1歩進めて向きが変わってから並べる）', () => {
-    // 上を向いて (3,1) に立ち、右の (4,1) へ歩く途中で置く。上は柱なので、向きのままなら足元に置くことになる。
+    // 上を向いて (3,1) に立ち、右の (4,1) へ歩く途中で置く。上は柱なので、向きのままなら足元に置いてしまう。
     const scene = duel('fox', { col: 3, row: 1 }, { col: 19, row: 13 });
     scene.me.facing = 'up';
     scene.source.next(scene.world);
@@ -255,13 +255,13 @@ describe('判断の規則を原型に合わせた所', () => {
     expect(HUNT.decide(ctx)).toMatchObject({ mode: 'hunt', wantBomb: true });
   });
 
-  it('うろつく先の遠さは、マスを調べるたびに引き直す（原型の `d>=2+rnd(4)`）', () => {
+  it('うろつく先の遠さは、マスを判定するたびに乱数で決め直す（原型の `d>=2+rnd(4)`）', () => {
     const world = makeWorld(3, ['rabbit', 'elephant']);
     clearBoard(world);
     const ctx = context(world, { col: 9, row: 7 });
     const before = ctx.rng.calls;
     WANDER.decide(ctx);
-    // 1回きりで決めると 1 回しか引かない。
+    // 1回きりで決めると 1 回しか取り出さない。
     expect(ctx.rng.calls - before).toBeGreaterThan(1);
   });
 
@@ -275,7 +275,7 @@ describe('判断の規則を原型に合わせた所', () => {
       return { got: source.memory.thinkIn, exact };
     });
     expect(intervals.map((i) => i.got)).toEqual(intervals.map((i) => Math.ceil(i.exact)));
-    // 四捨五入と答えが分かれる揺らぎを含んでいること（含まなければ、この確かめは切り上げを見分けられない）。
+    // 四捨五入と答えが分かれる揺らぎを含んでいること（含まなければ、この確認は切り上げを見分けられない）。
     expect(intervals.some((i) => Math.round(i.exact) !== Math.ceil(i.exact))).toBe(true);
   });
 });

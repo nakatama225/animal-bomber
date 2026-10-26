@@ -109,7 +109,7 @@ describe('撒く順と時刻（原型 updatePoroporos）', () => {
 });
 
 describe('撒いたうんこ（原型の poro のアイテム）', () => {
-  it('撒いたプレイヤー自身は踏んでも効かず残る。ほかのプレイヤーは踏むと消えて、うんこの抽選がかかる', () => {
+  it('撒いたプレイヤー自身は踏んでも効果が無く残る。ほかのプレイヤーは踏むと消えて、うんこの抽選がかかる', () => {
     const { world, p0: rabbit, p1: frog } = arena(['rabbit', 'frog']);
     place(rabbit, { col: 3, row: 7 });
     scatteredPoop(world, { col: 3, row: 7 }, rabbit);
@@ -154,7 +154,7 @@ describe('撒いたうんこ（原型の poro のアイテム）', () => {
     expect(goneAt).toBe(3602);
   });
 
-  it('かえるの舌で掴め、かえるに効く（2倍）', () => {
+  it('かえるの舌で掴め、かえるに適用される（2倍）', () => {
     const { world, p0: frog, p1: rabbit } = arena(['frog', 'rabbit']);
     place(frog, { col: 3, row: 7 });
     frog.facing = 'right';
@@ -205,7 +205,7 @@ describe('撒く範囲（原型 updatePoroporos）', () => {
     expect(new Set(cells).size).toBe(24);
   });
 
-  it('2つが同じ tick に同じマスへ撒くと、新しいほうのうんこになる（原型 updatePoroporos は配列を後ろから回す L2756）', () => {
+  it('2つが同じ tick に同じマスへ撒くと、新しいほうのうんこになる（原型 updatePoroporos は配列を後ろから順に処理する L2756）', () => {
     // 原型：中心 (5,7) の A（古い）と (7,7) の B（新しい）を同じ update から撒くと、B が先に撒き、A はアイテムのある
     // マスを飛ばす（L2768）。40 フレーム目の 1周目どうしの (6,7) と、80 フレーム目の 2周目どうしの (5,5)・(6,5)・(7,5)・
     // (5,9)・(6,9)・(7,9) は B のもの。持ち主ごとのマスは、原型を画面なしで動かして見た並び。
@@ -254,7 +254,7 @@ describe('一列置きと「爆弾おけない」（原型 foxLineShot の canPl
     fox.facing = 'right';
     fox.maxBombs = 3;
     for (const effect of effects) fox.effects.add(effect, itemEffectTicks(4), itemEffectTicks(12));
-    // 勝手に設置の拍は来ないようにする（技の確かめだけを見る）。
+    // 勝手に設置の拍は来ないようにする（技の検査だけを見る）。
     fox.autobombWait = tick(99);
     const sim = new Simulation();
     sim.step(world, sameForAll(world, press({})));

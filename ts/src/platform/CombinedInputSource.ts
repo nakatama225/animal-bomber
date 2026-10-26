@@ -5,11 +5,11 @@ import type { WorldState } from '../domain/state/WorldState.js';
 /**
  * 同じプレイヤーを、複数の入力機器で操作できるようにする窓口。
  *
- * キーボードとゲームパッドのどちらで押しても効くように、ボタンごとに OR をとる。
+ * キーボードとゲームパッドのどちらで押しても反映されるように、ボタンごとに OR をとる。
  * 試合の側から見ると、窓口は1つのまま。
  *
  * ⚠️ 窓口を2つそのまま試合に繋がない。同じプレイヤーの窓口が2つあると、
- * 後に繋いだほうが前のほうを置き換え、片方の機器が効かなくなる。
+ * 後に繋いだほうが前のほうを置き換え、片方の機器の入力が無効になる。
  */
 export class CombinedInputSource implements InputSource {
   readonly playerId: InputSource['playerId'];

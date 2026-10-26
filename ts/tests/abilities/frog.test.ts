@@ -213,7 +213,7 @@ describe('粘膜爆弾の跳ぶ先（原型 updateSlimes）', () => {
 describe('粘膜爆弾の時間（原型 frogSlime・updateSlimes）', () => {
   it('21 tick 飛んでから、19〜24 tick おきに跳ね、区切りの数より1回少なく跳ねて爆発する', () => {
     // 原型（300 の種）：投げた回から数えて 21 フレーム目に着地し、最初に跳ぶのは 40〜45 フレーム目、
-    // 跳ねる間隔は 19〜24 フレーム。6〜8 を引いて、跳ねるのは 5〜7 回。
+    // 跳ねる間隔は 19〜24 フレーム。6〜8 を乱数で決めて、跳ねるのは 5〜7 回。
     const firstHops = new Set<number>();
     const intervals = new Set<number>();
     for (let seed = 1; seed <= 300; seed += 1) {
@@ -368,10 +368,10 @@ describe('粘膜爆弾が爆発する番（原型 slimeBurst L2942-2945・update
   });
 });
 
-describe('同じ tick に跳ねる粘膜爆弾の順（原型 updateSlimes は配列を後ろから回す L2949）', () => {
-  it('新しく投げたほうが先に、跳ぶ先と次の間隔の乱数を引く', () => {
-    // 原型：古い A と新しい B が同じ update に跳ねると、B の番に跳ぶ先（L2970）と間隔（L2979）を引き終えてから、
-    // A の番に引く（種 7・11・300 で、どれも B → A）。原型の乱数は列が違うので、どちらの番に引いたかで比べる。
+describe('同じ tick に跳ねる粘膜爆弾の順（原型 updateSlimes は配列を後ろから順に処理する L2949）', () => {
+  it('新しく投げたほうが先に、跳ぶ先と次の間隔の乱数を取り出す', () => {
+    // 原型：古い A と新しい B が同じ update に跳ねると、B の番に跳ぶ先（L2970）と間隔（L2979）を取り出し終えてから、
+    // A の番に取り出す（種 7・11・300 で、どれも B → A）。原型の乱数は列が違うので、どちらの番に取り出したかで比べる。
     const { world, frog } = arena();
     const older = new SlimeBombActor({ col: 5, row: 5 }, frog, 5);
     const newer = new SlimeBombActor({ col: 13, row: 9 }, frog, 5);
@@ -388,7 +388,7 @@ describe('同じ tick に跳ねる粘膜爆弾の順（原型 updateSlimes は�
         }
       });
     }
-    // 試合の乱数は、どちらの番に引いたかを書き留めて、いつも 0 を返す偽物にする。2つの間隔がそろうので、
+    // 試合の乱数は、どちらの番に取り出したかを書き留めて、いつも 0 を返す偽物にする。2つの間隔がそろうので、
     // 同じ tick に着地して、同じ tick に跳ねる。
     const draws: (string | null)[] = [];
     vi.spyOn(world.rng, 'next').mockImplementation(() => {
@@ -406,7 +406,7 @@ describe('同じ tick に跳ねる粘膜爆弾の順（原型 updateSlimes は�
   });
 });
 
-describe('舌が止まるもの（原型 updateTongue）', () => {
+describe('舌を止めるもの（原型 updateTongue）', () => {
   /** かえるを (3,5) 右向きに置き、火を itemCol に置いて、舌を1回出す。 */
   function tongue(blocker: 'none' | 'bomb' | 'player' | 'playerOut', itemCol: number) {
     const world = makeWorld(2468, ['frog', 'rabbit']);
@@ -501,7 +501,7 @@ describe('舌の長さと時間（原型 startTongue・updateTongue・tongueBurn
     }
   });
 
-  it('掴んだアイテムは 23 tick 目に盤面から消え、舌が戻りきった 46 tick 目に効く（3 マス先）', () => {
+  it('掴んだアイテムは 23 tick 目に盤面から消え、舌が戻りきった 46 tick 目に適用される（3 マス先）', () => {
     const { world, frog } = frogAt();
     world.items.push({ id: world.ids.take(), cell: { col: 6, row: 5 }, kind: 'fire' });
     const before = frog.power;
@@ -569,7 +569,7 @@ describe('舌の長さと時間（原型 startTongue・updateTongue・tongueBurn
     }
   });
 
-  it('掴んで戻る途中で焼き切れると、掴んでいたものは焦げて効かない', () => {
+  it('掴んで戻る途中で焼き切れると、掴んでいたものは焦げて効果が無い', () => {
     const { world, frog } = frogAt();
     world.items.push({ id: world.ids.take(), cell: { col: 7, row: 5 }, kind: 'fire' });
     const before = frog.power;
@@ -639,9 +639,9 @@ describe('舌の長さと時間（原型 startTongue・updateTongue・tongueBurn
     }
   });
 
-  it('掴んだ瞬間に知らせるのは掴んだことだけで、拾ったこと（拾った音）は戻りきって効いた tick に知らせる', () => {
+  it('掴んだ瞬間に知らせるのは掴んだことだけで、拾ったこと（拾った音）は戻りきって適用された tick に知らせる', () => {
     // 原型：掴んだところでは SE.tongueCatch だけ。拾った音（SE.item など）は、戻りきって applyItem したときに鳴る。
-    // 戻る途中で焼き切れたら、効かないので拾ったことも知らせない。
+    // 戻る途中で焼き切れたら、適用されないので拾ったことも知らせない。
     const run = (burn: boolean): string[] => {
       const { world, frog } = frogAt();
       world.items.push({ id: world.ids.take(), cell: { col: 6, row: 5 }, kind: 'fire' });

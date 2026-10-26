@@ -127,7 +127,7 @@ describe('移動', () => {
     }
   });
 
-  it('壊せるブロックの中では、足の速さと靴のぶんの 0.18 倍。超スローは効き、とまれないは効かず、下限は 0.42', () => {
+  it('壊せるブロックの中では、足の速さと靴のぶんの 0.18 倍。超スローは適用され、とまれないは適用されず、下限は 0.42', () => {
     const world = makeWorld(1234, ['mole', 'fox']);
     const mole = world.players[0]!;
     const multiplier = abilityOf('mole').speedMultiplier;

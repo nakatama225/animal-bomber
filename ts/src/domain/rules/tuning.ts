@@ -78,7 +78,7 @@ export const SHOE_STEP = SHOE_STEP_PER_SECOND / TICKS_PER_SECOND;
  *
  * ⚠️ この値を上げると、1回の内部処理で進む距離が伸びて壁や爆風を
  * すり抜ける。移動を細かく分ける回数はこの最高速から決めているため、
- * 上げるならそちらも合わせて直す。
+ * 上げるならそちらも合わせて修正する。
  */
 export const MAX_SPEED_PER_SECOND = 9.4;
 export const MAX_SPEED = MAX_SPEED_PER_SECOND / TICKS_PER_SECOND;
@@ -86,7 +86,7 @@ export const MAX_SPEED = MAX_SPEED_PER_SECOND / TICKS_PER_SECOND;
 /**
  * 速度の下限（1秒あたりのマス数）。原型の値で、理由の記録は無い。
  *
- * 効くのは、ブロックの中を進んでいる間に「超スロー」がかかったときだけ（ほかは、いちばん
+ * 適用されるのは、ブロックの中を進んでいる間に「超スロー」がかかったときだけ（ほかは、いちばん
  * 遅い組み合わせでもこれより速い）。下限には「超スロー」の倍率を掛けない（原型の getSpeed は
  * 最後にこの値と上限で挟む）。
  */
@@ -99,8 +99,8 @@ export const MIN_SPEED = MIN_SPEED_PER_SECOND / TICKS_PER_SECOND;
  *
  * ブロックを抜けられる能力が強すぎないように、とても遅くしてある。靴のぶんにも同じ倍率を
  * 掛けるだけで、靴だけをさらに弱める扱いはしない（原型の作者は一度 10% まで弱めすぎて
- * 「弱すぎる」と戻した。2026-08-09）。ブロックの中では「とまれない」の下限は効かず、
- * 「超スロー」は効く（原型の getSpeed）。
+ * 「弱すぎる」と戻した。2026-08-09）。ブロックの中では「とまれない」の下限は適用されず、
+ * 「超スロー」は適用される（原型の getSpeed）。
  */
 export const IN_BLOCK_SPEED_RATIO = 0.18;
 
@@ -168,7 +168,7 @@ export const MAX_SHOES = 13;
  * 爆風の当たり判定（マス）。
  *
  * 移動の判定（0.36）より小さい。同じにすると、通路の端をかすめただけで
- * 当たったことになり、避けたはずなのに死ぬ。
+ * 当たり、避けたはずなのに死ぬ。
  */
 export const BLAST_HITBOX = 0.14;
 

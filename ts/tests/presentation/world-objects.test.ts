@@ -36,7 +36,7 @@ import { fakeCanvas, type FakeCanvas } from './fakeCanvas.js';
  *
  * 通し検査（renderer.test.ts）は試合で実際に現れたものしか通らない。ここでは
  * 種類ごと・段階ごとに1つずつ描き、どれも例外を出さずに描けることと、
- * 見せてはいけないもの（落とし穴）を描かないことを確かめる。
+ * 見せてはいけないもの（落とし穴）を描かないことを確認する。
  */
 
 function frameOn(canvas: FakeCanvas, time = 0.5): Frame {
@@ -388,7 +388,7 @@ describe('粒子と画面の揺れ', () => {
     expect(tapColors('rabbit').get('#a6e06a')).toBe(6);
   });
 
-  it('引き寄せて手元で効いたアイテム（拾ったマスが無い）は煙を出さない（対照：拾ったマスがあれば出す）', () => {
+  it('引き寄せて手元で適用されたアイテム（拾ったマスが無い）は煙を出さない（対照：拾ったマスがあれば出す）', () => {
     const world = makeWorld();
     const reeled = new ParticleField(new CosmeticRng());
     reeled.onEvents([{ type: 'itemTaken', cell: null, kind: 'fire', taker: 0 }], world);

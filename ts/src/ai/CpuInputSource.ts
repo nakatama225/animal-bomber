@@ -43,19 +43,19 @@ const NOTHING: Intent = Object.freeze({ direction: null, buttons: [] });
  * 4. 考える前の技（戦い方の `beforePlan`）。使った tick に何もしない技なら、ここで返す
  * 5. 危なくなったのに逃げていない、逃げ先が危なくなった、なら間隔を待たずに考え直す。間隔が来ていれば考え直す
  * 6. 滑っている間は、歩かず、爆弾も置かず、歩いたあとの技も無い（原型は滑って帰る）
- * 7. 経路を1歩。爆弾を置きたい計画なら、逃げ切れるかを確かめて置く。最後に歩いたあとの技（戦い方の `afterMove`）
+ * 7. 経路を1歩。爆弾を置きたい計画なら、逃げ切れるかを確認して置く。最後に歩いたあとの技（戦い方の `afterMove`）
  *
- * どれも、tick の始めの盤面を見て決める。ゲームの側は、この入力を 動く → 爆弾 → 技 の順で効かせるので、
+ * どれも、tick の始めの盤面を見て決める。ゲームの側は、この入力を 動く → 爆弾 → 技 の順で適用するので、
  * 原型の CPU が1フレームの中で 歩く → 置く → とくぎ と呼んでいたのと同じ順になる。
  *
- * ## ⚠️ 押した瞬間でしか効かない
+ * ## ⚠️ 押した瞬間にだけ有効
  *
  * ゲームの側はボタンを「前の tick は押していない」ときだけ押したと読む。前の tick に押したボタンは、
  * この tick には押さない（原型の CPU は続くフレームで関数を呼べたが、そうなる場面はほとんど無い）。
  *
  * ## ⚠️ 乱数は CPU 専用のものを持つ
  *
- * 試合の乱数（`world.rng`）を引かない。引くと、CPU が何回考えたかで
+ * 試合の乱数（`world.rng`）から取り出さない。取り出すと、CPU が何回考えたかで
  * アイテムの抽選が変わり、同じ操作でも同じ試合にならなくなる。
  * `Math.random` も使わない（lint で禁じてある）。CPU の判断も種から
  * 決まるので、同じ種・同じ盤面なら CPU は毎回同じ手を指す。
@@ -88,12 +88,12 @@ export class CpuInputSource implements InputSource {
     this.#memory = freshMemory(this.#rng);
   }
 
-  /** この CPU の強さ。通信対戦で、プレイヤーごとの強さが届いたかを確かめるのに使う。 */
+  /** この CPU の強さ。通信対戦で、プレイヤーごとの強さが届いたかを確認するのに使う。 */
   get level(): CpuLevel {
     return this.#level;
   }
 
-  /** いまの記憶。テストで判断の中身を確かめるために公開している。 */
+  /** いまの記憶。テストで判断の中身を確認するために公開している。 */
   get memory(): Readonly<CpuMemory> {
     return this.#memory;
   }
@@ -106,7 +106,7 @@ export class CpuInputSource implements InputSource {
     // ⚠️ 延長戦に入ったとき・外周から戻ったときは捨てない。原型の enterSuddenDeath（L4435-4465）も
     // negiHit（L2337-2356）も p.ai に触らない。開始位置や当てた相手の位置へ移ったあとも、次に考え直すまでは
     // 前の経路の先のマスへ歩き、置き直さない記憶・爆弾を控える残り・判断の間隔の揺らぎ（jitter）も続けて使う。
-    // 捨てると、CPU の乱数を1つ余計に引く（jitter の引き直し）ので、その後の判断がすべてずれる。
+    // 捨てると、CPU の乱数を1つ余計に取り出す（jitter を決め直す）ので、その後の判断がすべてずれる。
     if (world !== this.#world) {
       this.#world = world;
       this.#memory = freshMemory(this.#rng);
@@ -150,7 +150,7 @@ export class CpuInputSource implements InputSource {
 
     this.#replanIfNeeded(ctx);
 
-    // 滑っている間は操作が効かない。原型の CPU は滑らせて、そのフレームを終える。
+    // 滑っている間は操作が無効。原型の CPU は滑らせて、そのフレームを終える。
     const buttons: CpuButton[] = usedEarly ? [early.button] : [];
     if (me.effects.has('slide')) return { direction: null, buttons };
 

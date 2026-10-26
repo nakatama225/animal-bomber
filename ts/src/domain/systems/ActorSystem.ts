@@ -58,7 +58,7 @@ export class ActorSystem {
   }
 }
 
-/** 並べ替えの鍵。持ち主の番に進めるものは、1人ぶんしか選ばないので順は効かない。 */
+/** 並べ替えの鍵。持ち主の番に進めるものは、1人ぶんしか選ばないので順は結果に影響しない。 */
 function turnOrder(actor: WorldActor): number {
   return actor.turn === 'owner' ? 0 : actor.turn;
 }

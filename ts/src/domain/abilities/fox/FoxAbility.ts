@@ -31,7 +31,7 @@ export const FOX: Ability = {
    * 先頭に埋まって逃げ場を失う。前から置けば後ろへ下がれる。
    *
    * 爆弾を置けない状態（「爆弾おけない」で「勝手に設置」が無い、など）なら並べない。
-   * ボタンの爆弾と同じ確かめ（`canPlaceBomb`）を通す。原型の foxLineShot も入口で見ていた。
+   * ボタンの爆弾と同じ検査（`canPlaceBomb`）を通す。原型の foxLineShot も入口で見ていた。
    */
   onTap(world, player) {
     if (player.abilityCooldown > 0) return { action: null, events: [] };

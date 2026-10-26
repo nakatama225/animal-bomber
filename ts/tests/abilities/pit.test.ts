@@ -79,7 +79,7 @@ describe('掘る（原型 startDigPit・updateDigging）', () => {
     pressSpecial(world, 0, sim);
     advance(world, onlyFor(world, 0, press({})), 100, sim);
     pressSpecial(world, 0, sim);
-    // 2回目は掘り始めない（原型も掘り始めない）。掘り終わりの確かめだけに任せると、
+    // 2回目は掘り始めない（原型も掘り始めない）。掘り終わりの確認だけに任せると、
     // 何も生まない「掘る」で 90 tick 動けなくなる。
     expect(mole.action).toBeNull();
     advance(world, onlyFor(world, 0, press({})), 100, sim);
@@ -143,7 +143,7 @@ describe('掘る（原型 startDigPit・updateDigging）', () => {
   });
 
   it('掘っている途中に同じマスへ爆弾を置かれても、掘り終わりに穴ができ、爆発のあとも残る', () => {
-    // 原型の掘り終わり（updateDigging）が確かめ直すのはマスと穴だけで、爆弾は見ない。
+    // 原型の掘り終わり（updateDigging）が確認し直すのはマスと穴だけで、爆弾は見ない。
     // 原型の答え（掘り始めて 5・30・85 フレーム目に置く）：どれも掘り終わりに (5,5) に穴が1つ、爆発のあとも残り、踏むと落ちる。
     for (const at of [5, 30, 85]) {
       const world = arena(['mole', 'rabbit']);
@@ -285,7 +285,7 @@ describe('落ちる（原型 pitfallCheck）', () => {
     const frozen = countFrozen(world, rabbit, 800, (t) => {
       if (t === 31) place(rabbit, { col: 8, row: 5 });
       // はまっている間は2つ目の穴に落ちず、穴は残る（原型も 100 フレーム目に穴が1つ）。
-      // 直す前の形（落とし穴が泣き（'stun'）を上限 360 まで足していた）では、移した直後に落ちても
+      // 修正する前の形（落とし穴が泣き（'stun'）を上限 360 まで足していた）では、移した直後に落ちても
       // 止まる長さの合計が同じ幅に入り、見分けられなかった。穴が残っていることを直に見る。
       if (t === 100) expect(pitCells(world)).toEqual(['8,5']);
     });
@@ -371,7 +371,7 @@ describe('落ちる（原型 pitfallCheck）', () => {
           .map((e) => (e.type === 'itemDropped' ? `${e.kind}@${e.cell.col},${e.cell.row}` : '')),
       ).toEqual(expected);
       expect(elephant.action).toBeNull();
-      // 抱えていたハズレは自分には効かない（泣いていない）。
+      // 抱えていたハズレは自分には作用しない（泣いていない）。
       expect(elephant.effects.has('stun')).toBe(false);
     }
   });

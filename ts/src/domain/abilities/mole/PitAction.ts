@@ -92,7 +92,7 @@ export class PitActor implements WorldActor {
  *
  * 掘れないのは3つ。マスが空いていない（壊せるブロックの中）、すでに穴がある、爆弾がある。
  * ⚠️ アイテム（とくぎで撒かれたうんこも）の上には掘れる。原型が見るのもこの3つだけ。
- * ⚠️ 掘り始めの確かめで、掘り終わりには使わない。掘り終わりは爆弾を見ない（`PitAction.finish`）。
+ * ⚠️ 掘り始めの確認で、掘り終わりには使わない。掘り終わりは爆弾を見ない（`PitAction.finish`）。
  */
 export function canDigAt(world: Readonly<WorldState>, cell: Cell): boolean {
   if (world.board.at(cell) !== 'empty') return false;
@@ -115,7 +115,7 @@ export class PitAction implements ActiveAction {
   readonly damageCap = null;
   readonly untouchable = false;
   readonly canPlaceBomb = false;
-  /** 最中も技のボタンは効くが、掘り直しはしない（`MOLE.onHold`。押すとチキンだけ減る）。 */
+  /** 最中も技のボタンは有効だが、掘り直しはしない（`MOLE.onHold`。押すとチキンだけ減る）。 */
   readonly blocksButtons = false;
   readonly sweepsItems = false;
 
@@ -139,8 +139,8 @@ export class PitAction implements ActiveAction {
   /** 掘り終わった時点で穴が生まれる。途中で打ち切られたときは何も残らない。 */
   finish(world: WorldState, player: PlayerState): SimEvent[] {
     if (this.#remaining > 0) return [];
-    // 掘り終わりにも確かめ直す。2匹が同じマスを同時に掘ると、先に掘り終えた側の穴がもうある。
-    // ⚠️ 確かめ直すのはマスと穴の2つだけで、爆弾は見ない（原型の updateDigging）。掘っている間に
+    // 掘り終わりにも確認し直す。2匹が同じマスを同時に掘ると、先に掘り終えた側の穴がもうある。
+    // ⚠️ 確認し直すのはマスと穴の2つだけで、爆弾は見ない（原型の updateDigging）。掘っている間に
     // 同じマスへ爆弾を置かれても、その下に穴ができる。爆弾を見るのは掘り始め（`canDigAt`）だけ。
     if (world.board.at(this.cell) !== 'empty' || pitAt(world, this.cell) !== undefined) return [];
     world.actors.push(new PitActor(this.cell, player.id));

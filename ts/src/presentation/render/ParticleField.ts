@@ -99,7 +99,7 @@ export class ParticleField {
           life: [0.5, 0.8],
           size: [4, 8],
         });
-        // 爆風で壊れたときは爆発の揺れのほうが大きいので、これが効くのは
+        // 爆風で壊れたときは爆発の揺れのほうが大きいので、この揺れが画面に出るのは
         // 爆風以外（体当たりなど）で壊れたときだけになる。
         this.#addShake(4);
         return;
@@ -130,7 +130,7 @@ export class ParticleField {
         return;
       }
       case 'itemTaken': {
-        // 引き寄せて手元で効いたもの（マスが無い）は煙を出さない（原型も出さない）。
+        // 引き寄せて手元で適用されたもの（マスが無い）は煙を出さない（原型も出さない）。
         if (event.cell === null) return;
         const definition = itemDefinition(event.kind);
         puff(out, rng, event.cell, definition.harmful ? '#b98a5a' : '#ffd23f', definition.emoji);
@@ -191,7 +191,7 @@ export class ParticleField {
       case 'roundEnded':
       case 'matchEnded':
       case 'techniqueMoment':
-        // 原型でも、置いた瞬間・効いた瞬間には粒子を出していない。効いたきっかけ
+        // 原型でも、置いた瞬間・状態がかかった瞬間には粒子を出していない。かかったきっかけ
         // （拾った・踏んだ）の側で煙を出す。ラウンドの区切りは盤面の作り直しで片づける。
         // 技の途中で起きたことは音だけ（掘り終えた穴の位置は見せない）。
         return;

@@ -12,7 +12,7 @@ import { InputLog, type MatchClock } from './InputLog.js';
  * ⚠️ `InputLog.at()` だけでは足りない。`at()` は記録の無い tick に
  * 「直前の入力が続いている」を返すので、まだ届いていない tick を読んでも
  * それらしい値が返る。届く前に進めると、その端末だけ違う入力で試合を進めて
- * 黙ってずれる。届いたかどうかは、ここで確かめてから読む。
+ * 黙ってずれる。届いたかどうかは、ここで確認してから読む。
  *
  * 入力は tick の順に1つずつ届く約束になっている（1 tick に1通、飛ばさない）。
  * 飛んだら例外にする。飛ばしたまま先へ進むと、抜けた tick を永久に待って止まる。
@@ -61,8 +61,8 @@ export class ConfirmedInputs {
   /**
    * 届いた入力の記録。途中で抜けた人と、その人の入力を最後に使う tick も、`LockstepDriver` がここに書く。
    *
-   * 時刻は試合通算の tick（`MatchClock.elapsed`）。`ReplayInputSource` も同じ時刻で引くので、
-   * 1台の試合で流し直せる。CPU の枠の操作は入っていないので、同じ設定から作り直す。
+   * 時刻は試合通算の tick（`MatchClock.elapsed`）。`ReplayInputSource` も同じ時刻で参照するので、
+   * 1台の試合で再生できる。CPU の枠の操作は入っていないので、同じ設定から作り直す。
    * 抜けた人は、再生の窓口に同じ CPU の作り方を渡せば、`departedAfter` の次の tick から CPU に替わる。
    */
   get log(): InputLog {
@@ -71,7 +71,7 @@ export class ConfirmedInputs {
 }
 
 /**
- * 通信で届いた入力を流す窓口。
+ * 通信で届いた入力を渡す窓口。
  *
  * キーボード・CPU・記録の再生と同じ資格で試合に繋がる。
  * ⭐ 自分の端末で操作しているプレイヤーも、この窓口を通す。自分の入力も

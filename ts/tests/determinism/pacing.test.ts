@@ -22,7 +22,7 @@ function makeLog(): InputLog {
 }
 
 /**
- * 同じ記録を、1回の描画あたり `ticksPerFrame` ずつ進めて流す。
+ * 同じ記録を、1回の描画あたり `ticksPerFrame` ずつ進めて再生する。
  *
  * 描画の区切りは状態に触れないので、結果は区切り方に依存しないはず。
  */
@@ -48,7 +48,7 @@ function runWithPacing(log: InputLog, ticksPerFrame: number): number {
  * 実時間が計算に漏れていないことの確認。
  *
  * `Simulation.step()` は経過時間を引数に取らないので、構造上漏れようがない。
- * この検査は、その構造が保たれていることを確かめる。誰かが `step(dt)` の形へ
+ * この検査は、その構造が保たれていることを確認する。誰かが `step(dt)` の形へ
  * 戻したり、実時間から速度を計算する処理を足したりすると失敗する。
  *
  * 原型ではここが守られておらず、「倍速にすると1回のキー入力が
@@ -135,7 +135,7 @@ describe('ゲームの速さ', () => {
     expect(takes(triple, 2)).toEqual([3, 3]);
   });
 
-  it('長く回しても、進んだ tick の合計は倍率どおり（端数の誤差が積もらない）', () => {
+  it('長く実行しても、進んだ tick の合計は倍率どおり（端数の誤差が積もらない）', () => {
     const speed = new GameSpeed();
     speed.set(1.75);
     let total = 0;

@@ -44,7 +44,7 @@ function duel(animal: string, other = 'frog'): Scene {
   return { world, me, foe, sim: new Simulation() };
 }
 
-/** 0番だけが `special` を押す・離す、を tick ごとに決めて流す。 */
+/** 0番だけが `special` を押す・離す、を tick ごとに決めて実行する。 */
 function run(scene: Scene, ticks: number, pressed: (t: number) => boolean): SimEvent[] {
   const events: SimEvent[] = [];
   for (let t = 1; t <= ticks; t += 1) {

@@ -11,7 +11,7 @@ import { hurt } from '../../mutations/damage.js';
 import { detonate } from '../../mutations/explode.js';
 import { applyItem, placedItem, rollDrop } from '../../mutations/items.js';
 import type { ActiveAction } from '../ActiveAction.js';
-// ⚠️ 能力は登録表（registry）からではなく Ability から引く。registry はこのファイルを読み込む
+// ⚠️ 能力は登録表（registry）からではなく Ability から取得する。registry はこのファイルを読み込む
 // （ElephantAbility 経由）ので、registry を読むと循環になる。
 import { lookupAbility } from '../Ability.js';
 
@@ -69,7 +69,7 @@ export class ChargeAction implements ActiveAction {
   readonly untouchable = true;
   readonly canPlaceBomb = false;
   /**
-   * 最中も技のボタンは効く。鼻水を吹け、とくぎでは突進が最初からやり直しになる（新しい突進に
+   * 最中も技のボタンは有効。鼻水を吹け、とくぎでは突進が最初からやり直しになる（新しい突進に
    * 差し替わり、この突進の `finish` は呼ばれないので、抱えていた悪いアイテムは撒かれずに消える。
    * 原型の elephantCharge も抱えた物を空にして始め直す）。
    */
@@ -120,7 +120,7 @@ export class ChargeAction implements ActiveAction {
     if (tile === 'soft') {
       world.board.set(ahead, 'empty');
       events.push({ type: 'blockDestroyed', cell: ahead });
-      // 爆風で壊したときと同じく、アイテムの抽選を引く（原型の destroySoft）。出たアイテムは
+      // 爆風で壊したときと同じく、アイテムを抽選する（原型の destroySoft）。出たアイテムは
       // このあと通り道として掃く（良いものは吸い込み、悪いものは抱える）。
       events.push(...rollDrop(world, ahead));
     }
@@ -232,8 +232,8 @@ export class ChargeAction implements ActiveAction {
         x: other.position.x + delta.dx * KNOCKBACK,
         y: other.position.y + delta.dy * KNOCKBACK,
       };
-      // 未登録なら抜けられる特例なしで判定する。試合では、盤面を作るときに能力を引いて
-      // （動物ごとの初期の加算。`GameSession` の startingBonusOf）登録を済ませているので起きない。
+      // 未登録なら抜けられる特例なしで判定する。試合では、盤面を作るときに能力を取得して
+      // （動物ごとの初期の加算。`GameSession` の startingBonusOf）登録を完了しているので起きない。
       const ability = lookupAbility(other.animal);
       if (!bodyCollides(world, other, other.position, pushed, ability?.passesThrough)) {
         other.position = pushed;

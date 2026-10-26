@@ -17,7 +17,7 @@ import { encodePeerMessage, type LanSettings, type PeerMessage } from '../../src
  * - ホスト（0番）の合図で、その時点の接続を人間の一覧にして全員へ `start` を配る。始まったあとの
  *   ホストの合図は、試合の番号を1つ増やした次の試合にする
  * - 入力と報告は、いまの試合の番号が付いたものだけを扱う
- * - 始まる前のホストの設定（`settings`）を、ホスト以外の全員へ流す
+ * - 始まる前のホストの設定（`settings`）を、ホスト以外の全員へ転送する
  * - 抜けた人は、入力を最後に配った tick（`lastTick`）を添えて知らせる
  * - 同じ tick の要約が全員ぶん揃ったら突き合わせ、食い違えば `desync` を配る
  *
@@ -25,7 +25,7 @@ import { encodePeerMessage, type LanSettings, type PeerMessage } from '../../src
  * - 入力と報告は、試合を始めたときの参加者からのものだけを扱い、参加者にだけ配る
  *
  * ⚠️ 真似ていないもの：全員が抜けたあとに次の試合へ戻すこと、送れない相手を外すこと、
- * 読めないメッセージを捨てること。これらは `server/tests/test_lockstep.py` で実物を確かめる。
+ * 読めないメッセージを捨てること。これらは `server/tests/test_lockstep.py` で実物を確認する。
  *
  * ⚠️ メッセージは受け取り手ごとの列に溜まり、`deliver()` を呼ぶまで届かない。
  * 届く時機をテストの側で決めて、遅れ・届く順の違いを作るため。
@@ -40,7 +40,7 @@ export class FakeRelay {
   readonly #lastTick = new Map<number, number>();
   readonly #pending = new Map<number, Map<number, string>>();
   #desynced = false;
-  /** 突き合わせて一致した tick。検査が本当に行われたかを確かめるのに使う。 */
+  /** 突き合わせて一致した tick。検査が本当に行われたかを確認するのに使う。 */
   readonly agreed: number[] = [];
 
   /** 新しい端末をつなぐ。番号は空いている最も小さいもの。 */
@@ -166,8 +166,8 @@ export class FakeRelay {
  * 台本どおりに操作する、この端末の入力。人間がキーボードを押す代わり。
  *
  * 台本には「何回目に読まれたか」を渡す。0 回目は試合が始まったとき（`LockstepDriver.start`）に
- * 読まれ、tick 0〜2 に効く。そのあとは tick を進めるときだけ読まれるので、n 回目（n ≥ 1）に
- * 読まれた入力は、tick n − 1 を進めるときに送られ、tick n + 2 に効く。
+ * 読まれ、tick 0〜2 に反映される。そのあとは tick を進めるときだけ読まれるので、n 回目（n ≥ 1）に
+ * 読まれた入力は、tick n − 1 を進めるときに送られ、tick n + 2 に反映される。
  */
 export class ScriptedLocal implements InputSource {
   #calls = 0;

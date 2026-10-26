@@ -10,11 +10,11 @@ import { Simulation } from '../src/domain/systems/Simulation.js';
  * 前の tick の入力だけを、ラウンドの途中の状態（誰も何も押していない）にする。ラウンドの始まりは、
  * 爆弾と技のボタンを押していた扱いになっていて、最初の tick に押しても「押した瞬間」にならない。
  * そのままだと、押した瞬間を見るテストがどれも1 tick 待つ形になる。ボタンのラウンドの
- * 始まりの扱いは `tests/systems/round.test.ts` で `createWorld` から確かめる。
+ * 始まりの扱いは `tests/systems/round.test.ts` で `createWorld` から確認する。
  *
  * ⚠️ 技のボタンの「とくぎを出し終えた扱い」（`actionFired` の true）は、ラウンドの始まりのまま残る。
  * 長押しのとくぎを見るテストは、まず1 tick 離してから押す（`tests/abilities/charge.test.ts` の
- * `triggerCharge`）。そのものは `charge.test.ts` の「ラウンド開始時から押していると、離すまで出ない」で確かめる。
+ * `triggerCharge`）。そのものは `charge.test.ts` の「ラウンド開始時から押していると、離すまで出ない」で確認する。
  */
 export function makeWorld(seed = 1234, animals: string[] = ['rabbit', 'elephant']): WorldState {
   const world = createWorld({ seed, animals, bonusOf: startingBonusOf });
@@ -74,7 +74,7 @@ export function advance(
 /**
  * 盤面の壊せるブロックを全部消す。
  *
- * 爆風の伸び方や経路を確かめるとき、種ごとに違うブロックの配置に
+ * 爆風の伸び方や経路を確認するとき、種ごとに違うブロックの配置に
  * 結果が左右されないようにするため。
  */
 export function clearBoard(world: WorldState): void {

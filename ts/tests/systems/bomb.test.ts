@@ -217,7 +217,7 @@ describe('爆発', () => {
   });
 
   it('2つの爆弾の爆風が同じブロックに届いても、壊すのは1回', () => {
-    // 壊すたびにアイテムの抽選を引くので、2回壊すと同じマスにアイテムが
+    // 壊すたびにアイテムを抽選するので、2回壊すと同じマスにアイテムが
     // 2つ出うる（段階 3 から 2026-10-04 まで、この版はそうなっていた）。
     // 原型は、ブロックを壊す関数の入口で「もう壊れていれば帰る」ので1回だけ。
     const world = makeWorld();
@@ -239,7 +239,7 @@ describe('爆発', () => {
     expect(result.chained).toBe(2);
     expect(result.destroyed).toEqual([block]);
     expect(result.events.filter((event) => event.type === 'blockDestroyed')).toHaveLength(1);
-    // 抽選1回で引くのは、出るかで1回、出るなら種類で1回まで（2回引くと、この場面では3回）。
+    // 抽選1回で乱数を取り出すのは、出るかで1回、出るなら種類で1回まで（2回抽選すると、この場面では3回）。
     expect(world.rng.calls - before).toBeLessThanOrEqual(2);
     const itemsOnBlock = world.items.filter(
       (item) => item.cell.col === block.col && item.cell.row === block.row,
@@ -316,7 +316,7 @@ describe('爆風の寿命', () => {
 });
 
 describe('置いた爆弾の問い合わせ', () => {
-  it('置いたマスから引ける', () => {
+  it('置いたマスから取得できる', () => {
     const world = makeWorld();
     placeBomb(world, world.players[0]!);
     expect(bombAt(world, { col: 1, row: 1 })).toBeDefined();

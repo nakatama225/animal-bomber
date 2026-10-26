@@ -47,7 +47,7 @@ export function canEscapeAfter(ctx: CpuContext, option: BombOption): boolean {
 /** いまいるマスに、そもそも爆弾を置ける状態か。 */
 export function canPlaceHere(ctx: CpuContext): boolean {
   const { me, world, here } = ctx;
-  // ゲームの側と同じ確かめを通す（原型の CPU も canPlaceBomb を見る）。爆弾おけないだけを見ると、
+  // ゲームの側と同じ検査を通す（原型の CPU も canPlaceBomb を見る）。爆弾おけないだけを見ると、
   // 「勝手に設置」が重なって置ける間も、CPU だけが置かなくなる。
   if (!canPlaceBomb(me)) return false;
   if (me.activeBombs >= me.maxBombs) return false;
@@ -57,10 +57,10 @@ export function canPlaceHere(ctx: CpuContext): boolean {
 }
 
 /**
- * 爆弾を置きたいと判断していたら、置いてよいかを確かめて、押すボタンを返す（原型 cpuUpdate の「爆弾を置く」）。
+ * 爆弾を置きたいと判断していたら、置いてよいかを確認して、押すボタンを返す（原型 cpuUpdate の「爆弾を置く」）。
  *
  * 置けなかった場合は、理由に応じて「しばらく爆弾を狙わない」を記憶に残す。
- * 押すボタンを前の tick にも押していたら、この tick は何も決めずに待つ（押した瞬間でしか効かない）。
+ * 押すボタンを前の tick にも押していたら、この tick は何も決めずに待つ（押した瞬間にだけ有効）。
  *
  * @param facing この tick の移動のあとに向いている方向。一列に並べる置き方は、この向きに並ぶ
  *   （原型も、経路を1歩進めて向きが変わってから並べる）
@@ -80,9 +80,9 @@ export function decideBomb(ctx: CpuContext, facing: Direction): BombOption['butt
   // ⛔ 同じマスに置き直さない。逃げ切れても、置けない場所として扱う。
   const escapes = canEscapeAfter(ctx, option) && !sameSpot;
 
-  // ⛔ 「袋小路では置かない」という規則は入れない。
+  // ⛔ 「袋小路では置かない」という規則は加えない。
   // このゲームはブロックを壊して道を作るので、序盤はかならず袋小路になる。
-  // 入れると「道が狭いから置かない → 壊せない → ずっと狭い」で永久に置けなくなる。
+  // 加えると「道が狭いから置かない → 壊せない → ずっと狭い」で永久に置けなくなる。
   // 原型の実測で、つよい CPU が40秒のあいだ爆弾を1個も置かなかった。
   // 置いてよいかは「逃げ切れるか」だけで決める。
 

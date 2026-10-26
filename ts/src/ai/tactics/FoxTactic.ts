@@ -44,7 +44,7 @@ export const FOX_TACTIC: AnimalTactic = {
   bombOption(ctx, facing) {
     const cells = lineCells(ctx, facing);
     if (cells.length === 0) return null;
-    // ⚠️ この版は一列のあとに間隔を置く（原型には無い。直すのは Python 版を一通り作り終えてから）。
+    // ⚠️ この版は一列のあとに間隔を置く（原型には無い。修正するのは Python 版を一通り作り終えてから）。
     // 間隔の最中は並べられないので、足元に置く。
     if (ctx.me.abilityCooldown > 0) return null;
     return {

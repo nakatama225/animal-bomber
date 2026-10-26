@@ -37,7 +37,7 @@ export function formatSeconds(seconds: number): string {
 }
 
 /**
- * 選べる値かを確かめる。
+ * 選べる値かを検証する。
  *
  * 選べない値が来るのは画面の作りの誤りなので、既定値に戻さずに例外にする（戻すと気づけない）。
  *

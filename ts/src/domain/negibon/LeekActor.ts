@@ -32,14 +32,14 @@ export type LeekStop = 'wall' | 'blast' | 'bomb' | 'range';
  * ⚠️ 無敵中の相手を通り抜けるのは、復活した直後の相手に撃ち返せないようにするため。
  * 当たると、復活と撃ち返しの往復が止まらない。
  *
- * 1 tick に進む距離はマスの 4 分の 1 より短いので、1 tick に1回だけ調べても
+ * 1 tick に進む距離はマスの 4 分の 1 より短いので、1 tick に1回だけ判定しても
  * マスを飛び越えない。
  */
 export class LeekActor implements WorldActor {
   readonly kind = 'leek';
   readonly turn = ACTOR_TURNS.leek;
   /**
-   * 同じ tick の葱は、新しく撃ったものから進める。原型の updateNegis の L2292 と同じ（配列を後ろから回す）。
+   * 同じ tick の葱は、新しく撃ったものから進める。原型の updateNegis の L2292 と同じ（配列を後ろから順に処理する）。
    * 別々の葱ボンが撃った葱が同じ tick に同じ相手に届くと、あとに撃った葱の持ち主が盤面へ戻る（同じ tick に撃った2本なら
    * 番号の大きいほう）。先に撃った葱は、相手がもう外周にいるのと、戻った撃ち手が無敵なのとで通り抜けて飛び続ける。
    */
@@ -75,7 +75,7 @@ export class LeekActor implements WorldActor {
     return { events: [], done: this.#remaining <= 0 || this.#offBoard(world) };
   }
 
-  /** ぶつかったものを調べる。止まったならイベント（空のこともある）、飛び続けるなら null。 */
+  /** ぶつかったものを判定する。止まったならイベント（空のこともある）、飛び続けるなら null。 */
   #collide(world: WorldState): SimEvent[] | null {
     const cell = cellOf(this.#position);
     if (this.#travelled > LEEK_RANGE) return [stopped(cell, 'range')];

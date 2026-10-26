@@ -13,7 +13,7 @@ import type { NavCommand } from '../presentation/menu/MenuCursor.js';
  * ⛔ Option（Alt）を主のキーにしない。macOS は修飾キーを押している間
  * 他のキーの keyup を送らないことがあり、「たまに効かない」が起きる。
  * ⛔ Command（Meta）はどのプレイヤーの操作にも使えない。ブラウザが予約していて
- * `preventDefault` も効かないため、cmd+W でタブが閉じる。
+ * `preventDefault` も無効なため、cmd+W でタブが閉じる。
  */
 export interface KeyBinding {
   readonly up: readonly string[];
@@ -72,7 +72,7 @@ export const GAME_KEYS: readonly string[] = [
  * メニューを動かすキーと、その操作（原型と同じ）。
  *
  * 決定は Enter と Space。どちらも爆弾のキーなので、決定で「はじめる」を押すと、押したまま
- * 試合が始まる。ルールの層が、ラウンドの始まりに押していた爆弾のボタンを離すまで効かなくして
+ * 試合が始まる。ルールの層が、ラウンドの始まりに押していた爆弾のボタンを離すまで無効にして
  * いるので、開始位置に爆弾は置かれない（`WorldState.ts` の `HELD_AT_ROUND_START`）。
  */
 const NAV_COMMANDS: Readonly<Record<string, NavCommand>> = {

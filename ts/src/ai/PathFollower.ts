@@ -55,9 +55,9 @@ export function directionAlong(player: PlayerState, path: Cell[]): Direction | n
  * ゲームの側は反転を入力の段階でかける。CPU が行きたい向きをそのまま
  * 押すと逆へ歩いてしまうので、先に逆にしておけば打ち消し合う。
  *
- * ⚠️ 原型では、反転は人間の操作にだけかかり、CPU には効いていなかった
+ * ⚠️ 原型では、反転は人間の操作にだけかかり、CPU には作用していなかった
  * （CPU は操作を経由せずに直接プレイヤーを動かしていたため）。
- * この版の CPU は人間と同じく入力を返すので、そのままだと反転が効く。
+ * この版の CPU は人間と同じく入力を返すので、そのままだと反転が作用する。
  * 原型と同じ強さに揃えるため、CPU は反転を知っていて打ち消す。
  */
 export function compensateReverse(player: PlayerState, direction: Direction): Direction {

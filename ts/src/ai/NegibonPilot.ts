@@ -189,7 +189,7 @@ function shortestWay(from: number, to: number): number {
 /**
  * 外周をその向きへ進むために押す向き。
  *
- * どの辺で何を押すとどちらへ進むかは、人間の操作と同じ変換（`laneStep`）から逆に引く。
+ * どの辺で何を押すとどちらへ進むかは、人間の操作と同じ変換（`laneStep`）から逆算する。
  * 別に表を持つと、人間と CPU で外周の進み方が食い違ったときに気づけない。
  */
 function keysFor(spot: LaneSpot, direction: -1 | 0 | 1): PlayerInput {

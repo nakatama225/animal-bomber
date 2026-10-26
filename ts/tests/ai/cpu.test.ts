@@ -77,7 +77,7 @@ describe('CPU は入力を返すだけ', () => {
   it('入力を返す前と後で、試合の状態が変わらない', () => {
     // 型の Readonly は浅く、中の配列やプレイヤーの書き換えは止められない。
     // 状態の要約を前後で比べて、実際に書き換えていないことを見る。
-    // 要約には試合の乱数を引いた回数も入るので、試合の乱数を引いていないことも分かる。
+    // 要約には試合の乱数を取り出した回数も入るので、試合の乱数を取り出していないことも分かる。
     const world = makeWorld(7, ALL_FOUR);
     const gatherer = new InputGatherer();
     for (const player of world.players) {
@@ -103,7 +103,7 @@ describe('CPU は入力を返すだけ', () => {
       return hashWorld(world);
     };
     expect(play(0)).toBe(play(0));
-    // 対照：CPU の種だけを変えると別の試合になる。種が効いていることの確認。
+    // 対照：CPU の種だけを変えると別の試合になる。種が反映されていることの確認。
     expect(play(1)).not.toBe(play(0));
   });
 });
@@ -156,7 +156,7 @@ describe('攻める', () => {
 
   it('⛔ 開幕の袋小路でも、5秒以内に爆弾を置く', () => {
     // 開幕は周りがブロックだらけで、どこも袋小路になっている。
-    // 原型で「袋小路では置かない」を入れたところ、つよい CPU が
+    // 原型で「袋小路では置かない」を加えたところ、つよい CPU が
     // 40秒のあいだ1個も置かず、うろつくだけになった。
     for (const seed of [1, 2, 3, 4, 5]) {
       const world = makeWorld(seed, ['rabbit', 'elephant']);
@@ -255,7 +255,7 @@ describe('爆弾を置いてよいかの判断', () => {
     expect(decideBomb(ctx, 'down')).toBe('bomb');
   });
 
-  it('前の tick に爆弾のボタンを押していたら、この tick は何も決めずに待つ（押した瞬間でしか効かない）', () => {
+  it('前の tick に爆弾のボタンを押していたら、この tick は何も決めずに待つ（押した瞬間にだけ有効）', () => {
     const world = makeWorld(3);
     clearBoard(world);
     world.players[0]!.previousInput = { ...IDLE_INPUT, bomb: true };
@@ -292,7 +292,7 @@ describe('爆弾を置いてよいかの判断', () => {
 });
 
 describe('ボタンの押し方', () => {
-  it('前の tick に押していたボタンは押さず、次の tick に押す（押した瞬間でしか効かない）', () => {
+  it('前の tick に押していたボタンは押さず、次の tick に押す（押した瞬間にだけ有効）', () => {
     // 射線に相手がいて、すぐ置きたい場面。前の tick に爆弾のボタンを押していた扱いにすると、
     // この tick は押さずに置きたいままでいて、次の tick に押す。
     const world = makeWorld(3, ['rabbit', 'elephant']);
@@ -386,9 +386,9 @@ describe('経路の追従（原型 cpuUpdate の「経路追従」）', () => {
 });
 
 describe('同じ長さの経路の選び方', () => {
-  it('隣のマスを右・左・下・上の順に調べる（原型の bfsPath と同じ）', () => {
+  it('隣のマスを右・左・下・上の順に探索する（原型の bfsPath と同じ）', () => {
     // (3,3) から (5,1) へは、右右上上 と 上上右右 の2通りがあり、どちらも4歩（(4,2) は柱）。
-    // 右を上より先に調べるので 右右上上。上を先に調べると 上上右右 になる。
+    // 右を上より先に探索するので 右右上上。上を先に探索すると 上上右右 になる。
     const world = makeWorld(3);
     clearBoard(world);
     const me = world.players[0]!;
@@ -406,10 +406,10 @@ describe('同じ長さの経路の選び方', () => {
 
 describe('技の最中と技の出し方', () => {
   /**
-   * 確かめのための作り物の振る舞い。ticks のあいだ続く。
+   * 確認のための作り物の振る舞い。ticks のあいだ続く。
    *
    * いまの動物の振る舞いは、どれも移動を乗っ取り、爆弾を置けない。CPU の側には「乗っ取らない振る舞い」
-   * 「置ける振る舞い」のときの決まりがあるので、その決まりは作り物で確かめる。
+   * 「置ける振る舞い」のときの決まりがあるので、その決まりは作り物で確認する。
    */
   function probe(options: { drivesMovement: boolean; canPlaceBomb: boolean }, ticks = 120): ActiveAction {
     let left = ticks;
@@ -475,7 +475,7 @@ describe('技の最中と技の出し方', () => {
       const sim = new Simulation();
       let pressed = 0;
       for (let t = 0; t < 120; t += 1) {
-        // 技が続いている間だけを数える。技が終わってから置いたのでは確かめにならない。
+        // 技が続いている間だけを数える。技が終わってから置いたのでは確認にならない。
         const during = rabbit.action?.kind === 'probe';
         const input = source.next(world);
         if (during && input.bomb) pressed += 1;
@@ -488,7 +488,7 @@ describe('技の最中と技の出し方', () => {
     };
     expect(whileAction(true).placedAt).not.toBeNull();
     // 置けない技の最中は、CPU の判断でボタンを押さない。置いたかだけを見ると、CPU が押しても
-    // ゲームの側（BombSystem の canPlaceBomb）が止めるので、CPU の判断を確かめられない。
+    // ゲームの側（BombSystem の canPlaceBomb）が止めるので、CPU の判断を確認できない。
     expect(whileAction(false)).toEqual({ pressed: 0, placedAt: null });
   });
 
@@ -621,7 +621,7 @@ describe('きつねの狐火', () => {
       me.position = centerOf({ col: 1, row: 1 });
       foe.position = centerOf({ col: 1 + distance, row: 1 });
       grantSpecial(me, 1);
-      // 技を使うかの抽選が必ず当たる強さ（skillUse 1）にする。乱数を確かめるテストにしないため。
+      // 技を使うかの抽選が必ず当たる強さ（skillUse 1）にする。乱数を検証するテストにしないため。
       const ctx = new CpuContext(
         world, me, { col: 1, row: 1 }, DangerMap.of(world), false, CPU_LEVELS.hard, freshMemory(new Rng(1)), new Rng(1),
       );

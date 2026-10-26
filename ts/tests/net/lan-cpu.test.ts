@@ -6,9 +6,9 @@ import { lanCpuSource } from '../../src/net/lanCpu.js';
 import type { LanSettings } from '../../src/net/protocol.js';
 
 describe('通信対戦の CPU', () => {
-  it('強さは、そのプレイヤーの値を引く', () => {
+  it('強さは、そのプレイヤーの値を取得する', () => {
     // 取り違えても、全員の端末が同じく取り違えるので状態の要約は一致したまま進む。
-    // ずれを見るテストでは捕まらないので、ここで直接比べる。
+    // ずれを見るテストでは検出できないので、ここで直接比べる。
     const settings: LanSettings = {
       match: defaultMatchConfig(3, ['rabbit', 'elephant', 'fox', 'frog']),
       cpu: ['easy', 'normal', 'hard', 'oni'],

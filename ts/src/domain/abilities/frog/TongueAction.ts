@@ -91,12 +91,12 @@ export function tongueReachOf(world: Readonly<WorldState>, player: PlayerState):
  * かえるの通常技。舌を伸ばして、遠くのアイテムを引き寄せる。
  *
  * ⚠️ 良いものも悪いものも区別なく掴む。かえるは効果が2倍になるので、
- * 何を引くか分からないまま伸ばすのは博打になる。
+ * 何を掴むか分からないまま伸ばすのは博打になる。
  * 選べるようにすると、2倍という長所だけが残って短所が消える。
  *
  * 伸ばしている間は動けない。何かに当たるか伸びきったら、同じ速さで引っ込める。往復し終わるまで隙ができる。
  * 伸びきったかは1マス伸びるたびにその時の長さで見る（伸ばしている間に焼けた舌が1マス戻れば、そのぶん伸びる）。
- * 掴んだアイテムは、舌が戻りきったときに効く（原型の updateTongue）。掴んだ瞬間は掴んだ音だけ、拾った音は効いたとき。
+ * 掴んだアイテムは、舌が戻りきったときに適用される（原型の updateTongue）。掴んだ瞬間は掴んだ音だけ、拾った音は適用されたとき。
  *
  * 伸びている舌の上に爆風が来ると焼き切れる（原型の tongueBurnCheck）：掴んでいたものは焦げて消え、
  * 3 秒泣き、そのラウンドは焼けたマスの手前までしか伸びなくなる（`BurntTongueActor`）。
@@ -107,12 +107,12 @@ export class TongueAction implements ActiveAction {
   readonly damageCap = null;
   readonly untouchable = false;
   readonly canPlaceBomb = false;
-  /** 往復し終わるまで、技のボタンは効かない（原型の doAction・doSpecial）。 */
+  /** 往復し終わるまで、技のボタンは無効（原型の doAction・doSpecial）。 */
   readonly blocksButtons = true;
   readonly sweepsItems = false;
   /**
    * 倒れても舌は外さずに止めておき、焼けたかは見続ける（原型と同じ）。原型の toNegibon（L2255）は tongue を消さず
-   * （退場 L1700 でも残る）、舌を進めるのは盤面にいるときだけ（L4320-4322）、焼けたかの確かめ（L4395）は状態を
+   * （退場 L1700 でも残る）、舌を進めるのは盤面にいるときだけ（L4320-4322）、焼けたかの確認（L4395）は状態を
    * 問わない。外周にいる間に止まった舌の上へ爆風が来ると焼けて、そのラウンドの舌が短くなり、泣く。葱で盤面へ
    * 戻るときに舌も泣く状態も消える（negiHit L2347-2348）が、短くなった長さは残る。
    */
@@ -154,8 +154,8 @@ export class TongueAction implements ActiveAction {
       }
       this.#length -= 1;
       if (this.#length <= 0) {
-        // 戻りきった。掴んでいたものがあれば、ここで効く（拾った音もここ。原型も applyItem の中で鳴らす）。
-        // 倍率は能力が持つが、ここでは引かない。かえる自身の技なので 2 を直に書いてよい。共通の処理ではないため。
+        // 戻りきった。掴んでいたものがあれば、ここで適用される（拾った音もここ。原型も applyItem の中で鳴らす）。
+        // 倍率は能力が持つが、ここでは参照しない。かえる自身の技なので 2 を直に書いてよい。共通の処理ではないため。
         if (this.#caught !== null) {
           events.push({ type: 'itemTaken', cell: null, kind: this.#caught, taker: player.id });
           events.push(...applyItem(world, player, this.#caught, 2));
@@ -166,7 +166,7 @@ export class TongueAction implements ActiveAction {
     return { events, done: false };
   }
 
-  /** 1マス伸ばす。止まるもの（マス → 爆弾 → ほかのプレイヤー → アイテム）に当たったら、戻り始める。 */
+  /** 1マス伸ばす。舌を止めるもの（マス → 爆弾 → ほかのプレイヤー → アイテム）に当たったら、戻り始める。 */
   #extend(world: WorldState, player: PlayerState): SimEvent[] {
     const cell = step(this.#origin, this.#direction, this.#length + 1);
     // 壁の向こうへは届かない。爆弾と、盤面の上のほかのプレイヤーでも止まる（その向こうのアイテムは取らない）。

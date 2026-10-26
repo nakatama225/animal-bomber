@@ -33,7 +33,7 @@ export function playersOn(world: Readonly<WorldState>, cell: Cell): PlayerState[
 /**
  * 壊せるブロックを通り抜けられるかを答えるもの。
  *
- * ⚠️ 動物ごとの能力をここで引かない。引くと
+ * ⚠️ 動物ごとの能力をここで参照しない。参照すると
  * `query` → `abilities` → `mutations` → `query` の循環になる。
  * 判定そのものを引数で受け取る。
  */
@@ -81,7 +81,7 @@ export function isSolidFor(
  * 完全に出たあとは判定の対象へ戻るため、いったん出たら戻れない。これは意図した挙動で、
  * 「置いた爆弾をすり抜けて逃げ続ける」ことを防ぐ。
  *
- * 歩く処理（`MovementSystem`）と、技で押しのけられる先の確かめが同じ判定を使う。
+ * 歩く処理（`MovementSystem`）と、技で押しのけられる先の確認が同じ判定を使う。
  * 別々に書くと、押しのけだけ壁の中へ入れてしまう、といった食い違いが出る。
  *
  * @param passesThrough 壊せるブロックを抜けられるかの判定（`isSolidFor` と同じ理由で引数で受ける）
@@ -119,7 +119,7 @@ export function isStandingOn(player: PlayerState, bomb: Bomb): boolean {
   return sameCell(cellOf(player.position), bomb.cell);
 }
 
-/** プレイヤー番号からプレイヤーを引く。 */
+/** プレイヤー番号からプレイヤーを取得する。 */
 export function playerById(
   world: Readonly<WorldState>,
   id: PlayerId,

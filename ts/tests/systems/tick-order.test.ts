@@ -112,7 +112,7 @@ describe('1 tick の中の並び（原型の update と同じ）', () => {
     expect(stunned(false)).toBe(180);
   });
 
-  it('伸びている舌は、爆風が出た tick のうちに焼き切れる（被弾を見たあとに確かめる）', () => {
+  it('伸びている舌は、爆風が出た tick のうちに焼き切れる（被弾を見たあとに確認する）', () => {
     const { world, p0: frog, p1: fox } = arena(['frog', 'fox']);
     place(frog, { col: 3, row: 7 });
     place(fox, { col: 19, row: 13 });
@@ -201,7 +201,7 @@ describe('盤面の物を進める順（`WorldActor.turn`）', () => {
 
   it('同じ数のものを全員進めてから settle を出た順に呼び、そのあとで次の数へ移る（その tick に終わったものには呼ばない）', () => {
     // 新しいものから進めるもの（newestFirst）でも、settle は古いものから呼ぶ（原型の追いかける炎は、動かす輪を
-    // 後ろから回し、当たりの輪を前から回す。L2667・L2685）。
+    // 後ろから処理し、当たりの輪を前から処理する。L2667・L2685）。
     const world = makeWorld();
     const log: string[] = [];
     const settling = (name: string): WorldActor => ({

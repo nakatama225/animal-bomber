@@ -8,7 +8,7 @@ import { defineConfig } from 'vitest/config';
  * 「テストでは通るがビルドでは通らない」の食い違いが起きない。
  */
 export default defineConfig({
-  // ビルドの出力の中で、スクリプトやスタイルを相対の道で引く（`./assets/…`）。
+  // ビルドの出力の中で、スクリプトやスタイルを相対の道で参照する（`./assets/…`）。
   // 中継サーバは `/ts/` の下で配るので、`/assets/…` と書くと原型の HTML の側を指してしまう。
   base: './',
   server: {

@@ -149,7 +149,7 @@ describe('とくぎの溜めのゲージ', () => {
     expect(rects(held(false))).toBeGreaterThan(rects(held(true)));
   });
 
-  it('振る舞いの最中でも、押していて出し終えていなければゲージを出す（最中もとくぎのボタンは効く。原型と同じ）', () => {
+  it('振る舞いの最中でも、押していて出し終えていなければゲージを出す（最中もとくぎのボタンは有効。原型と同じ）', () => {
     const during = (withAction: boolean): Case => ({
       name: withAction ? '突進の最中' : '突進していない',
       setup: (_w, p) => {

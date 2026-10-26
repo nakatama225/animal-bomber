@@ -17,15 +17,15 @@ import type { CpuButton } from './CpuPlan.js';
 const SKILL_RETRY = secondsToTicks(0.4);
 
 /**
- * CPU が1回の判断で見るもの、と使える道具。
+ * CPU が1回の判断で見るものと、使える機能。
  *
  * ## 何を書き換えてよいか
  *
  * - `world`（試合の状態）… **読むだけ**。書き換えると、入力を返す前に
- *   試合が進んだことになり、リプレイと通信対戦の前提が崩れる
+ *   試合が進んでしまい、リプレイと通信対戦の前提が崩れる
  * - `memory`（CPU 自身の記憶）… 書き換えてよい
- * - `rng`（CPU 専用の乱数）… 引いてよい。試合の乱数とは別物なので、
- *   CPU が何回引いても盤面やアイテムの抽選は変わらない
+ * - `rng`（CPU 専用の乱数）… 取り出してよい。試合の乱数とは別物なので、
+ *   CPU が何回取り出しても盤面やアイテムの抽選は変わらない
  *
  * 1 tick ごとに作り直す。前の tick の値を持ち越さない。
  */
@@ -65,7 +65,7 @@ export class CpuContext {
    * この tick にそのボタンを押せるか。
    *
    * ゲームの側は「前の tick は押していない」ときだけ押したと読む。前の tick に押したボタンは、
-   * この tick に押しても効かない。
+   * この tick に押しても無効。
    */
   canPress(button: CpuButton): boolean {
     return !this.me.previousInput[button];
@@ -85,7 +85,7 @@ export class CpuContext {
    *
    * ⚠️ 外れたら少し待つ。使える場面で毎 tick 抽選すると、確率 0.7 でも
    * 1秒のうちにほぼ確実に当たり、実質 100% になる。待つことで
-   * 「弱い CPU はとくぎを使い損ねる」が実際に効く。
+   * 「弱い CPU はとくぎを使い損ねる」が実際に起きる。
    */
   skillReady(): boolean {
     if (this.memory.skillCool > 0) return false;

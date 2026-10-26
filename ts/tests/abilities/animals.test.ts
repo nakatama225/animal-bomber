@@ -91,7 +91,7 @@ describe('うさぎ', () => {
     expect(world.items.filter((item) => item.scatteredBy === 0).length).toBeGreaterThan(0);
   });
 
-  it('撒いたプレイヤー自身は踏んでも効かず、撒いたものも残る', () => {
+  it('撒いたプレイヤー自身は踏んでも効果が無く、撒いたものも残る', () => {
     // 自分の周りに壁を作って立てこもる使い方が成り立たなくなる。
     const world = worldWith('rabbit');
     const player = world.players[0]!;
@@ -257,7 +257,7 @@ describe('かえる', () => {
     world.items.push({ id: world.ids.take(), cell: { col: 4, row: 1 }, kind: 'fire' });
     const before = player.power;
     tap(world);
-    // 掴んだアイテムは舌が戻りきってから効く（3 マス先なら伸ばし始めて 46 tick 目）。
+    // 掴んだアイテムは舌が戻りきってから適用される（3 マス先なら伸ばし始めて 46 tick 目）。
     advance(world, onlyFor(world, 0, press({})), 60);
     expect(player.power).toBeGreaterThan(before);
     expect(world.items).toHaveLength(0);

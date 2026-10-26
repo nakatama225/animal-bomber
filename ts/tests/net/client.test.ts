@@ -296,7 +296,7 @@ describe('止めるとき', () => {
     c.receive(text({ t: 'input', seat: 1, tick: 5, bits: 0, match: 1 }));
 
     expect(c.phase).toMatchObject({ kind: 'failed', reason: expect.stringContaining('順が乱れた') });
-    // 原因を調べられるように、元の例外も残す。
+    // 原因を調査できるように、元の例外も残す。
     expect(c.phase.kind === 'failed' && c.phase.cause).toBeInstanceOf(Error);
     expect(c.step()).toBeNull();
   });

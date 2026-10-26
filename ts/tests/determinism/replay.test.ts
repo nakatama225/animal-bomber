@@ -75,7 +75,7 @@ describe('リプレイ', () => {
     expect(hashWorld(a.world)).toBe(hashWorld(b.world));
   });
 
-  it('記録した操作を流し直すと、同じ状態に行き着く', () => {
+  it('記録した操作を再生すると、同じ状態に行き着く', () => {
     // この実装の土台。ここが崩れると通信対戦もバランス検証も成り立たない。
     const original = runScripted(600);
     const replayed = runFromLog(original.log, 600);
@@ -131,7 +131,7 @@ describe('リプレイ', () => {
     expect(() => log.record(atTick, 1, press({ right: true }))).toThrow(/^記録する tick が/);
     expect(log.encode()).toBe('');
     log.record(0, 0, press({ right: true }));
-    // 直前と同じ値でも確かめる（同じ値なら何もしない、より先に確かめる）。
+    // 直前と同じ値でも検証する（同じ値なら何もしない、より先に検証する）。
     expect(() => log.record(atTick, 0, press({ right: true }))).toThrow(/^記録する tick が/);
   });
 });
@@ -219,7 +219,7 @@ describe('記録の文字列の区画と変化の一覧', () => {
   });
 
   it('tick が安全な整数の上限でも、文字列にして戻せる', () => {
-    // 上の「tick が安全な整数の範囲の外」と、record の同じ確かめの対照。
+    // 上の「tick が安全な整数の範囲の外」と、record の同じ検査の対照。
     const log = new InputLog();
     log.record(Number.MAX_SAFE_INTEGER, 0, press({ right: true }));
     const restored = InputLog.decode(log.encode());
@@ -228,7 +228,7 @@ describe('記録の文字列の区画と変化の一覧', () => {
   });
 
   it('同じビットが続く項目も読める', () => {
-    // record は書かないが、入力が変わらないので、流し直しの答えは変わらない。
+    // record は書かないが、入力が変わらないので、再生の答えは変わらない。
     const restored = InputLog.decode('0:0,8;5,8');
     expect(restored.at(3, 0)).toEqual(press({ right: true }));
     expect(restored.at(5, 0)).toEqual(press({ right: true }));
@@ -293,7 +293,7 @@ describe('途中で抜けた人の記録', () => {
   });
 
   it('departedAfter が安全な整数の上限でも、文字列にして戻せる', () => {
-    // 上の表の「tick が安全な整数の範囲の外」と、depart の同じ確かめの対照。
+    // 上の表の「tick が安全な整数の範囲の外」と、depart の同じ検査の対照。
     const log = new InputLog();
     log.depart(Number.MAX_SAFE_INTEGER, 1);
     expect(InputLog.decode(log.encode()).departedAfter(1)).toBe(Number.MAX_SAFE_INTEGER);
@@ -332,9 +332,9 @@ describe('途中で抜けた人の記録', () => {
 });
 
 describe('ラウンドをまたぐ記録の再生', () => {
-  it('ラウンドをまたいでも、記録を流し直すと同じ試合になる', () => {
+  it('ラウンドをまたいでも、記録を再生すると同じ試合になる', () => {
     // 盤面の時刻（world.now）はラウンドごとに 0 へ戻るので、同じ時刻が試合の中で何度も現れる。
-    // 記録の時刻にそれを使うと、2ラウンド目の再生で1ラウンド目の操作を引いてしまう。
+    // 記録の時刻にそれを使うと、2ラウンド目の再生で1ラウンド目の操作を参照してしまう。
     const config = {
       ...defaultMatchConfig(SEED, ['rabbit', 'elephant', 'fox', 'frog']),
       winsToTake: 2,
@@ -395,8 +395,8 @@ describe('状態の要約', () => {
     expect(hashWorld(world)).not.toBe(before);
   });
 
-  it('乱数を余計に引けば変わる', () => {
-    // 見た目の処理がルールの乱数を引いてしまった場合を捕まえる。
+  it('乱数を余計に取り出せば変わる', () => {
+    // 見た目の処理がルールの乱数を取り出してしまった場合を検出する。
     const world = createWorld({ seed: SEED, animals: ANIMALS });
     const before = hashWorld(world);
     world.rng.next();

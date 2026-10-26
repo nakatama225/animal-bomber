@@ -137,7 +137,7 @@ export function planLocalMatch(setup: LocalSetup, seed: number): LocalPlan {
  * CPU の動物を選ぶ。人間が選んでいない動物から、重ならないように。
  *
  * ⚠️ 乱数は試合の乱数（`world.rng`）とは別に、試合の種から作る。試合の乱数を使うと、
- * 盤面を作る前に余計に引くことになり、同じ種でも別の盤面になる。
+ * 盤面を作る前に乱数を余計に取り出してしまい、同じ種でも別の盤面になる。
  */
 function pickCpuAnimals(humanAnimals: readonly string[], count: number, seed: number): string[] {
   const pool = ANIMAL_LOOKS.map((look) => look.key).filter((key) => !humanAnimals.includes(key));

@@ -35,9 +35,9 @@ export class ItemSystem {
     const index = world.items.findIndex((item) => sameCell(item.cell, cell));
     if (index < 0) return [];
     const item = world.items[index] as Item;
-    // 撒いたプレイヤー自身は、自分の撒いたものを踏んでも拾わない（効かず、残る。原型の pickupCheck）。
+    // 撒いたプレイヤー自身は、自分の撒いたものを踏んでも拾わない（効果が無く、残る。原型の pickupCheck）。
     if (item.scatteredBy === player.id) return [];
-    // 鼻水で溶けている最中のものは、踏んでも効かない（原型の pickupCheck）。
+    // 鼻水で溶けている最中のものは、踏んでも効果が無い（原型の pickupCheck）。
     if (item.meltingUntil !== undefined) return [];
     world.items.splice(index, 1);
     const multiplier = abilityOf(player.animal).itemMultiplier;

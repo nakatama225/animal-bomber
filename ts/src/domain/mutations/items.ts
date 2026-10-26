@@ -58,8 +58,8 @@ export function applyItem(
   /**
    * 効果の倍率。良いものにも悪いものにもかかる。
    *
-   * ⚠️ ここで動物の表を引かない。引くと `mutations` が `abilities` を
-   * 知ることになり、依存が循環する。呼び出し側から渡す。
+   * ⚠️ ここで動物の表を参照しない。参照すると `mutations` が `abilities` を
+   * import し、依存が循環する。呼び出し側から渡す。
    */
   multiplier = 1,
 ): SimEvent[] {
@@ -113,7 +113,7 @@ export function spitPowerUp(world: WorldState, player: PlayerState): SimEvent[] 
   const origin = cellOf(player.position);
 
   // 足元から順に、近いマスを決まった順で試す。乱数で選ぶと
-  // 引く回数が状況で変わり、状態の突き合わせがずれる。
+  // 取り出す回数が状況で変わり、状態の突き合わせがずれる。
   const ring: readonly { col: number; row: number }[] = [
     { col: 0, row: 0 },
     { col: 1, row: 0 },

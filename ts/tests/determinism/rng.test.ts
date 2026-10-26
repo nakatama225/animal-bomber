@@ -34,7 +34,7 @@ describe('Rng', () => {
     }
   });
 
-  it('引いた回数を数えている', () => {
+  it('取り出した回数を数えている', () => {
     const rng = new Rng(1);
     expect(rng.calls).toBe(0);
     rng.next();
@@ -69,7 +69,7 @@ describe('Rng', () => {
     new Rng(2024).shuffle(a);
     new Rng(2024).shuffle(b);
     expect(a).toEqual(b);
-    // 混ざっていること自体も確かめる。そのまま返していたら意味がない。
+    // 混ざっていること自体も確認する。そのまま返していたら意味がない。
     expect(a).not.toEqual(source);
     // 要素が失われていないこと。
     expect([...a].sort((x, y) => x - y)).toEqual(source);
@@ -92,7 +92,7 @@ describe('Rng', () => {
     expect(actual).toEqual(predicted);
   });
 
-  it('clone は引いた回数を引き継がない', () => {
+  it('clone は取り出した回数を引き継がない', () => {
     const rng = new Rng(1);
     rng.next();
     rng.next();

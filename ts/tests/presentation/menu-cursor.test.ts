@@ -20,8 +20,8 @@ describe('メニューのカーソル', () => {
     expect(cursor.shown).toBe(true);
   });
 
-  it('枠が出ていないときの移動と戻るは、枠を出したうえで効く', () => {
-    // 移動まで飲み込むと、マウスに触れたあとの最初の1押しが毎回効かない。
+  it('枠が出ていないときの移動と戻るは、枠を出したうえで反映される', () => {
+    // 移動まで飲み込むと、マウスに触れたあとの最初の1押しが毎回反映されない。
     const moving = new MenuCursor();
     expect(moving.handle('down', SIZES)).toEqual({ kind: 'moved' });
     expect([moving.shown, moving.group]).toEqual([true, 1]);

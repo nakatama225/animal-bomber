@@ -27,7 +27,7 @@ const COOLDOWN_BAR = 0.56;
 
 /**
  * 飛ぶ向きごとの、葱を回す角度。原型は速度から `Math.atan2` で求めていたが、
- * 葱の向きは4つのどれかなので表で引く。
+ * 葱の向きは4つのどれかなので表から取得する。
  */
 const HEADING: Readonly<Record<Direction, number>> = {
   right: 0,

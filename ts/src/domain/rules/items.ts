@@ -56,7 +56,7 @@ export const ITEM_DEFINITIONS: readonly ItemDefinition[] = [
   { kind: 'poop', emoji: '💩', label: 'うんこ', weight: 8, powerUp: false, harmful: true },
 ];
 
-/** 種類から定義を引く。 */
+/** 種類から定義を取得する。 */
 export function itemDefinition(kind: ItemKind): ItemDefinition {
   const found = ITEM_DEFINITIONS.find((definition) => definition.kind === kind);
   if (found === undefined) throw new Error(`知らないアイテム: ${kind}`);
@@ -67,8 +67,8 @@ export function itemDefinition(kind: ItemKind): ItemDefinition {
  * 抽選用に、重みのぶんだけ並べた一覧。
  *
  * 重みつきの抽選を「重みぶん複製した配列から1つ選ぶ」形にしているのは、
- * 乱数を引く回数が必ず1回になるため。累積和を走査する形にすると、
- * 実装によって引く回数が変わり、状態の突き合わせがずれる。
+ * 乱数を取り出す回数が必ず1回になるため。累積和を走査する形にすると、
+ * 実装によって取り出す回数が変わり、状態の突き合わせがずれる。
  */
 export const ITEM_LOTTERY: readonly ItemKind[] = ITEM_DEFINITIONS.flatMap((definition) =>
   Array.from({ length: definition.weight }, () => definition.kind),

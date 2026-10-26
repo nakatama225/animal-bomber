@@ -170,7 +170,7 @@ describe('突進中の被弾', () => {
   });
 
   it('突進中は、勝手に設置の拍が来ても置かない（拍は進む）', () => {
-    // 原型の canPlaceBomb は突進の最中を止め、勝手に設置もこの確かめを通る。
+    // 原型の canPlaceBomb は突進の最中を止め、勝手に設置もこの検査を通る。
     const world = elephantWorld();
     const player = world.players[0]!;
     const sim = new Simulation();
@@ -294,7 +294,7 @@ describe('突進でぶつけたアイテム（原型 updateCharge の applyItem�
     const [elephant, victim] = world.players as [PlayerState, PlayerState];
     elephant.position = centerOf({ col: 3, row: 5 });
     victim.position = centerOf({ col: 8, row: 5 });
-    // 傷は見ない（ぶつけたアイテムは無敵でも効く）。
+    // 傷は見ない（ぶつけたアイテムは無敵でも適用される）。
     victim.invulnerableUntil = tick(9999);
     putItem(world, { col: 4, row: 5 }, 'onion');
     elephant.action = new ChargeAction('right');
@@ -386,7 +386,7 @@ describe('突進で押しのける先（原型 updateCharge の collides）', ()
   });
 
   it('対照：壊せるブロックを抜けられる相手（もぐら）は、ブロックの中へ押される（原型 f16）', () => {
-    // 押す先の確かめに、押される側の抜けられる判定を渡しているかを見る。
+    // 押す先の確認に、押される側の抜けられる判定を渡しているかを見る。
     const { firstPush } = knock({ from: 15, victimAt: 19, soft: 20, victim: 'mole' });
     expect(firstPush).toMatchObject({ i: 16, tile: 'soft' });
   });

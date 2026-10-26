@@ -105,7 +105,7 @@ describe('中継から届いたメッセージを読む', () => {
 });
 
 describe('試合の設定を読む', () => {
-  it('CPU の強さはプレイヤーごとに引く', () => {
+  it('CPU の強さはプレイヤーごとに取得する', () => {
     expect([0, 1, 2, 3].map((id) => cpuLevelOf(SETTINGS, id as PlayerId))).toEqual(['easy', 'normal', 'hard', 'oni']);
     expect(() => cpuLevelOf({ ...SETTINGS, cpu: ['easy'] }, 3)).toThrow(ProtocolError);
   });
@@ -115,7 +115,7 @@ describe('試合の設定を読む', () => {
   });
 
   // 動物を2匹にするときは、1人ぶんずつ持つ値（体力・CPU の強さ）も2人ぶんにそろえる。
-  // そろえないと、動物名の確かめより先に数の確かめで止まり、動物名の確かめが見えなくなる。
+  // そろえないと、動物名の検査より先に数の検査で止まり、動物名の検査が見えなくなる。
   const twoAnimals = (animals: string[]): unknown => ({
     match: { ...SETTINGS.match, animals, startingHp: [6, 6] },
     cpu: ['easy', 'easy'],
@@ -136,14 +136,14 @@ describe('試合の設定を読む', () => {
     ['種が無い', { ...SETTINGS, match: { ...SETTINGS.match, seed: undefined } }, /seed/],
   ])('読めない設定は既定値で埋めずに止める: %s', (_label, raw, reason) => {
     // 埋めると、その端末だけ別の設定で試合を作ってずれる。
-    // 止めた理由まで比べる。確かめが並んでいるので、別の確かめが先に止めても通ってしまう。
+    // 止めた理由まで比べる。検査が並んでいるので、別の検査が先に止めても通ってしまう。
     const read = (): unknown => parseLanSettings(JSON.parse(JSON.stringify(raw)));
     expect(read).toThrow(ProtocolError);
     expect(read).toThrow(reason);
   });
 
   it('2匹の設定でも、そろっていれば読める', () => {
-    // 上の「知らない動物」の行が、動物名の確かめまで届いていることの対照。
+    // 上の「知らない動物」の行が、動物名の検査まで届いていることの対照。
     expect(() => parseLanSettings(twoAnimals(['rabbit', 'fox']))).not.toThrow();
   });
 });

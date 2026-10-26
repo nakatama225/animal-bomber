@@ -18,7 +18,7 @@ import type { WorldState } from '../../src/domain/state/WorldState.js';
  *
  * そこで interface の関数は `next: (world) => …` の形で書き、lint で強制している
  * （`eslint.config.js` の `method-signature-style`）。ここでは、その結果として
- * 引数を狭めた実装が型エラーになることを確かめる。
+ * 引数を狭めた実装が型エラーになることを確認する。
  *
  * ⚠️ 本体は型の検査（`tsc --noEmit`）。`@ts-expect-error` の行でエラーが出なくなると
  * （interface をメソッドの形に戻すと）、tsc が「使われていない `@ts-expect-error`」として失敗する。

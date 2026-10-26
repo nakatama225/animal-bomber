@@ -59,7 +59,7 @@ export type LanPhase =
   | {
       readonly kind: 'failed';
       readonly reason: string;
-      /** 止めるきっかけになった例外。原因を調べるときのために残す。 */
+      /** 止めるきっかけになった例外。原因を調査するときのために残す。 */
       readonly cause?: unknown;
       /**
        * 試合の最中に止まったときの、止まる直前の段階。始まる前に止まったときは無い。
@@ -85,7 +85,7 @@ export type LanPhase =
  * ## 試合が終わったあと
  *
  * 接続は閉じない。`LockstepDriver` が入力と要約の交換を続け、決着が端末ごとに
- * 食い違っていないかを確かめ続ける。⚠️ 終わった瞬間に閉じると、終わっていない端末は
+ * 食い違っていないかを確認し続ける。⚠️ 終わった瞬間に閉じると、終わっていない端末は
  * 抜けた人を CPU に替えて進み続け、ずれが見つからなくなる。
  *
  * ## 同じ接続での次の試合
@@ -188,7 +188,7 @@ export class LockstepClient {
           this.#phase = { ...phase, present: sorted([...phase.present, message.seat]) };
           this.#sendShared();
         } else if (message.t === 'settings') {
-          // 中継はホストの設定しか流さない。ホスト自身には返さない。
+          // 中継はホストの設定しか転送しない。ホスト自身には返さない。
           if (phase.seat !== 0) this.#phase = { ...phase, hostSettings: message.config };
         } else if (message.t === 'peer_left') {
           this.#phase = { ...phase, present: phase.present.filter((s) => s !== message.seat) };

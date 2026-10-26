@@ -42,7 +42,7 @@ const SIDES = alongsFacing({ col: 5, row: 5 });
  */
 const NOW = tick(600);
 
-/** 1人目を葱ボンにし、状態が変わらないことを確かめながら1回描く。 */
+/** 1人目を葱ボンにし、状態が変わらないことを確認しながら1回描く。 */
 function drawOnce(along: number, readyAt: Tick): FakeCanvas {
   const world = makeWorld(7, ['rabbit', 'elephant']);
   world.now = NOW;

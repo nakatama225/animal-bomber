@@ -7,7 +7,7 @@ import { PadChoice } from '../../src/platform/GamepadInput.js';
 import type { WebSocketLinkHandlers } from '../../src/platform/WebSocketLink.js';
 
 /**
- * 通信対戦の配線。WebSocket の代わりに、届くメッセージを手で流す接続を差す。
+ * 通信対戦の配線。WebSocket の代わりに、メッセージを手で届ける接続を差す。
  *
  * 流れそのもの（`LockstepClient`・`LockstepDriver`）は `tests/net/` が見ている。
  * ここで見るのは、ロビーで選んだものが「はじめる」で配られること・始まったら盤面と名札が
@@ -108,7 +108,7 @@ describe('通信対戦の配線', () => {
     expect(last.config.match.winsToTake).toBe(7);
 
     document.body.replaceChildren();
-    // 中継が流した同じ1通を、ゲストが受け取る。
+    // 中継が転送した同じ1通を、ゲストが受け取る。
     const guest = mount();
     deliver(guest.relay, { t: 'welcome', seat: 1, role: 'guest', seats: [0] });
     deliver(guest.relay, JSON.parse(JSON.stringify(last)));

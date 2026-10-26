@@ -21,7 +21,7 @@ export interface Frame {
    * 見た目だけの乱数。爆風のちらつきなど。
    *
    * ⚠️ ここで `Math.random` を直接呼ばず、これを使う。どこで見た目の乱数を
-   * 引いているかを、この名前で探せるようにするため。
+   * 取り出しているかを、この名前で探せるようにするため。
    */
   readonly cosmetic: CosmeticRng;
 }

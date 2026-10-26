@@ -21,7 +21,7 @@ export type Tile = 'empty' | 'hard' | 'soft';
  * この設計には型検査上の意味もある。全体の設定で
  * `noUncheckedIndexedAccess` を有効にしているため、配列への添字アクセスは
  * すべて `undefined` の可能性を伴う。その扱いを呼び出し側すべてに
- * 広げるかわりに、ここで範囲を確かめて `Tile` を返す形にしている。
+ * 広げるかわりに、ここで範囲を確認して `Tile` を返す形にしている。
  */
 export class Board {
   readonly cols: number;

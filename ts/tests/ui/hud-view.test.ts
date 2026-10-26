@@ -15,7 +15,7 @@ import type { Roster } from '../../src/presentation/hud/roster.js';
 import type { HudSource } from '../../src/presentation/hud/scoreboard.js';
 
 /**
- * 画面に写す部分を、ブラウザの代わりの DOM（happy-dom）で組んで確かめる。
+ * 画面に写す部分を、ブラウザの代わりの DOM（happy-dom）で組んで確認する。
  *
  * 中身の文は `tests/presentation/hud.test.ts` が見ている。ここで見るのは、
  * 写し方（要素ができるか・書き換えを省くか・押したら呼ばれるか）だけ。
@@ -76,7 +76,7 @@ describe('横の板', () => {
 
   it('自分が葱ボンになったら、葱ボンの操作を足す（ほかの人がなっても足さない）', () => {
     const root = document.createElement('div');
-    // 説明を出すのは 2P（番号1）。番号0 の人を見て判断する取り違えも捕まえる。
+    // 説明を出すのは 2P（番号1）。番号0 の人を見て判断する取り違えも検出する。
     const panel = new SidePanel(root, () => [{ playerId: 1, help: keyHelpFor('2P', SOLO_KEYS) }]);
     const { session, source } = hud();
     session.world.players[0]!.life = { kind: 'negibon', along: 0, readyAt: tick(0) };

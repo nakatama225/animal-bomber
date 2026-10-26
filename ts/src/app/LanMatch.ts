@@ -21,7 +21,7 @@ export interface LanLink extends PeerLink {
 }
 
 export interface LanMatchOptions {
-  /** 中継サーバの「ホスト名:ポート」（`parseRelayAddress` で確かめたもの）。 */
+  /** 中継サーバの「ホスト名:ポート」（`parseRelayAddress` で検証したもの）。 */
   readonly address: string;
   readonly keyboard: KeyStateReader;
   /** つかむパッド。ロビーを動かすパッドの操作（`Shell` の `PadMenuInput`）と同じものを渡す。 */
@@ -37,7 +37,7 @@ export interface LanMatchOptions {
   /**
    * 中継につなぐ。省くとブラウザの WebSocket を使う。
    *
-   * テストでは、届くメッセージを手で流す接続に差し替える。
+   * テストでは、メッセージを手で届ける接続に差し替える。
    */
   readonly connect?: (url: string, handlers: WebSocketLinkHandlers) => LanLink;
 }
@@ -100,7 +100,7 @@ export class LanMatch implements MatchRunner {
           new KeyboardInputSource(playerId, options.keyboard, SOLO_KEYS),
           new GamepadInputSource(playerId, options.pads),
         ]),
-      // 強さと種は、ホストが配った設定から引く。全員の端末で同じ CPU が同じ手を指す。
+      // 強さと種は、ホストが配った設定から取得する。全員の端末で同じ CPU が同じ手を指す。
       cpuSource: lanCpuSource,
     });
     const choices = this.#choices;
@@ -232,7 +232,7 @@ function lobbyStateOf(phase: LanPhase): LobbyState | null {
     case 'playing':
       return null;
     case 'failed':
-      // ⚠️ 試合を作ったあとの人数の確かめで止まったときも、ここは始まる前として扱う（盤面が無い）。
+      // ⚠️ 試合を作ったあとの人数の確認で止まったときも、ここは始まる前として扱う（盤面が無い）。
       return phase.played === undefined ? { kind: 'failed', reason: phase.reason } : null;
   }
 }

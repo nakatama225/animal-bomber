@@ -112,7 +112,7 @@ describe('ゲームパッド', () => {
     expect(source.next().right).toBe(false);
   });
 
-  it('倒したあとは戻りのしきい値まで効き続ける', () => {
+  it('倒したあとは戻りのしきい値まで押した扱いが続く', () => {
     // 境目でちらつかないよう、倒すときと戻すときでしきい値を分けている。
     let axes = [0.6, 0, 0, 0];
     const source = new GamepadInputSource(0, new PadChoice(() => [pad({ axes })]));
@@ -187,7 +187,7 @@ describe('ブラウザからパッドを読む', () => {
       },
     });
     try {
-      // 差し替えが効いていることを先に確かめる（効いていなければ、下の確かめは何も見ていない）。
+      // 差し替えが反映されていることを先に確認する（反映されていなければ、下の確認は何も見ていない）。
       expect(() => (globalThis.navigator as unknown as { getGamepads: () => unknown }).getGamepads()).toThrow('SecurityError');
       expect(readBrowserGamepads()).toEqual([]);
     } finally {

@@ -32,7 +32,7 @@ vi.mock('../../src/presentation/render/players.js', async (importOriginal) => {
 /**
  * 画面の切り替えの通し。タイトルから試合を始め、決着の幕のボタンでタイトルへ戻るまで。
  *
- * 試合は本物（`GameSession`）を回す。描画は偽の canvas に描く（ブラウザが例外を出す
+ * 試合は本物（`GameSession`）を実行する。描画は偽の canvas に描く（ブラウザが例外を出す
  * 呼び方では同じく例外を出す）。音は鳴らさず、鳴らした名前だけを控える。
  */
 
@@ -587,7 +587,7 @@ describe('キーボードでメニューを動かす', () => {
     const { shell, elements } = mount();
     startByMouse(shell, elements);
     playUntilChampion(shell, elements);
-    // 移動は、枠を出したうえで効く。先頭は「もういっかい」。
+    // 移動は、枠を出したうえで反映される。先頭は「もういっかい」。
     shell.navigate('right');
     expect(cursorOf(elements.banner)?.dataset['action']).toBe('title');
     shell.navigate('confirm');
@@ -602,7 +602,7 @@ describe('キーボードでメニューを動かす', () => {
 
   it('試合が決まった幕が出るたびに、カーソルは「もういっかい」へ戻る', () => {
     // 戻さないと、前の幕で「タイトルへ」を指したままマウスを動かしていた場合に、次の幕の1回目の
-    // 決定で、見えないまま「タイトルへ」が効く。原型も、試合が決まるたびにカーソルを先頭へ戻した。
+    // 決定で、見えないまま「タイトルへ」が実行される。原型も、試合が決まるたびにカーソルを先頭へ戻した。
     const { shell, elements } = mount();
     startByMouse(shell, elements);
     playUntilChampion(shell, elements);
@@ -670,7 +670,7 @@ describe('ゲームパッドとロビーでメニューを動かす', () => {
     shell.draw(0);
   }
 
-  it('2人で遊ぶとき、試合が決まった幕ではパッドを効かせない（原型と同じ）', () => {
+  it('2人で遊ぶとき、試合が決まった幕ではパッドを受け付けない（原型と同じ）', () => {
     // 2人で遊ぶときはパッドを試合に繋がない。机に置いたパッドに肘が当たっただけで次の試合が
     // 始まらないよう、原型も2人のときは幕でパッドを受け付けなかった（1人と通信対戦のときだけ）。
     const pad = fakePad();
@@ -679,7 +679,7 @@ describe('ゲームパッドとロビーでメニューを動かす', () => {
     tap(shell, pad, A);
     expect(elements.banner.hidden).toBe(false);
     expect(elements.menu.hidden).toBe(true);
-    // キーボードの決定は効く（原型もキーボードでは人数によらず次へ進めた）。
+    // キーボードの決定は受け付ける（原型もキーボードでは人数によらず次へ進めた）。
     shell.navigate('confirm');
     shell.draw(0);
     expect(elements.banner.hidden).toBe(true);

@@ -47,7 +47,7 @@ export class WebSocketLink implements PeerLink {
 /**
  * 中継サーバの場所から、ロックステップの中継につなぐ URL を作る。
  *
- * @param address `parseRelayAddress` で確かめた「ホスト名:ポート」
+ * @param address `parseRelayAddress` で検証した「ホスト名:ポート」
  */
 export function lockstepUrl(address: string): string {
   return `ws://${address}${LOCKSTEP_PATH}`;

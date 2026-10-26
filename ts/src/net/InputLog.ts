@@ -48,7 +48,7 @@ export interface MatchClock {
  *
  * 記録の時刻は `MatchClock.elapsed`（試合が始まってからの tick）で持つ。
  * 通信対戦で届いた入力の記録（`ConfirmedInputs.log`）も同じ時刻なので、
- * `ReplayInputSource` で流し直せる。CPU の枠は設定から作り直す（`ConfirmedInputs.log` の説明と docs/05）。
+ * `ReplayInputSource` で再生できる。CPU の枠は設定から作り直す（`ConfirmedInputs.log` の説明と docs/05）。
  *
  * ## 途中で抜けた人
  *
@@ -77,7 +77,7 @@ export class InputLog {
    *   直前と違う値で tick が戻っているとき
    */
   record(atTick: number, playerId: PlayerId, playerInput: PlayerInput): void {
-    // 直前と同じ値のときも確かめる。一覧を作るより前に止めないと、空の一覧が残って `encode` が読めない区画を書く。
+    // 直前と同じ値のときも確認する。一覧を作るより前に止めないと、空の一覧が残って `encode` が読めない区画を書く。
     if (!Number.isSafeInteger(atTick) || atTick < 0) {
       throw new Error(`記録する tick が 0 以上の安全な整数ではない: ${atTick}`);
     }
@@ -173,7 +173,7 @@ export class InputLog {
    * 区画の最初の「:」より前を見出し、`;` で区切った1つを項目と呼ぶ。途中で抜けた人がいれば、
    * 最後に `|departed:プレイヤー番号,tick;...`（tick は `departedAfter`）を足す。抜けた人を変化の一覧と
    * 別に書くのは、入力が1つも配られないうちに抜けた人は変化の一覧に居ないため。
-   * 読んで確かめられることを優先し、圧縮はしていない。3分の試合でも数キロバイトに収まる。
+   * 読んで検証できることを優先し、圧縮はしていない。3分の試合でも数キロバイトに収まる。
    */
   encode(): string {
     const parts: string[] = [];
@@ -201,7 +201,7 @@ export class InputLog {
    * （変化の一覧の tick は 0 以上、抜けた人の区画の tick（`departedAfter`）は -1 以上の安全な整数。
    * ビットは7つのボタンまで）のものだけを読む。
    * 同じ tick の変化が続くのは `record` も書く形（あとの値が勝つ）なので受け付ける。同じビットが続く項目は、
-   * `record` は書かないが、入力が変わらず流し直しの答えも変わらないので受け付ける。
+   * `record` は書かないが、入力が変わらず再生の答えも変わらないので受け付ける。
    *
    * @throws Error 読めない区画か項目（範囲の外の数を含む）、戻っている tick、同じ人の区画の2度目、
    *   同じ人が抜けたことの2度目があるとき。黙って読み飛ばしたりあとの値で上書きしたりすると、その人の
@@ -227,7 +227,7 @@ export class InputLog {
         }
         continue;
       }
-      // `Number` は空の文字列を 0 と読み、前後の空白も読み飛ばすので、形を先に確かめる。
+      // `Number` は空の文字列を 0 と読み、前後の空白も読み飛ばすので、形を先に検証する。
       if (!/^[0-3]$/.test(head)) throw new Error(`記録の区画が読めない: ${part}`);
       const playerId = Number(head) as PlayerId;
       if (log.#changes.has(playerId)) throw new Error(`記録にプレイヤー ${playerId} の区画が2度ある`);
@@ -253,7 +253,7 @@ export class InputLog {
 }
 
 /**
- * 記録した操作を流す窓口。
+ * 記録した操作を再生する窓口。
  *
  * 人間のキーボードや CPU と同じ資格で `Simulation` に繋がる。
  * 繋ぎ替えるのはここ1点だけで、ゲーム本体は変わらない。

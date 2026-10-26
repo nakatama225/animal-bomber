@@ -6,7 +6,7 @@ import { GameSession } from '../../src/app/GameSession.js';
 import { defaultMatchConfig } from '../../src/domain/rules/MatchConfig.js';
 import type { PlayerId } from '../../src/domain/state/PlayerState.js';
 
-/** CPU どうしの試合を、画面なしで決まったラウンド数だけ回した結果。 */
+/** CPU どうしの試合を、画面なしで決まったラウンド数だけ実行した結果。 */
 interface Tally {
   /** プレイヤー番号の順の勝ち数。 */
   readonly wins: number[];
@@ -59,7 +59,7 @@ function play(seed: number, animals: string[], levels: CpuLevelKey[], rounds: nu
  */
 describe('CPU の強さ', () => {
   it('おには、よわいより3倍以上多く勝つ', () => {
-    // 同じ動物どうしで、開始位置の有利不利が混ざらないよう開始位置を入れ替えて回す。
+    // 同じ動物どうしで、開始位置の有利不利が混ざらないよう開始位置を入れ替えて実行する。
     let oni = 0;
     let easy = 0;
     for (let s = 0; s < 4; s += 1) {
