@@ -63,12 +63,19 @@ export interface Ability {
    * 自分の振る舞いの最中にも呼ばれる（技のボタンを受け付けない振る舞いの間は呼ばれない。
    * `ActiveAction.blocksButtons`）。
    *
-   * @returns 始まった振る舞い（無ければ null。あれば今の振る舞いと差し替わる）と、起きたイベント
+   * @returns 始まった振る舞い（無ければ null。あれば今の振る舞いと差し替わる）と、起きたイベント。
+   *   技が出せない状態だった（届く長さが 0 になっている、など）ときは、`refusal` にその知らせを入れる
+   *   （画面の通知と操作の音のため）。`events` には入れない。呼び出し側は `events` が1つでもあれば
+   *   技が出たとみなして `techniqueUsed` を前に付けるので、入れると技を出した音まで鳴る
    */
   readonly onTap?: (
     world: WorldState,
     player: PlayerState,
-  ) => { action: ActiveAction | null; events: SimEvent[] };
+  ) => {
+    action: ActiveAction | null;
+    events: SimEvent[];
+    refusal?: Extract<SimEvent, { type: 'techniqueRefused' }>;
+  };
 
   /**
    * 技のボタンを長押ししてしきい値に届いた瞬間。とくぎ。onTap を書かない動物では、押した瞬間にも

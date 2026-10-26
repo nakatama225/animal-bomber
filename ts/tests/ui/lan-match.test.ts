@@ -82,9 +82,9 @@ describe('通信対戦の配線', () => {
     expect(match.world).not.toBeNull();
     expect(match.hud?.roster).toEqual([
       { kind: 'human', label: '1P', local: true },
-      { kind: 'cpu', level: 'normal' },
-      { kind: 'cpu', level: 'oni' },
-      { kind: 'cpu', level: 'normal' },
+      { kind: 'cpu', number: 1, level: 'normal' },
+      { kind: 'cpu', number: 2, level: 'oni' },
+      { kind: 'cpu', number: 3, level: 'normal' },
     ]);
     // 人間は自分だけなので、自分の入力がそろえば進められる。
     expect(match.ready).toBe(true);
@@ -117,7 +117,7 @@ describe('通信対戦の配線', () => {
     expect(guest.lobby.querySelector('[data-shared-field="wins"]')?.textContent).toContain('7勝');
   });
 
-  it('抜けた人は、CPU に替わった tick から名札も CPU にする', () => {
+  it('抜けたプレイヤーは、CPU に替わった tick から名札も CPU にする（札は CPU1、入れ替わりの通知の呼び方は元の番号）', () => {
     const { match, relay, sent } = mount();
     deliver(relay, { t: 'welcome', seat: 0, role: 'host', seats: [1] });
     match.afterDraw();
@@ -127,9 +127,11 @@ describe('通信対戦の配線', () => {
 
     // 2P は1通も送らずに抜けた。次の tick から CPU が受け持つ。
     deliver(relay, { t: 'peer_left', seat: 1, lastTick: -1 });
+    // 知らせが届いただけでは、まだ人間の名札のまま（替わるのは次の tick から）。
+    expect(match.hud?.roster[1]).toEqual({ kind: 'human', label: '2P', local: false });
     expect(match.ready).toBe(true);
     match.step();
-    expect(match.hud?.roster[1]).toEqual({ kind: 'cpu', level: 'hard' });
+    expect(match.hud?.roster[1]).toEqual({ kind: 'cpu', number: 1, level: 'hard', label: '2P' });
     expect(sent.some((message) => message.t === 'input')).toBe(true);
   });
 
@@ -162,6 +164,8 @@ describe('通信対戦の配線', () => {
     match.afterDraw();
     const config = { match: { roundLimit: 600, winsToTake: 3, suddenDeath: true, startingHp: [6, 6, 6, 6], seed: 1, animals: ['rabbit', 'fox', 'frog', 'mole'] }, cpu: ['easy', 'easy', 'easy', 'easy'] };
     deliver(relay, { t: 'start', seats: [0], config, match: 1 });
+    // 始めたときにいなかった枠は、前から CPU1・CPU2・CPU3（原型の setupPlayersLan の cpuIdx）。
+    expect(match.hud?.roster.map((c) => (c.kind === 'cpu' ? `CPU${c.number}` : c.label))).toEqual(['1P', 'CPU1', 'CPU2', 'CPU3']);
     relay.onClose(1006);
     match.afterDraw();
     expect(match.world).not.toBeNull();

@@ -116,6 +116,28 @@ export class GameSession {
   }
 
   /**
+   * 決着のあとの待ちを切り上げ、次のラウンドの盤面を作る。
+   *
+   * 1台の試合で、ラウンドの幕をボタンで送るときに使う（原型の `advanceBanner` の `startRound`）。通信対戦は
+   * 全員が同じ tick に次のラウンドへ進む必要があるので、待ちが尽きるのを待つ（呼ばない）。
+   * 作る盤面は、待ちが尽きたときに作るものと同じ（種はラウンドの番号から導く）。
+   *
+   * 試合通算の tick（`elapsed`）は進めない。切り上げた待ちの tick は進めていないので、数えると記録の時刻と
+   * 盤面の進みがずれる（Python 版の `GameSession.start_next_round` と同じ）。
+   *
+   * ⚠️ 非公開の `#startNextRound`（待ちが尽きた tick に `#advance` が呼ぶ）とは別のもの。こちらは
+   * 待ちの最中かを確認してから、待ちを 0 にして同じ盤面を作る。
+   *
+   * @throws Error 決着のあとの待ちの最中でないとき。ラウンドの最中に呼ぶと決着のつかないまま盤面が替わり、
+   *   試合が決まったあとに呼ぶと、決まった試合に次のラウンドができる
+   */
+  startNextRound(): void {
+    if (this.#intermission <= 0) throw new Error('決着のあとの待ちの最中でないので、次のラウンドへ進めない');
+    this.#intermission = 0;
+    this.#startNextRound();
+  }
+
+  /**
    * 1 tick 進める。ラウンドが終わっていれば次を始める。
    *
    * @returns この tick に起きたイベント

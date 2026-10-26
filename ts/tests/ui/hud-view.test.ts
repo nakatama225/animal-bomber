@@ -6,6 +6,7 @@ import { tick } from '../../src/domain/core/Tick.js';
 import { IdleInputSource } from '../../src/domain/input/InputSource.js';
 import { defaultMatchConfig } from '../../src/domain/rules/MatchConfig.js';
 import { BannerOverlay } from '../../src/platform/ui/BannerOverlay.js';
+import type { BannerView } from '../../src/presentation/hud/RoundBanner.js';
 import { activate, pointerButton } from '../../src/platform/ui/dom.js';
 import { SidePanel, type KeyHelpFor } from '../../src/platform/ui/SidePanel.js';
 import { Toasts } from '../../src/platform/ui/Toasts.js';
@@ -22,7 +23,7 @@ import type { HudSource } from '../../src/presentation/hud/scoreboard.js';
 
 const ROSTER: Roster = [
   { kind: 'human', label: '1P', local: true },
-  { kind: 'cpu', level: 'normal' },
+  { kind: 'cpu', number: 1, level: 'normal' },
 ];
 
 function hud(): { session: GameSession; source: () => HudSource } {
@@ -65,9 +66,13 @@ describe('横の板', () => {
     panel.update(hud().source());
 
     expect(root.querySelector('[data-part="clock"] .time')?.textContent).toBe('3:00');
+    expect(root.querySelector('[data-part="clock"] .round')?.textContent).toBe('ROUND 1\u30003勝先取');
+    expect(root.querySelector('[data-part="clock"] .label')?.textContent).toBe('TIME');
     expect(root.querySelectorAll('.card')).toHaveLength(2);
-    expect(root.querySelector('[data-player="0"] .tag')?.textContent).toBe('1P（あなた）');
-    expect(root.querySelector('[data-player="1"] .tag')?.textContent).toBe('CPU・ふつう');
+    // 原型の名札は「（あなた）」を付けない（L5508）。CPU は何体目かと強さ（L5507）。
+    expect(root.querySelector('[data-player="0"] .tag')?.textContent).toBe('1P');
+    expect(root.querySelector('[data-player="1"] .tag')?.textContent).toBe('CPU1・ふつう');
+    expect(root.querySelector('[data-player="0"] .stats')?.textContent).toBe('💣1 🔥1 👟0');
     // 行は文のまま並べる。太字だけの行は b、キーは空白で区切る。
     const rows = [...(root.querySelector('.keyhelp .help')?.children ?? [])];
     expect(rows.map((row) => [row.tagName, row.textContent])).toEqual([
@@ -128,6 +133,18 @@ describe('横の板', () => {
     expect(children.some((child) => child.textContent === '')).toBe(false);
   });
 
+  it('外周にいるプレイヤーの名札には、操作する側の札のあとに「葱ボン」の札を足す（原型 L5509）', () => {
+    const root = document.createElement('div');
+    const panel = new SidePanel(root, () => []);
+    const { session, source } = hud();
+    session.world.players[1]!.life = { kind: 'negibon', along: 0, readyAt: tick(0) };
+    panel.update(source());
+    const tags = (id: number): (string | null)[] =>
+      [...root.querySelectorAll(`[data-player="${id}"] .tag`)].map((tag) => tag.textContent);
+    expect(tags(1)).toEqual(['CPU1・ふつう', '葱ボン']);
+    expect(tags(0)).toEqual(['1P']);
+  });
+
   it('試合が無ければ空にする', () => {
     const root = document.createElement('div');
     const panel = new SidePanel(root, () => []);
@@ -139,8 +156,16 @@ describe('横の板', () => {
 });
 
 describe('幕', () => {
-  const ROUND = { emoji: '🐰', title: 'ラウンド1', lines: ['あと2勝'], final: false };
-  const FINAL = { emoji: '🏆', title: '優勝', lines: [], final: true };
+  const ROUND: BannerView = {
+    emoji: '🐰',
+    title: 'ラウンド1',
+    summary: 'あと2勝',
+    board: '🐰1\u3000🐘0',
+    note: null,
+    button: 'つぎのラウンド ▶',
+    final: false,
+  };
+  const FINAL: BannerView = { ...ROUND, emoji: '🏆', title: '優勝', note: null, button: 'もういっかい', final: true };
 
   it('出して、null で隠す', () => {
     const root = document.createElement('div');
@@ -153,6 +178,16 @@ describe('幕', () => {
 
     overlay.show(null);
     expect(root.hidden).toBe(true);
+  });
+
+  it('題の下の行・勝ち数の行・延長戦の行を、この順に1行ずつ並べる（無い行は並べない）', () => {
+    const root = document.createElement('div');
+    const overlay = new BannerOverlay(root);
+    const lines = (): (string | null)[] => [...root.querySelectorAll('.banner-line')].map((line) => line.textContent);
+    overlay.show(ROUND);
+    expect(lines()).toEqual(['あと2勝', '🐰1\u3000🐘0']);
+    overlay.show({ ...ROUND, note: '⚡サドンデス決着' });
+    expect(lines()).toEqual(['あと2勝', '🐰1\u3000🐘0', '⚡サドンデス決着']);
   });
 
   it('ボタンは試合が決まった幕にだけ並べる', () => {

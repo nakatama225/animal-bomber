@@ -12,6 +12,9 @@ import type { SoundName } from './SoundBank.js';
  * 技が出たときの techniqueMoment の側で鳴らす（下の MOMENT_SOUNDS）。
  * うさぎのとくぎは、うんこを踏んだときと同じ音（原型の rabbitPoroporo）。撒く輪ごとにも同じ音を鳴らす
  * （ringScattered）。
+ *
+ * きつねの通常技（一列に置く）は、ここでは鳴らさない。並べた爆弾の置く音を、何本でも1回だけ鳴らす
+ * （原型の placeLineBombs。`Presenter` が場面で見分ける）。
  */
 const TABLE: Readonly<Record<string, { readonly tap?: SoundName; readonly special: readonly SoundName[] }>> = {
   rabbit: { tap: 'hop', special: ['poop'] },
@@ -19,7 +22,7 @@ const TABLE: Readonly<Record<string, { readonly tap?: SoundName; readonly specia
   // 掘る音は、掘り始めたとき（digStarted）だけ。
   mole: { special: [] },
   // 原型は跳び上がる音を鳴らし、炎を出したとき（chaserCast）だけ炎の音を続ける。
-  fox: { tap: 'lineBombs', special: ['foxLeap'] },
+  fox: { special: ['foxLeap'] },
   frog: { tap: 'tongue', special: ['slime'] },
 };
 

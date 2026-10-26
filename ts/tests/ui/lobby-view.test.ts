@@ -119,7 +119,7 @@ describe('通信対戦のロビー', () => {
     const { root, view } = mount();
     view.show({ kind: 'failed', reason: '前の試合が続いている' });
     expect(root.textContent).toContain('前の試合が続いている');
-    expect(root.textContent).toContain('全員がページを閉じてから');
+    expect(root.textContent).toContain('全員が「設定へ」でタイトルへ戻ってから');
   });
 
   it('ぬけるを押したら知らせる', () => {

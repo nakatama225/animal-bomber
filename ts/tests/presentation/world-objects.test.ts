@@ -391,10 +391,10 @@ describe('粒子と画面の揺れ', () => {
   it('引き寄せて手元で適用されたアイテム（拾ったマスが無い）は煙を出さない（対照：拾ったマスがあれば出す）', () => {
     const world = makeWorld();
     const reeled = new ParticleField(new CosmeticRng());
-    reeled.onEvents([{ type: 'itemTaken', cell: null, kind: 'fire', taker: 0 }], world);
+    reeled.onEvents([{ type: 'itemTaken', cell: null, kind: 'fire', taker: 0, swept: false }], world);
     expect(paintedParticles(reeled)).toBe(0);
     const picked = new ParticleField(new CosmeticRng());
-    picked.onEvents([{ type: 'itemTaken', cell: { col: 5, row: 5 }, kind: 'fire', taker: 0 }], world);
+    picked.onEvents([{ type: 'itemTaken', cell: { col: 5, row: 5 }, kind: 'fire', taker: 0, swept: false }], world);
     expect(paintedParticles(picked)).toBeGreaterThan(0);
   });
 

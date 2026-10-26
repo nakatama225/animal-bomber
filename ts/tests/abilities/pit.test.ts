@@ -214,7 +214,7 @@ describe('落ちる（原型 pitfallCheck）', () => {
     expect(rabbit.effects.has('pitfall')).toBe(true);
     // 泣いている（たまねぎ）のとは別の状態として持つ。
     expect(rabbit.effects.has('stun')).toBe(false);
-    expect(events).toContainEqual({ type: 'effectApplied', target: rabbit.id, effect: 'pitfall' });
+    expect(events).toContainEqual({ type: 'effectApplied', target: rabbit.id, effect: 'pitfall', pushedBy: null });
     expect(pitCells(world)).toEqual([]);
   });
 

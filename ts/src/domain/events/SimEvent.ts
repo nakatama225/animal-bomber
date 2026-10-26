@@ -1,4 +1,5 @@
 import type { Cell, Direction, Point } from '../core/Coord.js';
+import type { Tick } from '../core/Tick.js';
 import type { PlayerId } from '../state/PlayerState.js';
 import type { EffectKind } from '../state/EffectBag.js';
 import type { ItemKind } from '../rules/items.js';
@@ -86,6 +87,14 @@ export type SimEvent =
       readonly cell: Cell | null;
       readonly kind: ItemKind;
       readonly taker: PlayerId;
+      /**
+       * 体当たりで進む振る舞いが、通り道のアイテムを吸い込んだか（`ActiveAction.sweepsItems`）。
+       *
+       * 画面の通知（「… を吸い込んだ！」。原型 L2818）に使う。同じ tick に、体当たりが終わってから
+       * ふつうに歩いて拾ったものは false（原型は、体当たりの最中に足元で取ったものにだけ出す）。
+       * 前の tick の振る舞いからは、この2つを見分けられないので、ここに載せる。
+       */
+      readonly swept: boolean;
     }
   | { readonly type: 'itemBurned'; readonly cell: Cell; readonly kind: ItemKind }
   /** 爆風に触れたアイテムが、焼けずに隣のマスへ吹き飛んだ（うんこ。`mutations/explode.ts`）。 */
@@ -111,11 +120,26 @@ export type SimEvent =
       readonly player: PlayerId;
       readonly cells: readonly Cell[];
       readonly facing: Direction;
+      /**
+       * 流したうんこの数（溶け始めたもの。溶けかけのものに吹き直したぶんも数える）。
+       *
+       * 画面の通知（「うんこn個を流した」。原型 L3036）に使う。流したうんこにはイベントが出ない
+       * （溶けきって消えたときに `itemWashed` が出る）ので、ここに数を載せる。
+       */
+      readonly washed: number;
     }
   | {
       readonly type: 'effectApplied';
       readonly target: PlayerId;
       readonly effect: EffectKind;
+      /**
+       * 抱えていた悪いアイテムを体当たりで押しつけて、この状態をかけたプレイヤー。
+       *
+       * 足元で拾った・舌で引き寄せた・穴にはまった、などで自分にかかったときは null。画面の通知
+       * （「n個 ぶつけた！」。原型 L2880）に、誰が誰に何個押しつけたかが要る。押しつけられた側に
+       * `techniqueMoment` の `rammed` が出ない（無敵で傷が入らない）ときもあるので、ここに載せる。
+       */
+      readonly pushedBy: PlayerId | null;
     }
   | {
       readonly type: 'playerHurt';
@@ -166,6 +190,30 @@ export type SimEvent =
       readonly cell: Cell;
     }
   | {
+      /**
+       * 技のボタンを押したが、技が出せない状態だった（根元まで焼けて伸ばせない舌）。
+       *
+       * 技は出ていないので `techniqueUsed` は出さない。画面の通知と画面の操作の音のためだけに知らせる
+       * （原型 L2497-2498 は、伸ばせる長さが 0 なら `SE.ui()` を鳴らして「舌は焼け落ちてる」と出す）。
+       */
+      readonly type: 'techniqueRefused';
+      readonly player: PlayerId;
+      /** 出せるようになるまでの残り（焼けた舌が1マス戻るまで）。 */
+      readonly wait: Tick;
+    }
+  | {
+      /**
+       * 焼けて短くなっていた技の届く長さ（舌）が、1マス戻った。
+       *
+       * 画面の通知のためだけに知らせる（原型 L4307 は、10 秒ごとに1マス戻すたびに「舌が1マス回復」と出す。
+       * 元の長さまで戻った回にも出す）。
+       */
+      readonly type: 'reachRestored';
+      readonly player: PlayerId;
+      /** 戻ったあとの、伸ばせるマス数。 */
+      readonly reach: number;
+    }
+  | {
       readonly type: 'leekThrown';
       /** 撃った葱ボン。 */
       readonly player: PlayerId;
@@ -208,7 +256,12 @@ export type SimEvent =
     }
   | {
       readonly type: 'matchEnded';
-      /** 引き分けで終わった場合は null。 */
+      /**
+       * 試合を取ったプレイヤー。
+       *
+       * 型は null を許すが、出す所（`systems/RoundSystem.ts` の `applyOutcome`）は優勝者が決まったときに
+       * しか出さないので、null にはならない（ひきわけのラウンドでは試合が決まらない）。
+       */
       readonly champion: PlayerId | null;
     };
 

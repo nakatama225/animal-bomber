@@ -12,8 +12,8 @@ import { ACTOR_TURNS, type WorldActor } from '../WorldActor.js';
 /** 掘り終わるまでの長さ。 */
 const DIG_TIME: Tick = tick(90);
 
-/** 落ちた相手が動けない長さ。 */
-const HOLD_TIME: Tick = tick(180);
+/** 落ちた相手が動けない長さ（原型の PIT_HOLD 3 秒）。画面の通知（「3秒うごけない」）もこの値から作る。 */
+export const HOLD_TIME: Tick = tick(180);
 
 /** 穴を掘れる動物。掘れる側は、誰の穴にも落ちない。 */
 const DIGGER = 'mole';
@@ -69,7 +69,7 @@ export class PitActor implements WorldActor {
     player.effects.add('pitfall', HOLD_TIME, HOLD_TIME);
     // 滑っている最中でも止まる。滑りを残すと、穴が切れたとたんに滑り出す。
     player.effects.clear('slide');
-    const events: SimEvent[] = [{ type: 'effectApplied', target: player.id, effect: 'pitfall' }];
+    const events: SimEvent[] = [{ type: 'effectApplied', target: player.id, effect: 'pitfall', pushedBy: null }];
     // 位置を決める振る舞い（掘る・舌・突進）は打ち切る。穴は無敵でも避けられない。
     // 打ち切るときも後始末は呼ぶ（抱えていたものを撒く、など。`ActiveAction.finish`）。
     // 動きを乗っ取らない振る舞いは続く（いまの動物には無い。撒くのは盤面の側の物なので、穴に落ちても続く）。

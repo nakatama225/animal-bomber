@@ -112,10 +112,6 @@ button {
   color: var(--warn);
 }
 
-.clock.sudden {
-  border-color: var(--accent2);
-}
-
 .cards {
   display: flex;
   flex-direction: column;

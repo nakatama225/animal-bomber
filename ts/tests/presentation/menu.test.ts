@@ -9,7 +9,7 @@ import { secondsToTicks } from '../../src/domain/core/Tick.js';
 import type { PlayerId } from '../../src/domain/state/PlayerState.js';
 import { POOP_EFFECTS } from '../../src/domain/rules/items.js';
 import { SPAWN_CELLS } from '../../src/domain/rules/tuning.js';
-import { EFFECT_LABELS } from '../../src/presentation/hud/effectLabels.js';
+import { POOP_MARKS } from '../../src/presentation/hud/effectLabels.js';
 import { tagOf } from '../../src/presentation/hud/roster.js';
 import { hitsForHp, hpForHits } from '../../src/presentation/menu/choices.js';
 import { DEFAULT_SETUP, planLocalMatch, type LocalSetup } from '../../src/presentation/menu/localSetup.js';
@@ -29,6 +29,12 @@ describe('選んだものから試合を作る', () => {
     expect(plan.roster.map((c) => c.kind)).toEqual(['human', 'cpu', 'cpu', 'cpu']);
     // 1台を囲んでいる全員が同じ画面を見ているので、「あなた」の印は付けない。
     expect(tagOf(plan.roster, 0)).toBe('1P');
+    // CPU は何体目かを付ける（原型の `CPU${cpuIdx+1}`。L5507）。
+    expect([1, 2, 3].map((id) => tagOf(plan.roster, id as PlayerId))).toEqual([
+      'CPU1・ふつう',
+      'CPU2・ふつう',
+      'CPU3・ふつう',
+    ]);
   });
 
   it('2人のときはキーボードを左右に分け、タイマンでは CPU を入れない', () => {
@@ -169,9 +175,9 @@ describe('表どうしの食い違い', () => {
     for (const hits of [1, 2, 3, 4, 5, 6]) expect(hitsForHp(hpForHits(hits))).toBe(hits);
   });
 
-  it('状態の呼び方は、ルールの層のうんこの表と同じ', () => {
-    // 同じ状態に2つの呼び方があると、名札と説明で違う名前が出る。
-    for (const effect of POOP_EFFECTS) expect(EFFECT_LABELS[effect.kind].label).toBe(effect.label);
+  it('名札のうんこの印は、ルールの層のうんこの表の状態をちょうど1つずつ持つ', () => {
+    // 呼び方はルールの層の表（POOP_EFFECTS の label）をそのまま使う。印の表に状態が欠けると、名札にその状態が出ない。
+    expect(POOP_MARKS.map(([kind]) => kind).sort()).toEqual(POOP_EFFECTS.map((effect) => effect.kind).sort());
   });
 
   it('選べる動物は、能力の登録と同じ顔ぶれ', () => {

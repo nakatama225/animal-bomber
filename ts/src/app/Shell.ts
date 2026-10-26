@@ -23,7 +23,6 @@ import { Toasts } from '../platform/ui/Toasts.js';
 import { Countdown } from '../presentation/audio/Countdown.js';
 import type { SoundBank } from '../presentation/audio/SoundBank.js';
 import { describeKeyHelp } from '../presentation/hud/keyHelp.js';
-import { displayName } from '../presentation/hud/roster.js';
 import { RoundBanner } from '../presentation/hud/RoundBanner.js';
 import { planLocalMatch, type LocalController, type LocalSetup } from '../presentation/menu/localSetup.js';
 import type { NavCommand } from '../presentation/menu/MenuCursor.js';
@@ -220,8 +219,8 @@ export class Shell {
     // ホストにだけ出す（原型も、次の試合を始められるのはホストだけだった）。押すと合図を送るだけで、
     // 次の試合は中継が配り直した start を受け取ってから始まる。
     const again = [pointerButton('もういっかい', () => runner.rematch(), { data: { action: 'again', nav: 'final' } })];
-    // 自分のプレイヤー番号は、つないで受け取るまで分からない。キーの案内は名札の「あなた」だけを出す
-    // （`describeKeyHelp`）。通信対戦ではだれもポーズできない。
+    // 自分のプレイヤー番号は、つないで受け取るまで分からない。キーの案内は、名札の一覧でこの端末のプレイヤー
+    // （`local`）の分だけを出す（`describeKeyHelp`）。通信対戦ではだれもポーズできない。
     this.#begin(runner, this.#keyHelp(runner, { padInMatch: true, canPause: false }), () => (runner.canRematch ? again : []), {
       paced: false,
       padOnBanner: true,
@@ -386,11 +385,8 @@ export class Shell {
   }
 
   #partsFor(runner: MatchRunner): MatchParts {
-    const presenter = new Presenter(this.#tools.sounds, this.#toasts, (id, world) => {
-      const roster = runner.hud?.roster;
-      const animal = world.players[id]?.animal;
-      return roster === undefined || animal === undefined ? `${id + 1}P` : displayName(roster, id, animal);
-    });
+    // 名札の一覧は通知を出すたびに尋ねる（通信対戦では、抜けたプレイヤーが CPU に替わる）。
+    const presenter = new Presenter(this.#tools.sounds, this.#toasts, () => runner.hud?.roster ?? []);
     return {
       renderer: new Renderer(this.#tools.context, this.#elements.canvas.width, this.#elements.canvas.height),
       presenter,

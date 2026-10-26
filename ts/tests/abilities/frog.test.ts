@@ -535,7 +535,7 @@ describe('舌の長さと時間（原型 startTongue・updateTongue・tongueBurn
     // 焼けたマスを知らせる（煙を出すため。原型の puff）。泣くことはそのあと。
     expect(burnt.events).toEqual([
       { type: 'burntOff', player: frog.id, cell: { col: 5, row: 5 } },
-      { type: 'effectApplied', target: frog.id, effect: 'stun' },
+      { type: 'effectApplied', target: frog.id, effect: 'stun', pushedBy: null },
     ]);
     expect(tongueReachOf(world, frog)).toBe(1);
     expect(frog.effects.remaining('stun')).toBe(180);
@@ -701,7 +701,7 @@ describe('倒れたかえるの舌（原型 toNegibon L2255・update L4320-4322�
     addBlast(world, { col: 5, row: 5 }, 1, false);
     const events = sim.step(world, sameForAll(world, press({})));
     expect(events).toContainEqual({ type: 'burntOff', player: frog.id, cell: { col: 5, row: 5 } });
-    expect(events).toContainEqual({ type: 'effectApplied', target: frog.id, effect: 'stun' });
+    expect(events).toContainEqual({ type: 'effectApplied', target: frog.id, effect: 'stun', pushedBy: null });
     expect(frog.life.kind).toBe('negibon');
     expect(frog.action).toBeNull();
     expect(tongueReachOf(world, frog)).toBe(1);

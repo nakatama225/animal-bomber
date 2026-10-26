@@ -126,16 +126,18 @@ export class LanMatch implements MatchRunner {
     const started = this.#started();
     if (started === null) return null;
     const { phase, game } = started;
+    const players = game.world.players.map((player) => player.id);
+    // いま人間が操作しているプレイヤーと、抜けて CPU に替わったプレイヤーを合わせると、試合を始めたときの人間に
+    // なる（`lanRoster` の番号の付け方に要る）。抜けたと記録するのは人間のプレイヤーだけ（`LockstepDriver`）。
+    // 抜けた知らせが届いてから CPU に替わるまでの間は、まだ人間として出す。
+    const now = phase.driver.humanPlayers();
+    const left = players.filter((id) => phase.driver.hasLeft(id));
+    const replaced = left.filter((id) => !now.includes(id));
     return {
       world: game.world,
       match: game.match,
       config: game.config,
-      roster: lanRoster(
-        game.world.players.map((player) => player.id),
-        phase.driver.humanPlayers(),
-        phase.seat,
-        (id) => cpuLevelOf(phase.settings, id),
-      ),
+      roster: lanRoster(players, [...now, ...replaced], phase.seat, replaced, (id) => cpuLevelOf(phase.settings, id)),
       betweenRounds: game.betweenRounds,
     };
   }

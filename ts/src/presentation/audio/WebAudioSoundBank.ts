@@ -1,27 +1,18 @@
 import type { SoundBank, SoundName } from './SoundBank.js';
-import { SOUND_RECIPES, type Recipe } from './soundRecipes.js';
+import { SOUND_RECIPES } from './soundRecipes.js';
 import type { Synth } from './Synth.js';
-
-/**
- * 同じ作り方の音を、これより短い間隔では重ねない（秒）。
- *
- * ルールの層はブロック1つ・アイテム1つごとにイベントを返すので、
- * 1回の爆発で同じ音が何本も同時に届く。そのまま重ねると音量が本数倍になり、
- * 割れる。原型は爆発1回につき1回だけ鳴らしていた。
- * 1回の描画で何 tick か進めたときも、音はどれも同じ瞬間に鳴るのでまとめてよい。
- */
-const SAME_SOUND_GAP = 0.03;
 
 /**
  * Web Audio で鳴らす SoundBank。
  *
  * 音を鳴らす仕組みは `Synth` が持つ。`Synth.unlock()` を呼ぶ前に `play()` が
  * 呼ばれても、何もせずに戻る。
+ *
+ * 同じ音を一定時間まとめて1回にする仕組みは持たない（原型の `SE` も、呼ぶたびに予約してまとめない）。
+ * 原型が1回しか鳴らさない場面（1回の爆発で壊したブロック・一列に並べた爆弾など）は、鳴らす側の
+ * `Presenter` が場面を見分けて1回にする。
  */
 export class WebAudioSoundBank implements SoundBank {
-  // 同じ関数を指す名前（1個置き・一列置き）も、まとめて1つと数える。
-  readonly #lastPlayed = new Map<Recipe, number>();
-
   constructor(private readonly synth: Synth) {}
 
   /** 効果音が入になっているか。 */
@@ -41,11 +32,6 @@ export class WebAudioSoundBank implements SoundBank {
     // 切っているあいだは部品も作らない。音量 0 で鳴らしても聞こえないだけで、
     // 部品は作られ続ける。
     if (!this.synth.ready || !this.enabled) return;
-    const recipe = SOUND_RECIPES[name];
-    const now = this.synth.now;
-    const last = this.#lastPlayed.get(recipe);
-    if (last !== undefined && now - last < SAME_SOUND_GAP) return;
-    this.#lastPlayed.set(recipe, now);
-    recipe(this.synth, intensity);
+    SOUND_RECIPES[name](this.synth, intensity);
   }
 }

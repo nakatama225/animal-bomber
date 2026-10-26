@@ -191,9 +191,12 @@ export class ParticleField {
       case 'roundEnded':
       case 'matchEnded':
       case 'techniqueMoment':
+      case 'techniqueRefused':
+      case 'reachRestored':
         // 原型でも、置いた瞬間・状態がかかった瞬間には粒子を出していない。かかったきっかけ
         // （拾った・踏んだ）の側で煙を出す。ラウンドの区切りは盤面の作り直しで片づける。
-        // 技の途中で起きたことは音だけ（掘り終えた穴の位置は見せない）。
+        // 技の途中で起きたことは音だけ（掘り終えた穴の位置は見せない）。技を出せなかった・焼けた
+        // 舌が戻ったことは、通知（と操作の音）だけ（原型 L2498・L4307 も粒子を出さない）。
         return;
       default:
         assertNever(event);

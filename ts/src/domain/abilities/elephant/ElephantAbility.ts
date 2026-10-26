@@ -46,6 +46,7 @@ export const ELEPHANT: Ability = {
     player.abilityCooldown = tick(SNOT_COOLDOWN);
     const events: SimEvent[] = [];
     const sprayedCells: Cell[] = [];
+    let washed = 0;
     const here = cellOf(player.position);
     for (let distance = 1; distance <= SNOT_RANGE; distance += 1) {
       const cell = step(here, player.facing, distance);
@@ -62,11 +63,13 @@ export const ELEPHANT: Ability = {
       // 流し直すと、溶けきるまでの長さを数え直す（原型も溶けかけのうんこに吹き直すと数え直す）。
       if (item !== undefined && item.kind === 'poop' && item.scatteredBy === undefined) {
         world.items[index] = { ...item, meltingUntil: tick(world.now + MELT_TICKS) };
+        washed += 1;
       }
       if (tile === 'soft') break;
     }
-    // 水しぶきは届いたマスごとに出す（原型も、柱のマスとその先には出さない）。
-    events.push({ type: 'sprayed', player: player.id, cells: sprayedCells, facing: player.facing });
+    // 水しぶきは届いたマスごとに出す（原型も、柱のマスとその先には出さない）。流したうんこの数も
+    // 載せる（画面の通知のため。原型の elephantSnot の `np`）。
+    events.push({ type: 'sprayed', player: player.id, cells: sprayedCells, facing: player.facing, washed });
     return { action: null, events };
   },
 

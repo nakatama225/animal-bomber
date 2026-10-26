@@ -27,7 +27,7 @@ describe('通信対戦の案内', () => {
     expect(describeLanPhase(c.phase)).toBe('');
   });
 
-  it('試合中は、操作を待っている人がいるときだけ出す', () => {
+  it('試合中は、操作を待っているプレイヤーがいるときだけ出す', () => {
     const c = client();
     c.receive(text({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
     c.receive(text({ t: 'start', seats: [0, 1], config: SETTINGS, match: 1 }));
@@ -38,20 +38,20 @@ describe('通信対戦の案内', () => {
     expect(describeLanPhase(c.phase)).toBe('');
   });
 
-  it('ずれたとき・止めたときは、全員が閉じてから開き直すよう出す', () => {
-    // 読み込み直すだけでは、ほかの人がつながっている間は中継に断られる。
+  it('ずれたとき・止めたときは、全員がタイトルへ戻ってからつなぎ直すよう出す（Python 版の lan_status.py の文）', () => {
+    // 自分だけつなぎ直しても、ほかの端末がつながっている間は中継に断られる。
     const c = client();
     c.receive(text({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
     c.receive(text({ t: 'start', seats: [0, 1], config: SETTINGS, match: 1 }));
     c.receive(text({ t: 'desync', tick: 19, reports: [] }));
     expect(describeLanPhase(c.phase)).toBe(
-      '端末どうしで試合がずれたので止めた（tick 19）。もう一度遊ぶときは、全員がページを閉じてから開き直す',
+      '端末どうしで試合がずれたので止めた（tick 19）。もう一度遊ぶときは、全員が「設定へ」でタイトルへ戻ってから、つなぎ直す',
     );
 
     const lost = client();
     lost.disconnected();
     expect(describeLanPhase(lost.phase)).toBe(
-      '中継との接続が切れた。もう一度遊ぶときは、全員がページを閉じてから開き直す',
+      '中継との接続が切れた。もう一度遊ぶときは、全員が「設定へ」でタイトルへ戻ってから、つなぎ直す',
     );
 
     const refused = client();
@@ -75,7 +75,7 @@ describe('通信対戦の案内', () => {
       c.receive(text({ t: 'input', seat: 1 - seat, tick: 1, bits: 0, match: 1 }));
       return describeLanPhase(c.phase);
     };
-    expect(finishedAs(0)).toBe('試合が終わった。「もういっかい」で、同じ人・同じ設定のまま次の試合を始める');
+    expect(finishedAs(0)).toBe('試合が終わった。「もういっかい」で、同じ顔ぶれ・同じ設定のまま次の試合を始める');
     expect(finishedAs(1)).toBe('試合が終わった。1P（ホスト）が「もういっかい」を押すと、次の試合が始まる');
   });
 
@@ -93,7 +93,7 @@ describe('通信対戦の案内', () => {
     c.step();
     expect(c.phase.session.match.finished).toBe(true);
     expect(describeLanPhase(c.phase)).toBe(
-      '試合が終わった。1P（ホスト）が抜けたので、次の試合は始められない。もう一度遊ぶときは、全員がページを閉じてから開き直す',
+      '試合が終わった。1P（ホスト）が抜けたので、次の試合は始められない。もう一度遊ぶときは、全員が「設定へ」でタイトルへ戻ってから、つなぎ直す',
     );
   });
 });

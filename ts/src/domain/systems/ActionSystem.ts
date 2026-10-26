@@ -165,6 +165,8 @@ export class ActionSystem {
     if (ability.onTap === undefined) return player.hasSpecial ? this.#special(world, player) : [];
     const cooldownBefore = player.abilityCooldown;
     const result = ability.onTap(world, player);
+    // 技が出せない状態だった。出せなかったことだけを知らせる（技を出したイベントは付けない。`Ability.onTap`）。
+    if (result.refusal !== undefined) return [result.refusal];
     if (result.action !== null) player.action = result.action;
     // 技が実際に出たかは、振る舞いが始まった・何かが起きた・間隔が始まった、の
     // どれかで判断する。間隔中に押しただけなら何も起きないので知らせない。

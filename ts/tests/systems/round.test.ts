@@ -139,6 +139,109 @@ describe('ラウンドの進行', () => {
   });
 });
 
+describe('次のラウンドへ送る（1台の試合で、ラウンドの幕をボタンで送る。原型の advanceBanner）', () => {
+  /** 負けるプレイヤーを倒し、ラウンドを決める tick を1つ進める。 */
+  function finishRound(game: GameSession): void {
+    game.world.players[1]!.life = OUT;
+    game.tick();
+  }
+
+  /** 送ったときの例外の文。送れてしまったら空の文字列（あとの盤面も同じテストで見るため、toThrow を使わない）。 */
+  function refusal(game: GameSession): string {
+    try {
+      game.startNextRound();
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+    return '';
+  }
+
+  it('待ちを切り上げて、待ち終えたときと同じ次の盤面を作る', () => {
+    const sent = session({ winsToTake: 3, startingHp: [2, 10] });
+    const waited = session({ winsToTake: 3, startingHp: [2, 10] });
+    for (const game of [sent, waited]) finishRound(game);
+    const decided = sent.world;
+    sent.tick();
+    sent.startNextRound();
+    skipIntermission(waited);
+    expect(sent.betweenRounds).toBe(false);
+    expect(sent.world).not.toBe(decided);
+    expect(sent.match.round).toBe(2);
+    expect(sent.world.now).toBe(0);
+    expect(sent.world.players.map((player) => player.hp)).toEqual([2, 12]);
+    expect(sent.world.players.every((player) => isAlive(player))).toBe(true);
+    expect(hashWorld(sent.world)).toBe(hashWorld(waited.world));
+  });
+
+  it('試合通算の tick は進めず、次の tick は続きの番号で進める（切り上げた待ちの tick は進めていない）', () => {
+    const asked: number[] = [];
+    const game = new GameSession({ ...defaultMatchConfig(777, ['rabbit', 'elephant']), winsToTake: 3 });
+    for (const player of game.world.players) {
+      game.attach({
+        playerId: player.id,
+        next: () => {
+          asked.push(game.elapsed);
+          return IDLE_INPUT;
+        },
+      });
+    }
+    finishRound(game);
+    game.tick();
+    game.startNextRound();
+    expect(game.elapsed).toBe(2);
+    asked.length = 0;
+    game.tick();
+    expect(asked).toEqual([2, 2]);
+    expect(game.elapsed).toBe(3);
+  });
+
+  it('送ったあとは、待ちの長さが過ぎても盤面を作り直さない', () => {
+    const game = session({ winsToTake: 3 });
+    finishRound(game);
+    game.startNextRound();
+    const started = game.world;
+    for (let i = 0; i < ROUND_INTERMISSION + 1; i += 1) game.tick();
+    expect(game.world).toBe(started);
+    expect(game.match.round).toBe(2);
+  });
+
+  it('待ちの最中でなければ例外にし、盤面を替えない（ラウンドの最中に送ると、決着のつかないまま盤面が替わる）', () => {
+    const playing = session({ winsToTake: 3 });
+    const before = playing.world;
+    expect(refusal(playing)).toContain('待ちの最中でない');
+    expect(playing.world).toBe(before);
+    expect(playing.match.round).toBe(1);
+
+    const twice = session({ winsToTake: 3 });
+    finishRound(twice);
+    twice.startNextRound();
+    const started = twice.world;
+    expect(refusal(twice)).toContain('待ちの最中でない');
+    expect(twice.world).toBe(started);
+  });
+
+  it('試合が決まったあとは例外にし、盤面を替えない（「もういっかい」は新しい試合）', () => {
+    const game = session({ winsToTake: 1 });
+    finishRound(game);
+    expect(game.match.finished).toBe(true);
+    const decided = game.world;
+    expect(refusal(game)).toContain('待ちの最中でない');
+    expect(game.world).toBe(decided);
+  });
+
+  it('押したまま送っても、次のラウンドの開始位置に爆弾を置かない（盤面を作るときの「押していた扱い」）', () => {
+    const holdBomb = press({ bomb: true });
+    const game = new GameSession({ ...defaultMatchConfig(3, ['rabbit', 'frog']), winsToTake: 3 });
+    for (const player of game.world.players) game.attach({ playerId: player.id, next: () => holdBomb });
+    game.world.players[1]!.life = OUT;
+    game.tick();
+    game.startNextRound();
+    expect(game.match.round).toBe(2);
+    expect(game.tick().filter((event) => event.type === 'bombPlaced')).toHaveLength(0);
+    expect(game.world.bombs).toHaveLength(0);
+  });
+});
+
 describe('開始位置', () => {
   const positionsOf = (world: WorldState) => world.players.map((p) => p.position);
   const facingsOf = (world: WorldState) => world.players.map((p) => p.facing);

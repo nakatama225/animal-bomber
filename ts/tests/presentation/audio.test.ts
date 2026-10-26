@@ -9,7 +9,7 @@ import type {
   AudioNodeLike,
   AudioParamLike,
 } from '../../src/presentation/audio/webAudioTypes.js';
-import { Synth } from '../../src/presentation/audio/Synth.js';
+import { Synth, type NoiseOptions, type ToneOptions } from '../../src/presentation/audio/Synth.js';
 import { WebAudioSoundBank } from '../../src/presentation/audio/WebAudioSoundBank.js';
 
 /**
@@ -128,26 +128,23 @@ describe('効果音', () => {
     expect(ctx.started - single).toBeGreaterThan(single);
   });
 
-  it('同じ瞬間の同じ音は1つにまとめ、時間がたてばまた鳴らす', () => {
+  it('同じ瞬間に同じ音を2回鳴らせば、2回とも予約する（原型の SE もまとめない）', () => {
+    // 原型が1回しか鳴らさない場面は、鳴らす側（Presenter）が場面を見分けて1回にする。
     const { synth, ctx } = unlockedSynth();
     const bank = new WebAudioSoundBank(synth);
     bank.play('breakBlock');
     const once = ctx.started;
-    bank.play('breakBlock');
-    expect(ctx.started).toBe(once);
-
-    ctx.currentTime += 1;
+    expect(once).toBeGreaterThan(0);
     bank.play('breakBlock');
     expect(ctx.started).toBe(once * 2);
   });
 
-  it('一列に置いた音と1個置いた音は、同じ瞬間なら1つにまとめる', () => {
-    const { synth, ctx } = unlockedSynth();
-    const bank = new WebAudioSoundBank(synth);
-    bank.play('lineBombs');
-    const once = ctx.started;
-    bank.play('place');
-    expect(ctx.started).toBe(once);
+  it('画面の操作の音は、原型の SE.ui と同じ1音（760Hz・矩形波・0.05 秒・音量 0.12）', () => {
+    const tones: ToneOptions[] = [];
+    const noises: NoiseOptions[] = [];
+    SOUND_RECIPES.ui({ tone: (options) => tones.push(options), noiseBurst: (options) => noises.push(options) }, 1);
+    expect(tones).toEqual([{ f0: 760, type: 'square', dur: 0.05, vol: 0.12 }]);
+    expect(noises).toEqual([]);
   });
 
   it('効果音を切っているあいだは音源を作らない', () => {

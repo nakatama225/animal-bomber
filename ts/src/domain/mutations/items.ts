@@ -27,7 +27,7 @@ import {
 } from '../rules/items.js';
 import { MAX_BOMBS, MAX_POWER, MAX_SHOES } from '../rules/tuning.js';
 import type { Item } from '../state/Item.js';
-import type { PlayerState } from '../state/PlayerState.js';
+import type { PlayerId, PlayerState } from '../state/PlayerState.js';
 import type { WorldState } from '../state/WorldState.js';
 
 /** 壊れたブロックから、確率でアイテムを落とす。 */
@@ -62,6 +62,11 @@ export function applyItem(
    * import し、依存が循環する。呼び出し側から渡す。
    */
   multiplier = 1,
+  /**
+   * 抱えていたアイテムを体当たりで押しつけたプレイヤー。かかった状態の知らせ
+   * （`effectApplied.pushedBy`）に載せる。自分で拾ったときは null。
+   */
+  pushedBy: PlayerId | null = null,
 ): SimEvent[] {
   switch (kind) {
     case 'bomb':
@@ -76,13 +81,13 @@ export function applyItem(
     case 'banana':
       // 足さずに置き換える（原型の applyItem。滑っている間に拾い直すと、残りが3秒に戻る）。
       player.effects.set('slide', itemEffectTicks(SLIDE_SECONDS * multiplier));
-      return [{ type: 'effectApplied', target: player.id, effect: 'slide' }];
+      return [{ type: 'effectApplied', target: player.id, effect: 'slide', pushedBy }];
     case 'onion':
       // 泣いている間は滑らない。同時にかかると動きが読めなくなる。
       player.effects.clear('slide');
       // 足さずに置き換える（原型の applyItem）。
       player.effects.set('stun', itemEffectTicks(STUN_SECONDS * multiplier));
-      return [{ type: 'effectApplied', target: player.id, effect: 'stun' }];
+      return [{ type: 'effectApplied', target: player.id, effect: 'stun', pushedBy }];
     case 'chicken':
       // 持っている印を立て、回数を足す（原型の L1616-1617）。外周へ回って外れた印も戻り、
       // そのとき残っていた回数にも足される。
@@ -97,7 +102,7 @@ export function applyItem(
         base,
         itemEffectTicks(poop.seconds * multiplier * POOP_STACK_LIMIT),
       );
-      return [{ type: 'effectApplied', target: player.id, effect: poop.kind }];
+      return [{ type: 'effectApplied', target: player.id, effect: poop.kind, pushedBy }];
     }
   }
 }

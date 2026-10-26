@@ -1,5 +1,6 @@
 import type { KeyHelpRow, KeyHelpSpan } from '../../presentation/hud/keyHelp.js';
 import {
+  CLOCK_CAPTION,
   describeClock,
   describePlayers,
   type ClockView,
@@ -52,11 +53,10 @@ export class SidePanel {
 }
 
 function clockElement(clock: ClockView): HTMLElement {
-  const classes = ['clock', clock.warn ? 'warn' : '', clock.suddenDeath ? 'sudden' : ''].filter(Boolean);
-  return el('div', { className: classes.join(' '), data: { part: 'clock' } }, [
-    el('div', { className: 'round', text: `ROUND ${clock.round} ・ ${clock.winsToTake}勝先取` }),
+  return el('div', { className: clock.warn ? 'clock warn' : 'clock', data: { part: 'clock' } }, [
+    el('div', { className: 'round', text: clock.heading }),
     el('div', { className: 'time', text: clock.time }),
-    el('div', { className: 'label', text: clock.suddenDeath ? '⚡ サドンデス' : 'TIME' }),
+    el('div', { className: 'label', text: CLOCK_CAPTION }),
   ]);
 }
 
@@ -66,11 +66,11 @@ function cardElement(card: PlayerCardView): HTMLElement {
     el('div', { className: 'info' }, [
       el('div', { className: 'name' }, [
         document.createTextNode(`${card.name} `),
-        el('span', { className: 'tag', text: card.tag }),
+        ...card.tags.map((tag) => el('span', { className: 'tag', text: tag.text })),
       ]),
       el('div', { className: 'stars', text: card.stars }),
       el('div', { className: 'condition', text: card.condition }),
-      el('div', { className: 'stats', text: card.stats }),
+      el('div', { className: 'stats', text: card.stats.join(' ') }),
       el('div', { className: 'effects', text: card.effects.join(' ') }),
     ]),
   ]);

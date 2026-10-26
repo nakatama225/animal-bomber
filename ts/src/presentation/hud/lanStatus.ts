@@ -1,18 +1,19 @@
 import type { PlayerId } from '../../domain/state/PlayerState.js';
 import type { LanPhase } from '../../net/LockstepClient.js';
+import { numberedName } from './roster.js';
 
 /**
- * 止まったあと（ずれ・切断・断られた）の案内。
+ * 止まったあと（ずれ・切断・断られた）の案内（Python 版の `lan_status.py` と同じ文）。
  *
- * ⚠️ 「読み込み直す」だけでは足りない。中継は、前の試合にいた人が1人でもつながっている間は
- * 新しい接続を断る（途中から入った人の入力を、誰の試合にも入れられないため）。
- * 全員が閉じてからでないと、開き直した人は入れない。
- * 同じ人のまま続けるときは、試合が決まったあとに閉じずに「もういっかい」を押す（`FINISHED_HOST`）。
+ * ⚠️ 自分だけつなぎ直しても足りない。中継は、前の試合にいた端末が1つでもつながっている間は、
+ * 新しい接続を断る（途中から入った端末の入力は、誰の試合にも入れられないため）。全員がタイトルへ戻って
+ * （接続を閉じて）からでないと、つなぎ直した端末は入れない。同じ顔ぶれのまま続けるときは、試合が
+ * 決まったあとにタイトルへ戻らずに、ホストが「もういっかい」で次の試合を始める（`FINISHED_HOST`）。
  */
-export const START_OVER = 'もう一度遊ぶときは、全員がページを閉じてから開き直す';
+export const START_OVER = 'もう一度遊ぶときは、全員が「設定へ」でタイトルへ戻ってから、つなぎ直す';
 
 /** 試合が決まったあとの、ホストへの案内。幕の「もういっかい」で、接続を保ったまま次の試合を始める。 */
-const FINISHED_HOST = '試合が終わった。「もういっかい」で、同じ人・同じ設定のまま次の試合を始める';
+const FINISHED_HOST = '試合が終わった。「もういっかい」で、同じ顔ぶれ・同じ設定のまま次の試合を始める';
 
 /** 試合が決まったあとの、ゲストへの案内。ゲストの幕にはボタンが無い（原型も、次の試合を始めるのはホストだけ）。 */
 const FINISHED_GUEST = '試合が終わった。1P（ホスト）が「もういっかい」を押すと、次の試合が始まる';
@@ -21,11 +22,11 @@ const FINISHED_GUEST = '試合が終わった。1P（ホスト）が「もうい
 const FINISHED_HOST_LEFT = `試合が終わった。1P（ホスト）が抜けたので、次の試合は始められない。${START_OVER}`;
 
 /**
- * 通信対戦の、いまの様子を1行の文にする。画面の上に出す。
+ * 通信対戦の、いまの様子を1行の文にする。
  *
  * 画面の組み立て（どこに出すか）とは分けてある。文だけならブラウザ無しで確認できる。
  *
- * @param waiting 「操作を待っている」と出す人。省くと、いま待っている人全員。
+ * @param waiting 「操作を待っている」と出すプレイヤー。省くと、いま待っているプレイヤー全員。
  *   一瞬の待ちまで出すと文がちらつくので、画面では `WaitingNotice` を通した値を渡す
  * @returns 出す文。何も出さなくてよいときは空文字
  */
@@ -43,7 +44,7 @@ export function describeLanPhase(
       if (desync !== null) {
         return `端末どうしで試合がずれたので止めた（tick ${desync.tick}）。${START_OVER}`;
       }
-      if (waiting.length > 0) return `${waiting.map(label).join('・')} の操作を待っている`;
+      if (waiting.length > 0) return `${waiting.map(numberedName).join('・')} の操作を待っている`;
       if (!phase.session.match.finished) return '';
       if (phase.seat === 0) return FINISHED_HOST;
       return phase.driver.hasLeft(0) ? FINISHED_HOST_LEFT : FINISHED_GUEST;
@@ -64,12 +65,12 @@ const WAIT_NOTICE_FRAMES = 30;
 /**
  * 「操作を待っている」の案内を、待ちがしばらく続いたときだけ出すための数え役。
  *
- * 描くたびに、いま待っている人を渡す。
+ * 描くたびに、いま待っているプレイヤーを渡す。
  */
 export class WaitingNotice {
   #frames = 0;
 
-  /** @returns 案内に出す人。まだ出さないときは空 */
+  /** @returns 案内に出すプレイヤー。まだ出さないときは空 */
   observe(waiting: readonly PlayerId[]): readonly PlayerId[] {
     if (waiting.length === 0) {
       this.#frames = 0;
@@ -78,9 +79,4 @@ export class WaitingNotice {
     this.#frames += 1;
     return this.#frames >= WAIT_NOTICE_FRAMES ? waiting : [];
   }
-}
-
-/** プレイヤー番号の画面での呼び方（0 → 1P）。 */
-function label(playerId: PlayerId): string {
-  return `${playerId + 1}P`;
 }

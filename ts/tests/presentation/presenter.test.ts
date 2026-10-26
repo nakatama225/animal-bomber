@@ -9,8 +9,10 @@ import { ScatterActor } from '../../src/domain/abilities/rabbit/ScatterActor.js'
 import { cellOf, centerOf } from '../../src/domain/core/Coord.js';
 import { tick } from '../../src/domain/core/Tick.js';
 import type { SimEvent } from '../../src/domain/events/SimEvent.js';
+import { addBlast } from '../../src/domain/mutations/explode.js';
+import type { ItemKind } from '../../src/domain/rules/items.js';
 import { OUT } from '../../src/domain/state/Life.js';
-import type { PlayerState } from '../../src/domain/state/PlayerState.js';
+import type { PlayerId, PlayerState } from '../../src/domain/state/PlayerState.js';
 import { ActorSystem } from '../../src/domain/systems/ActorSystem.js';
 import { Simulation } from '../../src/domain/systems/Simulation.js';
 import type { SoundName } from '../../src/presentation/audio/SoundBank.js';
@@ -42,6 +44,12 @@ describe('イベントから音へ', () => {
     expect(played).toEqual(['roundEnd']);
   });
 
+  it('ひきわけで終わったラウンドでは、ひきわけの音を鳴らす（原型の endGame L4507）', () => {
+    const { played, presenter } = recorder();
+    presenter.consume([{ type: 'roundEnded', round: 2, winner: null }], makeWorld());
+    expect(played).toEqual(['draw']);
+  });
+
   it('技の音は、使った動物で決まる。とくぎはどの動物でも共通の音を先に鳴らす（原型の useSpecial）', () => {
     const { played, presenter } = recorder();
     const world = makeWorld(1, ['rabbit', 'elephant', 'fox', 'mole']);
@@ -71,8 +79,8 @@ describe('イベントから音へ', () => {
         { type: 'techniqueMoment', player: 0, moment: 'chaserCast' },
         { type: 'techniqueMoment', player: 0, moment: 'chaserHit' },
         { type: 'techniqueMoment', player: 0, moment: 'ringScattered' },
-        { type: 'effectApplied', target: 1, effect: 'pitfall' },
-        { type: 'effectApplied', target: 1, effect: 'stun' },
+        { type: 'effectApplied', target: 1, effect: 'pitfall', pushedBy: null },
+        { type: 'effectApplied', target: 1, effect: 'stun', pushedBy: null },
       ],
       makeWorld(),
     );
@@ -115,6 +123,141 @@ describe('イベントから音へ', () => {
       ],
       makeWorld(),
     );
+    expect(played).toEqual([]);
+  });
+});
+
+describe('原型が1回しか鳴らさない場面を、1 tick ぶんのイベントの並びで見分ける（同じ音をまとめる仕組みは持たない）', () => {
+  const placed = (owner: PlayerId): SimEvent => ({ type: 'bombPlaced', cell: { col: 1, row: 1 }, owner });
+  const used = (player: PlayerId, special = false): SimEvent => ({ type: 'techniqueUsed', player, special });
+  const foxWorld = (): ReturnType<typeof makeWorld> => makeWorld(1, ['fox', 'rabbit']);
+
+  it('ボタンで置いた爆弾は、1つにつき置く音1回', () => {
+    const { played, presenter } = recorder();
+    presenter.consume([placed(0), placed(1)], foxWorld());
+    expect(played).toEqual(['place', 'place']);
+  });
+
+  it('技が一列に並べた爆弾は、何本でも置く音1回（原型の placeLineBombs）。技そのものの音は無い', () => {
+    const { played, presenter } = recorder();
+    presenter.consume([used(0), placed(0), placed(0), placed(0)], foxWorld());
+    expect(played).toEqual(['place']);
+  });
+
+  it('ボタンの爆弾と一列置きが同じ tick なら、2回', () => {
+    const { played, presenter } = recorder();
+    presenter.consume([placed(0), used(0), placed(0), placed(0)], foxWorld());
+    expect(played).toEqual(['place', 'place']);
+  });
+
+  it('技のすぐあとでも、ほかのプレイヤーの爆弾は1つずつ鳴らす', () => {
+    const { played, presenter } = recorder();
+    presenter.consume([used(0), placed(1), placed(1)], foxWorld());
+    expect(played).toEqual(['place', 'place']);
+  });
+
+  it('技とのあいだにほかのプレイヤーの爆弾があれば、技が並べたものとしない', () => {
+    const { played, presenter } = recorder();
+    presenter.consume([used(0), placed(1), placed(0)], foxWorld());
+    expect(played).toEqual(['place', 'place']);
+  });
+
+  it('試合で一列に置くと、置く音は1回', () => {
+    const world = foxWorld();
+    clearBoard(world);
+    const fox = world.players[0]!;
+    fox.position = centerOf({ col: 3, row: 5 });
+    fox.facing = 'right';
+    fox.maxBombs = 3;
+    const { played, presenter } = recorder();
+    const events = new Simulation().step(world, onlyFor(world, 0, press({ action: true })));
+    expect(events.filter((event) => event.type === 'bombPlaced')).toHaveLength(3);
+    presenter.consume(events, world);
+    expect(played).toEqual(['place']);
+  });
+
+  it('同じ tick に2体が葱を撃てば、2回鳴らす（まとめない）', () => {
+    const { played, presenter } = recorder();
+    presenter.consume(
+      [
+        { type: 'leekThrown', player: 0, from: { x: 1.5, y: -0.31 }, facing: 'down' },
+        { type: 'leekThrown', player: 1, from: { x: 2.5, y: -0.31 }, facing: 'down' },
+      ],
+      foxWorld(),
+    );
+    expect(played).toEqual(['leek', 'leek']);
+  });
+});
+
+describe('アイテムと被弾の音（原型の applyItem・hurt・spitPowerup）', () => {
+  const taken = (kind: ItemKind): SimEvent => ({ type: 'itemTaken', cell: { col: 1, row: 1 }, kind, taker: 0, swept: false });
+  const hurt = (target: PlayerId): SimEvent => ({ type: 'playerHurt', target, by: 1, amount: 2 });
+  const dropped = (kind: ItemKind): SimEvent => ({ type: 'itemDropped', cell: { col: 2, row: 1 }, kind });
+  const down = (target: PlayerId): SimEvent => ({ type: 'playerDown', target, by: 1, at: { x: 1.5, y: 1.5 } });
+
+  it('強くなるアイテムは拾った音、チキンはチキンの音。悪いアイテムは、かかった状態の音だけ', () => {
+    const { played, presenter } = recorder();
+    for (const kind of ['bomb', 'fire', 'shoe', 'chicken'] as const) presenter.consume([taken(kind)], makeWorld());
+    expect(played).toEqual(['item', 'item', 'item', 'chicken']);
+    played.length = 0;
+    presenter.consume(
+      [taken('banana'), { type: 'effectApplied', target: 0, effect: 'slide', pushedBy: null }],
+      makeWorld(),
+    );
+    presenter.consume([taken('onion'), { type: 'effectApplied', target: 0, effect: 'stun', pushedBy: null }], makeWorld());
+    presenter.consume([taken('poop'), { type: 'effectApplied', target: 0, effect: 'slow', pushedBy: null }], makeWorld());
+    expect(played).toEqual(['slip', 'cry', 'poop']);
+  });
+
+  it('体力が残れば、吐き出す音と被弾の音。吐き出す場所が無ければ被弾の音だけ', () => {
+    const { played, presenter } = recorder();
+    presenter.consume([hurt(0), dropped('fire')], makeWorld());
+    expect(played).toEqual(['spit', 'hurt']);
+    played.length = 0;
+    presenter.consume([hurt(0)], makeWorld());
+    expect(played).toEqual(['hurt']);
+  });
+
+  it('体力が尽きれば、倒れる音だけ（被弾の音は鳴らさない）。倒れたのが別のプレイヤーなら被弾の音を鳴らす', () => {
+    const { played, presenter } = recorder();
+    presenter.consume([hurt(0), dropped('bomb'), down(0)], makeWorld());
+    expect(played).toEqual(['spit', 'down']);
+    played.length = 0;
+    presenter.consume([hurt(0), down(1)], makeWorld());
+    expect(played).toEqual(['hurt', 'down']);
+  });
+
+  it('吐き出せなかった被弾のすぐあとに撒いたうんこが落ちても、吐き出す音を鳴らさない（落ちたのが強くなるアイテムのときだけ）', () => {
+    const { played, presenter } = recorder();
+    presenter.consume([hurt(0), dropped('poop')], makeWorld());
+    expect(played).toEqual(['hurt']);
+  });
+
+  it('試合で爆風に当たると、原型と同じ音（残れば吐き出す音と被弾の音、尽きれば吐き出す音と倒れる音）', () => {
+    for (const [hp, expected] of [
+      [4, ['spit', 'hurt']],
+      [1, ['spit', 'down']],
+    ] as const) {
+      const world = makeWorld(5, ['rabbit', 'elephant']);
+      clearBoard(world);
+      world.items = [];
+      const rabbit = world.players[0]!;
+      rabbit.position = centerOf({ col: 3, row: 5 });
+      rabbit.hp = hp;
+      rabbit.invulnerableUntil = tick(0);
+      addBlast(world, cellOf(rabbit.position), 1, true);
+      const { played, presenter } = recorder();
+      presenter.consume(new Simulation().step(world, sameForAll(world, press({}))), world);
+      expect(played, `体力 ${hp}`).toEqual(expected);
+    }
+  });
+
+  it('根元まで焼けた舌を出そうとしたら画面の操作の音（原型 L2498）。焼けた舌が戻っても音は鳴らさない', () => {
+    const { played, presenter } = recorder();
+    presenter.consume([{ type: 'techniqueRefused', player: 0, wait: tick(60) }], makeWorld());
+    expect(played).toEqual(['ui']);
+    played.length = 0;
+    presenter.consume([{ type: 'reachRestored', player: 0, reach: 4 }], makeWorld());
     expect(played).toEqual([]);
   });
 });

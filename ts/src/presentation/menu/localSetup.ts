@@ -4,7 +4,7 @@ import { Rng } from '../../domain/core/Rng.js';
 import { secondsToTicks } from '../../domain/core/Tick.js';
 import type { MatchConfig } from '../../domain/rules/MatchConfig.js';
 import { DUEL_SPAWN_ORDER, ROUND_SECONDS, STARTING_HP, WINS_TO_TAKE_MATCH } from '../../domain/rules/tuning.js';
-import type { Roster } from '../hud/roster.js';
+import { localRoster, type Roster } from '../hud/roster.js';
 import { hitsForHp, hpForHits } from './choices.js';
 
 /**
@@ -125,11 +125,7 @@ export function planLocalMatch(setup: LocalSetup, seed: number): LocalPlan {
       ...layouts.map((layout): LocalController => ({ kind: 'keys', layout })),
       ...cpuLevels.map((level): LocalController => ({ kind: 'cpu', level })),
     ],
-    roster: [
-      // 「あなた」の印は付けない。1台を囲んでいる全員が同じ画面を見ている。
-      ...layouts.map((_, index) => ({ kind: 'human' as const, label: `${index + 1}P`, local: false })),
-      ...cpuLevels.map((level) => ({ kind: 'cpu' as const, level })),
-    ],
+    roster: localRoster(layouts.length, cpuLevels),
   };
 }
 

@@ -42,7 +42,7 @@ export class ItemSystem {
     world.items.splice(index, 1);
     const multiplier = abilityOf(player.animal).itemMultiplier;
     return [
-      { type: 'itemTaken', cell, kind: item.kind, taker: player.id },
+      { type: 'itemTaken', cell, kind: item.kind, taker: player.id, swept: false },
       ...applyItem(world, player, item.kind, multiplier),
     ];
   }

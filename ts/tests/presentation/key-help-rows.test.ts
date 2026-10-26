@@ -15,7 +15,7 @@ import { makeWorld } from '../helpers.js';
  */
 
 const human = (label: string, local = false): Controller => ({ kind: 'human', label, local });
-const CPU: Controller = { kind: 'cpu', level: 'normal' };
+const CPU: Controller = { kind: 'cpu', number: 1, level: 'normal' };
 const SOLO: Roster = [human('1P'), CPU, CPU, CPU];
 const DUO: Roster = [human('1P'), human('2P'), CPU, CPU];
 

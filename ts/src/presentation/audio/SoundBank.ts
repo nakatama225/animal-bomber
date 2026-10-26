@@ -22,7 +22,6 @@ export type SoundName =
   | 'tick'
   | 'fanfare'
   | 'hop'
-  | 'lineBombs'
   | 'tongue'
   | 'special'
   | 'charge'
@@ -40,7 +39,9 @@ export type SoundName =
   | 'snot'
   | 'foxLeap'
   | 'foxfireHit'
-  | 'spit';
+  | 'spit'
+  /** 画面の操作の音（原型の `SE.ui`）。試合の外の画面と、根元まで焼けた舌を出そうとしたときに鳴らす。 */
+  | 'ui';
 
 /** すべての音の名前。表の漏れを検査するのに使う。 */
 export const SOUND_NAMES: readonly SoundName[] = [
@@ -61,7 +62,6 @@ export const SOUND_NAMES: readonly SoundName[] = [
   'tick',
   'fanfare',
   'hop',
-  'lineBombs',
   'tongue',
   'special',
   'charge',
@@ -80,6 +80,7 @@ export const SOUND_NAMES: readonly SoundName[] = [
   'foxLeap',
   'foxfireHit',
   'spit',
+  'ui',
 ];
 
 /** 音を鳴らすもの。 */

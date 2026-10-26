@@ -65,13 +65,16 @@ export class BurntTongueActor implements WorldActor {
     this.#untilRegen = REGEN_TIME;
   }
 
+  /** 1 tick 進める。1マス戻ったら知らせる（画面の通知のため。原型 L4307 は、元の長さまで戻った回にも出す）。 */
   tick(): { events: SimEvent[]; done: boolean } {
     this.#untilRegen = tick(this.#untilRegen - 1);
+    const events: SimEvent[] = [];
     if (this.#untilRegen <= 0) {
       this.#limit = Math.min(TONGUE_REACH, this.#limit + 1);
       this.#untilRegen = REGEN_TIME;
+      events.push({ type: 'reachRestored', player: this.owner, reach: this.#limit });
     }
-    return { events: [], done: this.#limit >= TONGUE_REACH };
+    return { events, done: this.#limit >= TONGUE_REACH };
   }
 
   encode(): string {
@@ -79,12 +82,16 @@ export class BurntTongueActor implements WorldActor {
   }
 }
 
+/** そのプレイヤーの焼けた舌。焼けていない（伸ばせる長さが元のまま）なら undefined。 */
+export function burntTongueOf(world: Readonly<WorldState>, owner: PlayerId): BurntTongueActor | undefined {
+  return world.actors.find(
+    (actor): actor is BurntTongueActor => actor instanceof BurntTongueActor && actor.owner === owner,
+  );
+}
+
 /** そのプレイヤーがいま伸ばせる舌のマス数。焼けていなければ TONGUE_REACH。CPU が「届くか」を判断するのにも使う。 */
 export function tongueReachOf(world: Readonly<WorldState>, player: PlayerState): number {
-  const burnt = world.actors.find(
-    (actor): actor is BurntTongueActor => actor instanceof BurntTongueActor && actor.owner === player.id,
-  );
-  return burnt?.limit ?? TONGUE_REACH;
+  return burntTongueOf(world, player.id)?.limit ?? TONGUE_REACH;
 }
 
 /**
@@ -157,7 +164,7 @@ export class TongueAction implements ActiveAction {
         // 戻りきった。掴んでいたものがあれば、ここで適用される（拾った音もここ。原型も applyItem の中で鳴らす）。
         // 倍率は能力が持つが、ここでは参照しない。かえる自身の技なので 2 を直に書いてよい。共通の処理ではないため。
         if (this.#caught !== null) {
-          events.push({ type: 'itemTaken', cell: null, kind: this.#caught, taker: player.id });
+          events.push({ type: 'itemTaken', cell: null, kind: this.#caught, taker: player.id, swept: false });
           events.push(...applyItem(world, player, this.#caught, 2));
         }
         return { events, done: true };
@@ -227,7 +234,7 @@ export class TongueAction implements ActiveAction {
     const cell = step(this.#origin, this.#direction, at);
     return [
       { type: 'burntOff', player: player.id, cell },
-      { type: 'effectApplied', target: player.id, effect: 'stun' },
+      { type: 'effectApplied', target: player.id, effect: 'stun', pushedBy: null },
     ];
   }
 }

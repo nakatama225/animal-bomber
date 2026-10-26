@@ -6,6 +6,7 @@ import { ANIMAL_LOOKS } from '../../src/content/animals.js';
 import type { PeerMessage } from '../../src/net/protocol.js';
 import type { PadSnapshot } from '../../src/platform/GamepadInput.js';
 import { KeyboardWatcher, type KeyboardState } from '../../src/platform/Keyboard.js';
+import { Toasts } from '../../src/platform/ui/Toasts.js';
 import type { WebSocketLinkHandlers } from '../../src/platform/WebSocketLink.js';
 import type { SoundName } from '../../src/presentation/audio/SoundBank.js';
 import type { SoundSetting } from '../../src/presentation/menu/MenuFlow.js';
@@ -894,7 +895,8 @@ describe('通信対戦で、接続を保ったまま次の試合を始める', (
   function playToEnd(shell: Shell, elements: ShellElements, relay: () => WebSocketLinkHandlers, others: readonly number[], match: number): void {
     let delivered = 0;
     let ticks = 0;
-    const decided = (): boolean => !elements.banner.hidden && /優勝！|引き分け/.test(elements.banner.textContent ?? '');
+    // 試合が決まるのは優勝者が出たときだけ（原型の endGame の3つの形。優勝者のいない「引き分け」の幕は無い）。
+    const decided = (): boolean => !elements.banner.hidden && /優勝！/.test(elements.banner.textContent ?? '');
     while (!decided()) {
       // 使う前に届くよう、少し先の tick まで届けておく。
       for (; delivered < ticks + 10; delivered += 1) {
@@ -1146,6 +1148,41 @@ describe('押してすぐ離したキーとボタン（押した瞬間を忘れ�
       return places(played) - before;
     };
     expect(placedBy(true)).toBe(placedBy(false) + 1);
+  });
+});
+
+describe('通知（配線）', () => {
+  it('盤面で倒れて外周へ回った通知は、名札の一覧で人間のプレイヤーにだけ出し、CPU には出さない（名札の一覧を通知へ渡す）', () => {
+    // 盤面の通知は 4 つまでしか残らないので、出した通知は出す所で控える。
+    const shown = vi.spyOn(Toasts.prototype, 'show');
+    try {
+      const { shell, elements } = mount();
+      shell.showMenu();
+      press(elements.menu, '[data-choice="solo"]');
+      press(elements.menu, '[data-action="next"]');
+      press(elements.menu, '[data-action="start"]');
+      shell.draw(0);
+      // 人間は操作しない。人間と CPU の両方が外周へ回ったのを名札で見るまで進める。
+      const lane = { human: new Set<string>(), cpu: new Set<string>() };
+      let ticks = 0;
+      while (lane.human.size === 0 || lane.cpu.size === 0) {
+        shell.tick();
+        shell.draw(0);
+        for (const card of elements.side.querySelectorAll('.card.negibon')) {
+          const name = card.querySelector('.name')?.firstChild?.textContent?.trim() ?? '';
+          const cpu = [...card.querySelectorAll('.tag')].some((tag) => tag.textContent?.startsWith('CPU'));
+          (cpu ? lane.cpu : lane.human).add(name);
+        }
+        ticks += 1;
+        if (ticks > 20_000) throw new Error('人間と CPU の両方が外周へ回らない');
+      }
+      // 同じ動物どうしだと、通知の呼び方（動物の名前）で見分けられない。
+      expect([...lane.cpu].filter((name) => lane.human.has(name))).toEqual([]);
+      const toLane = shown.mock.calls.map(([message]) => message).filter((message) => message.includes('は葱ボンへ'));
+      expect(toLane).toEqual([...lane.human].map((name) => `🌿 ${name} は葱ボンへ！ 外周から葱を撃って復活をねらえ`));
+    } finally {
+      shown.mockRestore();
+    }
   });
 });
 

@@ -206,8 +206,9 @@ export class ChargeAction implements ActiveAction {
       if (this.#carried.length < CARRY_LIMIT) this.#carried.push(item.kind);
       return [];
     }
+    // 吸い込んだ印を付ける（画面の通知「… を吸い込んだ！」のため。原型 L2818）。
     const events: SimEvent[] = [
-      { type: 'itemTaken', cell, kind: item.kind, taker: player.id },
+      { type: 'itemTaken', cell, kind: item.kind, taker: player.id, swept: true },
     ];
     events.push(...applyItem(world, player, item.kind, lookupAbility(player.animal)?.itemMultiplier ?? 1));
     return events;
@@ -240,10 +241,11 @@ export class ChargeAction implements ActiveAction {
       }
 
       // ぶつけたアイテムには、ぶつけられた側の倍率がかかる（原型の applyItem。効果が2倍の
-      // 動物なら、たまねぎで泣く長さも2倍）。
+      // 動物なら、たまねぎで泣く長さも2倍）。押しつけた側を状態の知らせに載せる（画面の
+      // 「n個 ぶつけた！」の通知のため。`effectApplied.pushedBy`）。
       if (this.#carried.length > 0) {
         const multiplier = ability?.itemMultiplier ?? 1;
-        for (const kind of this.#carried) events.push(...applyItem(world, other, kind, multiplier));
+        for (const kind of this.#carried) events.push(...applyItem(world, other, kind, multiplier, player.id));
         this.#carried.length = 0;
       }
 

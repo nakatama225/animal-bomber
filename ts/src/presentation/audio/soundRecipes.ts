@@ -153,11 +153,6 @@ export const SOUND_RECIPES: Readonly<Record<SoundName, Recipe>> = {
     v.tone({ f0: 400, f1: 820, type: 'triangle', dur: 0.13, vol: 0.2 });
   },
 
-  // 原型でも、一列に置いたときは1個置くときと同じ音を1回だけ鳴らしていた。
-  // 置いた数だけ届く bombPlaced と重ならないよう、同じ関数を指しておく
-  // （WebAudioSoundBank は同じ作り方の音を同時に重ねない）。
-  lineBombs: place,
-
   tongue(v) {
     v.tone({ f0: 700, f1: 1300, type: 'sine', dur: 0.13, vol: 0.16 });
   },
@@ -246,5 +241,10 @@ export const SOUND_RECIPES: Readonly<Record<SoundName, Recipe>> = {
   spit(v) {
     v.tone({ f0: 330, f1: 660, type: 'triangle', dur: 0.11, vol: 0.15 });
     v.tone({ f0: 990, type: 'square', dur: 0.05, vol: 0.08, delay: 0.06 });
+  },
+
+  ui(v) {
+    // 画面の操作の音（原型の SE.ui。L909）。短く高い矩形波1つ。
+    v.tone({ f0: 760, type: 'square', dur: 0.05, vol: 0.12 });
   },
 };

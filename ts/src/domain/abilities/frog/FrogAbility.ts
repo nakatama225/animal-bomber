@@ -3,7 +3,7 @@ import { secondsToTicks } from '../../core/Tick.js';
 import type { Ability } from '../Ability.js';
 import { NEUTRAL_ABILITY } from '../Ability.js';
 import { SlimeBombActor } from './SlimeBombActor.js';
-import { TongueAction, tongueReachOf } from './TongueAction.js';
+import { burntTongueOf, TongueAction } from './TongueAction.js';
 
 /**
  * かえる。アイテムの効果が2倍になる。
@@ -19,9 +19,21 @@ export const FROG: Ability = {
   itemMultiplier: 2,
   holdTicks: secondsToTicks(0.5),
 
-  /** 舌を伸ばす。根元まで焼けていれば出せない（原型の startTongue）。 */
+  /**
+   * 舌を伸ばす。根元まで焼けていれば出せない（原型の startTongue）。
+   *
+   * 出せないときは、出せなかったことだけを知らせる（画面の通知と操作の音のため。原型 L2498）。
+   * 技を出したことにはならず、間隔も始まらない。
+   */
   onTap(world, player) {
-    if (tongueReachOf(world, player) <= 0) return { action: null, events: [] };
+    const scar = burntTongueOf(world, player.id);
+    if (scar !== undefined && scar.limit <= 0) {
+      return {
+        action: null,
+        events: [],
+        refusal: { type: 'techniqueRefused', player: player.id, wait: scar.untilRegen },
+      };
+    }
     return { action: new TongueAction(cellOf(player.position), player.facing), events: [] };
   },
 
