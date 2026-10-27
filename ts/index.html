@@ -11,28 +11,27 @@
       <!-- 試合の前の画面（タイトル・キャラ選び・ルール・設定とマニュアルと更新履歴）と、通信対戦のロビー。中身はスクリプトが組み立てる -->
       <section id="menu"></section>
 
-      <!-- 試合の画面 -->
+      <!-- 試合の画面。盤面と横の板を横に並べる（原型の .stage。L513-540） -->
       <section id="play" hidden>
         <div class="stage">
+          <!-- 盤面に重ねるもの（ラウンドの間の幕・通信対戦の案内の帯）を置くための包み。原型は canvas だけを置く。
+               大きさは窓の大きさからスクリプトが決める（原型の fitBoard） -->
           <div class="board">
-            <canvas id="stage" width="920" height="680"></canvas>
-            <!-- 盤面に重ねるもの。ラウンドの間の幕・短い通知・ポーズの表示 -->
+            <canvas id="stage"></canvas>
             <div id="banner" class="banner" hidden></div>
-            <div id="toasts" class="toasts"></div>
-            <div id="pause" class="pause" hidden>ポーズ中（P で再開）</div>
-          </div>
-          <aside class="side">
-            <div id="side-panel"></div>
-            <!-- 通信対戦の、接続の様子。高さを固定して、文が出たり消えたりしても板が上下に動かないようにする -->
+            <!-- 通信対戦の案内の帯。盤面の下の端に重ね、幕より上に出す（原型に無い。Python 版と同じ置き場所） -->
             <p id="lan-status" class="lan-status" hidden></p>
-            <div id="toolbar" class="toolbar"></div>
-          </aside>
+          </div>
+          <!-- 横の板（時計・つまみ・名札・キーの案内・ツールバー）。中身は試合ごとにスクリプトが組み立てる -->
+          <div id="side"></div>
         </div>
       </section>
     </div>
 
     <!-- 起動の幕。全面を覆うので #app の外に置く（原型と同じ）。中身はスクリプトが組み立て、出すときだけ hidden を外す -->
     <div id="splash" hidden></div>
+    <!-- 画面の上に出す通知。どの画面の上にも出るので #app の外に1つだけ置く（原型と同じ） -->
+    <div id="toast" class="toast"></div>
     <script type="module" src="/src/app/main.ts"></script>
   </body>
 </html>

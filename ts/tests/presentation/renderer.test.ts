@@ -16,7 +16,7 @@ import type { InputSource } from '../../src/domain/input/InputSource.js';
 import { OUT } from '../../src/domain/state/Life.js';
 import { isAlive, type PlayerState } from '../../src/domain/state/PlayerState.js';
 import { hashWorld } from '../../src/domain/state/WorldState.js';
-import { layoutFor, screenX } from '../../src/presentation/render/Layout.js';
+import { boardLayoutFor, layoutFor, screenX } from '../../src/presentation/render/Layout.js';
 import { Renderer } from '../../src/presentation/render/Renderer.js';
 import { grantSpecial, makeWorld } from '../helpers.js';
 import { fakeCanvas, type FakeCanvas } from './fakeCanvas.js';
@@ -79,7 +79,7 @@ describe('描画', () => {
         const cpu = new CpuInputSource(player.id, CPU_LEVELS.oni, cpuSeed(seed, player.id));
         game.attach(player.animal === 'frog' ? pressingSpecial(cpu, wantsSlime) : cpu);
       });
-      const renderer = new Renderer(canvas.context, 920, 680);
+      const renderer = new Renderer(canvas.context, layoutFor(920, 680));
       let intermissions = 0;
       let granted: unknown = null;
       let frogGranted: unknown = null;
@@ -128,7 +128,7 @@ describe('描画', () => {
     const world = makeWorld(3, ['rabbit']);
     world.players[0]!.position = { x: 20.5, y: 14.5 };
     const canvas = fakeCanvas();
-    const renderer = new Renderer(canvas.context, 920, 680);
+    const renderer = new Renderer(canvas.context, layoutFor(920, 680));
     renderer.beforeTick(world);
     renderer.afterTick(enterSuddenDeath(world, [0], 'timeUp'), world);
     renderer.draw(world, 0.5);
@@ -149,7 +149,7 @@ describe('描画', () => {
     shooter.life = { kind: 'negibon', along: 0, readyAt: tick(0) };
     target.position = { x: 1.5, y: 3.5 };
     const canvas = fakeCanvas();
-    const renderer = new Renderer(canvas.context, 920, 680);
+    const renderer = new Renderer(canvas.context, layoutFor(920, 680));
     renderer.beforeTick(world);
     renderer.afterTick(swapPlaces(world, shooter, target), world);
     renderer.draw(world, 0.5);
@@ -177,7 +177,7 @@ describe('描画', () => {
       }
       const canvas = fakeCanvas();
       const before = hashWorld(world);
-      new Renderer(canvas.context, 920, 680).draw(world, 0.5);
+      new Renderer(canvas.context, layoutFor(920, 680)).draw(world, 0.5);
       expect(hashWorld(world)).toBe(before);
       return canvas;
     };
@@ -204,13 +204,100 @@ describe('描画', () => {
       if (life === 'negibon') frog.life = { kind: 'negibon', along: 5, readyAt: tick(0) };
       if (life === 'out') frog.life = OUT;
       const canvas = fakeCanvas();
-      new Renderer(canvas.context, 920, 680).draw(world, 0.5);
+      new Renderer(canvas.context, layoutFor(920, 680)).draw(world, 0.5);
       return canvas.log;
     };
     expect(drawWith('negibon', true)).toEqual(drawWith('negibon', false));
     expect(drawWith('out', true)).toEqual(drawWith('out', false));
     // 対照：盤面にいれば舌を描く（同じ比べ方で違いが出る）。
     expect(drawWith('alive', true)).not.toEqual(drawWith('alive', false));
+  });
+});
+
+describe('ポーズの幕（原型の draw の最後。L4566-4573）', () => {
+  /** 呼んだ命令と、書いた値（`fillStyle` など）を、起きた順に控える canvas。命令は偽の canvas に渡す。 */
+  function recordingCanvas(): { context: CanvasRenderingContext2D; steps: string[] } {
+    const fake = fakeCanvas({ keepLog: false });
+    const steps: string[] = [];
+    const target = fake.context as unknown as Record<string, unknown>;
+    const context = new Proxy(target, {
+      get(_target, property) {
+        const value = target[property as string];
+        if (typeof value !== 'function') return value;
+        return (...args: unknown[]) => {
+          steps.push(`${String(property)}(${args.map((arg) => JSON.stringify(arg)).join(',')})`);
+          return (value as (...a: unknown[]) => unknown)(...args);
+        };
+      },
+      set(_target, property, value) {
+        steps.push(`${String(property)}=${JSON.stringify(value)}`);
+        target[property as string] = value;
+        return true;
+      },
+    }) as unknown as CanvasRenderingContext2D;
+    return { context, steps };
+  }
+
+  it('止めている間は、盤面全体を暗くし、真ん中に PAUSE、30px 下に「P で再開」を、原型の色と書体で描く', () => {
+    const { context, steps } = recordingCanvas();
+    new Renderer(context, layoutFor(920, 680)).draw(makeWorld(3, ['rabbit']), 0.5, true);
+    const start = steps.lastIndexOf('fillStyle="rgba(10,6,4,.6)"');
+    expect(start).toBeGreaterThan(0);
+    expect(steps.slice(start)).toEqual([
+      'fillStyle="rgba(10,6,4,.6)"',
+      'fillRect(0,0,920,680)',
+      'fillStyle="#ffd23f"',
+      'font="900 34px system-ui"',
+      'textAlign="center"',
+      'textBaseline="middle"',
+      'fillText("PAUSE",460,340)',
+      'font="600 14px system-ui"',
+      'fillStyle="#c9ab97"',
+      'fillText("P で再開",460,370)',
+      // 画面の揺れ（save のあとの平行移動）の内側で描き、最後に戻す（原型と同じ）。
+      'restore()',
+    ]);
+    expect(steps.lastIndexOf('save()')).toBeLessThan(start);
+  });
+
+  it('止めていなければ描かない', () => {
+    const { context, steps } = recordingCanvas();
+    new Renderer(context, layoutFor(920, 680)).draw(makeWorld(3, ['rabbit']), 0.5);
+    expect(steps.some((step) => step.startsWith('fillText("PAUSE"'))).toBe(false);
+    expect(steps).not.toContain('fillStyle="rgba(10,6,4,.6)"');
+  });
+
+  it('寸法を替えたら（窓の大きさが替わったとき）、新しい寸法で描く', () => {
+    const { context, steps } = recordingCanvas();
+    const renderer = new Renderer(context, layoutFor(920, 680));
+    renderer.resize(boardLayoutFor(1440, 900));
+    renderer.draw(makeWorld(3, ['rabbit']), 0.5, true);
+    expect(steps).toContain('fillRect(0,0,1115,839)');
+    expect(steps).toContain('fillText("PAUSE",557.5,419.5)');
+  });
+});
+
+describe('盤面の寸法を窓の大きさから決める（原型の fitBoard。L583-606）', () => {
+  it('窓の幅から横の板などの 312px、高さから 56px を引いた所に入る、いちばん大きいマスにする', () => {
+    // 1440×900：幅 1128 / 24.24 = 46.5…、高さ 844 / 18.24 = 46.2… → 46。描画面は 24.24 × 46 と 18.24 × 46 を丸める。
+    expect(boardLayoutFor(1440, 900)).toEqual({ tile: 46, originX: 0.62 * 46, originY: 0.62 * 46, width: 1115, height: 839 });
+    // 1024×768：幅 712 / 24.24 = 29.3… が狭いほう → 29。
+    expect(boardLayoutFor(1024, 768)).toMatchObject({ tile: 29, width: 703, height: 529 });
+    // 高さが狭いほうになるとき（1920×900：幅 1608 / 24.24 = 66.3…、高さ 844 / 18.24 = 46.2…）。
+    expect(boardLayoutFor(1920, 900).tile).toBe(46);
+  });
+
+  it('マスは 26 より小さくせず、96 より大きくしない（原型の TILE_MIN・TILE_MAX）。読めない大きさ（0）は 1280×800 とみなす', () => {
+    expect(boardLayoutFor(300, 200).tile).toBe(26);
+    expect(boardLayoutFor(5000, 3000).tile).toBe(96);
+    expect(boardLayoutFor(0, 0)).toEqual(boardLayoutFor(1280, 800));
+    expect(boardLayoutFor(1280, 800).tile).toBe(39);
+  });
+
+  it('描画面から決め直すと1つ小さいマスになる大きさでも、決めたマスのまま（丸めた幅を割ると、わずかに足りない）', () => {
+    const layout = boardLayoutFor(1440, 900);
+    expect(layoutFor(layout.width, layout.height).tile).toBe(45);
+    expect(layout.tile).toBe(46);
   });
 });
 

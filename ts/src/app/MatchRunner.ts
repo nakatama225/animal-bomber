@@ -36,7 +36,7 @@ export interface MatchRunner {
    * 通信対戦はいつも false。入力を待って進めないのは止めているのではなく、押したキーは送るまで残す。
    */
   readonly stopped: boolean;
-  /** 止める・再開する。止められない試合（通信対戦）では何もしない。 */
+  /** 止める・再開する。止められない試合（通信対戦）と、ラウンドの最中でないときは何もしない。 */
   readonly togglePause: () => void;
   /** 1 tick 進める。`ready` のときだけ呼ぶ。 */
   readonly step: () => SimEvent[];
@@ -87,8 +87,9 @@ export class LocalMatch implements MatchRunner {
   }
 
   togglePause(): void {
-    // 決まった試合は止めても意味がない（進めても何も起きない）。
-    if (this.session.match.finished) return;
+    // 止められるのはラウンドの最中だけ（原型の `togglePause` の `G.phase!=='play'`。L4215）。決まった試合は止めても
+    // 意味がなく、決着のあとの待ちの間は幕が出ている（原型の幕の間も止められない）。
+    if (this.session.match.finished || this.session.betweenRounds) return;
     this.#paused = !this.#paused;
   }
 

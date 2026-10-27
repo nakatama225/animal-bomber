@@ -330,6 +330,40 @@ describe('つかむパッド', () => {
     first = pad({ index: 0 });
     expect(new GamepadInputSource(0, choice).next().bomb).toBe(true);
   });
+
+  it('見つけたことと、標準の並びでない機器のことを、それぞれ1回だけ知らせる（原型の PAD.announced・PAD.warned）', () => {
+    let pads: (PadSnapshot | null)[] = [];
+    const choice = new PadChoice(() => pads);
+    choice.pick();
+    expect(choice.takeNotices()).toEqual([]);
+    // 標準の並びでない機器だけ：名前を添えて知らせる。見つけてはいない。
+    pads = [{ ...pad({ index: 0, mapping: '' }), id: 'Odd Stick' }];
+    choice.pick();
+    choice.pick();
+    expect(choice.takeNotices()).toEqual([{ kind: 'unsupported', id: 'Odd Stick' }]);
+    expect(choice.takeNotices()).toEqual([]);
+    // 標準のパッドが点いたら、見つけたことを1回だけ知らせる。対応していない機器のことは、もう知らせない。
+    pads = [{ ...pad({ index: 0, mapping: '' }), id: 'Odd Stick' }, pad({ index: 1 })];
+    choice.pick();
+    choice.pick();
+    expect(choice.takeNotices()).toEqual([{ kind: 'found' }]);
+    // 抜いて差し直しても、知らせ直さない（原型も起動の間に1回だけ）。
+    pads = [];
+    choice.pick();
+    pads = [pad({ index: 1 })];
+    choice.pick();
+    expect(choice.takeNotices()).toEqual([]);
+  });
+
+  it('覚えたパッドが生きている間は探し直さないので、あとから点いた標準でない機器のことは知らせない（原型の pickPad）', () => {
+    let pads: (PadSnapshot | null)[] = [pad({ index: 1 })];
+    const choice = new PadChoice(() => pads);
+    choice.pick();
+    expect(choice.takeNotices()).toEqual([{ kind: 'found' }]);
+    pads = [{ ...pad({ index: 0, mapping: '' }), id: 'Odd Stick' }, pad({ index: 1 })];
+    choice.pick();
+    expect(choice.takeNotices()).toEqual([]);
+  });
 });
 
 describe('ブラウザからパッドを読む', () => {
@@ -354,11 +388,13 @@ describe('ブラウザからパッドを読む', () => {
   it('ボタンのアナログの値（value）も写す。写さないと、pressed の立たないボタンを試合で読めない', () => {
     const buttons = Array.from({ length: 17 }, (_, i) => ({ pressed: false, value: i === 0 ? 0.8 : 0 }));
     vi.stubGlobal('navigator', {
-      getGamepads: () => [{ mapping: 'standard', connected: true, index: 0, buttons, axes: [0, 0, 0, 0] }],
+      getGamepads: () => [{ mapping: 'standard', connected: true, index: 0, buttons, axes: [0, 0, 0, 0], id: 'Pad (Vendor: 1)' }],
     });
     try {
       const [snapshot] = readBrowserGamepads();
       expect(snapshot?.buttons[0]).toEqual({ pressed: false, value: 0.8 });
+      // 機器の名前も写す（対応していない機器の通知に出す）。
+      expect(snapshot?.id).toBe('Pad (Vendor: 1)');
       expect(new GamepadInputSource(0, new PadChoice(readBrowserGamepads)).next().bomb).toBe(true);
     } finally {
       vi.unstubAllGlobals();

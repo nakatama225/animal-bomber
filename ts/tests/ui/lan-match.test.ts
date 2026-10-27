@@ -146,8 +146,24 @@ describe('通信対戦の配線', () => {
 
     match.afterDraw();
     expect(status.textContent).toBe('');
+    // 案内の帯は盤面の下の端に重なるので、出す文が無い間は隠す。
+    expect(status.hidden).toBe(true);
     for (let i = 0; i < 40; i += 1) match.afterDraw();
     expect(status.textContent).toContain('2P の操作を待っている');
+    expect(status.hidden).toBe(false);
+  });
+
+  it('抜けるときは、案内の帯を空にして隠す（1台の試合の盤面に、前の案内を残さない）', () => {
+    const { match, status, relay } = mount();
+    deliver(relay, { t: 'welcome', seat: 0, role: 'host', seats: [] });
+    const config = { match: { roundLimit: 600, winsToTake: 3, suddenDeath: true, startingHp: [6, 6], seed: 1, animals: ['rabbit', 'fox'] }, cpu: ['easy', 'hard'] };
+    deliver(relay, { t: 'start', seats: [0], config, match: 1 });
+    relay.onClose(1006);
+    match.afterDraw();
+    expect(status.hidden).toBe(false);
+    match.close();
+    expect(status.textContent).toBe('');
+    expect(status.hidden).toBe(true);
   });
 
   it('始まる前に断られたら、ロビーの画面で理由を出す', () => {

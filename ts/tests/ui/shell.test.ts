@@ -6,11 +6,14 @@ import { ANIMAL_LOOKS } from '../../src/content/animals.js';
 import type { PeerMessage } from '../../src/net/protocol.js';
 import type { PadSnapshot } from '../../src/platform/GamepadInput.js';
 import { KeyboardWatcher, type KeyboardState } from '../../src/platform/Keyboard.js';
+import { SidePanel } from '../../src/platform/ui/SidePanel.js';
 import { Toasts } from '../../src/platform/ui/Toasts.js';
 import type { WebSocketLinkHandlers } from '../../src/platform/WebSocketLink.js';
 import type { SoundName } from '../../src/presentation/audio/SoundBank.js';
+import { PanelRefresh } from '../../src/presentation/hud/panelRefresh.js';
 import type { SoundSetting } from '../../src/presentation/menu/MenuFlow.js';
 import type * as PlayersModule from '../../src/presentation/render/players.js';
+import { Renderer } from '../../src/presentation/render/Renderer.js';
 import { fakeCanvas } from '../presentation/fakeCanvas.js';
 
 /**
@@ -44,6 +47,15 @@ function press(root: ParentNode, selector: string): void {
   target.dispatchEvent(new MouseEvent('click', { detail: 1, bubbles: true }));
 }
 
+/** 横の板のキーの案内の文。キー（原型の `.k`）は [] で囲む（`keyHelpText` と同じ書き方）。 */
+function keyHelpOf(root: ParentNode): string {
+  const help = root.querySelector('.keyhelp');
+  if (help === null) return '';
+  const copy = help.cloneNode(true) as HTMLElement;
+  for (const key of copy.querySelectorAll('.k')) key.textContent = `[${key.textContent ?? ''}]`;
+  return copy.textContent ?? '';
+}
+
 /**
  * 画面を組み立てる。
  *
@@ -51,12 +63,14 @@ function press(root: ParentNode, selector: string): void {
  *   押した瞬間は残さない（押してすぐ離したキーを見るテストは `keyboard` に本物を渡す）
  * @param pads いまのゲームパッド。同じく呼ばれるたびに読む
  * @param keyboard キーボード。省くと `held` から答える
+ * @param context 盤面を描く先。省くと、命令を残さない偽の canvas
  */
 function mount(
   sound: SoundSetting = 'both',
   held: () => readonly string[] = () => [],
   pads: () => readonly (PadSnapshot | null)[] = () => [],
   keyboard?: KeyboardState,
+  context: CanvasRenderingContext2D = fakeCanvas({ keepLog: false }).context,
 ): {
   shell: Shell;
   elements: ShellElements;
@@ -83,9 +97,7 @@ function mount(
     canvas,
     side: make('side'),
     banner: make('banner'),
-    toasts: make('toasts'),
-    pause: make('pause'),
-    toolbar: make('toolbar'),
+    toast: make('toast'),
     lanStatus: make('lan-status'),
   };
   const played: SoundName[] = [];
@@ -96,7 +108,7 @@ function mount(
   let relay: WebSocketLinkHandlers | null = null;
   const pressed = (codes: readonly string[]): boolean => codes.some((code) => held().includes(code));
   const tools: ShellTools = {
-    context: fakeCanvas({ keepLog: false }).context,
+    context,
     keyboard: keyboard ?? { anyOf: pressed, buttonAnyOf: pressed, forgetTaps: () => undefined },
     gamepads: pads,
     sounds: {
@@ -160,16 +172,17 @@ describe('画面の切り替え', () => {
     shell.draw(0);
     expect(elements.menu.hidden).toBe(true);
     expect(elements.banner.hidden).toBe(true);
-    expect(elements.side.querySelector('.time')?.textContent).toBe('1:00');
+    expect(elements.side.querySelector('.t')?.textContent).toBe('1:00');
 
-    press(elements.toolbar, '[data-action="quit"]');
+    // 横の板の「設定へ」は、確認を出さずにタイトルへ戻る（原型の注記 L3377-3380）。
+    expect(elements.side.querySelector('[data-action="quit"]')?.textContent).toBe('設定へ');
+    press(elements.side, '[data-action="quit"]');
     expect(elements.menu.hidden).toBe(false);
     expect(elements.play.hidden).toBe(true);
     expect(elements.menu.querySelector('[data-screen="title"]')).not.toBeNull();
-    // 前の試合のものを残さない。
+    // 前の試合のものを残さない（横の板は空にする）。
     expect(elements.banner.hidden).toBe(true);
-    expect(elements.toolbar.childElementCount).toBe(0);
-    expect(elements.toasts.childElementCount).toBe(0);
+    expect(elements.side.childElementCount).toBe(0);
   }, 120_000);
 
   it('通信対戦では、番号を受け取ってから自分のキー配置を出す', () => {
@@ -185,15 +198,31 @@ describe('画面の切り替え', () => {
     relay().onMessage(JSON.stringify({ t: 'start', seats: [0, 2], config, match: 1 }));
     shell.draw(0);
     expect(elements.play.hidden).toBe(false);
-    const help = elements.side.querySelector('.keyhelp')?.textContent ?? '';
+    const help = keyHelpOf(elements.side);
     // この端末のプレイヤー（3P のかえる）の案内だけを、1人の形（「そうさ」・WASD と矢印）で出す。
     expect(help).toContain('そうさ');
-    expect(help).toContain('した E Q X C R Shift');
+    expect(help).toContain('した [E][Q][X][C][R][Shift]');
     expect(help).not.toContain('1P');
-    expect(help).toContain('W A S D / ↑ ← ↓ →');
+    expect(help).toContain('[W][A][S][D] / [↑][←][↓][→]');
     // パッドを認識していないので、パッドの段は出さない。通信対戦ではポーズできないので、ポーズの行も出さない。
     expect(help).not.toContain('🎮');
     expect(help).not.toContain('ポーズ');
+  });
+
+  it('通信対戦の横の板には、つまみも「⏸ ポーズ」も出さず、「設定へ」だけを出す（押すと抜ける）', () => {
+    const { shell, elements, relay, left } = mount();
+    shell.startLan('relay.local:8777');
+    const config = {
+      match: { roundLimit: 600, winsToTake: 3, suddenDeath: true, startingHp: [6, 6, 6, 6], seed: 1, animals: ['rabbit', 'fox', 'frog', 'mole'] },
+      cpu: ['easy', 'easy', 'easy', 'easy'],
+    };
+    relay().onMessage(JSON.stringify({ t: 'welcome', seat: 1, role: 'guest', seats: [0] }));
+    relay().onMessage(JSON.stringify({ t: 'start', seats: [0, 1], config, match: 1 }));
+    shell.draw(0);
+    expect(elements.side.querySelector('[data-field="speed"]')).toBeNull();
+    expect([...elements.side.querySelectorAll('.toolbar > .tbtn')].map((button) => button.textContent)).toEqual(['設定へ']);
+    press(elements.side, '[data-action="quit"]');
+    expect(left.count).toBe(1);
   });
 
   it('前に選んだ音の設定を、設定の画面に出す', () => {
@@ -204,29 +233,43 @@ describe('画面の切り替え', () => {
     expect(elements.menu.querySelector('[data-field="sound"] .on')?.textContent).toBe('無音');
   });
 
-  it('ポーズの間は進めず、曲も止める', () => {
-    const { shell, elements, music } = mount();
-    shell.showMenu();
-    press(elements.menu, '[data-choice="solo"]');
-    press(elements.menu, '[data-action="next"]');
-    press(elements.menu, '[data-action="start"]');
-    shell.draw(0);
-    const time = (): string | null | undefined => elements.side.querySelector('.time')?.textContent;
+  it('ポーズの間は進めず、曲も止め、盤面にポーズの幕を描き、ボタンの字を「▶ 再開」にする', () => {
+    const drawn = vi.spyOn(Renderer.prototype, 'draw');
+    try {
+      const { shell, elements, music } = mount();
+      shell.showMenu();
+      press(elements.menu, '[data-choice="solo"]');
+      press(elements.menu, '[data-action="next"]');
+      press(elements.menu, '[data-action="start"]');
+      shell.draw(0);
+      const time = (): string | null | undefined => elements.side.querySelector('.t')?.textContent;
+      const button = (): string | null | undefined => elements.side.querySelector('[data-action="pause"]')?.textContent;
+      /** 最後に描いたときに、ポーズの幕を描くと渡したか。 */
+      const pausedDrawn = (): unknown => drawn.mock.calls.at(-1)?.[2];
+      expect(button()).toBe('⏸ ポーズ');
+      expect(pausedDrawn()).toBe(false);
 
-    press(elements.toolbar, '[data-action="pause"]');
-    shell.draw(0);
-    expect(elements.pause.hidden).toBe(false);
-    const stoppedBefore = music.stopped;
-    for (let i = 0; i < 120; i += 1) shell.tick();
-    shell.draw(0);
-    expect(time()).toBe('3:00');
-    expect(music.stopped).toBeGreaterThan(stoppedBefore);
+      press(elements.side, '[data-action="pause"]');
+      shell.draw(0);
+      expect(button()).toBe('▶ 再開');
+      expect(pausedDrawn()).toBe(true);
+      // 試合の画面に、ポーズの表示の要素は置かない（原型と同じく盤面に描く）。
+      expect(document.querySelector('#pause')).toBeNull();
+      const stoppedBefore = music.stopped;
+      for (let i = 0; i < 120; i += 1) shell.tick();
+      shell.draw(0);
+      expect(time()).toBe('3:00');
+      expect(music.stopped).toBeGreaterThan(stoppedBefore);
 
-    shell.togglePause();
-    for (let i = 0; i < 120; i += 1) shell.tick();
-    shell.draw(0);
-    expect(elements.pause.hidden).toBe(true);
-    expect(time()).toBe('2:58');
+      shell.togglePause();
+      for (let i = 0; i < 120; i += 1) shell.tick();
+      shell.draw(0);
+      expect(button()).toBe('⏸ ポーズ');
+      expect(pausedDrawn()).toBe(false);
+      expect(time()).toBe('2:58');
+    } finally {
+      drawn.mockRestore();
+    }
   });
 
   it('もういっかいで、同じ設定の新しい試合になる', () => {
@@ -237,13 +280,13 @@ describe('画面の切り替え', () => {
     press(elements.menu, '[data-action="start"]');
     for (let i = 0; i < 120; i += 1) shell.tick();
     shell.draw(0);
-    expect(elements.side.querySelector('.time')?.textContent).toBe('2:58');
+    expect(elements.side.querySelector('.t')?.textContent).toBe('2:58');
 
     shell.restart();
     shell.draw(0);
     // 同じ遊び方（2人だけ）で、時計が頭から始まっている。
     expect(elements.side.querySelectorAll('.pcard')).toHaveLength(2);
-    expect(elements.side.querySelector('.time')?.textContent).toBe('3:00');
+    expect(elements.side.querySelector('.t')?.textContent).toBe('3:00');
   });
 
   it('試合を始めるたびに（はじめる・もういっかい）ページの先頭へ戻す（原型の startGame → showScreen）', () => {
@@ -299,14 +342,14 @@ describe('ゲームの速さ', () => {
 
   /** ツールバーのつまみを動かす（マウスで動かしたときと同じく input が起きる）。 */
   function slide(elements: ShellElements, rate: number): void {
-    const input = elements.toolbar.querySelector('[data-field="speed"] input');
+    const input = elements.side.querySelector('[data-field="speed"] input');
     if (!(input instanceof HTMLInputElement)) throw new Error('つまみが無い');
     input.value = String(rate);
     input.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   const clock = (elements: ShellElements): string | null | undefined =>
-    elements.side.querySelector('.time')?.textContent;
+    elements.side.querySelector('.t')?.textContent;
 
   it('1台の試合では、つまみを2倍にすると、1回の呼び出しで 2 tick 進み、曲も速くなる', () => {
     const { shell, elements, music } = mount();
@@ -337,7 +380,7 @@ describe('ゲームの速さ', () => {
     slide(elements, 2);
     shell.restart();
     shell.draw(0);
-    expect(elements.toolbar.querySelector('[data-field="speed"] .speed-value')?.textContent).toBe('2×');
+    expect(elements.side.querySelector('[data-field="speed"] .sv')?.textContent).toBe('2×');
     for (let i = 0; i < 60; i += 1) shell.tick();
     shell.draw(0);
     expect(clock(elements)).toBe('2:58');
@@ -379,7 +422,7 @@ describe('ゲームの速さ', () => {
     // 相手（0番）の入力を先に10 tick ぶん届けておく。待たずに進められる状態にする。
     for (let t = 0; t < 10; t += 1) relay().onMessage(JSON.stringify({ t: 'input', seat: 0, tick: t, bits: 0, match: 1 }));
     shell.draw(0);
-    expect(elements.toolbar.querySelector('[data-field="speed"]')).toBeNull();
+    expect(elements.side.querySelector('[data-field="speed"]')).toBeNull();
     // 曲も等倍に戻す。盤面は同じ速さなのに曲だけ速いと、速さが変わったように見える。
     expect(music.speeds).toEqual([3, 1]);
 
@@ -428,7 +471,7 @@ describe('キーボードでメニューを動かす', () => {
     shell.navigate('confirm');
     shell.draw(0);
     expect(elements.play.hidden).toBe(false);
-    const names = [...elements.side.querySelectorAll('.pcard .name')].map((name) => name.textContent);
+    const names = [...elements.side.querySelectorAll('.pcard .pn')].map((name) => name.textContent);
     expect(names.slice(0, 2)).toEqual([`${second.name} 1P`, `${third.name} 2P`]);
   });
 
@@ -555,7 +598,7 @@ describe('キーボードでメニューを動かす', () => {
     expect(elements.menu.hidden).toBe(true);
     expect(document.querySelector('.navcur')).toBeNull();
     // 試合は作り直されていない（作り直すと時計が 3:00 に戻る）。
-    expect(elements.side.querySelector('.time')?.textContent).toBe('2:59');
+    expect(elements.side.querySelector('.t')?.textContent).toBe('2:59');
   });
 
   it('Enter を押したまま「はじめる」を決めても、開始位置に爆弾を置かない。離して押し直すと置く', () => {
@@ -606,7 +649,7 @@ describe('キーボードでメニューを動かす', () => {
 
   /** 次の試合が始まったか（幕が消え、時計が最初に戻った）。 */
   const restarted = (elements: ShellElements): boolean =>
-    elements.banner.hidden && elements.menu.hidden && elements.side.querySelector('.time')?.textContent === '1:00';
+    elements.banner.hidden && elements.menu.hidden && elements.side.querySelector('.t')?.textContent === '1:00';
 
   it('キーボードで試合を始めたとき、試合が決まった幕では、キーを押す前から「もういっかい」に枠が付き、1回目の決定で次の試合になる', () => {
     const { shell, elements } = mount();
@@ -766,7 +809,7 @@ describe('ゲームパッドとロビーでメニューを動かす', () => {
     playToChampionByMouse(shell, elements, 'solo');
     tap(shell, pad, A);
     expect(elements.banner.hidden).toBe(true);
-    expect(elements.side.querySelector('.time')?.textContent).toBe('1:00');
+    expect(elements.side.querySelector('.t')?.textContent).toBe('1:00');
   }, 120_000);
 
   it('メニューでつかんだパッドを試合でもそのまま使い、あとから別のパッドが点いても移らない', () => {
@@ -1004,14 +1047,16 @@ describe('通信対戦で、接続を保ったまま次の試合を始める', (
     // 中継が配り直すまでは、次の試合を始めない（全員が同じ1通から始める）。
     expect(elements.banner.hidden).toBe(false);
 
-    // 前の試合の通知は、次の試合へ持ち越さない（1台の「もういっかい」と同じ）。
-    elements.toasts.append(Object.assign(document.createElement('div'), { className: 'toast', textContent: '前の試合の通知' }));
+    // 出ている通知は、次の試合が始まっても消さない（時間でだけ消える。原型と同じ）。
+    elements.toast.textContent = '前の試合の通知';
+    elements.toast.classList.add('on');
 
     relay().onMessage(JSON.stringify({ t: 'start', seats: [0], config: again.config, match: 2 }));
     shell.draw(0);
     expect(elements.banner.hidden).toBe(true);
-    expect(elements.side.querySelector('.time')?.textContent).toBe('1:00');
-    expect(elements.toasts.childElementCount).toBe(0);
+    expect(elements.side.querySelector('.t')?.textContent).toBe('1:00');
+    expect(elements.toast.textContent).toBe('前の試合の通知');
+    expect(elements.toast.classList.contains('on')).toBe(true);
   }, 120_000);
 
   it('試合が決まったあとにずれが知らされたら、ホストの幕から「もういっかい」を消す', () => {
@@ -1045,7 +1090,7 @@ describe('通信対戦で、接続を保ったまま次の試合を始める', (
     relay().onMessage(JSON.stringify({ t: 'start', seats: [0, 1], config: { ...config, match: { ...config.match, seed: 2 } }, match: 2 }));
     shell.draw(0);
     expect(elements.banner.hidden).toBe(true);
-    expect(elements.side.querySelector('.time')?.textContent).toBe('1:00');
+    expect(elements.side.querySelector('.t')?.textContent).toBe('1:00');
   }, 120_000);
 });
 
@@ -1076,7 +1121,7 @@ describe('押してすぐ離したキーとボタン（押した瞬間を忘れ�
 
   /** ツールバーのつまみで、ゲームの速さを変える。 */
   function slide(elements: ShellElements, rate: number): void {
-    const input = elements.toolbar.querySelector('[data-field="speed"] input');
+    const input = elements.side.querySelector('[data-field="speed"] input');
     if (!(input instanceof HTMLInputElement)) throw new Error('つまみが無い');
     input.value = String(rate);
     input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1117,7 +1162,7 @@ describe('押してすぐ離したキーとボタン（押した瞬間を忘れ�
     startByMouse(shell, elements, 'versus');
     shell.tick();
     shell.tick();
-    press(elements.toolbar, '[data-action="pause"]');
+    press(elements.side, '[data-action="pause"]');
     tapKey('Space');
     shell.tick();
     shell.draw(0);
@@ -1231,7 +1276,7 @@ describe('押してすぐ離したキーとボタン（押した瞬間を忘れ�
 
 describe('通知（配線）', () => {
   it('盤面で倒れて外周へ回った通知は、名札の一覧で人間のプレイヤーにだけ出し、CPU には出さない（名札の一覧を通知へ渡す）', () => {
-    // 盤面の通知は 4 つまでしか残らないので、出した通知は出す所で控える。
+    // 通知は1枚で、新しいものが前のものを置き換えるので、出した通知は出す所で控える。
     const shown = vi.spyOn(Toasts.prototype, 'show');
     try {
       const { shell, elements } = mount();
@@ -1246,8 +1291,8 @@ describe('通知（配線）', () => {
       while (lane.human.size === 0 || lane.cpu.size === 0) {
         shell.tick();
         shell.draw(0);
-        for (const card of elements.side.querySelectorAll('.pcard.negibon')) {
-          const name = card.querySelector('.name')?.firstChild?.textContent?.trim() ?? '';
+        for (const card of elements.side.querySelectorAll('.pcard.negi')) {
+          const name = card.querySelector('.pn')?.firstChild?.textContent?.trim() ?? '';
           const cpu = [...card.querySelectorAll('.tag')].some((tag) => tag.textContent?.startsWith('CPU'));
           (cpu ? lane.cpu : lane.human).add(name);
         }
@@ -1282,26 +1327,26 @@ describe('横の板のキーの案内（配線）', () => {
     press(elements.menu, '[data-action="next"]');
     press(elements.menu, '[data-action="start"]');
     shell.draw(0);
-    return () => elements.side.querySelector('.keyhelp')?.textContent ?? '';
+    return () => keyHelpOf(elements.side);
   }
 
   it('1人で遊ぶとき、パッドを認識していればパッドの段と Start を出し、ポーズ中は Select の行を足す', () => {
     const { shell, elements } = mount('both', () => [], idlePad);
     const help = start(shell, elements, 'solo');
     expect(help()).toContain('そうさ');
-    expect(help()).toContain('🎮 十字 スティック うごく ／ ばくだん A R1');
-    expect(help()).toContain('P Start ポーズ');
+    expect(help()).toContain('🎮 [十字][スティック] うごく ／ ばくだん [A][R1]');
+    expect(help()).toContain('[P][Start] ポーズ');
     expect(help()).not.toContain('Select');
-    press(elements.toolbar, '[data-action="pause"]');
+    press(elements.side, '[data-action="pause"]');
     shell.draw(0);
-    expect(help()).toContain('Select 設定へもどる');
+    expect(help()).toContain('[Select] 設定へもどる');
   });
 
   it('パッドが無ければ、パッドの段も Start も Select も出さない', () => {
     const { shell, elements } = mount();
     const help = start(shell, elements, 'solo');
-    expect(help()).toContain('P ポーズ');
-    press(elements.toolbar, '[data-action="pause"]');
+    expect(help()).toContain('[P] ポーズ');
+    press(elements.side, '[data-action="pause"]');
     shell.draw(0);
     expect(help()).not.toMatch(/🎮|Start|Select/);
   });
@@ -1309,10 +1354,10 @@ describe('横の板のキーの案内（配線）', () => {
   it('2人で遊ぶときは、パッドを認識していてもパッドの段を出さず、1P と 2P の形で出す', () => {
     const { shell, elements } = mount('both', () => [], idlePad);
     const help = start(shell, elements, 'duo');
-    expect(help()).toContain('W A S D ／ ばくだん Space Z');
-    expect(help()).toContain('↑ ← ↓ → ／ ばくだん Enter /');
+    expect(help()).toContain('[W][A][S][D] ／ ばくだん [Space][Z]');
+    expect(help()).toContain('[↑][←][↓][→] ／ ばくだん [Enter][/]');
     expect(help()).not.toContain('🎮');
-    expect(help()).toContain('P Start ポーズ');
+    expect(help()).toContain('[P][Start] ポーズ');
   });
 });
 
@@ -1367,5 +1412,246 @@ describe('パッドのボタンをまとめてカーソルへ渡す', () => {
       expect(screenOf(elements), String(button)).toBe('title');
       document.body.replaceChildren();
     }
+  });
+});
+
+describe('試合の画面（パッドの Start・パッドの通知・通知の消え方・盤面の大きさ）', () => {
+  const START = 9;
+
+  /** 押しているボタンを差し替えられるパッド。`devices` の前に、ほかの機器を並べられる。 */
+  function padWith(devices: readonly (PadSnapshot | null)[] = []): {
+    read: () => readonly (PadSnapshot | null)[];
+    hold: (...buttons: number[]) => void;
+  } {
+    let held = new Set<number>();
+    const read = (): readonly (PadSnapshot | null)[] => [
+      ...devices,
+      {
+        mapping: 'standard',
+        connected: true,
+        index: devices.length,
+        buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: held.has(i) })),
+        axes: [0, 0, 0, 0],
+        id: 'Standard Pad',
+      },
+    ];
+    return { read, hold: (...buttons) => (held = new Set(buttons)) };
+  }
+
+  function startByMouse(shell: Shell, elements: ShellElements, mode: 'solo' | 'duo' | 'versus', time?: number): void {
+    shell.showMenu();
+    press(elements.menu, `[data-choice="${mode}"]`);
+    press(elements.menu, '[data-action="next"]');
+    if (time !== undefined) press(elements.menu, `[data-field="time"] [data-value="${time}"]`);
+    press(elements.menu, '[data-action="start"]');
+    shell.draw(0);
+  }
+
+  const pauseLabel = (elements: ShellElements): string | null | undefined =>
+    elements.side.querySelector('[data-action="pause"]')?.textContent;
+
+  it('1人で遊ぶとき、パッドの Start で止め、もう一度押すと再開する（原型 L3643-3645）', () => {
+    const pad = padWith();
+    const { shell, elements } = mount('both', () => [], pad.read);
+    startByMouse(shell, elements, 'solo');
+    const tapStart = (): void => {
+      pad.hold(START);
+      shell.draw(0);
+      pad.hold();
+      shell.draw(0);
+    };
+    tapStart();
+    expect(pauseLabel(elements)).toBe('▶ 再開');
+    for (let i = 0; i < 60; i += 1) shell.tick();
+    shell.draw(0);
+    expect(elements.side.querySelector('.t')?.textContent).toBe('3:00');
+    // 押したままでは、もう一度は切り替えない（押し始めだけを見る）。
+    pad.hold(START);
+    for (let i = 0; i < 3; i += 1) shell.draw(0);
+    expect(pauseLabel(elements)).toBe('⏸ ポーズ');
+    pad.hold();
+    shell.draw(0);
+    expect(pauseLabel(elements)).toBe('⏸ ポーズ');
+  });
+
+  it('2人で遊ぶときは、パッドの Start で止めない（パッドを試合に繋がない。机に置いたパッドに肘が当たってポーズ、を防ぐ）', () => {
+    const pad = padWith();
+    const { shell, elements } = mount('both', () => [], pad.read);
+    startByMouse(shell, elements, 'duo');
+    pad.hold(START);
+    shell.draw(0);
+    pad.hold();
+    shell.draw(0);
+    expect(pauseLabel(elements)).toBe('⏸ ポーズ');
+    // 対照：ツールバーの「⏸ ポーズ」なら止まる（2人でも止められる試合で、パッドだけを受け付けない）。
+    press(elements.side, '[data-action="pause"]');
+    shell.draw(0);
+    expect(pauseLabel(elements)).toBe('▶ 再開');
+  });
+
+  it('決着のあとの待ちの間（幕が出ている間）は、「⏸ ポーズ」も P も止めない（原型の togglePause は play の間だけ）', () => {
+    // 2人タイマンで誰も操作しなければ、時間切れ・延長戦も時間切れで、ひきわけの幕が出る。
+    const { shell, elements } = mount();
+    startByMouse(shell, elements, 'versus', 60);
+    let ticks = 0;
+    while (elements.banner.hidden) {
+      shell.tick();
+      if (ticks % 30 === 0) shell.draw(0);
+      ticks += 1;
+      if (ticks > 20_000) throw new Error('幕が出ない');
+    }
+    // ボタンと P（`togglePause`）を1回ずつ試し、そのたびに見る（2回続けて切り替えると、止めて再開した形と区別できない）。
+    press(elements.side, '[data-action="pause"]');
+    shell.draw(0);
+    expect(pauseLabel(elements)).toBe('⏸ ポーズ');
+    shell.togglePause();
+    shell.draw(0);
+    expect(pauseLabel(elements)).toBe('⏸ ポーズ');
+    expect(elements.banner.hidden).toBe(false);
+    // 止まっていないので、待ちが尽きれば幕が消えて次のラウンドが始まる。
+    let rest = 0;
+    while (!elements.banner.hidden) {
+      shell.tick();
+      shell.draw(0);
+      rest += 1;
+      if (rest > 2_000) throw new Error('幕が消えない（止まっている）');
+    }
+    expect(elements.side.querySelector('.rnd')?.textContent).toContain('ROUND 2');
+    expect(pauseLabel(elements)).toBe('⏸ ポーズ');
+  });
+
+  it('ツールバーの「⏸ ポーズ」と「設定へ」は、画面の操作の音を鳴らさない（原型 L6038・L6080）', () => {
+    const { shell, elements, audio } = mount();
+    startByMouse(shell, elements, 'solo');
+    audio.length = 0;
+    press(elements.side, '[data-action="pause"]');
+    press(elements.side, '[data-action="pause"]');
+    press(elements.side, '[data-action="quit"]');
+    expect(elements.menu.querySelector('[data-screen="title"]')).not.toBeNull();
+    expect(audio).not.toContain('ui');
+  });
+
+  it('パッドを初めて見つけたら、メニューの間でも「🎮 コントローラーを認識しました」を1回だけ出す', () => {
+    const shown = vi.spyOn(Toasts.prototype, 'show');
+    try {
+      const pad = padWith();
+      const { shell, elements } = mount('both', () => [], pad.read);
+      shell.showMenu();
+      shell.draw(0);
+      expect(elements.toast.textContent).toBe('🎮 コントローラーを認識しました');
+      expect(elements.toast.classList.contains('on')).toBe(true);
+      for (let i = 0; i < 5; i += 1) shell.draw(0);
+      startByMouse(shell, elements, 'solo');
+      for (let i = 0; i < 30; i += 1) shell.tick();
+      shell.draw(0);
+      expect(shown.mock.calls.map(([message]) => message)).toEqual(['🎮 コントローラーを認識しました']);
+    } finally {
+      shown.mockRestore();
+    }
+  });
+
+  it('標準の並びでない機器が先にあれば、名前を添えて1回だけ知らせる（そのあと見つけたパッドの通知が置き換える）', () => {
+    const shown = vi.spyOn(Toasts.prototype, 'show');
+    try {
+      const odd: PadSnapshot = { mapping: '', connected: true, index: 0, buttons: [], axes: [], id: 'Odd Stick (Vendor: 1234)' };
+      const pad = padWith([odd]);
+      const { shell, elements } = mount('both', () => [], pad.read);
+      shell.showMenu();
+      for (let i = 0; i < 5; i += 1) shell.draw(0);
+      expect(shown.mock.calls.map(([message]) => message)).toEqual([
+        '🎮 このコントローラーには対応していません（Odd Stick (Vendor: 1234)）',
+        '🎮 コントローラーを認識しました',
+      ]);
+      expect(elements.toast.textContent).toBe('🎮 コントローラーを認識しました');
+    } finally {
+      shown.mockRestore();
+    }
+  });
+
+  it('対応していない機器しか無いときも、知らせるのは1回だけ（毎フレーム出すと画面が埋まる）', () => {
+    const shown = vi.spyOn(Toasts.prototype, 'show');
+    try {
+      const odd: PadSnapshot = { mapping: '', connected: true, index: 0, buttons: [], axes: [], id: 'Odd Stick' };
+      const { shell } = mount('both', () => [], () => [odd]);
+      shell.showMenu();
+      for (let i = 0; i < 5; i += 1) shell.draw(0);
+      expect(shown.mock.calls.map(([message]) => message)).toEqual(['🎮 このコントローラーには対応していません（Odd Stick）']);
+    } finally {
+      shown.mockRestore();
+    }
+  });
+
+  it('通知は、試合を抜けてタイトルへ戻っても消さず、出してから 1.4 秒で薄れる（原型の backToSetup は通知に触らない）', () => {
+    vi.useFakeTimers();
+    try {
+      const pad = padWith();
+      const { shell, elements } = mount('both', () => [], pad.read);
+      startByMouse(shell, elements, 'solo');
+      expect(elements.toast.classList.contains('on')).toBe(true);
+      press(elements.side, '[data-action="quit"]');
+      shell.draw(0);
+      expect(elements.menu.querySelector('[data-screen="title"]')).not.toBeNull();
+      expect(elements.toast.textContent).toBe('🎮 コントローラーを認識しました');
+      expect(elements.toast.classList.contains('on')).toBe(true);
+      vi.advanceTimersByTime(1400);
+      expect(elements.toast.classList.contains('on')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('横の板の名札と時計は、盤面の時刻の 15 tick の区切りで作り直す。進めた tick のイベントはすべて PanelRefresh へ渡す', () => {
+    const updates = vi.spyOn(SidePanel.prototype, 'update');
+    const observed = vi.spyOn(PanelRefresh.prototype, 'observe');
+    try {
+      const { shell, elements } = mount();
+      startByMouse(shell, elements, 'versus');
+      const refreshed = (): unknown => updates.mock.calls.at(-1)?.[1].refresh;
+      // 始めて最初に描くときは作り直す。
+      expect(refreshed()).toBe(true);
+      shell.draw(0);
+      expect(refreshed()).toBe(false);
+      const flags: unknown[] = [];
+      for (let i = 1; i <= 30; i += 1) {
+        shell.tick();
+        shell.draw(0);
+        flags.push(refreshed());
+      }
+      // 誰も操作しない2人タイマンなので、すぐ作り直すイベントは起きない。15 tick と 30 tick の区切りだけ。
+      expect(flags.flatMap((flag, index) => (flag === true ? [index + 1] : []))).toEqual([15, 30]);
+      expect(observed).toHaveBeenCalledTimes(30);
+    } finally {
+      updates.mockRestore();
+      observed.mockRestore();
+    }
+  });
+
+  it('盤面の大きさを窓の大きさから決め、試合の途中で窓の大きさが替わったら、描く寸法も替える（原型の fitBoard と resize）', () => {
+    const canvas = fakeCanvas();
+    const { shell, elements } = mount('both', () => [], () => [], undefined, canvas.context);
+    shell.fitBoard(1440, 900);
+    expect([elements.canvas.width, elements.canvas.height]).toEqual([1115, 839]);
+    expect([elements.canvas.style.width, elements.canvas.style.height]).toEqual(['1115px', '839px']);
+    startByMouse(shell, elements, 'solo');
+    const pauseAt = (): readonly unknown[] | undefined =>
+      canvas.log.filter((call) => call.name === 'fillText' && call.args[0] === 'PAUSE').at(-1)?.args;
+    /** 左上の隅の柱（マス 0,0）を塗った四角。マスの大きさで決まる。 */
+    const cornerDrawn = (tile: number): boolean =>
+      canvas.log.some(
+        (call) => call.name === 'fillRect' && JSON.stringify(call.args) === JSON.stringify([0.62 * tile, 0.62 * tile, tile, tile]),
+      );
+    shell.togglePause();
+    shell.draw(0);
+    // 試合を始めたあとに作った描く部品も、窓から決めた寸法で描く（真ん中に PAUSE。マスは 46）。
+    expect(pauseAt()).toEqual(['PAUSE', 557.5, 419.5]);
+    expect(cornerDrawn(46)).toBe(true);
+
+    canvas.log.length = 0;
+    shell.fitBoard(1024, 768);
+    shell.draw(0);
+    expect([elements.canvas.width, elements.canvas.height]).toEqual([703, 529]);
+    expect(pauseAt()).toEqual(['PAUSE', 351.5, 264.5]);
+    expect(cornerDrawn(29)).toBe(true);
+    expect(cornerDrawn(46)).toBe(false);
   });
 });

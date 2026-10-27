@@ -28,7 +28,7 @@ export interface LanMatchOptions {
   readonly pads: PadChoice;
   /** 試合が始まる前（ロビー）の画面を出す場所。 */
   readonly lobby: HTMLElement;
-  /** 試合中の、接続の様子を出す場所。 */
+  /** 試合中の、接続の様子を出す帯（盤面の下の端に重ねる。文が無い間は隠す）。 */
   readonly status: HTMLElement;
   /** 試合の種を作る。ホストが始めるときに使う。 */
   readonly newSeed: () => number;
@@ -114,8 +114,7 @@ export class LanMatch implements MatchRunner {
     // 選び直す前の設定も控えておく。ホストと分かったとき・人が入ってきたときに配る。
     this.#client.shareSettings(lanSettingsFrom(choices.setup, PREVIEW_SEED));
     this.#status = options.status;
-    // 文が無いときも隠さない（高さを保って、文が出るたびに横の板が動かないように）。
-    this.#status.hidden = false;
+    this.#showStatus('');
   }
 
   get world(): WorldState | null {
@@ -194,16 +193,25 @@ export class LanMatch implements MatchRunner {
       return;
     }
     const waiting = this.#waiting.observe(phase.kind === 'playing' ? phase.driver.waitingFor() : []);
-    const text = describeLanPhase(phase, waiting);
-    // 毎回書き換えない。同じ文を書き直すだけでも、ブラウザは組み直しの手間をかける。
-    if (text !== this.#shown) {
-      this.#status.textContent = text;
-      this.#shown = text;
-    }
+    this.#showStatus(describeLanPhase(phase, waiting));
   }
 
+  /** 抜ける。接続を閉じ、案内の帯を空にして隠す（1台の試合の盤面に、前の案内を残さない）。 */
   close(): void {
     this.#link.close();
+    this.#showStatus('');
+  }
+
+  /**
+   * 案内の帯に文を出す。空の文なら帯を隠す（帯は盤面の下の端に重なるので、出す文が無い間は盤面を隠さない）。
+   *
+   * 毎回書き換えない。同じ文を書き直すだけでも、ブラウザは組み直しの手間をかける。
+   */
+  #showStatus(text: string): void {
+    if (text === this.#shown) return;
+    this.#shown = text;
+    this.#status.textContent = text;
+    this.#status.hidden = text === '';
   }
 
   /**

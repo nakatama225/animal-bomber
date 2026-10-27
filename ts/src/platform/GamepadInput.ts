@@ -79,7 +79,19 @@ export type PadSnapshot = {
   readonly index: number;
   readonly buttons: readonly PadButtonSnapshot[];
   readonly axes: readonly number[];
+  /** 機器の名前（ブラウザの `Gamepad.id`）。対応していない機器の通知に出す。 */
+  readonly id?: string;
 };
+
+/**
+ * パッドについて、画面に1回だけ知らせること（原型の `pickPad`・`pollGamepads` の通知。L3496-3499・L3525-3528）。
+ *
+ * - `found`：使うパッドを初めて見つけた。ブラウザは、そのページでパッドを触るまでパッドを返さないので、
+ *   繋いだ直後は何も起きないように見える。見つけたことを知らせないと、壊れていると思われる（原型の注記）
+ * - `unsupported`：使うパッドを探すときに、標準の並びでない機器があった。ボタンの番号が製品ごとに違うので
+ *   使わない。名前（`id`）を添えて知らせる
+ */
+export type PadNotice = { readonly kind: 'found' } | { readonly kind: 'unsupported'; readonly id: string };
 
 /**
  * どのパッドをつかんでいるかと、押した瞬間。メニューの操作と試合の操作が、1つを分け合う。
@@ -95,6 +107,13 @@ export type PadSnapshot = {
  * フレームなど）に押して離したボタンも残る。試合の操作（`GamepadInputSource`）は、爆弾と技のボタンを、
  * 押しているか、押した瞬間を残しているかで見る（原型も、パッドの押した瞬間を `pressed` に足していた。
  * L3590-3596）。いつ忘れるかは画面の流れ（`Shell`）が決める（`forgetTaps`）。
+ *
+ * ## 画面に知らせること
+ *
+ * パッドを初めて見つけたときと、標準の並びでない機器を見つけたときは、それぞれ起動の間に1回だけ知らせる
+ * （`PadNotice`。原型の `PAD.announced`・`PAD.warned`）。毎フレーム知らせると、画面が通知で埋まる。
+ * 知らせるのは、この端末のパッドのことだけ（原型の通信対戦はホストの通知をゲストへ配るが、それはホストだけが
+ * 試合を進める作りの結果。この版は、各端末が自分の試合を進める）。
  */
 export class PadChoice {
   /** 一度つかんだパッドの番号。途中で別のパッドへ移らないようにする。 */
@@ -103,6 +122,12 @@ export class PadChoice {
   #previous: ReadonlySet<number> = new Set();
   /** 押した瞬間を残したボタンの番号（もう離していても）。 */
   readonly #tapped = new Set<number>();
+  /** 見つけたことを、もう知らせたか（原型の `PAD.announced`）。 */
+  #announced = false;
+  /** 対応していない機器のことを、もう知らせたか（原型の `PAD.warned`）。 */
+  #warned = false;
+  /** まだ取り出していない知らせ。 */
+  readonly #notices: PadNotice[] = [];
 
   constructor(private readonly read: () => readonly (PadSnapshot | null)[]) {}
 
@@ -115,6 +140,10 @@ export class PadChoice {
    */
   pick(): PadSnapshot | null {
     const pad = this.#find();
+    if (pad !== null && !this.#announced) {
+      this.#announced = true;
+      this.#notices.push({ kind: 'found' });
+    }
     const now = new Set<number>();
     if (pad !== null) {
       pad.buttons.forEach((_, index) => {
@@ -145,6 +174,11 @@ export class PadChoice {
     this.#tapped.clear();
   }
 
+  /** まだ取り出していない知らせを、起きた順に取り出す（取り出したものは消える）。 */
+  takeNotices(): PadNotice[] {
+    return this.#notices.splice(0);
+  }
+
   #find(): PadSnapshot | null {
     const pads = this.read();
     if (this.#index !== null) {
@@ -154,9 +188,15 @@ export class PadChoice {
     }
     for (const pad of pads) {
       if (pad == null || !pad.connected) continue;
-      if (pad.mapping !== 'standard') continue;
-      this.#index = pad.index;
-      return pad;
+      if (pad.mapping === 'standard') {
+        this.#index = pad.index;
+        return pad;
+      }
+      // 標準の並びのパッドより前にあった、標準でない機器（原型と同じく、探し直すときだけ見る）。
+      if (!this.#warned) {
+        this.#warned = true;
+        this.#notices.push({ kind: 'unsupported', id: pad.id ?? '' });
+      }
     }
     return null;
   }
@@ -343,6 +383,7 @@ export function readBrowserGamepads(): readonly (PadSnapshot | null)[] {
           index: pad.index,
           buttons: pad.buttons.map((button) => ({ pressed: button.pressed, value: button.value })),
           axes: [...pad.axes],
+          id: pad.id,
         },
   );
 }

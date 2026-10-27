@@ -38,6 +38,17 @@ export class Toast {
   /** 時刻 `nowMs` に写す通知。一度も出していなければ null。 */
   view(nowMs: number): ToastView | null {
     if (this.#text === null) return null;
-    return { text: this.#text, on: nowMs - this.#shownAt < TOAST_SHOW_MS };
+    return { text: this.#text, on: this.remaining(nowMs) > 0 };
+  }
+
+  /**
+   * 時刻 `nowMs` から消え始めるまでの残り（ミリ秒）。出していないとき・消え始めたあとは 0。
+   *
+   * 写す側は、この長さのあとにもう一度 `view` を読んで消す。決まった長さで読み直すと、時計の刻みの都合で少し
+   * 早く呼ばれたときに、出したまま残る。
+   */
+  remaining(nowMs: number): number {
+    if (this.#text === null) return 0;
+    return Math.max(0, TOAST_SHOW_MS - (nowMs - this.#shownAt));
   }
 }

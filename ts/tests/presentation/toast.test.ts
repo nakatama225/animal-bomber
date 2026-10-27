@@ -28,6 +28,16 @@ describe('通知の状態', () => {
     expect(toast.view(2400)?.on).toBe(false);
   });
 
+  it('消え始めるまでの残りを答える（出していない・消え始めたあとは 0。写す側がこの長さのあとに読み直す）', () => {
+    const toast = new Toast();
+    expect(toast.remaining(0)).toBe(0);
+    toast.show('通知', 1000);
+    expect(toast.remaining(1000)).toBe(TOAST_SHOW_MS);
+    expect(toast.remaining(1600)).toBe(800);
+    expect(toast.remaining(2400)).toBe(0);
+    expect(toast.remaining(9000)).toBe(0);
+  });
+
   it('消えたあとに出し直せば、また出す', () => {
     const toast = new Toast();
     toast.show('一つ目', 0);

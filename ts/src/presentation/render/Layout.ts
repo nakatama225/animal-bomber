@@ -33,9 +33,58 @@ export interface Layout {
 
 /** 描画面の大きさに収まる、いちばん大きいマスの寸法を決める。 */
 export function layoutFor(width: number, height: number): Layout {
+  return { ...tileLayout(fitTile(width, height)), width, height };
+}
+
+/**
+ * 窓の幅から、盤面に使えない分として引く幅（px。原型の `SIDE_W`。L584-585。合わせて 312）。
+ *
+ * 横の板 238・すき間 16・`body` のまわりの余白 16×2・盤面の枠 3×2・スクロールバー 20（原型の注記は 18 と書くが、
+ * 式は 20）。原型の枠は canvas の CSS の大きさの内側に描かれる（`*{box-sizing:border-box}`）ので、枠の 6 は
+ * 使われずに余る。この版も同じ CSS を写したので、同じく余る。
+ */
+const SIDE_RESERVE = 238 + 16 + 32 + 6 + 20;
+
+/** 窓の高さから引く高さ（px。原型の `innerHeight - 56`）。 */
+const HEIGHT_RESERVE = 56;
+
+/** 引いたあとの幅と高さの下限（px。原型の `Math.max(320, …)`・`Math.max(240, …)`）。 */
+const MIN_AVAILABLE_WIDTH = 320;
+const MIN_AVAILABLE_HEIGHT = 240;
+
+/** 窓の大きさが読めないとき（0 のとき）に使う大きさ（px。原型の `innerWidth || 1280`・`innerHeight || 800`）。 */
+const FALLBACK_WIDTH = 1280;
+const FALLBACK_HEIGHT = 800;
+
+/**
+ * 窓の大きさ（`window.innerWidth`・`innerHeight`）から、盤面の寸法を決める（原型の `fitBoard`。L592-606）。
+ *
+ * 1マスの大きさは窓に合わせる（固定にすると大画面で盤面が小さく余る。原型の注記）。マスの数は変えないので、
+ * ゲームの釣り合いには影響しない。描画面の大きさは、まわりの帯を含めた盤面の大きさ（マスの大きさ × 24.24 と
+ * 18.24 を丸めたもの）。
+ *
+ * ⚠️ 描画面の大きさから `layoutFor` でマスを決め直さない。丸めた幅を 24.24 で割ると、マスより少しだけ小さく
+ * なることがあり（46 のとき 1115 / 24.24 = 45.998…）、切り捨てると1つ小さいマスになる。
+ */
+export function boardLayoutFor(viewportWidth: number, viewportHeight: number): Layout {
+  const width = Math.max(MIN_AVAILABLE_WIDTH, (viewportWidth || FALLBACK_WIDTH) - SIDE_RESERVE);
+  const height = Math.max(MIN_AVAILABLE_HEIGHT, (viewportHeight || FALLBACK_HEIGHT) - HEIGHT_RESERVE);
+  const tile = fitTile(width, height);
+  return {
+    ...tileLayout(tile),
+    width: Math.round((COLS + LANE * 2) * tile),
+    height: Math.round((ROWS + LANE * 2) * tile),
+  };
+}
+
+/** 幅と高さに盤面とまわりの帯が入る、いちばん大きいマス（上限と下限で止める）。 */
+function fitTile(width: number, height: number): number {
   const fit = Math.min(width / (COLS + LANE * 2), height / (ROWS + LANE * 2));
-  const tile = Math.max(TILE_MIN, Math.min(TILE_MAX, Math.floor(fit)));
-  return { tile, originX: LANE * tile, originY: LANE * tile, width, height };
+  return Math.max(TILE_MIN, Math.min(TILE_MAX, Math.floor(fit)));
+}
+
+function tileLayout(tile: number): Pick<Layout, 'tile' | 'originX' | 'originY'> {
+  return { tile, originX: LANE * tile, originY: LANE * tile };
 }
 
 /** マス単位の横の座標を、ピクセルにする。 */

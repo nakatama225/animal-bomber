@@ -9,7 +9,7 @@ import { drawBlast, drawBomb } from './bombs.js';
 import { ParticleField } from './ParticleField.js';
 import type { Frame } from './Frame.js';
 import { drawItem } from './items.js';
-import { layoutFor, type Layout } from './Layout.js';
+import type { Layout } from './Layout.js';
 import { drawNegibon } from './negibon.js';
 import { drawPlayer } from './players.js';
 import type { PlayerView } from './PlayerView.js';
@@ -33,18 +33,29 @@ import { PositionHistory } from './PositionHistory.js';
  * 6. 外周の葱ボン
  * 7. 宙を飛ぶ自律物（追いかける炎・跳ね回る爆弾・葱）
  * 8. 粒子
+ * 9. ポーズの幕（止めている間だけ）
  */
 export class Renderer {
   readonly #g: CanvasRenderingContext2D;
-  readonly #layout: Layout;
+  #layout: Layout;
   readonly #cosmetic = new CosmeticRng();
   readonly #history = new PositionHistory();
   readonly #effects: ParticleField;
 
-  constructor(g: CanvasRenderingContext2D, width: number, height: number) {
+  /** @param layout 盤面の寸法（`layoutFor`・`boardLayoutFor`） */
+  constructor(g: CanvasRenderingContext2D, layout: Layout) {
     this.#g = g;
-    this.#layout = layoutFor(width, height);
+    this.#layout = layout;
     this.#effects = new ParticleField(this.#cosmetic);
+  }
+
+  /**
+   * 盤面の寸法を替える（窓の大きさが替わったとき。原型の `resize` の `fitBoard`）。
+   *
+   * 粒子と位置の控えは残す（作り直すと、試合の途中で粒子が消える）。
+   */
+  resize(layout: Layout): void {
+    this.#layout = layout;
   }
 
   /** tick を進める直前に呼ぶ。位置の間を埋めるための控えを取る。 */
@@ -64,8 +75,9 @@ export class Renderer {
    *
    * @param alpha 前の tick から次の tick までの進み具合（0 以上 1 以下）。1 になるのは、倍率を掛けた
    *   1台の試合で、次の tick の位置まで埋め終えたとき（`GameSpeed.progress`）
+   * @param paused 止めている間か。止めている間は、盤面の上にポーズの幕を描く（`drawPause`）
    */
-  draw(world: Readonly<WorldState>, alpha: number): void {
+  draw(world: Readonly<WorldState>, alpha: number, paused = false): void {
     const g = this.#g;
     const layout = this.#layout;
     const frame: Frame = {
@@ -106,6 +118,7 @@ export class Renderer {
     }
     for (const actor of world.actors) drawAirActor(frame, actor);
     this.#effects.draw(frame);
+    if (paused) drawPause(g, layout);
     g.restore();
   }
 
@@ -123,4 +136,32 @@ export class Renderer {
       invulnerable: isInvulnerable(player, world.now),
     };
   }
+}
+
+/** ポーズの幕の真ん中の字（原型 L4570）。 */
+export const PAUSE_TITLE = 'PAUSE';
+
+/** ポーズの幕の下の字（原型 L4572）。 */
+export const PAUSE_HINT = 'P で再開';
+
+/**
+ * ポーズの幕（原型の `draw` の最後。L4566-4573）。盤面全体を暗くし、真ん中に「PAUSE」、その 30px 下に
+ * 「P で再開」を出す。
+ *
+ * 原型と同じく、画面の揺れ（平行移動）の内側で描く。止めている間は揺れが減らない（tick を進めないため）ので、
+ * 揺れが残ったまま止めると、盤面と一緒に幕と字も揺れ、ずれた側の端の帯は暗くならない（原型も同じ）。
+ */
+function drawPause(g: CanvasRenderingContext2D, layout: Layout): void {
+  const centerX = layout.width / 2;
+  const centerY = layout.height / 2;
+  g.fillStyle = 'rgba(10,6,4,.6)';
+  g.fillRect(0, 0, layout.width, layout.height);
+  g.fillStyle = '#ffd23f';
+  g.font = '900 34px system-ui';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(PAUSE_TITLE, centerX, centerY);
+  g.font = '600 14px system-ui';
+  g.fillStyle = '#c9ab97';
+  g.fillText(PAUSE_HINT, centerX, centerY + 30);
 }

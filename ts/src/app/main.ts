@@ -72,11 +72,9 @@ function main(): void {
       menu: findElement('menu', HTMLElement),
       play: findElement('play', HTMLElement),
       canvas,
-      side: findElement('side-panel', HTMLElement),
+      side: findElement('side', HTMLElement),
       banner: findElement('banner', HTMLElement),
-      toasts: findElement('toasts', HTMLElement),
-      pause: findElement('pause', HTMLElement),
-      toolbar: findElement('toolbar', HTMLElement),
+      toast: findElement('toast', HTMLElement),
       lanStatus: findElement('lan-status', HTMLElement),
     },
     {
@@ -104,6 +102,11 @@ function main(): void {
       },
     },
   );
+
+  // 盤面の大きさは窓の大きさから決める。窓の大きさが替わるたびに決め直す（原型の fitBoard と resize）。
+  const fitBoard = (): void => shell.fitBoard(window.innerWidth, window.innerHeight);
+  fitBoard();
+  window.addEventListener('resize', fitBoard);
 
   // ブラウザは、画面を操作するまで音を出させない。キーやクリックのたびに
   // 音を鳴らす仕組みを（初回だけ）作り、止まっていれば動かし直す（何度呼んでもよい）。

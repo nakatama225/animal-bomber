@@ -15,14 +15,14 @@ describe('ゲームの速さのつまみ', () => {
   it('動かすと、倍率を渡し、表示と枠の目立たせ方を変える', () => {
     const chosen: number[] = [];
     const box = speedControl(1, (rate) => chosen.push(rate));
-    expect(box.querySelector('.speed-value')?.textContent).toBe('1×');
+    expect(box.querySelector('.sv')?.textContent).toBe('1×');
     expect(box.classList.contains('fast')).toBe(false);
 
     const input = rangeOf(box);
     input.value = '2.5';
     input.dispatchEvent(new Event('input', { bubbles: true }));
     expect(chosen).toEqual([2.5]);
-    expect(box.querySelector('.speed-value')?.textContent).toBe('2.5×');
+    expect(box.querySelector('.sv')?.textContent).toBe('2.5×');
     expect(box.classList.contains('fast')).toBe(true);
 
     input.value = '0.75';
@@ -38,7 +38,7 @@ describe('ゲームの速さのつまみ', () => {
   it('目盛りは等間隔に置かず、つまみの中心が来る位置に置く', () => {
     // 等間隔だと「1×」の目盛りに合わせたつまみが 1.33 倍を指す（原型で実際に起きた）。
     // 値は原型の CSS に手で計算して書いてあったものと同じ。
-    const marks = [...speedControl(1, () => undefined).querySelectorAll<HTMLElement>('.speed-marks span')];
+    const marks = [...speedControl(1, () => undefined).querySelectorAll<HTMLElement>('.ticks span')];
     expect(marks.map((mark) => mark.textContent)).toEqual(['0.5×', '1×', '2×', '3×']);
     expect(marks[0]?.style.left).toBe('0px');
     expect(marks[1]?.style.left).toBe('calc(20% + 5.1px)');

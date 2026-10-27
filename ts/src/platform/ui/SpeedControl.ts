@@ -23,7 +23,7 @@ const MARKS = [0.5, 1, 2, 3] as const;
  * @param change つまみが動いたときに、新しい倍率で呼ぶ
  */
 export function speedControl(current: number, change: (rate: number) => void): HTMLElement {
-  const value = el('span', { className: 'speed-value', text: rateLabel(current) });
+  const value = el('span', { className: 'sv', text: rateLabel(current) });
   const input = el('input');
   input.type = 'range';
   input.min = String(SPEED_RANGE.min);
@@ -34,9 +34,9 @@ export function speedControl(current: number, change: (rate: number) => void): H
   input.setAttribute('aria-label', 'ゲーム速度');
 
   const box = el('div', { className: boxClass(current), data: { field: 'speed' } }, [
-    el('div', { className: 'speed-head' }, [el('span', { text: 'ゲーム速度' }), value]),
+    el('div', { className: 'sh' }, [el('span', { text: 'ゲーム速度' }), value]),
     input,
-    el('div', { className: 'speed-marks' }, MARKS.map(markAt)),
+    el('div', { className: 'ticks' }, MARKS.map(markAt)),
   ]);
   input.addEventListener('input', () => {
     const rate = Number(input.value);

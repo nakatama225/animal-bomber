@@ -17,17 +17,19 @@ import { BannerOverlay } from '../platform/ui/BannerOverlay.js';
 import { pointerButton, scrollToTop } from '../platform/ui/dom.js';
 import { MenuNavigator } from '../platform/ui/MenuNavigator.js';
 import { MenuView } from '../platform/ui/MenuView.js';
-import { SidePanel, type KeyHelpFor } from '../platform/ui/SidePanel.js';
-import { speedControl } from '../platform/ui/SpeedControl.js';
+import { SidePanel, type KeyHelpFor, type SideControls } from '../platform/ui/SidePanel.js';
 import { Toasts } from '../platform/ui/Toasts.js';
 import { Countdown } from '../presentation/audio/Countdown.js';
 import type { SoundBank } from '../presentation/audio/SoundBank.js';
 import { describeKeyHelp } from '../presentation/hud/keyHelp.js';
+import { PanelRefresh } from '../presentation/hud/panelRefresh.js';
 import { RoundBanner } from '../presentation/hud/RoundBanner.js';
 import { planLocalMatch, type LocalController, type LocalSetup } from '../presentation/menu/localSetup.js';
 import type { NavCommand } from '../presentation/menu/MenuCursor.js';
 import { MenuFlow, type SoundSetting } from '../presentation/menu/MenuFlow.js';
+import { PAD_FOUND, padUnsupported } from '../presentation/notices.js';
 import { Presenter } from '../presentation/Presenter.js';
+import { boardLayoutFor, layoutFor, type Layout } from '../presentation/render/Layout.js';
 import { Renderer } from '../presentation/render/Renderer.js';
 import { GameSession } from './GameSession.js';
 import { LanMatch, type LanMatchOptions } from './LanMatch.js';
@@ -40,11 +42,12 @@ export interface ShellElements {
   /** 試合の画面。 */
   readonly play: HTMLElement;
   readonly canvas: HTMLCanvasElement;
+  /** 試合の横の板（原型の `#side`）。中身は試合ごとに `SidePanel` が組む。 */
   readonly side: HTMLElement;
   readonly banner: HTMLElement;
-  readonly toasts: HTMLElement;
-  readonly pause: HTMLElement;
-  readonly toolbar: HTMLElement;
+  /** 画面の上に出す通知（原型の `#toast`）。1つだけで、`#app` の外にあり、どの画面の上にも出る。 */
+  readonly toast: HTMLElement;
+  /** 通信対戦の案内の帯。盤面の下の端に重ねる（`LanMatch`）。 */
   readonly lanStatus: HTMLElement;
 }
 
@@ -106,6 +109,7 @@ interface ActiveMatch extends MatchParts {
    *
    * 1台で2人のときは（CPU の有無によらず）、パッドを試合に繋がない。幕でも受け付けないのは、机に置いた
    * パッドに肘が当たっただけで次の試合が始まらないようにするため（原型の注意書き）。キーボードは受け付ける。
+   * パッドの Start で止めるのも、1台の試合ではこれが真のときだけ（`#padCommands`）。
    */
   readonly padOnBanner: boolean;
 }
@@ -121,6 +125,8 @@ interface MatchParts {
   readonly presenter: Presenter;
   readonly banner: RoundBanner;
   readonly countdown: Countdown;
+  /** 横の板の名札と時計を作り直す時（原型の 0.25 秒ごとと、被弾などの場面）。 */
+  readonly refresh: PanelRefresh;
 }
 
 const KEY_LAYOUTS: Readonly<Record<'solo' | 'left' | 'right', KeyBinding>> = {
@@ -161,6 +167,11 @@ export class Shell {
   /** つかんでいるパッド。メニュー・ロビー・試合で1つを分け合う（`PadChoice` の説明を参照）。 */
   readonly #pads: PadChoice;
   readonly #padMenu: PadMenuInput;
+  /**
+   * 盤面の寸法。窓の大きさから決める（`fitBoard`）。決めるまでは、canvas の大きさに収まる寸法
+   * （テストは `fitBoard` を呼ばずに、渡した canvas の大きさで描く）。
+   */
+  #layout: Layout;
 
   constructor(elements: ShellElements, tools: ShellTools) {
     this.#elements = elements;
@@ -169,7 +180,8 @@ export class Shell {
     this.#padMenu = new PadMenuInput(this.#pads);
     this.#flow = new MenuFlow(undefined, tools.sound);
     this.#bannerView = new BannerOverlay(elements.banner);
-    this.#toasts = new Toasts(elements.toasts);
+    this.#toasts = new Toasts(elements.toast);
+    this.#layout = layoutFor(elements.canvas.width, elements.canvas.height);
     this.#menu = new MenuView(elements.menu, this.#flow, {
       start: (setup) => this.startLocal(setup),
       soundChanged: (sound) => tools.setSound(sound),
@@ -207,15 +219,18 @@ export class Shell {
       pointerButton('タイトルへ', () => this.showMenu(), { data: { action: 'title', nav: 'final' } }),
     ];
     const padInMatch = plan.controllers.some(drivesPad);
-    this.#begin(runner, this.#keyHelp(runner, { padInMatch, canPause: true }), () => actions, {
+    // 横の板：つまみ・「⏸ ポーズ」・「設定へ」（原型 L522-537）。「設定へ」は確認を出さずにタイトルへ戻る
+    // （原型の注記 L3377-3380。マウスで押しに行くこと自体が、戻るつもりで押したことを示すため）。どちらのボタンも
+    // 操作の音を鳴らさない（原型と同じ。L6038・L6080）。
+    const controls: SideControls = {
+      speed: { rate: this.#speed.rate, change: (rate) => this.#setSpeed(rate) },
+      pause: () => this.togglePause(),
+      quit: () => this.showMenu(),
+    };
+    this.#begin(runner, this.#keyHelp(runner, { padInMatch, canPause: true }), controls, () => actions, {
       paced: true,
       padOnBanner: padInMatch,
     });
-    this.#setToolbar([
-      speedControl(this.#speed.rate, (rate) => this.#setSpeed(rate)),
-      pointerButton('⏸ ポーズ', () => this.togglePause(), { data: { action: 'pause' } }),
-      pointerButton('タイトルへ', () => this.showMenu(), { data: { action: 'quit' } }),
-    ]);
   }
 
   /** 通信対戦に参加する。 */
@@ -234,15 +249,19 @@ export class Shell {
     // 次の試合は中継が配り直した start を受け取ってから始まる。
     const again = [pointerButton('もういっかい', () => runner.rematch(), { data: { action: 'again', nav: 'final' } })];
     // 自分のプレイヤー番号は、つないで受け取るまで分からない。キーの案内は、名札の一覧でこの端末のプレイヤー
-    // （`local`）の分だけを出す（`describeKeyHelp`）。通信対戦ではだれもポーズできない。
-    this.#begin(runner, this.#keyHelp(runner, { padInMatch: true, canPause: false }), () => (runner.canRematch ? again : []), {
-      paced: false,
-      padOnBanner: true,
-    });
+    // （`local`）の分だけを出す（`describeKeyHelp`）。通信対戦ではだれもポーズできないので、横の板にはつまみも
+    // 「⏸ ポーズ」も出さず、「設定へ」だけを出す（原型のゲストと同じ形。原型の `applyRoleUI`）。
+    const controls: SideControls = { speed: null, pause: null, quit: () => this.#tools.leaveLan() };
+    this.#begin(
+      runner,
+      this.#keyHelp(runner, { padInMatch: true, canPause: false }),
+      controls,
+      () => (runner.canRematch ? again : []),
+      { paced: false, padOnBanner: true },
+    );
     // 通信対戦は等倍で進めるので、曲も等倍に戻す。盤面は同じ速さなのに曲だけ速いと、
     // 速さが変わったように見える。つまみの倍率（`#speed`）は、1台の試合に戻ったときのために残す。
     this.#tools.music.setSpeed(1);
-    this.#setToolbar([pointerButton('ぬける', () => this.#tools.leaveLan(), { data: { action: 'leave' } })]);
   }
 
   /** 同じ選択で、新しい試合を始める（種は変わる）。1台で遊んだあとだけ有効。 */
@@ -250,9 +269,28 @@ export class Shell {
     if (this.#lastSetup !== null) this.startLocal(this.#lastSetup);
   }
 
-  /** 止める・再開する（1台で遊ぶときだけ有効）。 */
+  /** 止める・再開する（1台で遊ぶときの、ラウンドの最中だけ有効。`LocalMatch.togglePause`）。 */
   togglePause(): void {
     this.#match?.runner.togglePause();
+  }
+
+  /**
+   * 窓の大きさから、盤面の大きさを決め直す（原型の `fitBoard`）。起動したときと、窓の大きさが替わったときに
+   * 起動の入口が呼ぶ（ここは窓を読まない）。
+   *
+   * canvas の大きさを、描く面（`width`・`height`）と見た目（CSS の幅と高さ）の両方で置き直す（原型と同じ）。
+   * 枠（3px）は CSS の大きさの内側に描かれるので、絵はその分だけ縮んで見える（原型と同じ）。
+   * 試合の最中なら、描く部品の寸法も替える（粒子は残す）。
+   */
+  fitBoard(viewportWidth: number, viewportHeight: number): void {
+    const layout = boardLayoutFor(viewportWidth, viewportHeight);
+    this.#layout = layout;
+    const canvas = this.#elements.canvas;
+    canvas.width = layout.width;
+    canvas.height = layout.height;
+    canvas.style.width = `${layout.width}px`;
+    canvas.style.height = `${layout.height}px`;
+    this.#match?.renderer.resize(layout);
   }
 
   /**
@@ -310,8 +348,7 @@ export class Shell {
   #current(): ActiveMatch | null {
     const match = this.#match;
     if (match === null || match.runner.generation === match.generation) return match;
-    // 前の試合の通知も持ち越さない（1台の「もういっかい」は、試合を作り直すときに消している）。
-    this.#toasts.clear();
+    // 出ている通知は消さない。通知は時間でだけ消える（原型と同じ。`Toasts`）。
     this.#match = { ...match, ...this.#partsFor(match.runner), generation: match.runner.generation };
     return this.#match;
   }
@@ -333,6 +370,7 @@ export class Shell {
     this.#forgetTaps();
     match.presenter.consume(events, world);
     match.banner.onEvents(events, hud);
+    match.refresh.observe(events);
     match.renderer.afterTick(events, world);
     const after = runner.world;
     if (after !== null) match.countdown.observe(after);
@@ -350,7 +388,9 @@ export class Shell {
     // ⚠️ 読むのは毎回。受け付けないときも、前回の状態を更新し続ける（押したままのボタンを、あとで
     // 新しい押下と取り違えないため。原型も同じ）。試合の操作の押した瞬間も、ここで読んだときに残る（`PadChoice`）。
     const commands = this.#padMenu.poll();
-    if (commands.length > 0 && this.#padAccepted()) this.navigate(...commands);
+    // パッドを見つけた知らせは、メニューの間も出す（原型もメニューの間にパッドを読み、見つけたら知らせる）。
+    this.#showPadNotices();
+    if (commands.length > 0) this.#padCommands(commands);
     const match = this.#current();
     const music = this.#tools.music;
     if (match === null) {
@@ -363,11 +403,11 @@ export class Shell {
     const { runner } = match;
     const world = runner.world;
     this.#showBoard(world !== null);
-    if (world !== null) match.renderer.draw(world, match.paced ? this.#speed.progress(alpha) : alpha);
+    // 止めている間は、盤面の上にポーズの幕を描く（原型も canvas に描く。L4566-4573）。
+    if (world !== null) match.renderer.draw(world, match.paced ? this.#speed.progress(alpha) : alpha, runner.paused);
     const hud = runner.hud;
-    match.side.update(hud);
+    match.side.update(hud, { refresh: world !== null && match.refresh.due(world), paused: runner.paused });
     this.#bannerView.show(world === null ? null : match.banner.current(world), match.finalActions());
-    this.#elements.pause.hidden = !runner.paused;
     runner.afterDraw();
     this.#paintCursor();
     // 試合が始まる前（通信対戦のロビー）と、1台の試合を止めている間は、押したキーを毎フレーム忘れる
@@ -382,6 +422,7 @@ export class Shell {
   #begin(
     runner: MatchRunner,
     help: KeyHelpFor,
+    controls: SideControls,
     finalActions: ActiveMatch['finalActions'],
     { paced, padOnBanner }: Pick<ActiveMatch, 'paced' | 'padOnBanner'>,
   ): void {
@@ -389,7 +430,7 @@ export class Shell {
     this.#match = {
       runner,
       ...this.#partsFor(runner),
-      side: new SidePanel(this.#elements.side, help),
+      side: new SidePanel(this.#elements.side, help, controls),
       generation: runner.generation,
       finalActions,
       paced,
@@ -407,10 +448,11 @@ export class Shell {
     // 名札の一覧は通知を出すたびに尋ねる（通信対戦では、抜けたプレイヤーが CPU に替わる）。
     const presenter = new Presenter(this.#tools.sounds, this.#toasts, () => runner.hud?.roster ?? []);
     return {
-      renderer: new Renderer(this.#tools.context, this.#elements.canvas.width, this.#elements.canvas.height),
+      renderer: new Renderer(this.#tools.context, this.#layout),
       presenter,
       banner: new RoundBanner(),
       countdown: new Countdown(this.#tools.sounds),
+      refresh: new PanelRefresh(),
     };
   }
 
@@ -422,6 +464,29 @@ export class Shell {
   #showBoard(board: boolean): void {
     this.#elements.menu.hidden = board;
     this.#elements.play.hidden = !board;
+  }
+
+  /**
+   * パッドで1回に押し始めた操作を渡す。
+   *
+   * 1台の試合では、パッドを試合に繋いだとき（1人で遊ぶとき）、Start で止める・再開する（原型 L3643-3645。
+   * 止められるのはラウンドの最中だけ。`LocalMatch.togglePause`）。2人で遊ぶときは受け付けない（机に置いたパッドに
+   * 肘が当たってポーズ、が起きる。原型の注記 L3561-3564）。通信対戦はだれも止められない。
+   * カーソルへは、受け付けるときだけ渡す（`#padAccepted`）。
+   */
+  #padCommands(commands: readonly NavCommand[]): void {
+    const match = this.#match;
+    if (match !== null && match.paced && match.padOnBanner && commands.includes('start')) {
+      match.runner.togglePause();
+    }
+    if (this.#padAccepted()) this.navigate(...commands);
+  }
+
+  /** パッドについての知らせ（見つけた・対応していない）を、通知に出す（`PadChoice` の「画面に知らせること」）。 */
+  #showPadNotices(): void {
+    for (const notice of this.#pads.takeNotices()) {
+      this.#toasts.show(notice.kind === 'found' ? PAD_FOUND : padUnsupported(notice.id));
+    }
   }
 
   /** いまパッドでカーソルを動かしてよいか。メニューとロビーはいつでも、幕は `padOnBanner` のときだけ。 */
@@ -474,22 +539,21 @@ export class Shell {
     this.#pads.forgetTaps();
   }
 
+  /**
+   * 試合を抜ける。横の板を空にし、幕を隠す。
+   *
+   * 出ている通知は消さない（原型の `backToSetup` も触らない。タイトルへ戻ったあとも、残りの時間だけ出る）。
+   */
   #endMatch(): void {
     this.#match?.runner.close();
     this.#match = null;
-    this.#toasts.clear();
     this.#bannerView.show(null);
-    this.#elements.pause.hidden = true;
-    this.#setToolbar([]);
+    this.#elements.side.replaceChildren();
   }
 
   #setSpeed(rate: number): void {
     this.#speed.set(rate);
     this.#tools.music.setSpeed(rate);
-  }
-
-  #setToolbar(buttons: readonly HTMLElement[]): void {
-    this.#elements.toolbar.replaceChildren(...buttons);
   }
 
   #sourceFor(id: PlayerId, controller: LocalController, seed: number): InputSource {

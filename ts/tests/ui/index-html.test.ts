@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -25,6 +26,35 @@ describe('画面の要素', () => {
 
   it('見た目の指定を読み込んでいる', () => {
     expect(read('../../index.html')).toContain('href="/src/style.css"');
+  });
+
+  it('試合の画面は、盤面と横の板を .stage に横に並べ、通知は #app の外に1つだけ置く（原型 L513-540・L567）', () => {
+    // body の中身だけを template に読む（ページとして読むと、見た目の指定とスクリプトを取りに行く）。
+    const body = read('../../index.html').match(/<body>([\s\S]*)<\/body>/)?.[1] ?? '';
+    const template = document.createElement('template');
+    template.innerHTML = body;
+    const page = template.content;
+    const stage = page.querySelector('#play > .stage');
+    expect([...(stage?.children ?? [])].map((child) => child.className || `#${child.id}`)).toEqual(['board', '#side']);
+    // 盤面に重ねるもの（幕・通信対戦の案内の帯）は、canvas と同じ包みに入れる。
+    expect([...(stage?.querySelector('.board')?.children ?? [])].map((child) => child.id)).toEqual(['stage', 'banner', 'lan-status']);
+    // 通知は body の直下（#app の外）。
+    expect(page.querySelector('#toast')?.parentNode).toBe(page);
+    expect(page.querySelectorAll('.toast')).toHaveLength(1);
+    // ポーズの表示は盤面に描く（DOM に置かない）。通知を積む箱も無い。
+    expect(page.querySelector('#pause')).toBeNull();
+    expect(page.querySelector('#toasts')).toBeNull();
+  });
+
+  it('通信対戦の案内の帯は、幕（原型の z-index 20）より上、通知（30）より下に重ねる', () => {
+    const css = read('../../src/style.css');
+    const zIndexOf = (selector: string): number => {
+      const body = css.match(new RegExp(`(?:^|\\n)${selector.replace('.', '\\.')}\\s*\\{([^}]*)\\}`))?.[1] ?? '';
+      return Number(body.match(/z-index:\s*(\d+)/)?.[1]);
+    };
+    expect(zIndexOf('.toast')).toBe(30);
+    expect(zIndexOf('.lan-status')).toBeGreaterThan(20);
+    expect(zIndexOf('.lan-status')).toBeLessThan(30);
   });
 
   it('起動の幕は、出すまで隠してある（index.html の hidden と、それを見た目に反映する CSS の両方）', () => {
