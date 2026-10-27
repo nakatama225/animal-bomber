@@ -310,8 +310,10 @@ export class LanMatch implements MatchRunner {
   /**
    * 始まった試合と、その段階。まだ始まっていなければ null。
    *
-   * 試合の最中に止まった（ずれ・切断）ときも、止まる直前の段階を返す。盤面と名札を残したまま
-   * 理由を出すため。
+   * 試合の最中に止まった（中継との接続が切れた・約束に合わない1通が届いた）ときも、止まる直前の段階を返す。止まった
+   * 試合の盤面は画面に残さない（次に描くときに `Shell` が `stage` を見てタイトルへ戻す）が、それまでの間に `Shell` が
+   * 読む盤面と名札（`world`・`hud`）は、止まる前と同じ形のままにしておく。ずれたときは段階が `playing` のまま止まるので、
+   * ここは通らない。
    */
   #started(): { readonly phase: PlayingPhase; readonly game: GameSession } | null {
     const played = playedPhase(this.#client.phase);

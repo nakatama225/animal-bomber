@@ -807,9 +807,12 @@ describe('ゲームパッドとロビーでメニューを動かす', () => {
     return { read, hold: (...buttons) => (held = new Set(buttons)) };
   }
   const A = 0;
+  const B = 1;
+  const SELECT = 8;
   const START = 9;
   const UP = 12;
   const DOWN = 13;
+  const RIGHT = 15;
 
   /** 押して1枚描き、離して1枚描く。 */
   function tap(shell: Shell, pad: ReturnType<typeof fakePad>, button: number): void {
@@ -1090,6 +1093,73 @@ describe('ゲームパッドとロビーでメニューを動かす', () => {
     expect(guest.links.map((link) => link.closed)).toEqual([1]);
     expect(screenOf(guest.elements)).toBe('title');
   });
+
+  // 盤面が無い間（ロビーと、つないでいる最中の LAN の画面）は、パッドの操作をカーソルへ渡す（原型の pollGamepads は、
+  // メニューとロビーでパッドの操作を MENU.nav へ渡す。L3612-3652）。試合の分かれ道（Start でポーズ・Select で設定へ）へは渡さない。
+
+  /** パッドを1つ繋いで、通信対戦のロビーまで進める。 */
+  function padLobby(seat: number, pad: ReturnType<typeof fakePad>): ReturnType<typeof mount> {
+    const mounted = mount('both', () => [], pad.read);
+    mounted.shell.startLan('relay.local:8777');
+    mounted.relay().onMessage(JSON.stringify({ t: 'welcome', seat, role: seat === 0 ? 'host' : 'guest', seats: seat === 0 ? [] : [0] }));
+    mounted.shell.draw(0);
+    return mounted;
+  }
+
+  it('ホストのロビーでは、パッドの十字で動物を動かし、A で選べる', () => {
+    const pad = fakePad();
+    const { shell, elements } = padLobby(0, pad);
+    expect(screenOf(elements)).toBe('lobby');
+    const first = elements.menu.querySelector('[data-field="animal-0"] .on')?.getAttribute('data-value');
+    tap(shell, pad, RIGHT);
+    tap(shell, pad, A);
+    const second = ANIMAL_LOOKS[1]!;
+    expect(first).not.toBe(second.key);
+    expect(cursorOf(elements.menu)?.dataset['nav']).toBe('animal-0');
+    expect(elements.menu.querySelector('[data-field="animal-0"] .on')?.getAttribute('data-value')).toBe(second.key);
+  });
+
+  it('ホストのロビーでパッドの B を押すと「せつぞくを切ります。よいですか？」を開き（枠は「やめる」）、もう一度の B は「やめる」', () => {
+    const pad = fakePad();
+    const { shell, elements, links } = padLobby(0, pad);
+    tap(shell, pad, B);
+    expect(elements.confirm.hidden).toBe(false);
+    expect(elements.confirm.querySelector('.cfmMsg')?.textContent).toBe('せつぞくを切ります。よいですか？');
+    expect(cursorOf(elements.confirm)?.dataset['action']).toBe('no');
+    tap(shell, pad, B);
+    expect(elements.confirm.hidden).toBe(true);
+    expect(links.map((link) => link.closed)).toEqual([0]);
+    expect(screenOf(elements)).toBe('lobby');
+  });
+
+  it('つないでいる最中の LAN の画面でも、パッドの B で「せつぞくを切ります。よいですか？」を開く（カーソルの項目が無くても）', () => {
+    const pad = fakePad();
+    const { shell, elements, links } = mount('both', () => [], pad.read);
+    shell.startLan('relay.local:8777');
+    shell.draw(0);
+    expect(screenOf(elements)).toBe('lan');
+    tap(shell, pad, B);
+    expect(elements.confirm.hidden).toBe(false);
+    expect(elements.confirm.querySelector('.cfmMsg')?.textContent).toBe('せつぞくを切ります。よいですか？');
+    expect(cursorOf(elements.confirm)?.dataset['action']).toBe('no');
+    expect(links.map((link) => link.closed)).toEqual([0]);
+  });
+
+  it('つないでいる最中の LAN の画面とロビーでは、パッドの Select で「設定へもどりますか？」を開かない（枠を出すだけ）', () => {
+    const pad = fakePad();
+    const { shell, elements, relay } = mount('both', () => [], pad.read);
+    shell.startLan('relay.local:8777');
+    shell.draw(0);
+    tap(shell, pad, SELECT);
+    expect(elements.confirm.hidden).toBe(true);
+    relay().onMessage(JSON.stringify({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
+    shell.draw(0);
+    expect(screenOf(elements)).toBe('lobby');
+    tap(shell, pad, SELECT);
+    expect(elements.confirm.hidden).toBe(true);
+    expect(elements.confirm.textContent).not.toContain('設定へもどりますか？');
+    expect(cursorOf(elements.menu)).not.toBeNull();
+  });
 });
 
 describe('通信対戦で、接続を保ったまま次の試合を始める', () => {
@@ -1169,6 +1239,29 @@ describe('通信対戦で、接続を保ったまま次の試合を始める', (
     // 抜ける道は残す。
     expect(elements.banner.querySelector('[data-action="setup"]')).not.toBeNull();
   }, 120_000);
+
+  it('ラウンドの最中（決着の前）にずれが知らされたら、曲を止めて鳴らし直さない。帯に理由を出す', () => {
+    const { shell, elements, relay, music } = mount();
+    shell.startLan('relay.local:8777');
+    relay().onMessage(JSON.stringify({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
+    relay().onMessage(JSON.stringify({ t: 'start', seats: [0], config, match: 1 }));
+    shell.draw(0);
+    for (let i = 0; i < 5; i += 1) shell.tick();
+    shell.draw(0);
+    // 前提：ラウンドの最中で、曲は鳴っている。
+    expect(elements.banner.hidden).toBe(true);
+    const started = music.started;
+    expect(started).toBeGreaterThan(0);
+    const stopped = music.stopped;
+
+    relay().onMessage(JSON.stringify({ t: 'desync', tick: 3, reports: [] }));
+    shell.draw(0);
+    shell.draw(0);
+    expect(music.started).toBe(started);
+    expect(music.stopped).toBe(stopped + 2);
+    expect(elements.lanStatus.textContent).toContain('端末どうしで試合がずれたので止めた');
+    expect(elements.banner.hidden).toBe(true);
+  });
 
   it('ゲストの幕には「⚙ 設定をやりなおす」だけを出し（押すと抜ける）、ホストが次の試合を始めたら幕が消える', () => {
     const { shell, elements, relay, sent, links } = mount();
@@ -2220,6 +2313,29 @@ describe('ラウンドの幕と優勝の幕（1台の試合。原型どおりボ
     expect(forgets).toBe(before);
     shell.draw(0);
     expect(forgets).toBe(before + 1);
+  }, 120_000);
+
+  it('優勝の幕の間も tick を進めない（粒子と画面の揺れも止める。原型の loop は play の間だけ update を呼ぶ）。「もういっかい」の次の試合は進む', () => {
+    const { shell, elements } = mount();
+    startByMouse(shell, elements, 'solo');
+    playUntilChampion(shell, elements);
+    const before = vi.spyOn(Renderer.prototype, 'beforeTick');
+    const after = vi.spyOn(Renderer.prototype, 'afterTick');
+    try {
+      for (let i = 0; i < 30; i += 1) shell.tick();
+      shell.draw(0);
+      expect(elements.banner.hidden).toBe(false);
+      expect(before).not.toHaveBeenCalled();
+      expect(after).not.toHaveBeenCalled();
+      press(elements.banner, '[data-action="advance"]');
+      shell.draw(0);
+      shell.tick();
+      expect(before).toHaveBeenCalledTimes(1);
+      expect(after).toHaveBeenCalledTimes(1);
+    } finally {
+      before.mockRestore();
+      after.mockRestore();
+    }
   }, 120_000);
 
   it('「⚙ 設定をやりなおす」でタイトルへ戻り、カーソルの枠を消す（原型の backToSetup の MENU.on = false）。幕のボタンは操作の音を鳴らさない', () => {

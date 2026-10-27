@@ -25,10 +25,14 @@ describe('1台の試合を止めているか（押してすぐ離したキーを
     expect(match.stopped).toBe(true);
     match.togglePause();
     expect(match.stopped).toBe(false);
-    // 決まった試合は進めても何も起きない（GameSession.tick が空を返す）。押したキーを残しても読まれない。
+    // 決まる前は進め、試合の最中に数える。
+    expect([match.ready, match.inProgress]).toEqual([true, true]);
+    // 決まった試合は止めている（押したキーを残しても読まれない）。
     session.match.finished = true;
     expect(match.stopped).toBe(true);
     expect(match.paused).toBe(false);
+    // 決まった試合も進めない（原型の loop も play の間だけ update を呼ぶ。進めると、優勝の幕の下で粒子と揺れが動き続ける）。
+    expect([match.ready, match.inProgress]).toEqual([false, false]);
   });
 
   it('ラウンドの幕の間（決着のあとの待ち）は止めていて、進めず、試合の最中に数えない（曲を止める）。送ると戻る', () => {

@@ -38,7 +38,8 @@ export interface MatchRunner {
   readonly paused: boolean;
   /**
    * 1台の試合を、わざと止めているか（ポーズ・ラウンドの幕・決まった試合）。止めている間は、押してすぐ離したキーを
-   * 毎フレーム忘れる（`Shell`。忘れないと、ポーズ中に押した爆弾のキーで、再開した最初の tick に爆弾を置く）。
+   * 毎フレーム忘れる（`Shell`。忘れないと、ポーズ中に押してすぐ離した爆弾のキーで、再開した最初の tick に爆弾を置く。
+   * 押したまま再開したときは置く。押した瞬間を試合の側が前の tick と比べて作るため。原型は置かない）。
    *
    * 通信対戦はいつも false。入力を待って進めないのは止めているのではなく、押したキーは送るまで残す。
    */
@@ -92,7 +93,10 @@ export class LocalMatch implements MatchRunner {
   }
 
   get ready(): boolean {
-    return !this.#paused && !this.session.betweenRounds;
+    // 止めている間（ポーズ・ラウンドの幕・決まった試合）は進めない（原型の `loop` も `G.phase==='play'` の間だけ `update` を
+    // 呼ぶ。L4256）。決まった試合を進めても盤面は変わらない（`GameSession.tick` が空を返す）が、進めると描く側の粒子と
+    // 画面の揺れが優勝の幕の下で動き続け、ゲームの速さの倍率ぶんの tick も数え続ける（原型は優勝の幕の間、粒子と揺れも止まる）。
+    return !this.stopped;
   }
 
   get paused(): boolean {
