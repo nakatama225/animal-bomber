@@ -5,6 +5,8 @@ import {
   CPU_HEADING,
   CPU_NOTE,
   cpuTag,
+  DIALOG_NO,
+  DIALOG_TEXTS,
   HIT_LABELS,
   HIT_NOTE,
   LOG_LABEL,
@@ -108,5 +110,13 @@ describe('試合の外の画面の文', () => {
     // 原型のもぐらの説明の語（字の番号で持つ。Python 版の言い換えは「効果」）を書かない。
     const original = String.fromCodePoint(0x52b9, 0x304d);
     expect(ANIMAL_LOOKS.some((look) => look.description.includes(original))).toBe(false);
+  });
+
+  it('確認の画面の文と右のボタンは原型の文（Python 版の DialogKind と同じ）。左はいつも「やめる」', () => {
+    expect(DIALOG_TEXTS).toEqual({
+      backToSetup: { message: '設定へもどりますか？', yes: '設定へもどる' },
+      disconnect: { message: 'せつぞくを切ります。よいですか？', yes: 'せつぞくを切る' },
+    });
+    expect(DIALOG_NO).toBe('やめる');
   });
 });

@@ -161,6 +161,44 @@ describe('描画', () => {
     expect(near((20.5 + 1.5) / 2)).toBe(false);
   });
 
+  it('盤面が作り直されたら、tick を進める前に描いても、前のラウンドの粒子と揺れを描かない（1台のラウンドの幕を送ったフレーム）', () => {
+    // 原型の startRound は、その場で粒子と揺れを捨てる（L4149・L4154）。盤面の替わりに気づくのが tick を進めたときだけだと、
+    // パッドで幕を送ったフレームや 0.5 倍で tick を進めないフレームに、次のラウンドの盤面へ前のラウンドの倒れた顔と
+    // 揺れが1枚描かれる。
+    const layout = layoutFor(920, 680);
+    const ended = makeWorld(3, ['rabbit', 'elephant']);
+    const canvas = fakeCanvas();
+    const renderer = new Renderer(canvas.context, layout);
+    renderer.beforeTick(ended);
+    renderer.afterTick(
+      [
+        { type: 'exploded', cell: { col: 5, row: 5 }, owner: 0, chained: 4, blocks: 0 },
+        { type: 'playerDown', target: 1, by: 0, at: { x: 5.5, y: 5.5 } },
+      ],
+      ended,
+    );
+    /** その盤面を描いた命令の名前の並び。 */
+    const namesOf = (draw: (context: CanvasRenderingContext2D) => void): string[] => {
+      const target = fakeCanvas();
+      draw(target.context);
+      return target.log.map((call) => call.name);
+    };
+    const drawnBy = (world: typeof ended): string[] => {
+      canvas.log.length = 0;
+      renderer.draw(world, 1);
+      return canvas.log.map((call) => call.name);
+    };
+    const freshOn = (world: typeof ended): string[] => namesOf((context) => new Renderer(context, layout).draw(world, 1));
+
+    // 対照：同じ盤面なら、倒れた顔（回して描く）と揺れの分だけ、作りたての描く部品より命令が多い。
+    const same = drawnBy(ended);
+    expect(same.filter((name) => name === 'rotate').length).toBeGreaterThan(freshOn(ended).filter((name) => name === 'rotate').length);
+    expect(same).not.toEqual(freshOn(ended));
+    // 次のラウンドの盤面は、tick を進める前でも、作りたての描く部品と同じ命令で描く（粒子も揺れも無い）。
+    const next = makeWorld(3, ['rabbit', 'elephant']);
+    expect(drawnBy(next)).toEqual(freshOn(next));
+  });
+
   it('外周の葱ボンと飛んでいる葱のいる盤面を描いても例外が出ず、状態も変わらない', () => {
     // 試合を通す検査では、葱ボンが出るか・葱が飛ぶかは CPU の振る舞い次第なので、ここで置く。
     const sides = alongsFacing({ col: 5, row: 5 });

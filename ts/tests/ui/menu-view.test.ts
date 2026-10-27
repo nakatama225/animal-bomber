@@ -28,6 +28,8 @@ function mount(): {
   sounds: SoundSetting[];
   lan: number[];
   log: string[];
+  /** 画面が替わったと知らせたときの、替わった先の画面の名前。 */
+  screens: (string | undefined)[];
 } {
   const root = document.createElement('div');
   document.body.append(root);
@@ -36,6 +38,7 @@ function mount(): {
   const sounds: SoundSetting[] = [];
   const lan: number[] = [];
   const log: string[] = [];
+  const screens: (string | undefined)[] = [];
   const view = new MenuView(root, flow, {
     start: (setup) => {
       started.push(setup);
@@ -50,9 +53,10 @@ function mount(): {
       log.push('lan');
     },
     uiSound: () => log.push('ui'),
+    screenChanged: () => screens.push(root.querySelector<HTMLElement>('[data-screen]')?.dataset['screen']),
   });
   view.render();
-  return { root, flow, view, started, sounds, lan, log };
+  return { root, flow, view, started, sounds, lan, log, screens };
 }
 
 const screenOf = (root: HTMLElement): string | null | undefined => root.querySelector('[data-screen]')?.getAttribute('data-screen');
@@ -99,11 +103,24 @@ describe('試合の前の画面', () => {
       soundChanged: () => undefined,
       openLan: () => undefined,
       uiSound: () => undefined,
+      screenChanged: () => undefined,
     }).render();
     const start = root.querySelector('[data-action="start"]');
     if (!(start instanceof HTMLButtonElement)) throw new Error('はじめるが無い');
     start.click();
     expect(started).toHaveLength(0);
+  });
+
+  it('画面が替わったときだけ外へ知らせる（確認の画面を畳むのに使う。同じ画面で選び直しただけなら知らせない）', () => {
+    const { root, screens } = mount();
+    // 最初に組み立てたタイトルも、替わった画面として知らせる。
+    expect(screens).toEqual(['title']);
+    press(root, '[data-choice="solo"]');
+    press(root, '[data-human="0"] [data-animal="fox"]');
+    press(root, '[data-action="next"]');
+    press(root, '[data-field="wins"] [data-value="5"]');
+    press(root, '[data-action="back"]');
+    expect(screens).toEqual(['title', 'pick', 'rules', 'pick']);
   });
 
   it('遊び方に合わせて、いない人の行を出さない', () => {

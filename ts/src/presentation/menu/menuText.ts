@@ -3,11 +3,11 @@ import type { PlayMode } from './localSetup.js';
 import type { SoundSetting } from './MenuFlow.js';
 
 /**
- * 試合の外の画面（起動の幕・タイトル・キャラ選び・ルール・設定とマニュアルと更新履歴）に出す文。
+ * 試合の外の画面（起動の幕・タイトル・キャラ選び・ルール・設定とマニュアルと更新履歴）と、確認の画面に出す文。
  *
  * 文の正は Python 版（`py/src/animal_bomber/presentation/menu/screens.py`・`choices.py`）。どちらも原型の文を
  * 写したもので、リポジトリの文の決まりで書かない語に当たる所だけを言い換えてある（この画面の文には当たる所が無い）。
- * 写す側（`platform/ui/MenuView.ts`・`platform/ui/Splash.ts`）は、ここを読んで要素に写すだけにする。
+ * 写す側（`platform/ui/MenuView.ts`・`platform/ui/Splash.ts`・`platform/ui/ConfirmDialog.ts`）は、ここを読んで要素に写すだけにする。
  * マニュアルと更新履歴の文は `manual.ts`、キャラ選びのキーの案内は `keyHints.ts`、動物の説明は
  * `content/animals.ts` にある。
  */
@@ -145,3 +145,20 @@ export function winsLabel(wins: number): string {
 export function onOff(on: boolean): string {
   return on ? 'ON' : 'OFF';
 }
+
+/**
+ * 確認の画面の種類（原型の `askConfirm` を使う2か所。L3384-3398）。
+ *
+ * - `backToSetup`：試合中にパッドの Select から開く（原型の `askBackToSetup`）
+ * - `disconnect`：通信対戦のロビーと、つないでいる最中の LAN の画面から開く（原型の `askDisconnect`）
+ */
+export type DialogKind = 'backToSetup' | 'disconnect';
+
+/** 確認の画面の文と、右のボタンの文（原型 L3386・L3396。Python 版の `DialogKind` と同じ）。 */
+export const DIALOG_TEXTS: Readonly<Record<DialogKind, { readonly message: string; readonly yes: string }>> = {
+  backToSetup: { message: '設定へもどりますか？', yes: '設定へもどる' },
+  disconnect: { message: 'せつぞくを切ります。よいですか？', yes: 'せつぞくを切る' },
+};
+
+/** 確認の画面の左のボタン（原型 L3365）。カーソルは初めにここを指す（危ない側を初めの位置にしない）。 */
+export const DIALOG_NO = 'やめる';

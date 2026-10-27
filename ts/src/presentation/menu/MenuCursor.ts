@@ -22,14 +22,6 @@ export type NavResult =
   /** 1つ前の画面へ戻る。 */
   | { readonly kind: 'back' };
 
-/**
- * 枠が出ていないときの決定をどう扱うか。
- *
- * - `show`：枠を出すだけで、押さない（ふつうの画面）
- * - `activate`：枠を出し、そのまま押す（試合が決まった幕）
- */
-export type HiddenConfirm = 'show' | 'activate';
-
 const NONE: NavResult = { kind: 'none' };
 const MOVED: NavResult = { kind: 'moved' };
 
@@ -52,10 +44,9 @@ const MOVED: NavResult = { kind: 'moved' };
  * 最初の1押しが毎回反映されず、「たまに反応しない」に見える。危ないのは、どこを指しているか
  * 見えないまま決定することだけ（原型の注意書き）。
  *
- * ⚠️ 試合が決まった幕だけは、最初の決定をそのまま反映する（`HiddenConfirm` の `activate`）。
- * 幕でする操作はほぼ「もういっかい」だけで、カーソルも幕が出るたびに「もういっかい」へ戻す。
- * 1回目を飲み込むと「決定が反映されない」としか見えない。原型もキーボードの Space・Enter は
- * そのまま次へ進め、パッドの A も1回目を飲み込まなかった。
+ * 幕（ラウンドの幕・優勝の幕）は、このカーソルの決まりの外で扱う（`app/Shell.ts`）。キーボードの Space・Enter は
+ * カーソルの位置によらず1つ目のボタンを押し、パッドを試合に繋ぐ遊び方では、幕の間は毎フレームと、パッドの操作を
+ * 渡す前に枠を出しておく（`show`）ので、パッドの1回目の A を飲み込まない（原型 L3082-3084・L3632-3637）。
  *
  * ## 1回に届く操作は1つとは限らない
  *
@@ -95,20 +86,29 @@ export class MenuCursor {
   }
 
   /**
+   * 操作を待たずに枠を出す。位置は変えない。
+   *
+   * 原型が `MENU.on = true` を直に書く2か所で使う：パッドを試合に繋ぐ遊び方の幕（毎フレーム。L3637）と、
+   * パッドの Select で「設定へもどりますか？」を開いたとき（L3385）。
+   */
+  show(): void {
+    this.#shown = true;
+  }
+
+  /**
    * 1回ぶんの操作を受ける（原型の `MENU.nav`）。
    *
    * @param commands この回に押し始めた操作（キーボードは1つ、パッドはまとめて）
    * @param sizes いまの画面の、グループごとの項目の数（上から順）。空のグループは含めない
-   * @param hiddenConfirm 枠が出ていないときの決定をどう扱うか
    */
-  handle(commands: readonly NavCommand[], sizes: readonly number[], hiddenConfirm: HiddenConfirm = 'show'): NavResult {
+  handle(commands: readonly NavCommand[], sizes: readonly number[]): NavResult {
     if (commands.length === 0 || sizes.length === 0) return NONE;
     this.fit(sizes);
     const showed = !this.#shown;
     if (showed) {
       this.#shown = true;
       // 同じ回の移動も飲み込む（原型は A があれば、枠を出して返る。L3300）。
-      if (commands.includes('confirm') && hiddenConfirm === 'show') return MOVED;
+      if (commands.includes('confirm')) return MOVED;
     }
     if (commands.includes('back')) return { kind: 'back' };
     if (commands.includes('confirm')) return { kind: 'activate', group: this.#group, item: this.#item };

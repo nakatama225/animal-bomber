@@ -37,6 +37,9 @@ import { Simulation } from '../domain/systems/Simulation.js';
  * 画面に1度も描かれない（描く前に次の盤面へ切り替わる）。決着の場面を見せる
  * ために、前の盤面を止めたまま少し待つ。ラウンドの間の幕（`presentation/hud/RoundBanner.ts`）は、
  * この待ちの間に重ねる。
+ *
+ * 待ちを tick で進めて消すのは通信対戦だけ（全端末が同じ tick に次のラウンドへ進む）。1台の試合は待ちの間を
+ * 進めず（`LocalMatch.ready`）、幕のボタンで切り上げる（`startNextRound`。原型と同じ）。
  */
 export const ROUND_INTERMISSION: Tick = secondsToTicks(2);
 

@@ -14,10 +14,13 @@ describe('メニューのカーソル', () => {
     expect(cursor.handle(['confirm'], SIZES)).toEqual({ kind: 'activate', group: 0, item: 0 });
   });
 
-  it('試合が決まった幕の扱い（activate）では、枠が出ていないときの決定も、枠を出してそのまま押す', () => {
+  it('操作を待たずに枠を出すと（幕・Select で開いた確認の画面）、次の決定は枠を出すだけにならずに押す。位置は変えない', () => {
     const cursor = new MenuCursor();
-    expect(cursor.handle(['confirm'], SIZES, 'activate')).toEqual({ kind: 'activate', group: 0, item: 0 });
-    expect(cursor.shown).toBe(true);
+    cursor.handle(['down'], SIZES);
+    cursor.hide();
+    cursor.show();
+    expect([cursor.shown, cursor.group, cursor.item]).toEqual([true, 1, 0]);
+    expect(cursor.handle(['confirm'], SIZES)).toEqual({ kind: 'activate', group: 1, item: 0 });
   });
 
   it('枠が出ていないときの移動と戻るは、枠を出したうえで反映される', () => {

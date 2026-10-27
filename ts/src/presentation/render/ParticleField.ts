@@ -44,13 +44,7 @@ export class ParticleField {
    * @param world イベントが起きた盤面。倒れた人の位置や自律物の顔ぶれを読む
    */
   onEvents(events: readonly SimEvent[], world: Readonly<WorldState>): void {
-    // 盤面が作り直されたら、前のラウンドの粒子と揺れを持ち越さない。
-    if (world !== this.#world) {
-      this.#world = world;
-      this.#particles = [];
-      this.#shake = 0;
-      this.#actors.reset(world);
-    }
+    this.enter(world);
 
     // 壊れたブロックから出たアイテムには煙を出さない。原型でも破片だけを出していた。
     const brokenCells = new Set<string>();
@@ -58,6 +52,22 @@ export class ParticleField {
 
     for (const event of events) this.#handle(event, world, brokenCells);
     this.#addShake(this.#actors.observe(world, this.#particles, this.cosmetic));
+  }
+
+  /**
+   * いまの盤面を知らせる。盤面が作り直されていたら（次のラウンド）、前のラウンドの粒子と揺れを持ち越さない。
+   *
+   * tick を進めたとき（`onEvents`）と描くとき（`Renderer.draw`）に呼ぶ。描くときにも見るのは、1台の試合のラウンドの
+   * 幕を送ったあと、次のラウンドの盤面を tick を進める前に描くことがあるため（パッドで送ったフレームと、0.5 倍で
+   * tick を進めないフレーム）。見ないと、その1枚に前のラウンドの粒子と揺れが描かれる（原型の startRound は、その場で
+   * 粒子と揺れを捨てる。L4149・L4154）。
+   */
+  enter(world: Readonly<WorldState>): void {
+    if (world === this.#world) return;
+    this.#world = world;
+    this.#particles = [];
+    this.#shake = 0;
+    this.#actors.reset(world);
   }
 
   /** 1 tick ぶん進める。 */

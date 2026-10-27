@@ -118,6 +118,8 @@ MEASURE=1 npx vitest run tests/ai/balance.test.ts
 - 文は `textContent` で入れてください。`innerHTML` に文字列をつないで入れないでください
 - 写す側のテストは、ファイルの先頭に `// @vitest-environment happy-dom` と書くと代わりの DOM の上で
   走ります。ほかのテストは node のままです
-- ラウンドの間の幕をボタンで送る形にしないでください。通信対戦で「誰の操作で次へ進むか」を
-  揃える必要が出てきます。待ちの長さは試合の側（`ROUND_INTERMISSION`）が tick で数えています
+- ラウンドの間の幕は、1台の試合ではボタンで送り（原型と同じ。`GameSession.startNextRound`）、通信対戦では
+  決着のあとの待ち（`ROUND_INTERMISSION`）を tick で数えて消します。⛔ 通信対戦のラウンドの幕をボタンで送る形に
+  しないでください。誰の操作で次へ進むかを全員で揃える約束（中継と Python 版も）が要ります（優勝の幕の「もういっかい」は、
+  ホストが次の試合の合図を送るだけで、次の試合は中継が配り直した `start` で全員そろって始まります）
 - `main.ts` が探す要素の名前を変えたら、`index.html` も修正してください（`tests/ui/index-html.test.ts` が突き合わせます）

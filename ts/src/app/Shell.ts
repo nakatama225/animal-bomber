@@ -13,8 +13,9 @@ import {
   type KeyBinding,
   type KeyboardState,
 } from '../platform/Keyboard.js';
-import { BannerOverlay } from '../platform/ui/BannerOverlay.js';
-import { pointerButton, scrollToTop } from '../platform/ui/dom.js';
+import { BannerOverlay, NO_BUTTONS, type BannerButtons } from '../platform/ui/BannerOverlay.js';
+import { ConfirmDialog } from '../platform/ui/ConfirmDialog.js';
+import { scrollToTop } from '../platform/ui/dom.js';
 import { MenuNavigator } from '../platform/ui/MenuNavigator.js';
 import { MenuView } from '../platform/ui/MenuView.js';
 import { SidePanel, type KeyHelpFor, type SideControls } from '../platform/ui/SidePanel.js';
@@ -23,7 +24,7 @@ import { Countdown } from '../presentation/audio/Countdown.js';
 import type { SoundBank } from '../presentation/audio/SoundBank.js';
 import { describeKeyHelp } from '../presentation/hud/keyHelp.js';
 import { PanelRefresh } from '../presentation/hud/panelRefresh.js';
-import { RoundBanner } from '../presentation/hud/RoundBanner.js';
+import { RoundBanner, type BannerView } from '../presentation/hud/RoundBanner.js';
 import { planLocalMatch, type LocalController, type LocalSetup } from '../presentation/menu/localSetup.js';
 import type { NavCommand } from '../presentation/menu/MenuCursor.js';
 import { MenuFlow, type SoundSetting } from '../presentation/menu/MenuFlow.js';
@@ -44,7 +45,10 @@ export interface ShellElements {
   readonly canvas: HTMLCanvasElement;
   /** 試合の横の板（原型の `#side`）。中身は試合ごとに `SidePanel` が組む。 */
   readonly side: HTMLElement;
+  /** ラウンドの幕と優勝の幕（原型の `#banner`）。`#app` の外にあり、窓の全体を覆う。 */
   readonly banner: HTMLElement;
+  /** 確認の画面（原型の `#cfmWrap`）。`#app` の外にあり、盤面の上にもメニューの上にも出る。 */
+  readonly confirm: HTMLElement;
   /** 画面の上に出す通知（原型の `#toast`）。1つだけで、`#app` の外にあり、どの画面の上にも出る。 */
   readonly toast: HTMLElement;
   /** 通信対戦の案内の帯。盤面の下の端に重ねる（`LanMatch`）。 */
@@ -90,28 +94,38 @@ export interface ShellTools {
   readonly connect?: LanMatchOptions['connect'];
 }
 
+/**
+ * 1台の試合と通信対戦とで違う、幕と抜け方の扱い。
+ */
+interface MatchRoutes {
+  /**
+   * 幕に並べるボタン。描くたびに呼ぶ（通信対戦では、ホストかどうかがつないだあとで分かり、ずれたら
+   * 「もういっかい」を消す）。
+   */
+  readonly bannerButtons: (view: BannerView) => BannerButtons;
+  /** 優勝の幕の1つ目のボタン（「もういっかい」）。 */
+  readonly again: () => void;
+  /** 試合をやめてタイトルへ戻る（横の板の「設定へ」・幕の「⚙ 設定をやりなおす」・確認の画面の「設定へもどる」）。 */
+  readonly leave: () => void;
+  /** ゲームの速さの倍率を適用するか。1台で遊ぶときだけ。通信対戦は全員が同じ速さで進める。 */
+  readonly paced: boolean;
+  /**
+   * パッドを試合に繋ぐ遊び方か（原型の `active`。L3570）。1人で遊ぶとき（`drivesPad`）と通信対戦のとき。
+   *
+   * 真のときだけ、幕でパッドを受け付け（幕の間は毎フレーム枠を出す）、試合の最中のパッドの Start・Select を
+   * 受け付ける。1台で2人のときは（CPU の有無によらず）、パッドを試合に繋がないので、幕でも試合の最中も受け付けない。
+   * 机に置いたパッドに肘が当たっただけで次のラウンドへ進んだり止まったりしないようにするため（原型の注意書き）。
+   * キーボードは受け付ける。
+   */
+  readonly padOnBanner: boolean;
+}
+
 /** 1試合ぶんの部品。試合ごとに作り直す（前の試合の粒子や幕を持ち越さない）。 */
-interface ActiveMatch extends MatchParts {
+interface ActiveMatch extends MatchParts, MatchRoutes {
   readonly runner: MatchRunner;
   readonly side: SidePanel;
   /** 部品を作ったときの `runner.generation`。変わったら次の試合なので、部品を作り直す。 */
   readonly generation: number;
-  /**
-   * 試合が決まった幕に並べるボタン。描くたびに呼ぶ（通信対戦では、ホストかどうかが
-   * つないだあとで分かる。ホストにだけ「もういっかい」を出す）。
-   */
-  readonly finalActions: () => readonly HTMLElement[];
-  /** ゲームの速さの倍率を適用するか。1台で遊ぶときだけ。通信対戦は全員が同じ速さで進める。 */
-  readonly paced: boolean;
-  /**
-   * 試合が決まった幕を、パッドで動かせるか。パッドを試合に繋いだとき（1人で遊ぶとき。`drivesPad`）と
-   * 通信対戦のとき（原型と同じ）。
-   *
-   * 1台で2人のときは（CPU の有無によらず）、パッドを試合に繋がない。幕でも受け付けないのは、机に置いた
-   * パッドに肘が当たっただけで次の試合が始まらないようにするため（原型の注意書き）。キーボードは受け付ける。
-   * パッドの Start で止めるのも、1台の試合ではこれが真のときだけ（`#padCommands`）。
-   */
-  readonly padOnBanner: boolean;
 }
 
 /**
@@ -135,11 +149,17 @@ const KEY_LAYOUTS: Readonly<Record<'solo' | 'left' | 'right', KeyBinding>> = {
   right: PLAYER2_KEYS,
 };
 
+/** 1台の試合の幕のボタン。どちらの幕にも2つとも出す（原型 L548-549）。 */
+const LOCAL_BUTTONS: BannerButtons = { advance: true, setup: true };
+
+/** 幕にボタンを1つでも並べるか（通信対戦のラウンドの幕は並べない）。 */
+const hasButtons = (buttons: BannerButtons): boolean => buttons.advance || buttons.setup;
+
 /**
  * ゲームパッドを繋ぐ操作か。1人で遊ぶときのキーボードの操作だけ（1台に1人ぶん）。
  * 2人のときに繋ぐと、どちらのプレイヤーのパッドか決められない。
  *
- * 試合に繋ぐか（`#sourceFor`）と、試合が決まった幕でパッドを受け付けるか（`padOnBanner`）を、
+ * 試合に繋ぐか（`#sourceFor`）と、幕と試合の最中にパッドを受け付けるか（`padOnBanner`）を、
  * この1つで決める。別々に書くと、遊び方を足したときに片方だけが変わる。
  */
 const drivesPad = (controller: LocalController): boolean => controller.kind === 'keys' && controller.layout === 'solo';
@@ -157,12 +177,13 @@ export class Shell {
   readonly #flow: MenuFlow;
   readonly #menu: MenuView;
   readonly #bannerView: BannerOverlay;
+  readonly #dialog: ConfirmDialog;
   readonly #toasts: Toasts;
   #match: ActiveMatch | null = null;
   #lastSetup: LocalSetup | null = null;
   /** ゲームの速さ。試合をまたいで持つ（もういっかいで等倍に戻さない。原型と同じ）。 */
   readonly #speed = new GameSpeed();
-  /** キーボードとパッドで、メニュー・ロビー・試合が決まった幕を動かすカーソル。 */
+  /** キーボードとパッドで、メニュー・ロビー・幕・確認の画面を動かすカーソル。 */
   readonly #nav = new MenuNavigator();
   /** つかんでいるパッド。メニュー・ロビー・試合で1つを分け合う（`PadChoice` の説明を参照）。 */
   readonly #pads: PadChoice;
@@ -179,7 +200,11 @@ export class Shell {
     this.#pads = new PadChoice(tools.gamepads);
     this.#padMenu = new PadMenuInput(this.#pads);
     this.#flow = new MenuFlow(undefined, tools.sound);
-    this.#bannerView = new BannerOverlay(elements.banner);
+    this.#bannerView = new BannerOverlay(elements.banner, {
+      advance: () => this.#advanceBanner(),
+      setup: () => this.#match?.leave(),
+    });
+    this.#dialog = new ConfirmDialog(elements.confirm, () => this.#uiSound());
     this.#toasts = new Toasts(elements.toast);
     this.#layout = layoutFor(elements.canvas.width, elements.canvas.height);
     this.#menu = new MenuView(elements.menu, this.#flow, {
@@ -187,6 +212,7 @@ export class Shell {
       soundChanged: (sound) => tools.setSound(sound),
       openLan: () => tools.openLan(),
       uiSound: () => this.#uiSound(),
+      screenChanged: () => this.#dialog.close(),
     });
   }
 
@@ -196,12 +222,18 @@ export class Shell {
     this.#tools.sounds.play('ui');
   }
 
-  /** 試合の前の画面を出す。 */
+  /**
+   * 試合の前の画面を出す（試合から戻るときは、原型の `backToSetup`）。
+   *
+   * 確認の画面を畳み、カーソルの枠を消す（原型 L6070-6074。消さないと、試合を終えてタイトルを出した瞬間に、
+   * 触っていないのに枠が光る。枠はキーかパッドを触ったときだけ出す）。
+   */
   showMenu(): void {
     this.#endMatch();
     this.#flow.returnToTitle();
     this.#menu.render();
     this.#showBoard(false);
+    this.#nav.hide(this.#elements.menu);
   }
 
   /** 1台で遊ぶ試合を始める。 */
@@ -213,12 +245,12 @@ export class Shell {
       session.attach(this.#sourceFor(index as PlayerId, controller, plan.config.seed));
     });
     const runner = new LocalMatch(session, plan.roster);
-    // 試合が決まった幕のボタンは横に並ぶので、カーソルの1グループにする。
-    const actions = [
-      pointerButton('もういっかい', () => this.restart(), { data: { action: 'again', nav: 'final' } }),
-      pointerButton('タイトルへ', () => this.showMenu(), { data: { action: 'title', nav: 'final' } }),
-    ];
     const padInMatch = plan.controllers.some(drivesPad);
+    // 2人で遊ぶ形では、メニューで出した枠を試合へ持ち越さない。原型は枠を出したまま（`MENU.on`）試合を始めるが、
+    // この形の幕では塗らない（L3622 が L3637 より前で帰る）ので、幕のボタンに枠は付かない。この版は描くたびに
+    // 幕を塗るので、持ち越すと「つぎのラウンド ▶」に枠が付く。2人の試合の間に枠を使う所は無い（幕でパッドを
+    // 受け付けず、確認の画面も開かない）。⚠️ `#begin` には置かない（通信対戦のロビーの枠まで消える）。
+    if (!padInMatch) this.#nav.hide(this.#elements.menu);
     // 横の板：つまみ・「⏸ ポーズ」・「設定へ」（原型 L522-537）。「設定へ」は確認を出さずにタイトルへ戻る
     // （原型の注記 L3377-3380。マウスで押しに行くこと自体が、戻るつもりで押したことを示すため）。どちらのボタンも
     // 操作の音を鳴らさない（原型と同じ。L6038・L6080）。
@@ -227,7 +259,10 @@ export class Shell {
       pause: () => this.togglePause(),
       quit: () => this.showMenu(),
     };
-    this.#begin(runner, this.#keyHelp(runner, { padInMatch, canPause: true }), controls, () => actions, {
+    this.#begin(runner, this.#keyHelp(runner, { padInMatch, canPause: true }), controls, {
+      bannerButtons: () => LOCAL_BUTTONS,
+      again: () => this.restart(),
+      leave: () => this.showMenu(),
       paced: true,
       padOnBanner: padInMatch,
     });
@@ -245,20 +280,21 @@ export class Shell {
       leave: () => this.#tools.leaveLan(),
       ...(this.#tools.connect === undefined ? {} : { connect: this.#tools.connect }),
     });
-    // ホストにだけ出す（原型も、次の試合を始められるのはホストだけだった）。押すと合図を送るだけで、
-    // 次の試合は中継が配り直した start を受け取ってから始まる。
-    const again = [pointerButton('もういっかい', () => runner.rematch(), { data: { action: 'again', nav: 'final' } })];
     // 自分のプレイヤー番号は、つないで受け取るまで分からない。キーの案内は、名札の一覧でこの端末のプレイヤー
     // （`local`）の分だけを出す（`describeKeyHelp`）。通信対戦ではだれもポーズできないので、横の板にはつまみも
     // 「⏸ ポーズ」も出さず、「設定へ」だけを出す（原型のゲストと同じ形。原型の `applyRoleUI`）。
     const controls: SideControls = { speed: null, pause: null, quit: () => this.#tools.leaveLan() };
-    this.#begin(
-      runner,
-      this.#keyHelp(runner, { padInMatch: true, canPause: false }),
-      controls,
-      () => (runner.canRematch ? again : []),
-      { paced: false, padOnBanner: true },
-    );
+    this.#begin(runner, this.#keyHelp(runner, { padInMatch: true, canPause: false }), controls, {
+      // ラウンドの幕にはボタンを出さない（待ちで消える）。優勝の幕は、ホストで次の試合を始められるときだけ
+      // 「もういっかい」を出し（原型も、次の試合を始められるのはホストだけだった）、全員に「⚙ 設定をやりなおす」を出す
+      // （原型のゲストには幕が出ない。この版は全員に幕を出すので、ゲストにも抜ける道を出す）。
+      bannerButtons: (view) => (view.final ? { advance: runner.canRematch, setup: true } : NO_BUTTONS),
+      // 押すと合図を送るだけで、次の試合は中継が配り直した start を受け取ってから始まる。
+      again: () => runner.rematch(),
+      leave: () => this.#tools.leaveLan(),
+      paced: false,
+      padOnBanner: true,
+    });
     // 通信対戦は等倍で進めるので、曲も等倍に戻す。盤面は同じ速さなのに曲だけ速いと、
     // 速さが変わったように見える。つまみの倍率（`#speed`）は、1台の試合に戻ったときのために残す。
     this.#tools.music.setSpeed(1);
@@ -272,6 +308,16 @@ export class Shell {
   /** 止める・再開する（1台で遊ぶときの、ラウンドの最中だけ有効。`LocalMatch.togglePause`）。 */
   togglePause(): void {
     this.#match?.runner.togglePause();
+  }
+
+  /**
+   * P キーを押した（原型の keydown の `KeyP`。L3080-3081）。止める・再開する。
+   *
+   * 確認の画面が開いている間は何もしない（原型の keydown は確認の画面を先に見て返る。L3074-3078）。
+   */
+  pressPauseKey(): void {
+    if (this.#dialog.open) return;
+    this.togglePause();
   }
 
   /**
@@ -294,21 +340,21 @@ export class Shell {
   }
 
   /**
-   * キーボードやパッドの操作で、メニュー・ロビー・試合が決まった幕のカーソルを動かす。
+   * キーボードのメニューのキー（矢印・Enter・Space・Escape・Backspace）を1つ押した（原型の keydown の振り分け。
+   * L3074-3089）。
    *
-   * 1回に押し始めた操作をまとめて渡す（キーボードは1つ、パッドは1回に読んだぶん。`MenuCursor.handle`）。
-   * 試合の最中は何もしない（幕にボタンが無いので、カーソルの並びが空になる）。
-   * ⚠️ ロビーでは戻る（Escape・B）で何もしない。ぬけるとページを開き直すので、押し間違えると
-   * 試合ごと抜けてしまう。ぬけるときは「← ぬける」をマウスで押す。
+   * 1. 確認の画面が開いていれば、確認の画面のカーソルを動かす（幕送りは届かない。P も `pressPauseKey` が止める）
+   * 2. 盤面がある間（試合の画面）は、幕の Space・Enter（決定）で、カーソルの位置によらず幕を送るだけ。矢印と
+   *    Escape は何もしない（原型 L3082-3084。幕のカーソルを動かせるのはパッドとマウスだけ）。試合の最中（幕が
+   *    出ていない）は何も起きない
+   * 3. メニューとロビーでは、カーソルを動かす（`#moveCursor`）
    */
   navigate(...commands: NavCommand[]): void {
-    const root = this.#navRoot();
-    // 試合が決まった幕だけは、枠が出ていなくても最初の決定を反映する（原型と同じ。`MenuCursor` の説明を参照）。
-    const result = this.#nav.handle(root, commands, root === this.#elements.banner ? 'activate' : 'show');
-    if (result.kind === 'back' && this.#match === null) {
-      this.#menu.back();
-      this.#nav.paint(root);
+    if (!this.#dialog.open && this.#onBoard()) {
+      if (commands.includes('confirm')) this.#advanceBanner();
+      return;
     }
+    this.#moveCursor(commands);
   }
 
   /** カーソルの枠を消す（マウスを動かしたとき）。 */
@@ -330,8 +376,8 @@ export class Shell {
    * 押したことが読まれないまま消える。
    * ⚠️ ここ（`tick` の末尾）では忘れない。通信対戦は、送る入力を進める tick の中で読む（3 tick 先の入力）ので、
    * 進めなかった回に末尾で忘れると、押しが読まれない。
-   * 例外は、1台の試合を止めている間（`MatchRunner.stopped`）と試合の外で、そのときは原型と同じく毎フレーム
-   * 忘れる（`draw`）。
+   * 例外は、1台の試合を止めている間（ポーズ・ラウンドの幕・決まった試合。`MatchRunner.stopped`）と試合の外で、
+   * そのときは原型と同じく毎フレーム忘れる（`draw`）。
    */
   tick(): void {
     const match = this.#current();
@@ -349,6 +395,8 @@ export class Shell {
     const match = this.#match;
     if (match === null || match.runner.generation === match.generation) return match;
     // 出ている通知は消さない。通知は時間でだけ消える（原型と同じ。`Toasts`）。
+    // 確認の画面は畳む（原型は次の試合を始めるときに showScreen('play') を通り、確認の画面を畳む）。
+    this.#dialog.close();
     this.#match = { ...match, ...this.#partsFor(match.runner), generation: match.runner.generation };
     return this.#match;
   }
@@ -380,7 +428,8 @@ export class Shell {
    * 画面のループから、1枚描くごとに呼ばれる。
    *
    * @param alpha 実時間での、次に `tick()` が呼ばれるまでの進み具合。1台で遊ぶときは、
-   *   描く側へ渡す前に、ゲームの速さの倍率を掛けた試合の時間の進み具合に換える（`GameSpeed.progress`）
+   *   描く側へ渡す前に、ゲームの速さの倍率を掛けた試合の時間の進み具合に換える（`GameSpeed.progress`）。
+   *   1台の試合を止めている間（`MatchRunner.stopped`）は使わず、1 を渡す
    */
   draw(alpha: number): void {
     // パッドは押したことを知らせてくれないので、描くたびに読む。決めた項目が画面を替えることがあるので、
@@ -404,37 +453,41 @@ export class Shell {
     const world = runner.world;
     this.#showBoard(world !== null);
     // 止めている間は、盤面の上にポーズの幕を描く（原型も canvas に描く。L4566-4573）。
-    if (world !== null) match.renderer.draw(world, match.paced ? this.#speed.progress(alpha) : alpha, runner.paused);
+    // 止めている間（ポーズ・ラウンドの幕・決まった試合）は、いまの tick の位置に描く（進み具合を 1 にする）。tick を
+    // 進めないので1つ前の tick の位置の控えが取り直されず、進み具合を渡し続けると、決着や止めた tick に歩いていた
+    // プレイヤーが、1つ前の位置といまの位置の間を往復して見える（原型は止めている間、いまの位置に描く）。
+    if (world !== null) {
+      const progress = runner.stopped ? 1 : match.paced ? this.#speed.progress(alpha) : alpha;
+      match.renderer.draw(world, progress, runner.paused);
+    }
     const hud = runner.hud;
     match.side.update(hud, { refresh: world !== null && match.refresh.due(world), paused: runner.paused });
-    this.#bannerView.show(world === null ? null : match.banner.current(world), match.finalActions());
+    // パッドを試合に繋ぐ遊び方では、ボタンのある幕の間は、毎フレーム枠を出しておく（原型 L3637。パッドを押さなくても、
+    // パッドが無くても通る）。マウスを動かして消しても、次のフレームで出し直す（原型も同じ）。パッドの1回目の A を
+    // 飲み込まないのは、`#padCommands` がカーソルへ渡す前にも枠を出すため（原型の注記 L3632-3636）。
+    const banner = this.#syncBanner(match);
+    if (banner !== null && hasButtons(banner) && match.padOnBanner) this.#nav.show(this.#navRoot());
     runner.afterDraw();
     this.#paintCursor();
-    // 試合が始まる前（通信対戦のロビー）と、1台の試合を止めている間は、押したキーを毎フレーム忘れる
-    // （`tick` の説明。止めている間に押した爆弾のキーで、再開した最初の tick に爆弾を置かない）。
+    // 試合が始まる前（通信対戦のロビー）と、1台の試合を止めている間（ポーズ・ラウンドの幕・決まった試合）は、
+    // 押したキーを毎フレーム忘れる（`tick` の説明。止めている間に押した爆弾のキーで、再開した最初の tick に
+    // 爆弾を置かない）。
     if (world === null || runner.stopped) this.#forgetTaps();
-    // 試合が終わったとき・止めたとき・通信対戦が止まったとき（ずれ・切断）は曲を止める。
-    // tick が進まない間も判断できるよう、描く側で毎回見る。鳴っていれば start は何もしない。
+    // 試合が終わったとき・ラウンドが決まったとき・止めたとき・通信対戦が止まったとき（ずれ・切断）は曲を止める
+    // （原型の `endGame` も、決まるたびに曲を止めてから勝ちの音を鳴らす）。tick が進まない間も判断できるよう、
+    // 描く側で毎回見る。鳴っていれば start は何もしない（次のラウンドの頭で、曲を頭から鳴らし直す）。
     if (runner.inProgress) music.start();
     else music.stop();
   }
 
-  #begin(
-    runner: MatchRunner,
-    help: KeyHelpFor,
-    controls: SideControls,
-    finalActions: ActiveMatch['finalActions'],
-    { paced, padOnBanner }: Pick<ActiveMatch, 'paced' | 'padOnBanner'>,
-  ): void {
+  #begin(runner: MatchRunner, help: KeyHelpFor, controls: SideControls, routes: MatchRoutes): void {
     this.#endMatch();
     this.#match = {
       runner,
       ...this.#partsFor(runner),
+      ...routes,
       side: new SidePanel(this.#elements.side, help, controls),
       generation: runner.generation,
-      finalActions,
-      paced,
-      padOnBanner,
     };
     this.#showBoard(runner.world !== null);
     // 試合を始めるたびにページの先頭へ戻す（原型の startGame → showScreen('play')。幕の「もういっかい」も同じ）。
@@ -460,26 +513,129 @@ export class Shell {
    * 盤面が有れば試合の画面を、無ければ試合の前の画面を出す。
    *
    * 通信対戦では、試合が始まるまで盤面が無い。その間は同じ場所にロビーを出す。
+   *
+   * 切り替えるときは、確認の画面を畳む（原型の `showScreen` の `MENU.closeDialog`。L5679-5687）。ロビーで確認の
+   * 画面を開いたまま、ホストが試合を始めたときに当たる（原型の注記。畳まないと盤面が確認の画面に覆われたままになる）。
    */
   #showBoard(board: boolean): void {
+    if (this.#elements.play.hidden === board) this.#dialog.close();
     this.#elements.menu.hidden = board;
     this.#elements.play.hidden = !board;
   }
 
+  /** 盤面がある間（試合の画面）か。 */
+  #onBoard(): boolean {
+    const match = this.#match;
+    return match !== null && match.runner.world !== null;
+  }
+
+  /** いま出す幕（ラウンドの幕・優勝の幕）。無ければ null。 */
+  #bannerOf(match: ActiveMatch): BannerView | null {
+    const world = match.runner.world;
+    return world === null ? null : match.banner.current(world);
+  }
+
   /**
-   * パッドで1回に押し始めた操作を渡す。
+   * 幕を要素に写す（同じ幕なら要素に触れない）。幕を出していれば、並べたボタンを返す。出していなければ null。
    *
-   * 1台の試合では、パッドを試合に繋いだとき（1人で遊ぶとき）、Start で止める・再開する（原型 L3643-3645。
-   * 止められるのはラウンドの最中だけ。`LocalMatch.togglePause`）。2人で遊ぶときは受け付けない（机に置いたパッドに
-   * 肘が当たってポーズ、が起きる。原型の注記 L3561-3564）。通信対戦はだれも止められない。
-   * カーソルへは、受け付けるときだけ渡す（`#padAccepted`）。
+   * 描くときと、パッドの操作を反映する前に呼ぶ（決着の tick のあとの最初のフレームで押したパッドも、幕のボタンへ届く）。
+   */
+  #syncBanner(match: ActiveMatch): BannerButtons | null {
+    const view = this.#bannerOf(match);
+    const buttons = view === null ? NO_BUTTONS : match.bannerButtons(view);
+    this.#bannerView.show(view, buttons);
+    return view === null ? null : buttons;
+  }
+
+  /**
+   * 幕を送る（原型の `advanceBanner`。L4514-4524）。1つ目のボタンを出している幕でだけ反映する。
+   *
+   * 入口はキーボードの Space・Enter・パッドの Start・1つ目のボタン（マウスとカーソル）。
+   *
+   * - 1台：ラウンドの幕なら次のラウンド（`MatchRunner.startNextRound`）、優勝の幕なら同じ設定で新しい試合
+   *   （`restart`。CPU の動物も選び直す。原型の `startGame` と同じ）
+   * - 通信対戦：ラウンドの幕にはボタンが無いので何もしない。優勝の幕は、ホストが次の試合の合図を送る（`rematch`）
+   *
+   * 押したまま送っても、次のラウンドの開始位置に爆弾は置かれない（ラウンドの始まりは、爆弾と技のボタンを押していた
+   * 扱い。`WorldState.ts` の `HELD_AT_ROUND_START`）。
+   */
+  #advanceBanner(): void {
+    const match = this.#current();
+    if (match === null) return;
+    const view = this.#bannerOf(match);
+    if (view === null || !match.bannerButtons(view).advance) return;
+    if (view.final) match.again();
+    else match.runner.startNextRound();
+  }
+
+  /**
+   * パッドで1回に押し始めた操作を渡す（原型の `pollGamepads` の画面の分かれ道。L3612-3652）。
+   *
+   * - メニューとロビー：カーソルへ
+   * - 幕：パッドを試合に繋ぐ遊び方（`padOnBanner`）で、ボタンのある幕のときだけ受け付ける（通信対戦のラウンドの幕は
+   *   何もしない。Python 版と同じ）。Start は幕を送る近道（確認の画面が開いていても。原型 L3631）、ほかは枠を出して
+   *   からカーソルへ（1回目の A を飲み込まない。原型 L3637）
+   * - 確認の画面が開いていれば、カーソルへ（Start で止めない。原型 L3612-3617）
+   * - 試合の最中：パッドを試合に繋ぐ遊び方のときだけ。1台は Start で止める・再開する（原型 L3643-3645。止められるのは
+   *   ラウンドの最中だけ。`LocalMatch.togglePause`）。Select は、1台ならポーズ中（同じ回の Start で止めたときも）、
+   *   通信対戦ならいつでも「設定へもどりますか？」を開く（原型 L3651。通信対戦はだれも止められないので、原型の
+   *   ゲストと同じく止めずに開く。開いている間も、試合への入力は止めない）
    */
   #padCommands(commands: readonly NavCommand[]): void {
-    const match = this.#match;
-    if (match !== null && match.paced && match.padOnBanner && commands.includes('start')) {
-      match.runner.togglePause();
+    const match = this.#current();
+    if (match === null || match.runner.world === null) {
+      this.#moveCursor(commands);
+      return;
     }
-    if (this.#padAccepted()) this.navigate(...commands);
+    const banner = this.#syncBanner(match);
+    if (banner !== null) {
+      if (!match.padOnBanner || !hasButtons(banner)) return;
+      if (commands.includes('start')) {
+        this.#advanceBanner();
+        return;
+      }
+      // 枠を出してからカーソルへ渡す（原型も L3637 で枠を出してから L3639 の MENU.nav へ渡す）。描く側の毎フレームの
+      // 枠（`draw`）だけでは、マウスを動かして枠を消した直後のフレームの A が、枠を出すだけで飲み込まれる。
+      this.#nav.show(this.#navRoot());
+      this.#moveCursor(commands);
+      return;
+    }
+    if (this.#dialog.open) {
+      this.#moveCursor(commands);
+      return;
+    }
+    if (!match.padOnBanner) return;
+    if (match.paced && commands.includes('start')) match.runner.togglePause();
+    if (commands.includes('select') && (match.runner.paused || !match.paced)) this.#askBackToSetup();
+  }
+
+  /**
+   * 「設定へもどりますか？」を開く（原型の `askBackToSetup`。L3384-3387）。
+   *
+   * 開くと枠を出す（原型の `MENU.on = true`）。パッドで開いたので、どちらを選んでいるかを見せる。
+   */
+  #askBackToSetup(): void {
+    this.#dialog.ask('backToSetup', () => this.#match?.leave());
+    this.#nav.show(this.#dialog.root);
+  }
+
+  /**
+   * カーソルを動かす（原型の `MENU.nav`）。動かす画面は `#navRoot`。
+   *
+   * 戻る（Escape・B）は、確認の画面なら「やめる」（原型 L3329-3332）、試合の前の画面なら1つ前の画面。
+   * ⚠️ ロビーでは戻るで何もしない。ぬけるとページを開き直すので、押し間違えると試合ごと抜けてしまう。
+   * ぬけるときは「← ぬける」をマウスで押す。幕でも何もしない（原型の `MENU_BACK` に幕が無い）。
+   */
+  #moveCursor(commands: readonly NavCommand[]): void {
+    const root = this.#navRoot();
+    const result = this.#nav.handle(root, commands);
+    if (result.kind !== 'back') return;
+    if (root === this.#dialog.root) {
+      this.#dialog.cancel();
+    } else if (this.#match === null) {
+      this.#menu.back();
+      this.#nav.paint(root);
+    }
   }
 
   /** パッドについての知らせ（見つけた・対応していない）を、通知に出す（`PadChoice` の「画面に知らせること」）。 */
@@ -489,17 +645,12 @@ export class Shell {
     }
   }
 
-  /** いまパッドでカーソルを動かしてよいか。メニューとロビーはいつでも、幕は `padOnBanner` のときだけ。 */
-  #padAccepted(): boolean {
-    const match = this.#match;
-    return this.#navRoot() !== this.#elements.banner || match === null || match.padOnBanner;
-  }
-
   /**
-   * カーソルで動かす画面。試合の前はメニュー、通信対戦で盤面がまだ無い間はロビー
-   * （同じ場所に出す）、盤面があればラウンドの間の幕。
+   * カーソルで動かす画面。確認の画面が開いていればそれ（下の画面の印には触らない。原型も確認の画面の2つだけを
+   * 塗る）。試合の前はメニュー、通信対戦で盤面がまだ無い間はロビー（同じ場所に出す）、盤面があれば幕。
    */
   #navRoot(): HTMLElement {
+    if (this.#dialog.open) return this.#dialog.root;
     const match = this.#match;
     if (match === null || match.runner.world === null) return this.#elements.menu;
     return this.#elements.banner;
@@ -540,7 +691,7 @@ export class Shell {
   }
 
   /**
-   * 試合を抜ける。横の板を空にし、幕を隠す。
+   * 試合を抜ける。横の板を空にし、幕と確認の画面を畳む。
    *
    * 出ている通知は消さない（原型の `backToSetup` も触らない。タイトルへ戻ったあとも、残りの時間だけ出る）。
    */
@@ -548,6 +699,7 @@ export class Shell {
     this.#match?.runner.close();
     this.#match = null;
     this.#bannerView.show(null);
+    this.#dialog.close();
     this.#elements.side.replaceChildren();
   }
 

@@ -320,40 +320,139 @@ describe('幕', () => {
     final: false,
   };
   const FINAL: BannerView = { ...ROUND, emoji: '🏆', title: '優勝', note: null, button: 'もういっかい', final: true };
+  const BOTH = { advance: true, setup: true };
+
+  /** 幕を組む。押されたボタンを `pressed` に控える。 */
+  function overlay(): { root: HTMLElement; banner: BannerOverlay; pressed: string[] } {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const pressed: string[] = [];
+    const banner = new BannerOverlay(root, { advance: () => pressed.push('advance'), setup: () => pressed.push('setup') });
+    return { root, banner, pressed };
+  }
+
+  /** カードの中の要素を [タグ, クラス, 文, data-nav] の並びにする。 */
+  const cardRows = (root: HTMLElement): (string | undefined)[][] =>
+    [...(root.querySelector('.bcard')?.children ?? [])].map((child) => [
+      child.tagName,
+      child.className,
+      child.textContent ?? '',
+      (child as HTMLElement).dataset['nav'],
+    ]);
 
   it('出して、null で隠す', () => {
-    const root = document.createElement('div');
-    const overlay = new BannerOverlay(root);
+    const { root, banner } = overlay();
     expect(root.hidden).toBe(true);
 
-    overlay.show(ROUND);
+    banner.show(ROUND);
     expect(root.hidden).toBe(false);
     expect(root.textContent).toContain('ラウンド1');
 
-    overlay.show(null);
+    banner.show(null);
     expect(root.hidden).toBe(true);
+    expect(root.childElementCount).toBe(0);
   });
 
-  it('題の下の行・勝ち数の行・延長戦の行を、この順に1行ずつ並べる（無い行は並べない）', () => {
-    const root = document.createElement('div');
-    const overlay = new BannerOverlay(root);
-    const lines = (): (string | null)[] => [...root.querySelectorAll('.banner-line')].map((line) => line.textContent);
-    overlay.show(ROUND);
-    expect(lines()).toEqual(['あと2勝', '🐰1\u3000🐘0']);
-    overlay.show({ ...ROUND, note: '⚡サドンデス決着' });
-    expect(lines()).toEqual(['あと2勝', '🐰1\u3000🐘0', '⚡サドンデス決着']);
+  it('カード（.bcard）の中に、絵文字・題・文・縦に2つのボタンを原型の並びとクラス名で置く（原型 L544-550）', () => {
+    const { root, banner } = overlay();
+    banner.show(ROUND, BOTH);
+    expect(root.children).toHaveLength(1);
+    expect(cardRows(root)).toEqual([
+      ['DIV', 'be', '🐰', undefined],
+      ['DIV', 'bt', 'ラウンド1', undefined],
+      ['DIV', 'bs', 'あと2勝🐰1　🐘0', undefined],
+      // ボタンは1つずつ別のグループ（縦に並ぶ。原型の roundEnd: ['b0','b1']）。
+      ['BUTTON', 'go', 'つぎのラウンド ▶', 'b0'],
+      ['BUTTON', 'tbtn bback', '⚙ 設定をやりなおす', 'b1'],
+    ]);
+    // 優勝の幕は、1つ目のボタンの字だけが替わる（原型は同じボタンの字を書き換える）。
+    banner.show(FINAL, BOTH);
+    expect(cardRows(root).slice(3).map((row) => row[2])).toEqual(['もういっかい', '⚙ 設定をやりなおす']);
   });
 
-  it('ボタンは試合が決まった幕にだけ並べる', () => {
-    const root = document.createElement('div');
-    const overlay = new BannerOverlay(root);
-    const again = pointerButton('もういっかい', () => undefined);
+  it('2つのボタンを並べるときは、間に空白の文字を1つ置く（原型の HTML の改行と字下げ。カードの幅がその分広がる）。1つだけなら置かない', () => {
+    const { root, banner } = overlay();
+    /** ボタンのまわりの中身を [種類, 文] の並びにする（文の要素より後ろ）。 */
+    const tail = (): [string, string][] =>
+      [...(root.querySelector('.bcard')?.childNodes ?? [])].slice(3).map((node) => [node.nodeName, node.textContent ?? '']);
+    banner.show(ROUND, BOTH);
+    expect(tail()).toEqual([
+      ['BUTTON', 'つぎのラウンド ▶'],
+      ['#text', ' '],
+      ['BUTTON', '⚙ 設定をやりなおす'],
+    ]);
+    banner.show(FINAL, { advance: false, setup: true });
+    expect(tail()).toEqual([['BUTTON', '⚙ 設定をやりなおす']]);
+    banner.show(FINAL, { advance: true, setup: false });
+    expect(tail()).toEqual([['BUTTON', 'もういっかい']]);
+  });
 
-    overlay.show(ROUND, [again]);
-    expect(root.contains(again)).toBe(false);
+  it('文は1つの要素に、題の下の行・改行・勝ち数の行（16px・字の間 .06em）・改行・延長戦の行の順に入れる（無い行は入れない）', () => {
+    const { root, banner } = overlay();
+    /** 文の要素の中身を [種類, 文] の並びにする（勝ち数の行は span）。 */
+    const parts = (): [string, string][] =>
+      [...(root.querySelector('.bs')?.childNodes ?? [])].map((node) => [node.nodeName, node.textContent ?? '']);
+    banner.show(ROUND);
+    expect(parts()).toEqual([
+      ['#text', 'あと2勝'],
+      ['BR', ''],
+      ['SPAN', '🐰1　🐘0'],
+    ]);
+    const board = root.querySelector<HTMLElement>('.bs span');
+    // 原型の `letter-spacing:.06em`（読み直すと先頭の 0 が付く）。
+    expect([board?.style.fontSize, board?.style.letterSpacing]).toEqual(['16px', '0.06em']);
+    banner.show({ ...ROUND, note: '⚡サドンデス決着' });
+    expect(parts()).toEqual([
+      ['#text', 'あと2勝'],
+      ['BR', ''],
+      ['SPAN', '🐰1　🐘0'],
+      ['BR', ''],
+      ['#text', '⚡サドンデス決着'],
+    ]);
+  });
 
-    overlay.show(FINAL, [again]);
-    expect(root.contains(again)).toBe(true);
+  it('並べるボタンは渡されたものだけ（通信対戦のラウンドの幕は無し・ゲストの優勝の幕は「⚙ 設定をやりなおす」だけ）', () => {
+    const { root, banner } = overlay();
+    banner.show(ROUND);
+    expect(root.querySelector('button')).toBeNull();
+    banner.show(FINAL, { advance: false, setup: true });
+    expect([...root.querySelectorAll('button')].map((button) => button.dataset['action'])).toEqual(['setup']);
+    banner.show(FINAL, BOTH);
+    expect([...root.querySelectorAll('button')].map((button) => button.dataset['action'])).toEqual(['advance', 'setup']);
+  });
+
+  it('ボタンはマウスで押したときだけ呼ぶ。キーボードで起きたクリックは捨て、カーソルで決めたときは同じ中身を呼ぶ', () => {
+    const { root, banner, pressed } = overlay();
+    banner.show(ROUND, BOTH);
+    const advance = root.querySelector<HTMLElement>('[data-action="advance"]');
+    const setup = root.querySelector<HTMLElement>('[data-action="setup"]');
+    if (advance === null || setup === null) throw new Error('ボタンが無い');
+    advance.click();
+    expect(pressed).toEqual([]);
+    advance.dispatchEvent(new MouseEvent('click', { detail: 1 }));
+    setup.dispatchEvent(new MouseEvent('click', { detail: 1 }));
+    expect(activate(setup)).toBe(true);
+    expect(pressed).toEqual(['advance', 'setup', 'setup']);
+  });
+
+  it('幕が出るたびに画面の名前（data-screen）を替え、同じ幕でボタンだけが替わったときは替えない（カーソルを先頭へ戻す時）', () => {
+    const { root, banner } = overlay();
+    const screen = (): string | undefined => root.querySelector<HTMLElement>('[data-screen]')?.dataset['screen'];
+    banner.show(ROUND, BOTH);
+    const first = screen();
+    banner.show(FINAL, BOTH);
+    const second = screen();
+    expect(second).not.toBe(first);
+    banner.show(FINAL, { advance: false, setup: true });
+    expect(screen()).toBe(second);
+    // 同じ幕とボタンなら、要素に触れない。
+    const card = root.querySelector('.bcard');
+    banner.show(FINAL, { advance: false, setup: true });
+    expect(root.querySelector('.bcard')).toBe(card);
+    // 次のラウンドの幕は、前と同じ中身でも別の幕として数える。
+    banner.show(null);
+    banner.show({ ...ROUND }, BOTH);
+    expect([first, second]).not.toContain(screen());
   });
 });
 

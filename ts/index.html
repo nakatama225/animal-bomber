@@ -14,11 +14,10 @@
       <!-- 試合の画面。盤面と横の板を横に並べる（原型の .stage。L513-540） -->
       <section id="play" hidden>
         <div class="stage">
-          <!-- 盤面に重ねるもの（ラウンドの間の幕・通信対戦の案内の帯）を置くための包み。原型は canvas だけを置く。
+          <!-- 通信対戦の案内の帯を盤面に重ねるための包み。原型は canvas だけを置く。
                大きさは窓の大きさからスクリプトが決める（原型の fitBoard） -->
           <div class="board">
             <canvas id="stage"></canvas>
-            <div id="banner" class="banner" hidden></div>
             <!-- 通信対戦の案内の帯。盤面の下の端に重ね、幕より上に出す（原型に無い。Python 版と同じ置き場所） -->
             <p id="lan-status" class="lan-status" hidden></p>
           </div>
@@ -28,8 +27,12 @@
       </section>
     </div>
 
+    <!-- ラウンドの幕と優勝の幕。窓の全体を覆うので #app の外に置く（原型と同じ）。中身はスクリプトが組み立て、出すときだけ hidden を外す -->
+    <div id="banner" hidden></div>
     <!-- 起動の幕。全面を覆うので #app の外に置く（原型と同じ）。中身はスクリプトが組み立て、出すときだけ hidden を外す -->
     <div id="splash" hidden></div>
+    <!-- 確認の画面。盤面の上にもメニューの上にも出すので #app の外に置く（原型と同じ）。中身はスクリプトが組み立てる -->
+    <div id="cfmWrap" class="cfm" hidden></div>
     <!-- 画面の上に出す通知。どの画面の上にも出るので #app の外に1つだけ置く（原型と同じ） -->
     <div id="toast" class="toast"></div>
     <script type="module" src="/src/app/main.ts"></script>

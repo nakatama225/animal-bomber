@@ -3,8 +3,8 @@
  *
  * 画面の部品は `src/platform/ui/` が組み立てる。ここにあるクラス名は、そちらで付けているもの。
  * 試合の外の画面（起動の幕・タイトル・キャラ選び・ルール・設定とマニュアルと更新履歴）と、試合の画面の盤面・
- * 横の板・通知は、要素の並びとクラス名を原型の HTML と同じにして、原型の CSS（legacy/animal-bomber.html の
- * L8-238）をそのまま写した。この版だけのもの（盤面の包み・通信対戦の案内の帯など）は、写した決まりのうち、関わる
+ * 横の板・幕・通知と、確認の画面は、要素の並びとクラス名を原型の HTML と同じにして、原型の CSS
+ * （legacy/animal-bomber.html の L8-238）をそのまま写した。この版だけのもの（盤面の包み・通信対戦の案内の帯など）は、写した決まりのうち、関わる
  * 画面の節の後ろに置く。
  * ⚠️ 写した部分は、決まりの並びも原型のまま（`.sub` を `.mbtn` より前に置く、など）。並べ替えると、同じ強さの
  *    決まりの勝ち負けが変わって見た目が変わる。
@@ -512,6 +512,60 @@ canvas {
   border-color: var(--accent);
 }
 
+/* ラウンドの幕と優勝の幕。窓の全体を覆う（#app の外）。原型は display:none と .on で出し分ける。この版は hidden で
+   出し分けるので、出さないときを [hidden] で書く */
+#banner {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 9, 6, 0.82);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  z-index: 20;
+}
+
+#banner[hidden] {
+  display: none;
+}
+
+.bcard {
+  background: linear-gradient(180deg, #4a3527, #33241b);
+  border: 2px solid var(--accent2);
+  border-radius: 22px;
+  padding: 30px 38px;
+  text-align: center;
+  max-width: 520px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+}
+
+.bcard .be {
+  font-size: 76px;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+.bcard .bt {
+  font-size: 30px;
+  font-weight: 900;
+  margin-bottom: 6px;
+}
+
+.bcard .bs {
+  font-size: 13.5px;
+  color: var(--dim);
+  margin-bottom: 20px;
+  line-height: 1.6;
+}
+
+.bback {
+  margin-top: 10px;
+  width: 100%;
+  padding: 11px;
+  font-size: 13px;
+}
+
 .toast {
   position: fixed;
   left: 50%;
@@ -535,7 +589,10 @@ canvas {
 
 /* ------------------------------------------------------------ 試合の画面（この版だけのもの） */
 
-/* 盤面に重ねるもの（幕・通信対戦の案内の帯）を置くための包み。原型は canvas だけを .stage に置く。
+/* 通信対戦の案内の帯を盤面に重ねるための包み。原型は canvas だけを .stage に置く（幕は #app の外に置くので、包みに
+   入れない。原型と同じ）。
+   ⚠️ z-index を付けない。付けると包みが重なりの文脈を作り、帯の z-index（25）が幕（20）と比べられなくなって、帯が
+   幕の下に隠れる。
    縮めずに .stage からはみ出させる（盤面の大きさは窓の幅から横の板の分を引いて決めるので、窓が十分に広ければ窓の中に
    収まる。マスが下限の 26 になる狭い窓では、原型と同じくはみ出す）。
    ⚠️ 原型の canvas は flex の子なので、並びが #app からはみ出すときは、縦横比から決まる最小の幅まで 2px 縮む
@@ -560,61 +617,13 @@ canvas {
   border-radius: 0 0 11px 11px;
   font-size: 14px;
   line-height: 1.5;
+  /* 幕より上に重なるので、窓が低いと幕のカードの下のボタンに帯がかかる（1024×768 で「⚙ 設定をやりなおす」の上半分）。
+     押せる物は無いので、押したときは下の幕のボタンに届ける */
+  pointer-events: none;
 }
 
 .lan-status[hidden] {
   display: none;
-}
-
-/* ラウンドの間の幕（盤面に重ねる。原型の置き場所と見た目に合わせるのは、幕をボタンで送る変更で行う） */
-
-.banner {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  background: rgba(20, 12, 8, 0.72);
-  border-radius: 12px;
-  text-align: center;
-}
-
-.banner[hidden] {
-  display: none;
-}
-
-.banner-emoji {
-  font-size: 64px;
-  line-height: 1;
-}
-
-.banner-title {
-  font-size: 30px;
-  font-weight: 900;
-}
-
-.banner-line {
-  font-size: 15px;
-  color: var(--dim);
-}
-
-.banner-actions {
-  display: flex;
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.banner-actions button {
-  border: 2px solid var(--line);
-  background: #2d2019;
-  border-radius: 10px;
-  padding: 8px 14px;
-}
-
-.banner-actions button:hover {
-  border-color: var(--accent);
 }
 
 /* ------------------------------------------------------------ 起動の幕・タイトル（原型 L161-205） */
@@ -808,6 +817,46 @@ canvas {
 .navcur {
   outline: 3px solid #fff;
   outline-offset: 2px;
+}
+
+/* 確認の画面。inset は使わず4辺を個別に書く（古い WebKit でも確実に反映される。原型の注記）。
+   原型は display:none と .on で出し分ける。この版は hidden で出し分けるので、出さないときを [hidden] で書く */
+.cfm {
+  display: flex;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.66);
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.cfm[hidden] {
+  display: none;
+}
+
+.cfmBox {
+  background: #2d2019;
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  padding: 22px;
+  max-width: 420px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.cfmMsg {
+  line-height: 1.7;
+  margin-bottom: 18px;
+}
+
+.cfmBtns {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 /* ルールの画面は2列にして1画面に収める（原型の注記） */

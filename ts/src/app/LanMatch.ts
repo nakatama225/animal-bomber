@@ -141,9 +141,15 @@ export class LanMatch implements MatchRunner {
     };
   }
 
+  /** 試合の最中か。ラウンドの幕の間（決着のあとの待ち）は曲を止めるので、最中に数えない（1台の試合と同じ）。 */
   get inProgress(): boolean {
     const phase = this.#client.phase;
-    return phase.kind === 'playing' && phase.driver.desync === null && !phase.session.match.finished;
+    return (
+      phase.kind === 'playing' &&
+      phase.driver.desync === null &&
+      !phase.session.match.finished &&
+      this.#game?.betweenRounds !== true
+    );
   }
 
   get ready(): boolean {
@@ -179,6 +185,11 @@ export class LanMatch implements MatchRunner {
 
   togglePause(): void {
     // 止められない。
+  }
+
+  startNextRound(): void {
+    // ラウンドの幕は、決着のあとの待ちを全端末が同じ tick まで進めて消す。ボタンで送ると、誰の操作で次へ進むかを
+    // 全員で揃える約束（中継と Python 版も）が要る。
   }
 
   step(): SimEvent[] {

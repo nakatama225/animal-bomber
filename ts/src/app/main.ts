@@ -74,6 +74,7 @@ function main(): void {
       canvas,
       side: findElement('side', HTMLElement),
       banner: findElement('banner', HTMLElement),
+      confirm: findElement('cfmWrap', HTMLElement),
       toast: findElement('toast', HTMLElement),
       lanStatus: findElement('lan-status', HTMLElement),
     },
@@ -114,7 +115,7 @@ function main(): void {
   window.addEventListener('keydown', unlockAudio);
   window.addEventListener('pointerdown', unlockAudio);
   window.addEventListener('keydown', (event: KeyboardEvent) => {
-    if (event.code === PAUSE_KEY && !event.repeat) shell.togglePause();
+    if (event.code === PAUSE_KEY && !event.repeat) shell.pressPauseKey();
     const command = navCommandOf(event);
     if (command !== null) shell.navigate(command);
   });

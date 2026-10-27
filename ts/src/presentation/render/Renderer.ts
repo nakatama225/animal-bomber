@@ -78,6 +78,8 @@ export class Renderer {
    * @param paused 止めている間か。止めている間は、盤面の上にポーズの幕を描く（`drawPause`）
    */
   draw(world: Readonly<WorldState>, alpha: number, paused = false): void {
+    // 次のラウンドの盤面を、tick を進める前に描くときも、前のラウンドの粒子と揺れを描かない（`ParticleField.enter`）。
+    this.#effects.enter(world);
     const g = this.#g;
     const layout = this.#layout;
     const frame: Frame = {

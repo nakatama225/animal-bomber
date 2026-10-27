@@ -62,6 +62,8 @@ export interface MenuHooks {
    * 呼ぶ側がここで行う。
    */
   readonly uiSound: () => void;
+  /** 画面が替わった（原型の `showScreen`）。確認の画面を畳むのに使う（`showScreen` の `MENU.closeDialog`。L5687）。 */
+  readonly screenChanged: () => void;
 }
 
 /** CPU の行の頭の札に、原型が直に付けた見た目（L5952）。 */
@@ -105,8 +107,8 @@ export class MenuView {
    * いまの画面を組み立て直す。
    *
    * タイトルは箱（`.card`）で包まない（原型 L245-263）。ほかの画面は箱で包む。画面が替わったら、
-   * ページの先頭へ戻す（原型の `showScreen` の `window.scrollTo(0,0)`。L5697）。同じ画面で選び直しただけなら
-   * 動かさない。
+   * ページの先頭へ戻し（原型の `showScreen` の `window.scrollTo(0,0)`。L5697）、外へ知らせる（`screenChanged`）。
+   * 同じ画面で選び直しただけなら、どちらもしない。
    */
   render(): void {
     const screen = this.#flow.screen;
@@ -118,6 +120,7 @@ export class MenuView {
     if (screen === this.#shown) return;
     this.#shown = screen;
     scrollToTop(this.#root);
+    this.#hooks.screenChanged();
   }
 
   /** 1つ前の画面へ戻る（Escape・B）。戻ったら画面の操作の音を鳴らす。タイトルでは何もしない（音も鳴らさない）。 */

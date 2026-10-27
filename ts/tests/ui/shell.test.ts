@@ -97,6 +97,7 @@ function mount(
     canvas,
     side: make('side'),
     banner: make('banner'),
+    confirm: make('cfmWrap'),
     toast: make('toast'),
     lanStatus: make('lan-status'),
   };
@@ -142,6 +143,31 @@ function mount(
 
 afterEach(() => document.body.replaceChildren());
 
+/** 幕（ラウンドの幕か優勝の幕）が出るまで tick を進め、1枚描く。人間は操作しない（CPU どうしで決まる）。 */
+function playUntilBanner(shell: Shell, elements: ShellElements, limit = 200_000): void {
+  let ticks = 0;
+  while (elements.banner.hidden) {
+    shell.tick();
+    if (ticks % 30 === 0) shell.draw(0);
+    ticks += 1;
+    if (ticks > limit) throw new Error('幕が出ない');
+  }
+  shell.draw(0);
+}
+
+/**
+ * 誰かが優勝して試合が決まった幕が出るまで進め、1枚描く。人間は操作しない（CPU どうしで決まる）。
+ * 1台の試合のラウンドの幕は、送るまで次のラウンドへ進まない（原型と同じ）ので、「つぎのラウンド ▶」をマウスで押して送る。
+ */
+function playUntilChampion(shell: Shell, elements: ShellElements): void {
+  for (;;) {
+    playUntilBanner(shell, elements);
+    if (elements.banner.textContent?.includes('優勝')) return;
+    press(elements.banner, '[data-action="advance"]');
+    shell.draw(0);
+  }
+}
+
 describe('画面の切り替え', () => {
   it('タイトルから試合を始め、横の板と幕を出し、もういっかい遊んでからタイトルへ戻る', () => {
     const { shell, elements } = mount();
@@ -160,15 +186,10 @@ describe('画面の切り替え', () => {
     expect(elements.side.querySelectorAll('.pcard')).toHaveLength(4);
 
     // 人間は操作しない（キーは何も押されていない）。CPU どうしで決まるまで進める。
-    let ticks = 0;
-    while (elements.banner.hidden || !elements.banner.textContent?.includes('優勝')) {
-      shell.tick();
-      if (ticks % 30 === 0) shell.draw(0);
-      ticks += 1;
-      if (ticks > 200_000) throw new Error('試合が決まらない');
-    }
+    playUntilChampion(shell, elements);
     // 幕の「もういっかい」で、同じ設定の新しい試合になる（タイトルへは戻らない）。
-    press(elements.banner, '[data-action="again"]');
+    expect(elements.banner.querySelector('[data-action="advance"]')?.textContent).toBe('もういっかい');
+    press(elements.banner, '[data-action="advance"]');
     shell.draw(0);
     expect(elements.menu.hidden).toBe(true);
     expect(elements.banner.hidden).toBe(true);
@@ -406,6 +427,26 @@ describe('ゲームの速さ', () => {
     expect(xs.at(-1)! - xs[0]!).toBeGreaterThan(0.2);
   });
 
+  it('止めている間（ポーズ・ラウンドの幕・決まった試合）は、いまの tick の位置に描く（1つ前の tick の位置との間を往復させない）', () => {
+    // 止めている間は tick を進めないので、1つ前の tick の位置の控えが取り直されない。進み具合をそのまま渡すと、
+    // 止めた tick に歩いていたプレイヤーが、画面のループの進み具合に合わせて前後に揺れて見える。
+    const { shell, elements } = mount('both', () => ['KeyD']);
+    startSolo(shell, elements);
+    for (let i = 0; i < 5; i += 1) shell.tick();
+    const xsOf = (): number[] => drawn.filter((view) => view.id === 0).map((view) => view.x);
+    // 対照：進めている間は、進み具合で描く位置が変わる（右へ歩いている）。
+    drawn.length = 0;
+    for (const alpha of [0, 0.5, 1]) shell.draw(alpha);
+    const moving = xsOf();
+    expect(moving[1]!).toBeGreaterThan(moving[0]!);
+    expect(moving[2]!).toBeGreaterThan(moving[1]!);
+    shell.togglePause();
+    drawn.length = 0;
+    for (const alpha of [0, 0.5, 1]) shell.draw(alpha);
+    // どの進み具合でも、いまの tick の位置（進めている間の進み具合 1 と同じ所）。
+    expect(xsOf()).toEqual([moving[2], moving[2], moving[2]]);
+  });
+
   it('通信対戦にはつまみを出さず、前の試合で速くしていても1回の呼び出しで 1 tick だけ進める', () => {
     // 全員の端末が同じ速さで進める必要がある。1台だけ速くしても、ほかの人の入力を待って止まる。
     const { shell, elements, relay, sent, music } = mount();
@@ -625,25 +666,13 @@ describe('キーボードでメニューを動かす', () => {
     expect(played.filter((name) => name === 'place')).toHaveLength(1);
   });
 
-  /** マウスで、1人・1ラウンド 60 秒の試合を始める。枠は出さない。 */
-  function startByMouse(shell: Shell, elements: ShellElements): void {
+  /** マウスで、その遊び方・1ラウンド 60 秒の試合を始める。枠は出さない。 */
+  function startByMouse(shell: Shell, elements: ShellElements, mode: 'solo' | 'duo' = 'solo'): void {
     shell.showMenu();
-    press(elements.menu, '[data-choice="solo"]');
+    press(elements.menu, `[data-choice="${mode}"]`);
     press(elements.menu, '[data-action="next"]');
     press(elements.menu, '[data-field="time"] [data-value="60"]');
     press(elements.menu, '[data-action="start"]');
-    shell.draw(0);
-  }
-
-  /** 誰かが優勝して試合が決まった幕が出るまで進め、1枚描く。人間は操作しない（CPU どうしで決まる）。 */
-  function playUntilChampion(shell: Shell, elements: ShellElements): void {
-    let ticks = 0;
-    while (elements.banner.hidden || !elements.banner.textContent?.includes('優勝')) {
-      shell.tick();
-      if (ticks % 30 === 0) shell.draw(0);
-      ticks += 1;
-      if (ticks > 200_000) throw new Error('試合が決まらない');
-    }
     shell.draw(0);
   }
 
@@ -651,7 +680,10 @@ describe('キーボードでメニューを動かす', () => {
   const restarted = (elements: ShellElements): boolean =>
     elements.banner.hidden && elements.menu.hidden && elements.side.querySelector('.t')?.textContent === '1:00';
 
-  it('キーボードで試合を始めたとき、試合が決まった幕では、キーを押す前から「もういっかい」に枠が付き、1回目の決定で次の試合になる', () => {
+  /** ラウンドの番号（時計の見出し）。 */
+  const roundOf = (elements: ShellElements): string | null | undefined => elements.side.querySelector('.rnd')?.textContent;
+
+  it('キーボードで試合を始めたとき、試合が決まった幕では、キーを押す前から「もういっかい」に枠が付き、Enter で次の試合になる', () => {
     const { shell, elements } = mount();
     shell.showMenu();
     shell.navigate('confirm');
@@ -668,58 +700,61 @@ describe('キーボードでメニューを動かす', () => {
 
     playUntilChampion(shell, elements);
     // 枠は試合の間も出たまま。幕が出たら、描いたときに「もういっかい」へ付け直す。
-    expect(cursorOf(elements.banner)?.dataset['action']).toBe('again');
+    expect(cursorOf(elements.banner)?.dataset['action']).toBe('advance');
     shell.navigate('confirm');
     shell.draw(0);
     expect(restarted(elements)).toBe(true);
   }, 120_000);
 
-  it('マウスで始めた試合でも、試合が決まった幕の1回目の決定で「もういっかい」になる（原型と同じ）', () => {
-    // ほかの画面では、枠が出ていないときの1回目の決定は枠を出すだけ。試合が決まった幕だけは例外にする。
-    // 原型もキーボードの Space・Enter でそのまま次へ進め、パッドの A も1回目を飲み込まなかった。
+  it('枠が出ていない幕でも（2人で遊ぶ形）、1回目の Enter でそのまま送る（原型の keydown は幕の Space・Enter で advanceBanner を呼ぶ）', () => {
+    // ほかの画面では、枠が出ていないときの1回目の決定は枠を出すだけ。幕は例外（原型 L3082-3084）。
     const { shell, elements } = mount();
-    startByMouse(shell, elements);
-    playUntilChampion(shell, elements);
+    startByMouse(shell, elements, 'duo');
+    playUntilBanner(shell, elements);
+    expect(roundOf(elements)).toContain('ROUND 1');
     expect(cursorOf(elements.banner)).toBeNull();
     shell.navigate('confirm');
     shell.draw(0);
-    expect(restarted(elements)).toBe(true);
+    expect(elements.banner.hidden).toBe(true);
+    expect(roundOf(elements)).toContain('ROUND 2');
   }, 120_000);
 
-  it('試合が決まった幕から「タイトルへ」をキーボードで選ぶと、タイトルの先頭に枠が付き、次の Enter で進む', () => {
+  it('キーボードで始めた2人の試合でも、幕のボタンに枠を付けない（原型は2人で遊ぶ形の幕を塗らない）。Enter はそのまま送る', () => {
+    // メニューで出した枠を持ち越すと、描くたびに幕を塗る形では「つぎのラウンド ▶」に枠が付く。
     const { shell, elements } = mount();
-    startByMouse(shell, elements);
-    playUntilChampion(shell, elements);
-    // 移動は、枠を出したうえで反映される。先頭は「もういっかい」。
-    shell.navigate('right');
-    expect(cursorOf(elements.banner)?.dataset['action']).toBe('title');
-    shell.navigate('confirm');
-    expect(elements.menu.hidden).toBe(false);
-    expect(screenOf(elements)).toBe('title');
-    // 画面が替わったので、描いたときに新しい画面の先頭へ付け直す。見えないまま決まることはない。
-    shell.draw(0);
-    expect(cursorOf(elements.menu)?.dataset['choice']).toBe('solo');
+    shell.showMenu();
+    shell.navigate('down');
+    expect(cursorOf(elements.menu)?.dataset['choice']).toBe('duo');
     shell.navigate('confirm');
     expect(screenOf(elements)).toBe('pick');
-  }, 120_000);
+    press(elements.menu, '[data-action="next"]');
+    expect(screenOf(elements)).toBe('rules');
+    press(elements.menu, '[data-field="time"] [data-value="60"]');
+    shell.navigate('up');
+    expect(cursorOf(elements.menu)?.dataset['action']).toBe('start');
+    shell.navigate('confirm');
+    expect(elements.play.hidden).toBe(false);
 
-  it('試合が決まった幕が出るたびに、カーソルは「もういっかい」へ戻る', () => {
-    // 戻さないと、前の幕で「タイトルへ」を指したままマウスを動かしていた場合に、次の幕の1回目の
-    // 決定で、見えないまま「タイトルへ」が実行される。原型も、試合が決まるたびにカーソルを先頭へ戻した。
-    const { shell, elements } = mount();
-    startByMouse(shell, elements);
-    playUntilChampion(shell, elements);
-    shell.navigate('right');
-    expect(cursorOf(elements.banner)?.dataset['action']).toBe('title');
-    shell.hideCursor();
-    press(elements.banner, '[data-action="again"]');
-    shell.draw(0);
-    expect(restarted(elements)).toBe(true);
-
-    playUntilChampion(shell, elements);
+    playUntilBanner(shell, elements);
+    expect(roundOf(elements)).toContain('ROUND 1');
+    expect(cursorOf(elements.banner)).toBeNull();
     shell.navigate('confirm');
     shell.draw(0);
-    expect(restarted(elements)).toBe(true);
+    expect(elements.banner.hidden).toBe(true);
+    expect(roundOf(elements)).toContain('ROUND 2');
+  }, 120_000);
+
+  it('幕では、キーボードの矢印と Escape は何もしない（カーソルを動かせるのはパッドだけ。「⚙ 設定をやりなおす」はマウスかパッドで押す）', () => {
+    const { shell, elements } = mount();
+    startByMouse(shell, elements, 'duo');
+    playUntilBanner(shell, elements);
+    for (const command of ['down', 'right', 'up', 'left', 'back'] as const) shell.navigate(command);
+    shell.draw(0);
+    expect(elements.banner.hidden).toBe(false);
+    expect(elements.menu.hidden).toBe(true);
+    // 枠も出さない（原型の keydown は、幕では矢印を MENU.nav へ渡さない）。
+    expect(cursorOf(elements.banner)).toBeNull();
+    expect(roundOf(elements)).toContain('ROUND 1');
   }, 120_000);
 });
 
@@ -744,6 +779,7 @@ describe('ゲームパッドとロビーでメニューを動かす', () => {
     return { read, hold: (...buttons) => (held = new Set(buttons)) };
   }
   const A = 0;
+  const START = 9;
   const UP = 12;
   const DOWN = 13;
 
@@ -755,33 +791,29 @@ describe('ゲームパッドとロビーでメニューを動かす', () => {
     shell.draw(0);
   }
 
-  /** マウスで、その遊び方・1ラウンド 60 秒の試合を始め、誰かが優勝して試合が決まった幕が出るまで進める。 */
-  function playToChampionByMouse(shell: Shell, elements: ShellElements, mode: 'solo' | 'duo'): void {
+  /** マウスで、その遊び方・1ラウンド 60 秒の試合を始める。 */
+  function startByMouse(shell: Shell, elements: ShellElements, mode: 'solo' | 'duo'): void {
     shell.showMenu();
     press(elements.menu, `[data-choice="${mode}"]`);
     press(elements.menu, '[data-action="next"]');
     press(elements.menu, '[data-field="time"] [data-value="60"]');
     press(elements.menu, '[data-action="start"]');
     shell.draw(0);
-    let ticks = 0;
-    while (elements.banner.hidden || !elements.banner.textContent?.includes('優勝')) {
-      shell.tick();
-      if (ticks % 30 === 0) shell.draw(0);
-      ticks += 1;
-      if (ticks > 200_000) throw new Error('試合が決まらない');
-    }
-    shell.draw(0);
   }
 
-  it('2人で遊ぶとき、試合が決まった幕ではパッドを受け付けない（原型と同じ）', () => {
-    // 2人で遊ぶときはパッドを試合に繋がない。机に置いたパッドに肘が当たっただけで次の試合が
-    // 始まらないよう、原型も2人のときは幕でパッドを受け付けなかった（1人と通信対戦のときだけ）。
+  it('2人で遊ぶとき、幕ではパッドを受け付けない（原型と同じ）', () => {
+    // 2人で遊ぶときはパッドを試合に繋がない。机に置いたパッドに肘が当たっただけで次のラウンドへ
+    // 進まないよう、原型も2人のときは幕でパッドを受け付けなかった（1人と通信対戦のときだけ）。
     const pad = fakePad();
     const { shell, elements } = mount('both', () => [], pad.read);
-    playToChampionByMouse(shell, elements, 'duo');
+    startByMouse(shell, elements, 'duo');
+    playUntilBanner(shell, elements);
     tap(shell, pad, A);
+    tap(shell, pad, START);
     expect(elements.banner.hidden).toBe(false);
     expect(elements.menu.hidden).toBe(true);
+    // 枠も出さない（原型は2人の形では、幕の分かれ道で枠を出す前に帰る。L3622）。
+    expect(cursorOf(elements.banner)).toBeNull();
     // キーボードの決定は受け付ける（原型もキーボードでは人数によらず次へ進めた）。
     shell.navigate('confirm');
     shell.draw(0);
@@ -789,15 +821,15 @@ describe('ゲームパッドとロビーでメニューを動かす', () => {
   }, 120_000);
 
   it('2人の試合の幕でパッドを受け付けない間も、パッドは読み続ける（押したままの A を、タイトルで押し直しと取り違えない）', () => {
-    // 受け付けない間に読むのを止めると、前回の状態が古いまま残る。幕で A を押したままキーボードで
-    // 「タイトルへ」を選ぶと、タイトルで A が新しい押下に見え、先頭の項目を押してしまう。
+    // 受け付けない間に読むのを止めると、前回の状態が古いまま残る。幕で A を押したままマウスで
+    // 「⚙ 設定をやりなおす」を押すと、タイトルで A が新しい押下に見え、先頭の項目を押してしまう。
     const pad = fakePad();
     const { shell, elements } = mount('both', () => [], pad.read);
-    playToChampionByMouse(shell, elements, 'duo');
+    startByMouse(shell, elements, 'duo');
+    playUntilBanner(shell, elements);
     pad.hold(A);
     shell.draw(0);
-    shell.navigate('right');
-    shell.navigate('confirm');
+    press(elements.banner, '[data-action="setup"]');
     expect(screenOf(elements)).toBe('title');
     for (let i = 0; i < 3; i += 1) shell.draw(0);
     expect(screenOf(elements)).toBe('title');
@@ -806,7 +838,8 @@ describe('ゲームパッドとロビーでメニューを動かす', () => {
   it('1人で遊ぶとき、試合が決まった幕はパッドの A で次の試合になる', () => {
     const pad = fakePad();
     const { shell, elements } = mount('both', () => [], pad.read);
-    playToChampionByMouse(shell, elements, 'solo');
+    startByMouse(shell, elements, 'solo');
+    playUntilChampion(shell, elements);
     tap(shell, pad, A);
     expect(elements.banner.hidden).toBe(true);
     expect(elements.side.querySelector('.t')?.textContent).toBe('1:00');
@@ -1037,8 +1070,13 @@ describe('通信対戦で、接続を保ったまま次の試合を始める', (
     relay().onMessage(JSON.stringify({ t: 'start', seats: [0], config, match: 1 }));
     shell.draw(0);
     playToEnd(shell, elements, relay, [], 1);
+    // ホストには「もういっかい」と「⚙ 設定をやりなおす」を出す。
+    expect([...elements.banner.querySelectorAll('button')].map((button) => button.textContent)).toEqual([
+      'もういっかい',
+      '⚙ 設定をやりなおす',
+    ]);
 
-    press(elements.banner, '[data-action="again"]');
+    press(elements.banner, '[data-action="advance"]');
     const again = sent.filter((message) => message.t === 'start').at(-1);
     if (again?.t !== 'start') throw new Error('次の試合の合図を送っていない');
     // 同じ設定で、種だけを新しくする（原型も同じ設定のまま次の試合を始めた）。
@@ -1069,28 +1107,71 @@ describe('通信対戦で、接続を保ったまま次の試合を始める', (
     shell.draw(0);
     playToEnd(shell, elements, relay, [], 1);
     shell.draw(0);
-    expect(elements.banner.querySelector('[data-action="again"]')).not.toBeNull();
+    expect(elements.banner.querySelector('[data-action="advance"]')).not.toBeNull();
 
     relay().onMessage(JSON.stringify({ t: 'desync', tick: 19, reports: [] }));
     shell.draw(0);
-    expect(elements.banner.querySelector('[data-action="again"]')).toBeNull();
+    expect(elements.banner.querySelector('[data-action="advance"]')).toBeNull();
+    // 抜ける道は残す。
+    expect(elements.banner.querySelector('[data-action="setup"]')).not.toBeNull();
   }, 120_000);
 
-  it('ゲストの幕にはボタンを出さず、ホストが次の試合を始めたら幕が消える', () => {
-    const { shell, elements, relay } = mount();
+  it('ゲストの幕には「⚙ 設定をやりなおす」だけを出し（押すと抜ける）、ホストが次の試合を始めたら幕が消える', () => {
+    const { shell, elements, relay, sent, left } = mount();
     shell.startLan('relay.local:8777');
     relay().onMessage(JSON.stringify({ t: 'welcome', seat: 1, role: 'guest', seats: [0] }));
     relay().onMessage(JSON.stringify({ t: 'start', seats: [0, 1], config, match: 1 }));
     shell.draw(0);
     playToEnd(shell, elements, relay, [0], 1);
+    shell.draw(0);
 
-    // 原型もゲストは押せなかった（盤面を進めるのはホストだけ）。
-    expect(elements.banner.querySelector('button')).toBeNull();
+    // 次の試合を始められるのはホストだけ（原型も盤面を進めるのはホストだけ）。全員に幕を出すので、ゲストにも抜ける道を出す。
+    expect([...elements.banner.querySelectorAll('button')].map((button) => button.dataset['action'])).toEqual(['setup']);
+    // Enter でも合図を送らない。
+    shell.navigate('confirm');
+    expect(sent.filter((message) => message.t === 'start')).toEqual([]);
 
     relay().onMessage(JSON.stringify({ t: 'start', seats: [0, 1], config: { ...config, match: { ...config.match, seed: 2 } }, match: 2 }));
     shell.draw(0);
     expect(elements.banner.hidden).toBe(true);
     expect(elements.side.querySelector('.t')?.textContent).toBe('1:00');
+
+    playToEnd(shell, elements, relay, [0], 2);
+    shell.draw(0);
+    press(elements.banner, '[data-action="setup"]');
+    expect(left.count).toBe(1);
+  }, 120_000);
+
+  it('ラウンドの幕にはボタンを出さず、決着のあとの待ち（2 秒）で消える。幕の間は曲を止め、次のラウンドで鳴らし直す', () => {
+    const { shell, elements, relay, music } = mount();
+    shell.startLan('relay.local:8777');
+    relay().onMessage(JSON.stringify({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
+    relay().onMessage(JSON.stringify({ t: 'start', seats: [0], config: { ...config, match: { ...config.match, winsToTake: 3 } }, match: 1 }));
+    shell.draw(0);
+    let ticks = 0;
+    while (elements.banner.hidden) {
+      shell.tick();
+      shell.draw(0);
+      ticks += 1;
+      if (ticks > 200_000) throw new Error('幕が出ない');
+    }
+    expect(elements.banner.textContent).toContain('ラウンド1');
+    expect(elements.banner.querySelector('button')).toBeNull();
+    // パッドもキーボードも受け付けない（送る口が無い）。曲は止める。
+    shell.navigate('confirm');
+    const started = music.started;
+    shell.draw(0);
+    expect(music.started).toBe(started);
+    let rest = 0;
+    while (!elements.banner.hidden) {
+      shell.tick();
+      shell.draw(0);
+      rest += 1;
+      if (rest > 200) throw new Error('幕が消えない');
+    }
+    // 2 秒（120 tick）の待ちが尽きた tick に、次のラウンドの盤面になる。
+    expect(rest).toBe(120);
+    expect(music.started).toBe(started + 1);
   }, 120_000);
 });
 
@@ -1500,24 +1581,27 @@ describe('試合の画面（パッドの Start・パッドの通知・通知の�
       ticks += 1;
       if (ticks > 20_000) throw new Error('幕が出ない');
     }
-    // ボタンと P（`togglePause`）を1回ずつ試し、そのたびに見る（2回続けて切り替えると、止めて再開した形と区別できない）。
+    // ボタンと P（`pressPauseKey`）を1回ずつ試し、そのたびに見る（2回続けて切り替えると、止めて再開した形と区別できない）。
     press(elements.side, '[data-action="pause"]');
     shell.draw(0);
     expect(pauseLabel(elements)).toBe('⏸ ポーズ');
-    shell.togglePause();
+    shell.pressPauseKey();
     shell.draw(0);
     expect(pauseLabel(elements)).toBe('⏸ ポーズ');
     expect(elements.banner.hidden).toBe(false);
-    // 止まっていないので、待ちが尽きれば幕が消えて次のラウンドが始まる。
-    let rest = 0;
-    while (!elements.banner.hidden) {
-      shell.tick();
-      shell.draw(0);
-      rest += 1;
-      if (rest > 2_000) throw new Error('幕が消えない（止まっている）');
-    }
+    // 1台の幕は、送るまで消えない（tick を進めても、次のラウンドは始まらない）。
+    for (let i = 0; i < 600; i += 1) shell.tick();
+    shell.draw(0);
+    expect(elements.banner.hidden).toBe(false);
+    expect(elements.side.querySelector('.rnd')?.textContent).toContain('ROUND 1');
+    press(elements.banner, '[data-action="advance"]');
+    shell.draw(0);
+    expect(elements.banner.hidden).toBe(true);
     expect(elements.side.querySelector('.rnd')?.textContent).toContain('ROUND 2');
-    expect(pauseLabel(elements)).toBe('⏸ ポーズ');
+    // 次のラウンドが始まれば、また止められる。
+    shell.pressPauseKey();
+    shell.draw(0);
+    expect(pauseLabel(elements)).toBe('▶ 再開');
   });
 
   it('ツールバーの「⏸ ポーズ」と「設定へ」は、画面の操作の音を鳴らさない（原型 L6038・L6080）', () => {
@@ -1654,4 +1738,525 @@ describe('試合の画面（パッドの Start・パッドの通知・通知の�
     expect(cornerDrawn(29)).toBe(true);
     expect(cornerDrawn(46)).toBe(false);
   });
+});
+
+describe('ラウンドの幕と優勝の幕（1台の試合。原型どおりボタンで送る）', () => {
+  const A = 0;
+  const START = 9;
+  const DOWN = 13;
+  const cursorOf = (root: HTMLElement): HTMLElement | null => root.querySelector('.navcur');
+  const screenOf = (elements: ShellElements): string | undefined =>
+    elements.menu.querySelector<HTMLElement>('[data-screen]')?.dataset['screen'];
+  const roundOf = (elements: ShellElements): string | null | undefined => elements.side.querySelector('.rnd')?.textContent;
+  const buttonsOf = (elements: ShellElements): (string | null)[] =>
+    [...elements.banner.querySelectorAll('button')].map((button) => button.textContent);
+
+  /** 押しているボタンを差し替えられるパッド（標準の並び）。 */
+  function heldPad(): { read: () => readonly (PadSnapshot | null)[]; hold: (...buttons: number[]) => void } {
+    let held = new Set<number>();
+    const read = (): readonly (PadSnapshot | null)[] => [
+      {
+        mapping: 'standard',
+        connected: true,
+        index: 0,
+        buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: held.has(i) })),
+        axes: [0, 0, 0, 0],
+        id: 'Standard Pad',
+      },
+    ];
+    return { read, hold: (...buttons) => (held = new Set(buttons)) };
+  }
+
+  /** 押して1枚描き、離して1枚描く。 */
+  function tap(shell: Shell, pad: ReturnType<typeof heldPad>, button: number): void {
+    pad.hold(button);
+    shell.draw(0);
+    pad.hold();
+    shell.draw(0);
+  }
+
+  /** マウスで、その遊び方・1ラウンド 60 秒の試合を始める。 */
+  function startByMouse(shell: Shell, elements: ShellElements, mode: 'solo' | 'duo' | 'versus'): void {
+    shell.showMenu();
+    press(elements.menu, `[data-choice="${mode}"]`);
+    press(elements.menu, '[data-action="next"]');
+    press(elements.menu, '[data-field="time"] [data-value="60"]');
+    press(elements.menu, '[data-action="start"]');
+    shell.draw(0);
+  }
+
+  it('ラウンドの幕にも「つぎのラウンド ▶」と「⚙ 設定をやりなおす」を出し、送るまで試合を進めない。送ると次のラウンドになる', () => {
+    // 2人タイマンで誰も操作しなければ、時間切れ・延長戦も時間切れで、ひきわけの幕が出る。
+    const { shell, elements } = mount();
+    startByMouse(shell, elements, 'versus');
+    playUntilBanner(shell, elements);
+    expect(elements.banner.textContent).toContain('ラウンド1　ひきわけ');
+    expect(buttonsOf(elements)).toEqual(['つぎのラウンド ▶', '⚙ 設定をやりなおす']);
+    // 決着のあとの待ち（2 秒）を過ぎても、幕は消えず、次のラウンドも始まらない（原型の loop は play の間だけ update）。
+    for (let i = 0; i < 600; i += 1) shell.tick();
+    shell.draw(0);
+    expect(elements.banner.hidden).toBe(false);
+    expect(roundOf(elements)).toContain('ROUND 1');
+
+    press(elements.banner, '[data-action="advance"]');
+    shell.draw(0);
+    expect(elements.banner.hidden).toBe(true);
+    expect(roundOf(elements)).toContain('ROUND 2');
+    expect(elements.side.querySelector('.t')?.textContent).toBe('1:00');
+    // 次のラウンドは進む。
+    for (let i = 0; i < 60; i += 1) shell.tick();
+    shell.draw(0);
+    expect(elements.side.querySelector('.t')?.textContent).toBe('0:59');
+  }, 120_000);
+
+  it('ラウンドが決まったら曲を止め、幕の間は鳴らさず、送ったら次のラウンドで鳴らし直す（原型の endGame の BGM.stop と startRound の BGM.start）', () => {
+    const { shell, elements, music } = mount();
+    startByMouse(shell, elements, 'versus');
+    shell.draw(0);
+    const playing = music.started;
+    expect(playing).toBeGreaterThan(0);
+    playUntilBanner(shell, elements);
+    const started = music.started;
+    const stopped = music.stopped;
+    for (let i = 0; i < 3; i += 1) shell.draw(0);
+    expect(music.started).toBe(started);
+    expect(music.stopped).toBe(stopped + 3);
+    press(elements.banner, '[data-action="advance"]');
+    shell.draw(0);
+    expect(music.started).toBe(started + 1);
+  }, 120_000);
+
+  it('幕の間は、押したキーを毎フレーム忘れる（止めている間と同じ。再開した最初の tick に残さない）', () => {
+    let forgets = 0;
+    const keyboard: KeyboardState = { anyOf: () => false, buttonAnyOf: () => false, forgetTaps: () => (forgets += 1) };
+    const { shell, elements } = mount('both', () => [], () => [], keyboard);
+    startByMouse(shell, elements, 'versus');
+    playUntilBanner(shell, elements);
+    const before = forgets;
+    shell.tick();
+    expect(forgets).toBe(before);
+    shell.draw(0);
+    expect(forgets).toBe(before + 1);
+  }, 120_000);
+
+  it('「⚙ 設定をやりなおす」でタイトルへ戻り、カーソルの枠を消す（原型の backToSetup の MENU.on = false）。幕のボタンは操作の音を鳴らさない', () => {
+    const pad = heldPad();
+    const { shell, elements, audio } = mount('both', () => [], pad.read);
+    startByMouse(shell, elements, 'solo');
+    playUntilBanner(shell, elements);
+    // 1人で遊ぶときは、幕の間は枠が出ている（パッドを押さなくても。原型 L3637）。カーソルは1つ目のボタン。
+    expect(cursorOf(elements.banner)?.dataset['action']).toBe('advance');
+    audio.length = 0;
+    tap(shell, pad, DOWN);
+    expect(cursorOf(elements.banner)?.dataset['action']).toBe('setup');
+    tap(shell, pad, A);
+    expect(elements.menu.hidden).toBe(false);
+    expect(screenOf(elements)).toBe('title');
+    shell.draw(0);
+    expect(cursorOf(elements.menu)).toBeNull();
+    expect(elements.banner.hidden).toBe(true);
+    expect(audio).not.toContain('ui');
+    // 枠が消えているので、次の Enter は枠を出すだけ。
+    shell.navigate('confirm');
+    expect(screenOf(elements)).toBe('title');
+    expect(cursorOf(elements.menu)?.dataset['choice']).toBe('solo');
+  }, 120_000);
+
+  it('1人で遊ぶときは、幕の間は毎フレーム枠を出す（パッドが無くても・マウスで消しても次のフレームで出し直す）。2人のときは出さない', () => {
+    const solo = mount();
+    startByMouse(solo.shell, solo.elements, 'solo');
+    playUntilBanner(solo.shell, solo.elements);
+    expect(cursorOf(solo.elements.banner)?.dataset['action']).toBe('advance');
+    solo.shell.hideCursor();
+    expect(cursorOf(solo.elements.banner)).toBeNull();
+    solo.shell.draw(0);
+    expect(cursorOf(solo.elements.banner)?.dataset['action']).toBe('advance');
+
+    document.body.replaceChildren();
+    const duo = mount();
+    startByMouse(duo.shell, duo.elements, 'duo');
+    playUntilBanner(duo.shell, duo.elements);
+    duo.shell.draw(0);
+    expect(cursorOf(duo.elements.banner)).toBeNull();
+  }, 120_000);
+
+  it('幕の1つ目のボタン（「つぎのラウンド ▶」「もういっかい」）も、マウスで押してもパッドの A で押しても、操作の音を鳴らさない（原型 L6032）', () => {
+    // 試合の中でも操作の音を鳴らすことがある（焼けた舌を出そうとしたとき）ので、押した直後だけを見る。
+    const pad = heldPad();
+    const { shell, elements, audio } = mount('both', () => [], pad.read);
+    startByMouse(shell, elements, 'solo');
+    playUntilBanner(shell, elements);
+    audio.length = 0;
+    press(elements.banner, '[data-action="advance"]');
+    shell.draw(0);
+    expect(elements.banner.hidden).toBe(true);
+    expect(roundOf(elements)).toContain('ROUND 2');
+    expect(audio).toEqual([]);
+    playUntilBanner(shell, elements);
+    expect(cursorOf(elements.banner)?.dataset['action']).toBe('advance');
+    audio.length = 0;
+    tap(shell, pad, A);
+    expect(elements.banner.hidden).toBe(true);
+    expect(audio).toEqual([]);
+  }, 120_000);
+
+  it('マウスを動かして枠を消した直後のフレームでも、パッドの A は飲み込まずに1つ目のボタンを押す（原型は L3637 で枠を出してから MENU.nav へ渡す）', () => {
+    // 描く側が毎フレーム枠を出し直すだけだと、マウスを動かした直後に押した A が、枠を出すだけで終わる。
+    // マウスが動き続けている間（トラックパッドに手が触れている、など）は、毎回そうなる。
+    const pad = heldPad();
+    const { shell, elements } = mount('both', () => [], pad.read);
+    startByMouse(shell, elements, 'solo');
+    playUntilBanner(shell, elements);
+    shell.hideCursor();
+    expect(cursorOf(elements.banner)).toBeNull();
+    pad.hold(A);
+    shell.draw(0);
+    expect(elements.banner.hidden).toBe(true);
+    expect(roundOf(elements)).toContain('ROUND 2');
+  }, 120_000);
+
+  it('パッドの Start は幕を送る近道（カーソルが「⚙ 設定をやりなおす」にあっても次のラウンドへ。原型 L3631）', () => {
+    const pad = heldPad();
+    const { shell, elements } = mount('both', () => [], pad.read);
+    startByMouse(shell, elements, 'solo');
+    playUntilBanner(shell, elements);
+    tap(shell, pad, DOWN);
+    expect(cursorOf(elements.banner)?.dataset['action']).toBe('setup');
+    tap(shell, pad, START);
+    expect(elements.banner.hidden).toBe(true);
+    expect(elements.menu.hidden).toBe(true);
+    expect(roundOf(elements)).toContain('ROUND 2');
+  }, 120_000);
+
+  it('幕が出るたびに、カーソルは1つ目のボタンへ戻る（原型の endGame の MENU.reset）', () => {
+    const pad = heldPad();
+    const { shell, elements } = mount('both', () => [], pad.read);
+    startByMouse(shell, elements, 'solo');
+    playUntilBanner(shell, elements);
+    tap(shell, pad, DOWN);
+    expect(cursorOf(elements.banner)?.dataset['action']).toBe('setup');
+    press(elements.banner, '[data-action="advance"]');
+    shell.draw(0);
+    expect(elements.banner.hidden).toBe(true);
+    playUntilBanner(shell, elements);
+    expect(roundOf(elements)).toContain('ROUND 2');
+    expect(cursorOf(elements.banner)?.dataset['action']).toBe('advance');
+  }, 120_000);
+
+  it('Enter を押したまま幕を送っても、次のラウンドの開始位置に爆弾を置かない。離して押し直すと置く', () => {
+    // Enter は決定のキーで、2人タイマンの 2P の爆弾のキーでもある（CPU がいないので、置いた爆弾は人間のものだけ）。
+    let held: readonly string[] = [];
+    const { shell, elements, played } = mount('both', () => held);
+    startByMouse(shell, elements, 'versus');
+    playUntilBanner(shell, elements);
+    const before = played.filter((name) => name === 'place').length;
+    held = ['Enter'];
+    shell.navigate('confirm');
+    shell.draw(0);
+    expect(roundOf(elements)).toContain('ROUND 2');
+    for (let i = 0; i < 30; i += 1) shell.tick();
+    expect(played.filter((name) => name === 'place').length).toBe(before);
+    // 対照：離して押し直せば置く（押しても置かれない、で上が通ってしまわないように）。
+    held = [];
+    shell.tick();
+    held = ['Enter'];
+    shell.tick();
+    expect(played.filter((name) => name === 'place').length).toBe(before + 1);
+  }, 120_000);
+
+  it('パッドの A を押したまま幕を送っても、次のラウンドの開始位置に爆弾を置かない', () => {
+    // 1人で遊ぶ形は CPU も爆弾を置くので、同じ種でマウスで送った試合を対照にし、置いた数の差で見る。
+    const placedAfterAdvance = (byPad: boolean, pressAgain: boolean): number => {
+      const pad = heldPad();
+      const { shell, elements, played } = mount('both', () => [], pad.read);
+      startByMouse(shell, elements, 'solo');
+      playUntilBanner(shell, elements);
+      const before = played.filter((name) => name === 'place').length;
+      if (byPad) {
+        pad.hold(A);
+        shell.draw(0);
+      } else {
+        press(elements.banner, '[data-action="advance"]');
+        shell.draw(0);
+      }
+      expect(roundOf(elements)).toContain('ROUND 2');
+      for (let i = 0; i < 30; i += 1) shell.tick();
+      if (pressAgain) {
+        pad.hold();
+        shell.draw(0);
+        shell.tick();
+        pad.hold(A);
+        shell.draw(0);
+      } else {
+        shell.tick();
+      }
+      shell.tick();
+      const placed = played.filter((name) => name === 'place').length - before;
+      document.body.replaceChildren();
+      return placed;
+    };
+    const control = placedAfterAdvance(false, false);
+    expect(placedAfterAdvance(true, false)).toBe(control);
+    // 対照：離して押し直せば置く。
+    expect(placedAfterAdvance(true, true)).toBe(control + 1);
+  }, 120_000);
+});
+
+describe('確認の画面（原型の askConfirm）', () => {
+  const A = 0;
+  const SELECT = 8;
+  const START = 9;
+  const RIGHT = 15;
+  const cursorOf = (root: HTMLElement): HTMLElement | null => root.querySelector('.navcur');
+  const screenOf = (elements: ShellElements): string | undefined =>
+    elements.menu.querySelector<HTMLElement>('[data-screen]')?.dataset['screen'];
+  const pauseLabel = (elements: ShellElements): string | null | undefined =>
+    elements.side.querySelector('[data-action="pause"]')?.textContent;
+  const dialogOf = (elements: ShellElements): { open: boolean; message: string | null | undefined; buttons: (string | null)[] } => ({
+    open: !elements.confirm.hidden,
+    message: elements.confirm.querySelector('.cfmMsg')?.textContent,
+    buttons: [...elements.confirm.querySelectorAll('.cfmBtns > .chip')].map((button) => button.textContent),
+  });
+
+  function heldPad(): { read: () => readonly (PadSnapshot | null)[]; hold: (...buttons: number[]) => void } {
+    let held = new Set<number>();
+    const read = (): readonly (PadSnapshot | null)[] => [
+      {
+        mapping: 'standard',
+        connected: true,
+        index: 0,
+        buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: held.has(i) })),
+        axes: [0, 0, 0, 0],
+        id: 'Standard Pad',
+      },
+    ];
+    return { read, hold: (...buttons) => (held = new Set(buttons)) };
+  }
+
+  function tap(shell: Shell, pad: ReturnType<typeof heldPad>, ...buttons: number[]): void {
+    pad.hold(...buttons);
+    shell.draw(0);
+    pad.hold();
+    shell.draw(0);
+  }
+
+  function startByMouse(shell: Shell, elements: ShellElements, mode: 'solo' | 'duo'): void {
+    shell.showMenu();
+    press(elements.menu, `[data-choice="${mode}"]`);
+    press(elements.menu, '[data-action="next"]');
+    press(elements.menu, '[data-action="start"]');
+    shell.draw(0);
+  }
+
+  it('1人で遊ぶとき、ポーズ中のパッドの Select で「設定へもどりますか？」を開き、枠を出してカーソルを「やめる」に置く。止めていなければ開かない', () => {
+    const pad = heldPad();
+    const { shell, elements } = mount('both', () => [], pad.read);
+    startByMouse(shell, elements, 'solo');
+    tap(shell, pad, SELECT);
+    expect(dialogOf(elements).open).toBe(false);
+    tap(shell, pad, START);
+    expect(pauseLabel(elements)).toBe('▶ 再開');
+    tap(shell, pad, SELECT);
+    expect(dialogOf(elements)).toEqual({ open: true, message: '設定へもどりますか？', buttons: ['やめる', '設定へもどる'] });
+    expect(cursorOf(elements.confirm)?.dataset['action']).toBe('no');
+  });
+
+  it('Start と Select を同じ回に押すと、止めてから開く（原型は togglePause のあとで G.paused を見る）', () => {
+    const pad = heldPad();
+    const { shell, elements } = mount('both', () => [], pad.read);
+    startByMouse(shell, elements, 'solo');
+    tap(shell, pad, START, SELECT);
+    expect(pauseLabel(elements)).toBe('▶ 再開');
+    expect(dialogOf(elements).open).toBe(true);
+  });
+
+  it('開いている間は、P もパッドの Start も届かない。Escape と B は「やめる」（音を鳴らし、ポーズのまま戻る）', () => {
+    const pad = heldPad();
+    const { shell, elements, audio } = mount('both', () => [], pad.read);
+    startByMouse(shell, elements, 'solo');
+    tap(shell, pad, START);
+    tap(shell, pad, SELECT);
+    shell.pressPauseKey();
+    tap(shell, pad, START);
+    shell.draw(0);
+    expect(pauseLabel(elements)).toBe('▶ 再開');
+    expect(dialogOf(elements).open).toBe(true);
+    audio.length = 0;
+    shell.navigate('back');
+    expect(dialogOf(elements).open).toBe(false);
+    expect(audio).toEqual(['unlock', 'ui']);
+    expect(pauseLabel(elements)).toBe('▶ 再開');
+    // パッドの B も同じ。
+    tap(shell, pad, SELECT);
+    expect(dialogOf(elements).open).toBe(true);
+    tap(shell, pad, 1);
+    expect(dialogOf(elements).open).toBe(false);
+    // 閉じたら P がまた届く。
+    shell.pressPauseKey();
+    shell.draw(0);
+    expect(pauseLabel(elements)).toBe('⏸ ポーズ');
+  });
+
+  it('「設定へもどる」を選ぶと、音を鳴らしてタイトルへ戻り、枠を消す。開き直すとカーソルはまた「やめる」', () => {
+    const pad = heldPad();
+    const { shell, elements, audio } = mount('both', () => [], pad.read);
+    startByMouse(shell, elements, 'solo');
+    tap(shell, pad, START);
+    tap(shell, pad, SELECT);
+    tap(shell, pad, RIGHT);
+    expect(cursorOf(elements.confirm)?.dataset['action']).toBe('yes');
+    tap(shell, pad, 1);
+    tap(shell, pad, SELECT);
+    expect(cursorOf(elements.confirm)?.dataset['action']).toBe('no');
+    tap(shell, pad, RIGHT);
+    audio.length = 0;
+    tap(shell, pad, A);
+    expect(audio).toEqual(['unlock', 'ui']);
+    expect(dialogOf(elements).open).toBe(false);
+    expect(elements.menu.hidden).toBe(false);
+    expect(screenOf(elements)).toBe('title');
+    expect(cursorOf(elements.menu)).toBeNull();
+  });
+
+  it('マウスでも押せる（どちらも操作の音を鳴らす）。開いたまま試合を抜けたとき・次の試合を始めたときは、音を鳴らさずに畳む', () => {
+    const pad = heldPad();
+    const { shell, elements, audio } = mount('both', () => [], pad.read);
+    startByMouse(shell, elements, 'solo');
+    tap(shell, pad, START);
+    tap(shell, pad, SELECT);
+    audio.length = 0;
+    press(elements.confirm, '[data-action="no"]');
+    expect(dialogOf(elements).open).toBe(false);
+    expect(audio).toEqual(['unlock', 'ui']);
+    tap(shell, pad, SELECT);
+    audio.length = 0;
+    shell.showMenu();
+    expect(dialogOf(elements).open).toBe(false);
+    expect(elements.confirm.childElementCount).toBe(0);
+    expect(audio).toEqual([]);
+    // 試合の画面のまま次の試合を始めたときも畳む（原型の startGame → showScreen の closeDialog）。
+    startByMouse(shell, elements, 'solo');
+    tap(shell, pad, START);
+    tap(shell, pad, SELECT);
+    expect(dialogOf(elements).open).toBe(true);
+    shell.restart();
+    shell.draw(0);
+    expect(dialogOf(elements).open).toBe(false);
+    expect(pauseLabel(elements)).toBe('⏸ ポーズ');
+  });
+
+  it('2人で遊ぶときは、パッドの Select で開かない（パッドを試合に繋がない）', () => {
+    const pad = heldPad();
+    const { shell, elements } = mount('both', () => [], pad.read);
+    startByMouse(shell, elements, 'duo');
+    press(elements.side, '[data-action="pause"]');
+    tap(shell, pad, SELECT);
+    expect(dialogOf(elements).open).toBe(false);
+  });
+
+  it('通信対戦では、止めずにいつでも開き、開いている間も試合への入力を送る（原型と同じ）。次の試合が始まったら畳む', () => {
+    const pad = heldPad();
+    const { shell, elements, relay, sent } = mount('both', () => [], pad.read);
+    const config = {
+      match: { roundLimit: 3600, winsToTake: 1, suddenDeath: true, startingHp: [2, 2, 2, 2], seed: 1, animals: ['rabbit', 'fox', 'frog', 'mole'] },
+      cpu: ['oni', 'oni', 'oni', 'oni'],
+    };
+    shell.startLan('relay.local:8777');
+    relay().onMessage(JSON.stringify({ t: 'welcome', seat: 1, role: 'guest', seats: [0] }));
+    relay().onMessage(JSON.stringify({ t: 'start', seats: [0, 1], config, match: 1 }));
+    let delivered = 0;
+    const deliver = (until: number): void => {
+      for (; delivered < until; delivered += 1) relay().onMessage(JSON.stringify({ t: 'input', seat: 0, tick: delivered, bits: 0, match: 1 }));
+    };
+    deliver(20);
+    shell.draw(0);
+    for (let i = 0; i < 5; i += 1) shell.tick();
+    tap(shell, pad, SELECT);
+    expect(dialogOf(elements)).toEqual({ open: true, message: '設定へもどりますか？', buttons: ['やめる', '設定へもどる'] });
+    // 開いている間も、パッドの十字は自分のプレイヤーの向きとして送る（原型 L3592-3597 は確認の画面より前に注入する）。
+    // 同じ押しで、確認の画面のカーソルも動く。
+    const pressedBefore = sent.filter((message) => message.t === 'input' && message.bits !== 0).length;
+    pad.hold(RIGHT);
+    shell.draw(0);
+    for (let i = 0; i < 3; i += 1) shell.tick();
+    expect(sent.filter((message) => message.t === 'input' && message.bits !== 0).length).toBeGreaterThan(pressedBefore);
+    expect(cursorOf(elements.confirm)?.dataset['action']).toBe('yes');
+    pad.hold();
+    shell.draw(0);
+    expect(dialogOf(elements).open).toBe(true);
+
+    relay().onMessage(JSON.stringify({ t: 'start', seats: [0, 1], config: { ...config, match: { ...config.match, seed: 2 } }, match: 2 }));
+    shell.draw(0);
+    expect(dialogOf(elements).open).toBe(false);
+  });
+
+  it('通信対戦の「設定へもどる」は抜ける（横の板の「設定へ」と同じ）', () => {
+    const pad = heldPad();
+    const { shell, relay, left } = mount('both', () => [], pad.read);
+    const config = {
+      match: { roundLimit: 600, winsToTake: 3, suddenDeath: true, startingHp: [6, 6, 6, 6], seed: 1, animals: ['rabbit', 'fox', 'frog', 'mole'] },
+      cpu: ['easy', 'easy', 'easy', 'easy'],
+    };
+    shell.startLan('relay.local:8777');
+    relay().onMessage(JSON.stringify({ t: 'welcome', seat: 1, role: 'guest', seats: [0] }));
+    relay().onMessage(JSON.stringify({ t: 'start', seats: [0, 1], config, match: 1 }));
+    shell.draw(0);
+    tap(shell, pad, SELECT);
+    shell.navigate('right');
+    shell.navigate('confirm');
+    expect(left.count).toBe(1);
+  });
+
+  /**
+   * 通信対戦のホスト（ほかの枠は CPU）で、試合の最中にパッドの Select で確認の画面を開き、開いたまま優勝の幕が
+   * 出るまで進める（通信対戦は止めずに開けるので、開いたまま試合が決まることがある）。
+   */
+  function lanChampionWithDialog(): ReturnType<typeof mount> & { pad: ReturnType<typeof heldPad>; starts: () => number } {
+    const pad = heldPad();
+    const mounted = mount('both', () => [], pad.read);
+    const { shell, elements, relay, sent } = mounted;
+    const config = {
+      match: { roundLimit: 3600, winsToTake: 1, suddenDeath: true, startingHp: [2, 2, 2, 2], seed: 1, animals: ['rabbit', 'fox', 'frog', 'mole'] },
+      cpu: ['oni', 'oni', 'oni', 'oni'],
+    };
+    shell.startLan('relay.local:8777');
+    relay().onMessage(JSON.stringify({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
+    relay().onMessage(JSON.stringify({ t: 'start', seats: [0], config, match: 1 }));
+    shell.draw(0);
+    tap(shell, pad, SELECT);
+    expect(dialogOf(elements).open).toBe(true);
+    let ticks = 0;
+    while (elements.banner.hidden || !elements.banner.textContent?.includes('優勝')) {
+      shell.tick();
+      if (ticks % 30 === 0) shell.draw(0);
+      ticks += 1;
+      if (ticks > 200_000) throw new Error('試合が決まらない');
+    }
+    shell.draw(0);
+    expect(dialogOf(elements).open).toBe(true);
+    expect([...elements.banner.querySelectorAll('button')].map((button) => button.dataset['action'])).toEqual(['advance', 'setup']);
+    return { ...mounted, pad, starts: () => sent.filter((message) => message.t === 'start').length };
+  }
+
+  it('開いたまま優勝の幕が出ても、キーの Enter は確認の画面を動かし、幕を送らない（原型の keydown は確認の画面を先に見る。L3074-3078）', () => {
+    const { shell, elements, starts } = lanChampionWithDialog();
+    const before = starts();
+    shell.navigate('confirm');
+    // カーソルは「やめる」にあるので、Enter は確認の画面を閉じるだけ。次の試合の合図は送らない。
+    expect(starts()).toBe(before);
+    expect(dialogOf(elements).open).toBe(false);
+    expect(elements.banner.hidden).toBe(false);
+    // 閉じたら、カーソルは幕の1つ目のボタンへ戻る（原型の MENU.closeDialog の MENU.reset）。
+    shell.draw(0);
+    expect(cursorOf(elements.banner)?.dataset['action']).toBe('advance');
+  }, 120_000);
+
+  it('開いたまま優勝の幕が出たら、パッドの Start は確認の画面が開いていても幕を送る（原型の pollGamepads は幕の分かれ道で先に Start を見る。L3631）', () => {
+    const { shell, elements, pad, starts } = lanChampionWithDialog();
+    const before = starts();
+    tap(shell, pad, START);
+    expect(starts()).toBe(before + 1);
+    // 次の試合は、中継が配り直した start を受け取ってから始まり、そのときに畳む（上の「次の試合が始まったら畳む」）。
+    expect(dialogOf(elements).open).toBe(true);
+  }, 120_000);
 });

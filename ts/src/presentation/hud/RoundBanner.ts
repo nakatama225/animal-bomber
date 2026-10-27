@@ -25,7 +25,7 @@ const SEPARATOR = '\u3000';
 /** 時間切れのひきわけで、残ったプレイヤーの前に置く文（原型 L4504）。 */
 const LEFT_LABEL = `${SEPARATOR}のこり: `;
 
-/** 盤面に重ねる幕の中身（原型の `#bE`・`#bT`・`#bS`・`#bAgain`）。 */
+/** 幕の中身（原型の `#bE`・`#bT`・`#bS`・`#bAgain`）。 */
 export interface BannerView {
   /** 大きく出す絵文字。 */
   readonly emoji: string;
@@ -43,7 +43,7 @@ export interface BannerView {
 }
 
 /**
- * ラウンドが決まったときに、盤面に重ねる幕。
+ * ラウンドが決まったときに出す幕（窓の全体を覆う。写すのは `platform/ui/BannerOverlay.ts`）。
  *
  * 文の形は原型の3つ（優勝・ラウンドの勝ち・ひきわけ。`endGame` L4467-4511）を Python 版の
  * `hud/banner.py` と同じく写した。
