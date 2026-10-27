@@ -48,10 +48,12 @@ function mount(): {
       sounds.push(sound);
       log.push(`sound:${sound}`);
     },
-    openLan: () => {
+    connectLan: () => {
       lan.push(1);
-      log.push('lan');
+      log.push('connect');
+      flow.startConnecting();
     },
+    askDisconnect: () => log.push('disconnect'),
     uiSound: () => log.push('ui'),
     screenChanged: () => screens.push(root.querySelector<HTMLElement>('[data-screen]')?.dataset['screen']),
   });
@@ -101,7 +103,8 @@ describe('試合の前の画面', () => {
     new MenuView(root, flow, {
       start: (s) => started.push(s),
       soundChanged: () => undefined,
-      openLan: () => undefined,
+      connectLan: () => undefined,
+      askDisconnect: () => undefined,
       uiSound: () => undefined,
       screenChanged: () => undefined,
     }).render();
@@ -158,10 +161,72 @@ describe('試合の前の画面', () => {
     expect(root.querySelector('.manual')?.textContent).toContain('葱ボン');
   });
 
-  it('LAN対戦を選んだら知らせる', () => {
-    const { root, lan } = mount();
+  it('LAN対戦を選ぶと、同じページの LAN の画面へ移る（まだつながない）。「たてる」も「さんかする」も同じ口でつなぐ', () => {
+    const { root, flow, view, lan } = mount();
     press(root, '[data-choice="lan"]');
+    expect(screenOf(root)).toBe('lan');
+    expect(lan).toEqual([]);
+    press(root, '[data-action="host"]');
     expect(lan).toEqual([1]);
+    // つないでいる最中は「たてる」「さんかする」を出さない。つなげなかったら、また出す。
+    expect(root.querySelector('[data-action="join"]')).toBeNull();
+    flow.connectionFailed('前の試合が続いているか、定員いっぱいで入れなかった');
+    view.render();
+    press(root, '[data-action="join"]');
+    expect(lan).toEqual([1, 1]);
+  });
+
+  it('LAN の画面は原型の文と並び（注記の2文目も原型の文）。つないでいる最中は「接続しています…」だけを出す', () => {
+    const { root, flow, view } = mount();
+    press(root, '[data-choice="lan"]');
+    const screen = root.querySelector('[data-screen="lan"]');
+    expect(screen?.classList.contains('card')).toBe(true);
+    expect([...(screen?.children ?? [])].map((child) => child.className)).toEqual(['shead', 'note', 'menu', 'note']);
+    expect(texts(root, '.shead > *')).toEqual(['← もどる', 'LAN対戦']);
+    expect(root.querySelector('[data-screen="lan"] > .note')?.textContent).toBe(
+      '同じ Wi-Fi（LAN）につながっている Mac 同士で対戦する。 あらかじめ表示された URL をブラウザで開いていること。',
+    );
+    const items = [...root.querySelectorAll<HTMLElement>('.menu > .mbtn')];
+    expect(items.map((item) => item.textContent)).toEqual([
+      '🏠たてるこの端末が試合を進める（ホスト）',
+      '🚪さんかする別の端末の試合に参加する（ゲスト）',
+    ]);
+    expect(items.map((item) => [item.classList.contains('sub'), item.dataset['nav']])).toEqual([
+      [false, 'lan-host'],
+      [false, 'lan-join'],
+    ]);
+    expect(root.querySelector('[data-lan-status]')?.textContent).toBe('');
+    // Python 版だけの、中継の名前の欄は無い。
+    expect(root.querySelector('input')).toBeNull();
+
+    press(root, '[data-action="host"]');
+    expect(flow.connecting).toBe(true);
+    expect(root.querySelectorAll('.menu > *')).toHaveLength(0);
+    expect(root.querySelector('[data-lan-status]')?.textContent).toBe('接続しています…');
+    // つなげなかったら、その行に理由を出し、「たてる」「さんかする」をまた出す。
+    flow.connectionFailed('中継（relay.local:8777）につなげなかった');
+    view.render();
+    expect(root.querySelector('[data-lan-status]')?.textContent).toBe('中継（relay.local:8777）につなげなかった');
+    expect(root.querySelectorAll('.menu > .mbtn')).toHaveLength(2);
+    // 画面を出たら理由は消え、戻ってきても出ない。
+    press(root, '[data-action="back"]');
+    press(root, '[data-choice="lan"]');
+    expect(root.querySelector('[data-lan-status]')?.textContent).toBe('');
+  });
+
+  it('LAN の画面の「← もどる」は、つないでいないならタイトルへ、つないでいる最中なら確認の画面を出す（どちらも操作の音を鳴らす）', () => {
+    const { root, log } = mount();
+    press(root, '[data-choice="lan"]');
+    log.length = 0;
+    press(root, '[data-action="back"]');
+    expect(log).toEqual(['ui']);
+    expect(screenOf(root)).toBe('title');
+    press(root, '[data-choice="lan"]');
+    press(root, '[data-action="join"]');
+    log.length = 0;
+    press(root, '[data-action="back"]');
+    expect(log).toEqual(['ui', 'disconnect']);
+    expect(screenOf(root)).toBe('lan');
   });
 
   it('キャラ選びのキーの案内は原型の文（1人は1人用の1つ、2人は 1P と 2P のそれぞれ）', () => {
@@ -350,11 +415,23 @@ describe('画面の操作の音', () => {
     expect(log.at(-1)).toBe('ui');
   });
 
-  it('LAN対戦と設定の項目でも鳴らす。「無音」のチップは、鳴らしてから音を切る', () => {
-    const { root, log } = mount();
+  it('LAN対戦の項目と、LAN の画面の「たてる」「さんかする」でも鳴らす（鳴らしてからつなぐ）', () => {
+    const { root, flow, view, log } = mount();
     press(root, '[data-choice="lan"]');
-    expect(log).toEqual(['ui', 'lan']);
+    expect(log).toEqual(['ui']);
+    press(root, '[data-action="host"]');
+    expect(log).toEqual(['ui', 'ui', 'connect']);
+    flow.connectionFailed('前の試合が続いているか、定員いっぱいで入れなかった');
+    view.render();
+    log.length = 0;
+    press(root, '[data-action="join"]');
+    expect(log).toEqual(['ui', 'connect']);
+  });
+
+  it('設定の項目でも鳴らす。「無音」のチップは、鳴らしてから音を切る', () => {
+    const { root, log } = mount();
     press(root, '[data-choice="manual"]');
+    expect(log).toEqual(['ui']);
     log.length = 0;
     press(root, '[data-field="sound"] [data-value="off"]');
     expect(log).toEqual(['ui', 'sound:off']);

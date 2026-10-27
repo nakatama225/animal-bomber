@@ -78,6 +78,14 @@ export function labelOf(roster: Roster, id: PlayerId, cpuName: string): string {
   return controller.label ?? cpuName;
 }
 
+/**
+ * 前の一覧では人間で、いまの一覧では CPU のプレイヤー（通信対戦で、抜けたプレイヤーを CPU が引き継いだ。Python 版の
+ * `app/shell.py` の `_watch_roster` と同じ見分け方）。プレイヤー番号の順。
+ */
+export function takenOver(before: Roster, after: Roster): PlayerId[] {
+  return after.flatMap((controller, id) => (controller.kind === 'cpu' && before[id]?.kind === 'human' ? [id as PlayerId] : []));
+}
+
 function controllerOf(roster: Roster, id: PlayerId): Controller {
   const controller = roster[id];
   if (controller === undefined) throw new Error(`プレイヤー ${id} が名札の一覧にいない`);

@@ -194,7 +194,7 @@ describe('同じ接続での次の試合', () => {
   });
 
   it('ずれが知らされた試合では、決まっていても次の試合の合図を送らない', () => {
-    // どの端末の決着が正しいか分からない。続けるなら、全員が閉じて開き直す。
+    // どの端末の決着が正しいか分からない。続けるなら、全員が「設定へ」でタイトルへ戻ってから、つなぎ直す。
     const host = switchable();
     host.client.receive(text({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
     host.client.receive(text({ t: 'start', seats: [0], config: SETTINGS, match: 1 }));

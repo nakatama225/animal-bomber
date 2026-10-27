@@ -3,7 +3,8 @@ import type { LanPhase } from '../../net/LockstepClient.js';
 import { numberedName } from './roster.js';
 
 /**
- * 止まったあと（ずれ・切断・断られた）の案内（Python 版の `lan_status.py` と同じ文）。
+ * 止まったあと（ずれた・ホストが抜けた）の案内（Python 版の `lan_status.py` と同じ文）。中継との接続が切れたときは、
+ * 原型と同じくタイトルへ戻して通知を出すので、この案内は出さない。
  *
  * ⚠️ 自分だけつなぎ直しても足りない。中継は、前の試合にいた端末が1つでもつながっている間は、
  * 新しい接続を断る（途中から入った端末の入力は、誰の試合にも入れられないため）。全員がタイトルへ戻って
@@ -50,7 +51,10 @@ export function describeLanPhase(
       return phase.driver.hasLeft(0) ? FINISHED_HOST_LEFT : FINISHED_GUEST;
     }
     case 'failed':
-      return `${phase.reason}。${START_OVER}`;
+      // 始まる前に止まったとき（断られた・中継に届かなかった）は、LAN の画面が理由を出す。始まったあとに止まったときは、
+      // 画面がタイトルへ戻って通知を出す（`app/Shell.ts` は帯を書き換える前に戻す）ので、帯には出ない（Python 版と同じく
+      // 文は残す）。
+      return phase.played === undefined ? '' : `${phase.reason}。${START_OVER}`;
   }
 }
 

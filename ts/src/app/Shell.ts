@@ -1,5 +1,6 @@
 import { CPU_LEVELS } from '../ai/CpuLevel.js';
 import { CpuInputSource, cpuSeed } from '../ai/CpuInputSource.js';
+import { lookOf } from '../content/animals.js';
 import type { InputSource } from '../domain/input/InputSource.js';
 import type { PlayerId } from '../domain/state/PlayerState.js';
 import { CombinedInputSource } from '../platform/CombinedInputSource.js';
@@ -24,11 +25,13 @@ import { Countdown } from '../presentation/audio/Countdown.js';
 import type { SoundBank } from '../presentation/audio/SoundBank.js';
 import { describeKeyHelp } from '../presentation/hud/keyHelp.js';
 import { PanelRefresh } from '../presentation/hud/panelRefresh.js';
+import { takenOver, type Roster } from '../presentation/hud/roster.js';
 import { RoundBanner, type BannerView } from '../presentation/hud/RoundBanner.js';
+import { LobbyChoices } from '../presentation/menu/lanSetup.js';
 import { planLocalMatch, type LocalController, type LocalSetup } from '../presentation/menu/localSetup.js';
 import type { NavCommand } from '../presentation/menu/MenuCursor.js';
 import { MenuFlow, type SoundSetting } from '../presentation/menu/MenuFlow.js';
-import { PAD_FOUND, padUnsupported } from '../presentation/notices.js';
+import { cpuTookOver, PAD_FOUND, padUnsupported } from '../presentation/notices.js';
 import { Presenter } from '../presentation/Presenter.js';
 import { boardLayoutFor, layoutFor, type Layout } from '../presentation/render/Layout.js';
 import { Renderer } from '../presentation/render/Renderer.js';
@@ -80,22 +83,32 @@ export interface ShellTools {
    */
   readonly unlockAudio: () => void;
   readonly music: MusicControl;
-  /** 起動したときの音の設定（前に選んだもの）。 */
+  /**
+   * 起動したときの音の設定（原型と同じく BGM + 効果音）。起動の入口が音の部品に当てたものと同じ値を渡す。
+   *
+   * 選び直した設定は起動の間だけ持ち、ブラウザには残さない（原型・Python 版と同じ。通信対戦へ移るときも抜けるときも
+   * ページを開き直さないので、残さなくても消えない）。
+   */
   readonly sound: SoundSetting;
   /** 音の設定を変える。 */
   readonly setSound: (sound: SoundSetting) => void;
   /** 試合の種を作る。実時間を読むのは起動の入口の役目なので、外から受け取る。 */
   readonly newSeed: () => number;
-  /** 通信対戦の画面へ移る（URL に `?relay` を付けて開き直す）。 */
-  readonly openLan: () => void;
-  /** 通信対戦から抜けてタイトルへ戻る（URL から `?relay` を外して開き直す）。 */
-  readonly leaveLan: () => void;
+  /**
+   * LAN の画面の「たてる」「さんかする」でつなぐ中継の「ホスト名:ポート」（`parseRelayAddress` で検証したもの）。
+   *
+   * 起動の入口が、URL の `?relay=名前` の値か、ページを配った端末の中継（`defaultRelayAddress`）から作る。ここは窓を読まない。
+   */
+  readonly relayAddress: string;
   /** 中継につなぐ。省くとブラウザの WebSocket を使う（テストで差し替える）。 */
   readonly connect?: LanMatchOptions['connect'];
 }
 
 /**
  * 1台の試合と通信対戦とで違う、幕と抜け方の扱い。
+ *
+ * 試合をやめてタイトルへ戻る口（横の板の「設定へ」・幕の「⚙ 設定をやりなおす」・確認の画面の「設定へもどる」）は、
+ * どちらも `showMenu`（原型の `backToSetup`。通信対戦は接続を閉じる）。
  */
 interface MatchRoutes {
   /**
@@ -105,8 +118,8 @@ interface MatchRoutes {
   readonly bannerButtons: (view: BannerView) => BannerButtons;
   /** 優勝の幕の1つ目のボタン（「もういっかい」）。 */
   readonly again: () => void;
-  /** 試合をやめてタイトルへ戻る（横の板の「設定へ」・幕の「⚙ 設定をやりなおす」・確認の画面の「設定へもどる」）。 */
-  readonly leave: () => void;
+  /** 通信対戦の接続（接続の段階を見て、画面を替える）。1台の試合は null。 */
+  readonly lan: LanMatch | null;
   /** ゲームの速さの倍率を適用するか。1台で遊ぶときだけ。通信対戦は全員が同じ速さで進める。 */
   readonly paced: boolean;
   /**
@@ -181,6 +194,8 @@ export class Shell {
   readonly #toasts: Toasts;
   #match: ActiveMatch | null = null;
   #lastSetup: LocalSetup | null = null;
+  /** 通信対戦のロビーでホストが選ぶもの。接続をまたいで持つ（原型の `CFG` と同じく、タイトルへ戻っても消さない）。 */
+  readonly #lobbyChoices = new LobbyChoices();
   /** ゲームの速さ。試合をまたいで持つ（もういっかいで等倍に戻さない。原型と同じ）。 */
   readonly #speed = new GameSpeed();
   /** キーボードとパッドで、メニュー・ロビー・幕・確認の画面を動かすカーソル。 */
@@ -202,7 +217,7 @@ export class Shell {
     this.#flow = new MenuFlow(undefined, tools.sound);
     this.#bannerView = new BannerOverlay(elements.banner, {
       advance: () => this.#advanceBanner(),
-      setup: () => this.#match?.leave(),
+      setup: () => this.showMenu(),
     });
     this.#dialog = new ConfirmDialog(elements.confirm, () => this.#uiSound());
     this.#toasts = new Toasts(elements.toast);
@@ -210,8 +225,12 @@ export class Shell {
     this.#menu = new MenuView(elements.menu, this.#flow, {
       start: (setup) => this.startLocal(setup),
       soundChanged: (sound) => tools.setSound(sound),
-      openLan: () => tools.openLan(),
+      connectLan: () => this.startLan(tools.relayAddress),
+      askDisconnect: () => this.#askDisconnect(false),
       uiSound: () => this.#uiSound(),
+      // 画面が替わったら確認の画面を畳む（原型の showScreen の closeDialog）。⚠️ いまは、確認の画面を開いたまま画面が替わる
+      // 道（つないでいる最中の LAN の画面から、ロビーへ移る・断られる・「せつぞくを切る」を選ぶ）のどれも、先に別の所が畳む
+      // （`enteredLobby`・`#endMatch`）。ここが畳む道は無いが、原型の showScreen と同じ形の備えとして残す。
       screenChanged: () => this.#dialog.close(),
     });
   }
@@ -223,10 +242,11 @@ export class Shell {
   }
 
   /**
-   * 試合の前の画面を出す（試合から戻るときは、原型の `backToSetup`）。
+   * 試合の前の画面を出す（試合や通信対戦から戻るときは、原型の `backToSetup`）。
    *
-   * 確認の画面を畳み、カーソルの枠を消す（原型 L6070-6074。消さないと、試合を終えてタイトルを出した瞬間に、
-   * 触っていないのに枠が光る。枠はキーかパッドを触ったときだけ出す）。
+   * 試合を抜け（通信対戦なら接続を閉じ、案内の帯を空にして隠す）、確認の画面を畳み、カーソルの枠を消してタイトルを出す
+   * （原型 L6058-6079。枠を消さないと、試合を終えてタイトルを出した瞬間に、触っていないのに枠が光る。枠はキーかパッドを
+   * 触ったときだけ出す）。LAN の画面の「接続しています…」も消す（`MenuFlow.returnToTitle`）。
    */
   showMenu(): void {
     this.#endMatch();
@@ -262,14 +282,30 @@ export class Shell {
     this.#begin(runner, this.#keyHelp(runner, { padInMatch, canPause: true }), controls, {
       bannerButtons: () => LOCAL_BUTTONS,
       again: () => this.restart(),
-      leave: () => this.showMenu(),
+      lan: null,
       paced: true,
       padOnBanner: padInMatch,
     });
+    // 試合を始めるたびにページの先頭へ戻す（原型の startGame → showScreen('play')。幕の「もういっかい」も同じ）。
+    // 窓より縦に長いルールの画面を下まで動かして「はじめる」を押すと、盤面の上と時計が窓の外に残るため。
+    // ⚠️ 盤面を出したかどうか（`#showBoard`）では決めない。「もういっかい」は試合の画面のまま次の試合になる。
+    scrollToTop(this.#elements.play);
+    // 曲の速さを、いまのゲームの速さに合わせる（通信対戦は曲を等倍に戻すので、そのあとの1台の試合で戻す。Python 版と
+    // 同じく、始めるたびに合わせる）。合わせないと、盤面はつまみの倍率なのに曲は等倍のままになる。
+    this.#tools.music.setSpeed(this.#speed.rate);
   }
 
-  /** 通信対戦に参加する。 */
+  /**
+   * 通信対戦の中継につなぎ始める（LAN の画面の「たてる」「さんかする」と、URL の `?relay` で開いたとき。原型の
+   * `joinLan`）。
+   *
+   * LAN の画面へ移り、「たてる」「さんかする」を隠して「接続しています…」を出す。中継から番号を受け取ったらロビーへ移る
+   * （`LanMatch` がロビーを写す）。止まったときの行き先は `#followLan`。もう接続を持っていれば何もしない（接続は1本だけ）。
+   *
+   * @param address 中継の「ホスト名:ポート」（`parseRelayAddress` で検証したもの）
+   */
   startLan(address: string): void {
+    if (!this.#flow.startConnecting()) return;
     const runner = new LanMatch({
       address,
       keyboard: this.#tools.keyboard,
@@ -277,13 +313,19 @@ export class Shell {
       lobby: this.#elements.menu,
       status: this.#elements.lanStatus,
       newSeed: this.#tools.newSeed,
-      leave: () => this.#tools.leaveLan(),
+      choices: this.#lobbyChoices,
+      askDisconnect: () => this.#askDisconnect(false),
+      uiSound: () => this.#uiSound(),
+      // ロビーへ移ったら確認の画面を畳む（原型の showScreen('lobby') の closeDialog。つないでいる最中の LAN の画面で
+      // 開いたままロビーへ移ったとき）。カーソルは、画面の名前が替わるので `MenuNavigator` が先頭へ戻す。
+      enteredLobby: () => this.#dialog.close(),
       ...(this.#tools.connect === undefined ? {} : { connect: this.#tools.connect }),
     });
     // 自分のプレイヤー番号は、つないで受け取るまで分からない。キーの案内は、名札の一覧でこの端末のプレイヤー
     // （`local`）の分だけを出す（`describeKeyHelp`）。通信対戦ではだれもポーズできないので、横の板にはつまみも
-    // 「⏸ ポーズ」も出さず、「設定へ」だけを出す（原型のゲストと同じ形。原型の `applyRoleUI`）。
-    const controls: SideControls = { speed: null, pause: null, quit: () => this.#tools.leaveLan() };
+    // 「⏸ ポーズ」も出さず、「設定へ」だけを出す（原型のゲストと同じ形。原型の `applyRoleUI`）。押すと接続を閉じて
+    // タイトルへ戻る（原型の `backToSetup`）。
+    const controls: SideControls = { speed: null, pause: null, quit: () => this.showMenu() };
     this.#begin(runner, this.#keyHelp(runner, { padInMatch: true, canPause: false }), controls, {
       // ラウンドの幕にはボタンを出さない（待ちで消える）。優勝の幕は、ホストで次の試合を始められるときだけ
       // 「もういっかい」を出し（原型も、次の試合を始められるのはホストだけだった）、全員に「⚙ 設定をやりなおす」を出す
@@ -291,10 +333,11 @@ export class Shell {
       bannerButtons: (view) => (view.final ? { advance: runner.canRematch, setup: true } : NO_BUTTONS),
       // 押すと合図を送るだけで、次の試合は中継が配り直した start を受け取ってから始まる。
       again: () => runner.rematch(),
-      leave: () => this.#tools.leaveLan(),
+      lan: runner,
       paced: false,
       padOnBanner: true,
     });
+    this.#menu.render();
     // 通信対戦は等倍で進めるので、曲も等倍に戻す。盤面は同じ速さなのに曲だけ速いと、
     // 速さが変わったように見える。つまみの倍率（`#speed`）は、1台の試合に戻ったときのために残す。
     this.#tools.music.setSpeed(1);
@@ -395,8 +438,10 @@ export class Shell {
     const match = this.#match;
     if (match === null || match.runner.generation === match.generation) return match;
     // 出ている通知は消さない。通知は時間でだけ消える（原型と同じ。`Toasts`）。
-    // 確認の画面は畳む（原型は次の試合を始めるときに showScreen('play') を通り、確認の画面を畳む）。
+    // 確認の画面は畳み、ページの先頭へ戻す（原型は試合を始めるたびに startGame → showScreen('play') を通り、確認の画面を
+    // 畳んで先頭へ戻す。通信対戦の最初の試合も、「もういっかい」の次の試合も同じ）。
     this.#dialog.close();
+    scrollToTop(this.#elements.play);
     this.#match = { ...match, ...this.#partsFor(match.runner), generation: match.runner.generation };
     return this.#match;
   }
@@ -422,6 +467,22 @@ export class Shell {
     match.renderer.afterTick(events, world);
     const after = runner.world;
     if (after !== null) match.countdown.observe(after);
+    this.#noticeTakeovers(match, hud.roster);
+  }
+
+  /**
+   * 通信対戦で、抜けたプレイヤーを CPU が引き継いだら（名札の一覧で人間から CPU に替わったら）、通知を出し、名札をすぐ
+   * 作り直す（原型の `peer_left` の「（動物の名前） の回線が切れた → CPU が引き継ぐ」と `renderCards`。L3793。Python 版の
+   * `_watch_roster` と同じく、替わった tick に出す）。呼び方は原型と同じく動物の名前。
+   */
+  #noticeTakeovers(match: ActiveMatch, before: Roster): void {
+    const hud = match.runner.hud;
+    if (hud === null) return;
+    for (const id of takenOver(before, hud.roster)) {
+      const player = hud.world.players.find((candidate) => candidate.id === id);
+      if (player !== undefined) this.#toasts.show(cpuTookOver(lookOf(player.animal).name));
+      match.refresh.request();
+    }
   }
 
   /**
@@ -440,7 +501,9 @@ export class Shell {
     // パッドを見つけた知らせは、メニューの間も出す（原型もメニューの間にパッドを読み、見つけたら知らせる）。
     this.#showPadNotices();
     if (commands.length > 0) this.#padCommands(commands);
-    const match = this.#current();
+    const current = this.#current();
+    // 通信対戦が止まっていたら、画面を替える（LAN の画面かタイトルへ。`#followLan`）。替えたら試合の外として描く。
+    const match = current !== null && this.#followLan(current) ? null : current;
     const music = this.#tools.music;
     if (match === null) {
       music.stop();
@@ -480,6 +543,10 @@ export class Shell {
     else music.stop();
   }
 
+  /**
+   * 試合の部品を作って持つ。ページの先頭へ戻すのは呼ぶ側（1台の試合は始めたとき。通信対戦は、つないだときには戻さず、
+   * 試合が始まったとき。`#current`。原型も「たてる」「さんかする」では画面を替えない）。
+   */
   #begin(runner: MatchRunner, help: KeyHelpFor, controls: SideControls, routes: MatchRoutes): void {
     this.#endMatch();
     this.#match = {
@@ -490,11 +557,34 @@ export class Shell {
       generation: runner.generation,
     };
     this.#showBoard(runner.world !== null);
-    // 試合を始めるたびにページの先頭へ戻す（原型の startGame → showScreen('play')。幕の「もういっかい」も同じ）。
-    // 窓より縦に長いルールの画面を下まで動かして「はじめる」を押すと、盤面の上と時計が窓の外に残るため。
-    // ⚠️ 盤面を出したかどうか（`#showBoard`）では決めない。「もういっかい」は試合の画面のまま次の試合になる。
-    // 通信対戦でここを通るのは、つないだとき（ロビーを出すとき）だけ。試合が始まって盤面へ移るときは、まだ戻さない。
-    scrollToTop(this.#elements.play);
+  }
+
+  /**
+   * 通信対戦の接続の段階に合わせて、画面を替える（`LanStage`）。試合を抜けたら true。
+   *
+   * - ロビーへ移る前に止まった（断られた・中継に届かなかった）：接続を手放し、LAN の画面に留まって理由を出す
+   *   （また押せる）。タイトルへは戻さない
+   * - ロビーへ移ったあとに止まった（中継との接続が切れた・ロビーでホストが抜けた）：通知を出してタイトルへ戻す
+   *   （原型の `onclose`・`peer_left` の `backToSetup`）
+   *
+   * ⚠️ いまの試合（`#match`）の段階だけを見る。抜けたあとの接続（閉じた `LanMatch`）は誰も持たないので、閉じたことが
+   * 遅れて届いても、次につないだ接続や1台の試合に触らない。
+   */
+  #followLan(match: ActiveMatch): boolean {
+    const stage = match.lan?.stage;
+    if (stage?.kind === 'cannotJoin') {
+      this.#endMatch();
+      this.#flow.connectionFailed(stage.reason);
+      this.#menu.render();
+      this.#showBoard(false);
+      return true;
+    }
+    if (stage?.kind === 'lost') {
+      this.#toasts.show(stage.notice);
+      this.showMenu();
+      return true;
+    }
+    return false;
   }
 
   #partsFor(runner: MatchRunner): MatchParts {
@@ -615,24 +705,52 @@ export class Shell {
    * 開くと枠を出す（原型の `MENU.on = true`）。パッドで開いたので、どちらを選んでいるかを見せる。
    */
   #askBackToSetup(): void {
-    this.#dialog.ask('backToSetup', () => this.#match?.leave());
+    this.#dialog.ask('backToSetup', () => this.showMenu());
     this.#nav.show(this.#dialog.root);
+  }
+
+  /**
+   * 「せつぞくを切ります。よいですか？」を開く（原型の `askDisconnect`。L3391-3398）。「せつぞくを切る」を選ぶと、接続を
+   * 閉じてタイトルへ戻る（`showMenu`。原型の `NET.disconnect(); backToSetup();`）。
+   *
+   * 入口は、ロビーの「← せつぞくを切る」と B、つないでいる最中の LAN の画面の「← もどる」と B。
+   * 枠は、キーかパッドで開いたときだけ出す（`viaKeys`）。原型は `askDisconnect` で `MENU.on` を立てない（L3381-3383：
+   * マウスで押した端末に枠を出さない）。キーとパッドの B は、原型の `MENU.nav` が枠を出してから開く。
+   *
+   * 開いていれば何もしない（`ConfirmDialog.ask` は閉じているときに呼ぶ）。いまは届かない：開いている間のキーとパッドは
+   * 確認の画面へ回り、マウスは確認の画面の覆いが下のボタンを押させない。
+   */
+  #askDisconnect(viaKeys: boolean): void {
+    if (this.#dialog.open) return;
+    this.#dialog.ask('disconnect', () => this.showMenu());
+    if (viaKeys) this.#nav.show(this.#dialog.root);
   }
 
   /**
    * カーソルを動かす（原型の `MENU.nav`）。動かす画面は `#navRoot`。
    *
-   * 戻る（Escape・B）は、確認の画面なら「やめる」（原型 L3329-3332）、試合の前の画面なら1つ前の画面。
-   * ⚠️ ロビーでは戻るで何もしない。ぬけるとページを開き直すので、押し間違えると試合ごと抜けてしまう。
-   * ぬけるときは「← ぬける」をマウスで押す。幕でも何もしない（原型の `MENU_BACK` に幕が無い）。
+   * 戻る（Escape・B）は、確認の画面なら「やめる」（原型 L3329-3332）、ロビーと、つないでいる最中の LAN の画面なら
+   * 切るかの確認の画面（原型 L3335）、ほかの試合の前の画面なら1つ前の画面。幕では何もしない（原型の `MENU_BACK` に
+   * 幕が無い）。
+   *
+   * つないでいる最中の LAN の画面は「たてる」「さんかする」を出さないのでカーソルの項目が無く、カーソルは戻るを返さない。
+   * それでも戻るで確認の画面を開く（原型はボタンが残るので、B で確認を開ける。Python 版と同じ）。ゲストのロビーも項目が
+   * 無いが、こちらは原型のコードのとおり何も起きない（原型の `MENU.nav` は項目が無ければ何もしない。L3291）。
    */
   #moveCursor(commands: readonly NavCommand[]): void {
     const root = this.#navRoot();
     const result = this.#nav.handle(root, commands);
-    if (result.kind !== 'back') return;
     if (root === this.#dialog.root) {
-      this.#dialog.cancel();
-    } else if (this.#match === null) {
+      if (result.kind === 'back') this.#dialog.cancel();
+      return;
+    }
+    const match = this.#match;
+    const lan = match?.lan ?? null;
+    if (match !== null && lan !== null && match.runner.world === null) {
+      if (result.kind === 'back' || (lan.stage.kind === 'connecting' && commands.includes('back'))) this.#askDisconnect(true);
+      return;
+    }
+    if (result.kind === 'back' && match === null) {
       this.#menu.back();
       this.#nav.paint(root);
     }

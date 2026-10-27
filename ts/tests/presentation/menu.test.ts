@@ -147,6 +147,41 @@ describe('画面の流れ', () => {
     expect(flow.screen).toBe('title');
   });
 
+  it('LAN の画面：タイトルから開き、もどるでタイトルへ。つなぎ始めたら「接続しています…」の間で、2本目はつながない', () => {
+    const flow = new MenuFlow();
+    flow.openLan();
+    expect(flow.screen).toBe('lan');
+    expect(flow.connecting).toBe(false);
+    flow.back();
+    expect(flow.screen).toBe('title');
+    expect(flow.startConnecting()).toBe(true);
+    expect(flow.screen).toBe('lan');
+    expect(flow.connecting).toBe(true);
+    expect(flow.startConnecting()).toBe(false);
+  });
+
+  it('つなげなかったら LAN の画面に理由を持ち、また押せる。画面を替えたら理由を消し、タイトルへ戻ったら「接続しています…」も消す', () => {
+    const flow = new MenuFlow();
+    flow.startConnecting();
+    flow.connectionFailed('前の試合が続いているか、定員いっぱいで入れなかった');
+    expect(flow.connecting).toBe(false);
+    expect(flow.failure).toBe('前の試合が続いているか、定員いっぱいで入れなかった');
+    // また押せる。つなぎ始めたら理由は消す。
+    expect(flow.startConnecting()).toBe(true);
+    expect(flow.failure).toBe('');
+    flow.connectionFailed('中継（relay.local:8777）につなげなかった');
+    flow.back();
+    flow.openLan();
+    expect(flow.failure).toBe('');
+    // ロビーへ移ってから（つないだまま）タイトルへ戻ったときも、接続は手放したものとする。
+    flow.startConnecting();
+    flow.returnToTitle();
+    expect(flow.screen).toBe('title');
+    expect(flow.connecting).toBe(false);
+    flow.openLan();
+    expect(flow.connecting).toBe(false);
+  });
+
   it('遊び方を行き来しても、選んだものは残る', () => {
     const flow = new MenuFlow();
     flow.chooseMode('duo');

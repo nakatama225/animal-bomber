@@ -1,13 +1,23 @@
+import { CPU_LEVELS } from '../../ai/CpuLevel.js';
+import { lookOf } from '../../content/animals.js';
+import type { PlayerId } from '../../domain/state/PlayerState.js';
+import { numberedName } from '../hud/roster.js';
+import { formatSeconds } from './choices.js';
+import type { LanSetup } from './lanSetup.js';
 import type { ManualSpan } from './manual.js';
 import type { PlayMode } from './localSetup.js';
 import type { SoundSetting } from './MenuFlow.js';
 
 /**
- * 試合の外の画面（起動の幕・タイトル・キャラ選び・ルール・設定とマニュアルと更新履歴）と、確認の画面に出す文。
+ * 試合の外の画面（起動の幕・タイトル・キャラ選び・ルール・設定とマニュアルと更新履歴・LAN の画面・ロビー）と、
+ * 確認の画面に出す文。
  *
  * 文の正は Python 版（`py/src/animal_bomber/presentation/menu/screens.py`・`choices.py`）。どちらも原型の文を
  * 写したもので、リポジトリの文の決まりで書かない語に当たる所だけを言い換えてある（この画面の文には当たる所が無い）。
- * 写す側（`platform/ui/MenuView.ts`・`platform/ui/Splash.ts`・`platform/ui/ConfirmDialog.ts`）は、ここを読んで要素に写すだけにする。
+ * ただし LAN の画面の注記の2文目は、Python 版がブラウザのページでないために書き換えた文なので、原型の文に戻してある
+ * （`LAN_NOTE`）。
+ * 写す側（`platform/ui/MenuView.ts`・`platform/ui/LobbyView.ts`・`platform/ui/Splash.ts`・`platform/ui/ConfirmDialog.ts`）は、
+ * ここを読んで要素に写すだけにする。
  * マニュアルと更新履歴の文は `manual.ts`、キャラ選びのキーの案内は `keyHints.ts`、動物の説明は
  * `content/animals.ts` にある。
  */
@@ -162,3 +172,94 @@ export const DIALOG_TEXTS: Readonly<Record<DialogKind, { readonly message: strin
 
 /** 確認の画面の左のボタン（原型 L3365）。カーソルは初めにここを指す（危ない側を初めの位置にしない）。 */
 export const DIALOG_NO = 'やめる';
+
+/** LAN の画面の見出し（原型 L270）。 */
+export const LAN_HEADING = 'LAN対戦';
+
+/**
+ * LAN の画面の注記（原型 L272-273。HTML の改行は空白1つになる）。
+ *
+ * 2文目は原型の文。Python 版は「あらかじめ「たてる」を押す Mac で中継サーバを立てておくこと。」に書き換えたが、それは
+ * Python 版がブラウザのページでないため。この版は原型と同じく、中継が配ったページを開いて遊ぶ。
+ */
+export const LAN_NOTE = '同じ Wi-Fi（LAN）につながっている Mac 同士で対戦する。 あらかじめ表示された URL をブラウザで開いていること。';
+
+/** LAN の画面の2つの項目（原型 L275-278。どちらも同じ中継につなぐ。ホストかゲストかは中継が決める）。 */
+export const LAN_ITEMS: readonly { readonly action: 'host' | 'join'; readonly icon: string; readonly title: string; readonly detail: string }[] = [
+  { action: 'host', icon: '🏠', title: 'たてる', detail: 'この端末が試合を進める（ホスト）' },
+  { action: 'join', icon: '🚪', title: 'さんかする', detail: '別の端末の試合に参加する（ゲスト）' },
+];
+
+/** LAN の画面で、つなぎ始めてから出す文（原型 L5737）。 */
+export const CONNECTING = '接続しています…';
+
+/** ロビーの頭の戻るボタン（原型 L288）。押すと確認の画面を開く。 */
+export const DISCONNECT_LABEL = '← せつぞくを切る';
+
+/** ロビーの見出し（原型 L289）。 */
+export const LOBBY_HEADING = 'ロビー';
+
+/** ロビーの、ホストだけが押す下のボタン（原型 L293）。ルールの画面の「はじめる」と違い、▶ が付く。 */
+export const LOBBY_START = 'はじめる ▶';
+
+/** ロビーで、ゲストに出す待ちの文（原型 L294。`<br>` で2行）。 */
+export const LOBBY_WAIT: readonly [string, string] = [
+  'ルールはホストが決めます（上に出ている内容ではじまります）。',
+  'ホストが「はじめる」を押すのを待っています…',
+];
+
+/** ロビーの、枠ごとの体力の見出し（原型 L5868）。 */
+export const LOBBY_HITS_LABEL = 'たいりょく（爆風にたえる回数）';
+
+/** ロビーの、勝ち数の見出し（原型 L5908。ルールの画面と文が違うのも原型のまま）。 */
+export const LOBBY_WINS_LABEL = '何勝先取';
+
+/** ロビーの、制限時間の見出し（原型 L5910）。 */
+export const LOBBY_TIME_LABEL = 'じかん';
+
+/** ロビーの、延長戦の見出し（原型 L5912）。 */
+export const LOBBY_SUDDEN_LABEL = 'サドンデス';
+
+/** ロビーの枠の見出しの右（つながっている。原型 L5832）。 */
+export const CONNECTED = '🟢 接続済み';
+
+/** ロビーの枠の見出しの右（つながっていない。原型 L5832）。 */
+export const VACANT = '⚪ 空き・待機中';
+
+/** ゲストの読むだけの行の区切り（原型の `bits.join(' ／ ')`。L5891・L5918）。 */
+const SHARED_SEPARATOR = ' ／ ';
+
+/** ロビーの冒頭の1行（原型の `あなたは ${NET.seat+1}P（ホスト／ゲスト）`。L5811）。ホストは 1P。 */
+export function lobbyMe(seat: PlayerId): string {
+  return `あなたは ${numberedName(seat)}（${seat === 0 ? 'ホスト' : 'ゲスト'}）`;
+}
+
+/**
+ * ロビーの枠の見出しの左（「1P」「2P（あなた）」。原型 L5831）。
+ *
+ * 原型は CPU の枠を「CPU」と書くが、この版はロビーで人間の人数を選ばないので、どの枠も番号で書く
+ * （つながっていない枠は、あとから誰かがつながれば人間になる。Python 版と同じ）。
+ */
+export function lobbySlotName(slot: PlayerId, seat: PlayerId): string {
+  return `${numberedName(slot)}${slot === seat ? '（あなた）' : ''}`;
+}
+
+/**
+ * ゲストの、枠1つぶんの読むだけの行（「🐰うさぎ ／ ふつう ／ たいりょく 1回」。原型 L5882-5891）。
+ *
+ * CPU の強さは、いまつながっていない枠（始めたら CPU になる枠）にだけ出す（Python 版と同じ。原型は CPU の枠だけ）。
+ */
+export function lobbySharedLine(setup: LanSetup, slot: PlayerId, connected: boolean): string {
+  const look = lookOf(setup.animals[slot]);
+  const bits = [`${look.emoji}${look.name}`];
+  if (!connected) bits.push(CPU_LEVELS[setup.cpuLevels[slot]].label);
+  bits.push(`たいりょく ${hitsLabel(setup.hits[slot])}`);
+  return bits.join(SHARED_SEPARATOR);
+}
+
+/** ゲストの、読むだけのルールの行（「3勝先取 ／ じかん 3:00 ／ サドンデス ON」。原型 L5915-5918）。 */
+export function lobbySharedRules(setup: LanSetup): string {
+  return [`${winsLabel(setup.winsToTake)}先取`, `じかん ${formatSeconds(setup.roundSeconds)}`, `サドンデス ${onOff(setup.suddenDeath)}`].join(
+    SHARED_SEPARATOR,
+  );
+}

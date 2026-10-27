@@ -17,7 +17,7 @@ import type { SoundName } from '../../src/presentation/audio/SoundBank.js';
 import { formatSeconds } from '../../src/presentation/menu/choices.js';
 import { Presenter } from '../../src/presentation/Presenter.js';
 import { RoundBanner } from '../../src/presentation/hud/RoundBanner.js';
-import { labelOf, lanRoster, localRoster, tagOf, type Roster } from '../../src/presentation/hud/roster.js';
+import { labelOf, lanRoster, localRoster, tagOf, takenOver, type Roster } from '../../src/presentation/hud/roster.js';
 import {
   CLOCK_CAPTION,
   describeClock,
@@ -103,6 +103,14 @@ describe('名札の札（Python 版の hud/roster.py と同じ）', () => {
   it('通信対戦で始めたときにいなかった枠が2つなら、CPU1・CPU2 と数える', () => {
     const roster = lanRoster([0, 1, 2, 3], [0, 2], 0, [], () => 'normal');
     expect([1, 3].map((id) => tagOf(roster, id as 1 | 3))).toEqual(['CPU1・ふつう', 'CPU2・ふつう']);
+  });
+
+  it('CPU が引き継いだプレイヤーは、前の一覧で人間・いまの一覧で CPU のプレイヤーだけ（始めから CPU の枠は含めない）', () => {
+    const before = lanRoster([0, 1, 2, 3], [0, 1, 3], 0, [], () => 'normal');
+    const after = lanRoster([0, 1, 2, 3], [0, 1, 3], 0, [1, 3], () => 'normal');
+    expect(takenOver(before, after)).toEqual([1, 3]);
+    expect(takenOver(after, after)).toEqual([]);
+    expect(takenOver(before, before)).toEqual([]);
   });
 });
 

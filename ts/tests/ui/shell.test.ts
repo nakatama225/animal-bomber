@@ -64,6 +64,7 @@ function keyHelpOf(root: ParentNode): string {
  * @param pads いまのゲームパッド。同じく呼ばれるたびに読む
  * @param keyboard キーボード。省くと `held` から答える
  * @param context 盤面を描く先。省くと、命令を残さない偽の canvas
+ * @param relayAddress 起動の入口が渡す中継の場所（LAN の画面の「たてる」「さんかする」でつなぐ先）
  */
 function mount(
   sound: SoundSetting = 'both',
@@ -71,6 +72,7 @@ function mount(
   pads: () => readonly (PadSnapshot | null)[] = () => [],
   keyboard?: KeyboardState,
   context: CanvasRenderingContext2D = fakeCanvas({ keepLog: false }).context,
+  relayAddress = 'relay.local:8777',
 ): {
   shell: Shell;
   elements: ShellElements;
@@ -78,9 +80,11 @@ function mount(
   /** 音の解錠（`unlock`）と鳴らした音の名前を、起きた順に。 */
   audio: string[];
   music: { started: number; stopped: number; speeds: number[] };
+  /** いちばん新しい接続の、中継からの知らせの受け口。 */
   relay: () => WebSocketLinkHandlers;
   sent: PeerMessage[];
-  left: { count: number };
+  /** 作った接続（古い順）。`url` はつないだ先、`closed` は閉じた回数。 */
+  links: { url: string; handlers: WebSocketLinkHandlers; closed: number }[];
 } {
   const make = (id: string): HTMLElement => {
     const element = document.createElement('div');
@@ -105,8 +109,7 @@ function mount(
   const audio: string[] = [];
   const music = { started: 0, stopped: 0, speeds: [] as number[] };
   const sent: PeerMessage[] = [];
-  const left = { count: 0 };
-  let relay: WebSocketLinkHandlers | null = null;
+  const links: { url: string; handlers: WebSocketLinkHandlers; closed: number }[] = [];
   const pressed = (codes: readonly string[]): boolean => codes.some((code) => held().includes(code));
   const tools: ShellTools = {
     context,
@@ -127,18 +130,19 @@ function mount(
     sound,
     setSound: () => undefined,
     newSeed: () => 7,
-    openLan: () => undefined,
-    leaveLan: () => (left.count += 1),
-    connect: (_url, handlers) => {
-      relay = handlers;
-      return { send: (text) => sent.push(text), close: () => undefined };
+    relayAddress,
+    connect: (url, handlers) => {
+      const link = { url, handlers, closed: 0 };
+      links.push(link);
+      return { send: (text) => sent.push(text), close: () => (link.closed += 1) };
     },
   };
   const connected = (): WebSocketLinkHandlers => {
-    if (relay === null) throw new Error('つないでいない');
-    return relay;
+    const link = links.at(-1);
+    if (link === undefined) throw new Error('つないでいない');
+    return link.handlers;
   };
-  return { shell: new Shell(elements, tools), elements, played, audio, music, relay: connected, sent, left };
+  return { shell: new Shell(elements, tools), elements, played, audio, music, relay: connected, sent, links };
 }
 
 afterEach(() => document.body.replaceChildren());
@@ -230,8 +234,8 @@ describe('画面の切り替え', () => {
     expect(help).not.toContain('ポーズ');
   });
 
-  it('通信対戦の横の板には、つまみも「⏸ ポーズ」も出さず、「設定へ」だけを出す（押すと抜ける）', () => {
-    const { shell, elements, relay, left } = mount();
+  it('通信対戦の横の板には、つまみも「⏸ ポーズ」も出さず、「設定へ」だけを出す（押すと接続を閉じ、同じページのタイトルへ戻る）', () => {
+    const { shell, elements, relay, links } = mount();
     shell.startLan('relay.local:8777');
     const config = {
       match: { roundLimit: 600, winsToTake: 3, suddenDeath: true, startingHp: [6, 6, 6, 6], seed: 1, animals: ['rabbit', 'fox', 'frog', 'mole'] },
@@ -243,13 +247,22 @@ describe('画面の切り替え', () => {
     expect(elements.side.querySelector('[data-field="speed"]')).toBeNull();
     expect([...elements.side.querySelectorAll('.toolbar > .tbtn')].map((button) => button.textContent)).toEqual(['設定へ']);
     press(elements.side, '[data-action="quit"]');
-    expect(left.count).toBe(1);
+    expect(links.map((link) => link.closed)).toEqual([1]);
+    expect(elements.play.hidden).toBe(true);
+    expect(elements.menu.querySelector('[data-screen="title"]')).not.toBeNull();
   });
 
-  it('前に選んだ音の設定を、設定の画面に出す', () => {
-    // 開き直す前に「無音」を選んでいた。画面が「BGM + 効果音」のままだと、実際と食い違う。
-    const { shell, elements } = mount('off');
+  it('音の設定は起動の間だけ持ち、通信対戦へ移ってタイトルへ戻っても残す（ページを開き直さないので、ブラウザに残さない）', () => {
+    const { shell, elements } = mount();
     shell.showMenu();
+    press(elements.menu, '[data-choice="manual"]');
+    press(elements.menu, '[data-field="sound"] [data-value="off"]');
+    press(elements.menu, '[data-action="back"]');
+    press(elements.menu, '[data-choice="lan"]');
+    press(elements.menu, '[data-action="host"]');
+    press(elements.menu, '[data-action="back"]');
+    press(elements.confirm, '[data-action="yes"]');
+    expect(elements.menu.querySelector('[data-screen="title"]')).not.toBeNull();
     press(elements.menu, '[data-choice="manual"]');
     expect(elements.menu.querySelector('[data-field="sound"] .on')?.textContent).toBe('無音');
   });
@@ -380,7 +393,21 @@ describe('ゲームの速さ', () => {
     for (let i = 0; i < 60; i += 1) shell.tick();
     shell.draw(0);
     expect(clock(elements)).toBe('2:58');
-    expect(music.speeds).toEqual([2]);
+    // 1つ目の 1 は、試合を始めたときに曲をそのときのつまみの倍率（等倍）に合わせたもの。
+    expect(music.speeds).toEqual([1, 2]);
+  });
+
+  it('通信対戦のあとに始めた1台の試合では、曲の速さをつまみの倍率に戻す（通信対戦は曲を等倍にする）', () => {
+    // 合わせないと、盤面はつまみの倍率で進むのに、曲は等倍のまま鳴る（Python 版は1台の試合を始めるたびに合わせる）。
+    const { shell, elements, music } = mount();
+    startSolo(shell, elements);
+    slide(elements, 2);
+    shell.startLan('relay.local:8777');
+    shell.showMenu();
+    expect(music.speeds).toEqual([1, 2, 1]);
+    startSolo(shell, elements);
+    expect(music.speeds).toEqual([1, 2, 1, 2]);
+    expect(elements.side.querySelector('[data-field="speed"] .sv')?.textContent).toBe('2×');
   });
 
   it('0.5倍なら、2回の呼び出しで 1 tick 進む', () => {
@@ -464,8 +491,9 @@ describe('ゲームの速さ', () => {
     for (let t = 0; t < 10; t += 1) relay().onMessage(JSON.stringify({ t: 'input', seat: 0, tick: t, bits: 0, match: 1 }));
     shell.draw(0);
     expect(elements.side.querySelector('[data-field="speed"]')).toBeNull();
-    // 曲も等倍に戻す。盤面は同じ速さなのに曲だけ速いと、速さが変わったように見える。
-    expect(music.speeds).toEqual([3, 1]);
+    // 曲も等倍に戻す。盤面は同じ速さなのに曲だけ速いと、速さが変わったように見える（1つ目の 1 は、1台の試合を
+    // 始めたときに、曲をそのときのつまみの倍率に合わせたもの）。
+    expect(music.speeds).toEqual([1, 3, 1]);
 
     const inputs = (): number => sent.filter((message) => message.t === 'input').length;
     const before = inputs();
@@ -1021,20 +1049,46 @@ describe('ゲームパッドとロビーでメニューを動かす', () => {
     expect(start?.t === 'start' ? start.config.match.animals[0] : undefined).toBe(second.key);
   });
 
-  it('ロビーでは、戻るを押しても抜けない。ゲストは何を押しても何も起きない', () => {
-    // ぬけるとページを開き直すので、押し間違えると試合ごと抜けてしまう。
+  it('ホストのロビーの戻るは「せつぞくを切ります。よいですか？」を開き（枠は「やめる」）、もう一度の戻るは「やめる」（原型 L3335）', () => {
     const host = lobby(0);
+    host.audio.length = 0;
     host.shell.navigate('back');
+    // 開いたときは、画面の操作の音を鳴らさない（原型の MENU.back は SE.ui を呼ばない）。
+    expect(host.audio).toEqual([]);
+    expect(host.elements.confirm.hidden).toBe(false);
+    expect(host.elements.confirm.querySelector('.cfmMsg')?.textContent).toBe('せつぞくを切ります。よいですか？');
+    expect([...host.elements.confirm.querySelectorAll('.chip')].map((chip) => chip.textContent)).toEqual(['やめる', 'せつぞくを切る']);
+    expect(cursorOf(host.elements.confirm)?.dataset['action']).toBe('no');
     host.shell.navigate('back');
-    expect(host.left.count).toBe(0);
+    expect(host.elements.confirm.hidden).toBe(true);
+    expect(host.links.map((link) => link.closed)).toEqual([0]);
     expect(screenOf(host.elements)).toBe('lobby');
+    // 「せつぞくを切る」を選ぶと、接続を閉じてタイトルへ戻り、枠を消す。
+    host.shell.navigate('back');
+    host.shell.navigate('right');
+    host.shell.navigate('confirm');
+    expect(host.links.map((link) => link.closed)).toEqual([1]);
+    expect(screenOf(host.elements)).toBe('title');
+    expect(cursorOf(host.elements.menu)).toBeNull();
+  });
 
-    document.body.replaceChildren();
+  it('ゲストのロビーは、キーでは何を押しても何も起きない（項目が無い。原型のコードのとおり）。「← せつぞくを切る」は確認の画面を開き、枠は出さない', () => {
     const guest = lobby(1);
     for (const command of ['down', 'confirm', 'confirm', 'back'] as const) guest.shell.navigate(command);
-    expect(guest.left.count).toBe(0);
+    expect(guest.elements.confirm.hidden).toBe(true);
     expect(cursorOf(guest.elements.menu)).toBeNull();
     expect(guest.sent.filter((message) => message.t === 'start')).toHaveLength(0);
+    // マウスで押したときは、枠を出さない（原型の askDisconnect は MENU.on を立てない。L3381-3383）。
+    guest.shell.hideCursor();
+    guest.audio.length = 0;
+    press(guest.elements.menu, '[data-action="leave"]');
+    guest.shell.draw(0);
+    expect(guest.audio).toEqual(['unlock', 'ui']);
+    expect(guest.elements.confirm.hidden).toBe(false);
+    expect(cursorOf(guest.elements.confirm)).toBeNull();
+    press(guest.elements.confirm, '[data-action="yes"]');
+    expect(guest.links.map((link) => link.closed)).toEqual([1]);
+    expect(screenOf(guest.elements)).toBe('title');
   });
 });
 
@@ -1117,7 +1171,7 @@ describe('通信対戦で、接続を保ったまま次の試合を始める', (
   }, 120_000);
 
   it('ゲストの幕には「⚙ 設定をやりなおす」だけを出し（押すと抜ける）、ホストが次の試合を始めたら幕が消える', () => {
-    const { shell, elements, relay, sent, left } = mount();
+    const { shell, elements, relay, sent, links } = mount();
     shell.startLan('relay.local:8777');
     relay().onMessage(JSON.stringify({ t: 'welcome', seat: 1, role: 'guest', seats: [0] }));
     relay().onMessage(JSON.stringify({ t: 'start', seats: [0, 1], config, match: 1 }));
@@ -1139,7 +1193,9 @@ describe('通信対戦で、接続を保ったまま次の試合を始める', (
     playToEnd(shell, elements, relay, [0], 2);
     shell.draw(0);
     press(elements.banner, '[data-action="setup"]');
-    expect(left.count).toBe(1);
+    expect(links.map((link) => link.closed)).toEqual([1]);
+    expect(elements.banner.hidden).toBe(true);
+    expect(elements.menu.querySelector('[data-screen="title"]')).not.toBeNull();
   }, 120_000);
 
   it('ラウンドの幕にはボタンを出さず、決着のあとの待ち（2 秒）で消える。幕の間は曲を止め、次のラウンドで鳴らし直す', () => {
@@ -1173,6 +1229,333 @@ describe('通信対戦で、接続を保ったまま次の試合を始める', (
     expect(rest).toBe(120);
     expect(music.started).toBe(started + 1);
   }, 120_000);
+});
+
+describe('通信対戦の画面の流れ（同じページでつなぎ、切ってタイトルへ戻る）', () => {
+  const cursorOf = (root: HTMLElement): HTMLElement | null => root.querySelector('.navcur');
+  const screenOf = (elements: ShellElements): string | undefined =>
+    elements.menu.querySelector<HTMLElement>('[data-screen]')?.dataset['screen'];
+  const lanStatusOf = (elements: ShellElements): string | null | undefined => elements.menu.querySelector('[data-lan-status]')?.textContent;
+  const dialogOpen = (elements: ShellElements): boolean => !elements.confirm.hidden;
+  const message = (value: object): string => JSON.stringify(value);
+  const config = {
+    match: { roundLimit: 600, winsToTake: 3, suddenDeath: true, startingHp: [6, 6], seed: 1, animals: ['rabbit', 'frog'] },
+    cpu: ['easy', 'hard'],
+  };
+
+  /** タイトルから「LAN対戦」→「たてる」まで、マウスで押す。 */
+  function connectByMouse(shell: Shell, elements: ShellElements, action: 'host' | 'join' = 'host'): void {
+    press(elements.menu, '[data-choice="lan"]');
+    press(elements.menu, `[data-action="${action}"]`);
+    shell.draw(0);
+  }
+
+  it('タイトルの「LAN対戦」で同じページの LAN の画面へ移り、「たてる」で起動の入口から受け取った中継へつなぐ。番号を受け取るとロビーへ', () => {
+    // 起動の入口が渡す中継は、テストのほかの所で使う場所と違う値にする（決め打ちの場所へつないでも通らないように）。
+    const { shell, elements, links } = mount(undefined, undefined, undefined, undefined, undefined, 'other.local:9000');
+    shell.showMenu();
+    press(elements.menu, '[data-choice="lan"]');
+    expect(screenOf(elements)).toBe('lan');
+    expect(links).toHaveLength(0);
+    press(elements.menu, '[data-action="host"]');
+    shell.draw(0);
+    expect(links.map((link) => link.url)).toEqual(['ws://other.local:9000/lockstep']);
+    // つないでいる最中は「接続しています…」と「← もどる」だけ（「たてる」「さんかする」は出さない）。
+    expect(screenOf(elements)).toBe('lan');
+    expect(lanStatusOf(elements)).toBe('接続しています…');
+    expect(elements.menu.querySelectorAll('[data-nav]')).toHaveLength(0);
+    // もう一度つなごうとしても、2本目はつながない。
+    shell.startLan('relay.local:8777');
+    expect(links).toHaveLength(1);
+
+    links[0]!.handlers.onMessage(message({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
+    shell.draw(0);
+    expect(screenOf(elements)).toBe('lobby');
+    expect(elements.play.hidden).toBe(true);
+  });
+
+  it('切って、タイトルへ戻って、同じページでもう一度つなぐ。前の接続のもの（試合・案内の帯・カーソル・確認の画面・「接続しています…」）を残さない', () => {
+    // 試合の最中にパッドの Select で確認の画面を開くため、パッドを1つ繋いでおく。
+    let held = new Set<number>();
+    const pad = (): readonly (PadSnapshot | null)[] => [
+      {
+        mapping: 'standard',
+        connected: true,
+        index: 0,
+        buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: held.has(i) })),
+        axes: [0, 0, 0, 0],
+      },
+    ];
+    const SELECT = 8;
+    const { shell, elements, links, sent } = mount('both', () => [], pad);
+    shell.showMenu();
+    connectByMouse(shell, elements);
+    const first = links[0]!.handlers;
+    first.onMessage(message({ t: 'welcome', seat: 0, role: 'host', seats: [1] }));
+    shell.draw(0);
+    // ホストが2P の動物を選び（これは次の接続にも残す。原型の CFG と同じ）、キーで枠を出してから始める。
+    press(elements.menu, '[data-field="animal-1"] [data-value="mole"]');
+    shell.navigate('down');
+    expect(cursorOf(elements.menu)).not.toBeNull();
+    press(elements.menu, '[data-action="start"]');
+    const start = sent.find((sentMessage) => sentMessage.t === 'start');
+    if (start?.t !== 'start') throw new Error('はじめるの合図を送っていない');
+    first.onMessage(message({ t: 'start', seats: [0, 1], config: start.config, match: 1 }));
+    shell.draw(0);
+    expect(elements.play.hidden).toBe(false);
+    // 2P の入力は届かないので、先に送ってある分を使い切ると待ち、待ちが続くと案内の帯に出る。
+    for (let i = 0; i < 100; i += 1) shell.tick();
+    for (let i = 0; i < 40; i += 1) shell.draw(0);
+    expect(elements.lanStatus.hidden).toBe(false);
+    expect(elements.lanStatus.textContent).toContain('2P の操作を待っている');
+
+    // 確認の画面を開いたまま抜ける（通信対戦のパッドの Select は、試合の最中ならいつでも「設定へもどりますか？」を開く）。
+    // ブラウザでは確認の画面が横の板を覆うが、接続が切れたときなど、開いたまま抜ける道はあり、どれも showMenu を通る。
+    held = new Set([SELECT]);
+    shell.draw(0);
+    held = new Set();
+    shell.draw(0);
+    expect(dialogOpen(elements)).toBe(true);
+    press(elements.side, '[data-action="quit"]');
+    shell.draw(0);
+    expect(links.map((link) => link.closed)).toEqual([1]);
+    expect(dialogOpen(elements)).toBe(false);
+    expect(screenOf(elements)).toBe('title');
+    expect(elements.lanStatus.hidden).toBe(true);
+    expect(elements.lanStatus.textContent).toBe('');
+    expect(cursorOf(elements.menu)).toBeNull();
+
+    // もう一度 LAN の画面を開くと、つないでいない形（「接続しています…」は出ない）。
+    press(elements.menu, '[data-choice="lan"]');
+    expect(lanStatusOf(elements)).toBe('');
+    expect(elements.menu.querySelectorAll('.menu > .mbtn')).toHaveLength(2);
+    press(elements.menu, '[data-action="join"]');
+    shell.draw(0);
+    expect(links).toHaveLength(2);
+    expect(lanStatusOf(elements)).toBe('接続しています…');
+
+    // 前の接続から遅れて届いた知らせは、何もしない（前の接続を持つ試合はもう無い）。通知も替えない（出ているのは、パッドを
+    // 見つけた知らせ）。
+    const toastBefore = elements.toast.textContent;
+    first.onMessage(message({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
+    first.onClose(1006, true);
+    shell.draw(0);
+    expect(screenOf(elements)).toBe('lan');
+    expect(lanStatusOf(elements)).toBe('接続しています…');
+    expect(elements.toast.textContent).toBe(toastBefore);
+    expect(elements.toast.textContent).not.toContain('接続が切れました');
+
+    links[1]!.handlers.onMessage(message({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
+    shell.draw(0);
+    expect(screenOf(elements)).toBe('lobby');
+    expect(dialogOpen(elements)).toBe(false);
+    expect(cursorOf(elements.menu)).toBeNull();
+    expect(elements.lanStatus.hidden).toBe(true);
+    expect(elements.menu.querySelector('[data-field="animal-1"] .on')?.getAttribute('data-value')).toBe('mole');
+    // 2本目の接続で始めた試合は、前の試合を引き継がない（1試合目から）。
+    press(elements.menu, '[data-action="start"]');
+    const again = sent.filter((sentMessage) => sentMessage.t === 'start').at(-1);
+    if (again?.t !== 'start') throw new Error('はじめるの合図を送っていない');
+    links[1]!.handlers.onMessage(message({ t: 'start', seats: [0], config: again.config, match: 1 }));
+    shell.draw(0);
+    expect(elements.play.hidden).toBe(false);
+    expect(elements.side.querySelector('.t')?.textContent).toBe('3:00');
+  });
+
+  it('つないでいる最中の LAN の画面の B（Escape）は「せつぞくを切ります。よいですか？」を開く。開いたままロビーへ移ったら畳む', () => {
+    const { shell, elements, links, audio } = mount();
+    shell.showMenu();
+    connectByMouse(shell, elements);
+    audio.length = 0;
+    shell.navigate('back');
+    expect(dialogOpen(elements)).toBe(true);
+    expect(elements.confirm.querySelector('.cfmMsg')?.textContent).toBe('せつぞくを切ります。よいですか？');
+    // B で開いたときは、画面の操作の音を鳴らさない（原型の MENU.back は SE.ui を呼ばない）。
+    expect(audio).toEqual([]);
+    // キーで開いたので、枠を出してカーソルを「やめる」に置く。
+    expect(cursorOf(elements.confirm)?.dataset['action']).toBe('no');
+    links[0]!.handlers.onMessage(message({ t: 'welcome', seat: 1, role: 'guest', seats: [0] }));
+    shell.draw(0);
+    expect(screenOf(elements)).toBe('lobby');
+    expect(dialogOpen(elements)).toBe(false);
+  });
+
+  it('つないでいる最中に「せつぞくを切る」を選ぶと、接続を閉じてタイトルへ戻り、「接続しています…」を消す。「← もどる」でも同じ確認を出す', () => {
+    const { shell, elements, links, audio } = mount();
+    shell.showMenu();
+    connectByMouse(shell, elements);
+    audio.length = 0;
+    press(elements.menu, '[data-action="back"]');
+    shell.draw(0);
+    expect(audio).toEqual(['unlock', 'ui']);
+    expect(dialogOpen(elements)).toBe(true);
+    // マウスで開いたので、枠は出さない（原型の askDisconnect は MENU.on を立てない。L3381-3383）。
+    expect(cursorOf(elements.confirm)).toBeNull();
+    press(elements.confirm, '[data-action="yes"]');
+    shell.draw(0);
+    expect(links.map((link) => link.closed)).toEqual([1]);
+    expect(screenOf(elements)).toBe('title');
+    press(elements.menu, '[data-choice="lan"]');
+    expect(lanStatusOf(elements)).toBe('');
+  });
+
+  it('ロビーで確認の画面を開いたまま、ホストが始めたら畳む（原型の showScreen の closeDialog。N2）', () => {
+    const { shell, elements, links } = mount();
+    shell.showMenu();
+    connectByMouse(shell, elements, 'join');
+    links[0]!.handlers.onMessage(message({ t: 'welcome', seat: 1, role: 'guest', seats: [0] }));
+    shell.draw(0);
+    press(elements.menu, '[data-action="leave"]');
+    expect(dialogOpen(elements)).toBe(true);
+    links[0]!.handlers.onMessage(message({ t: 'start', seats: [0, 1], config, match: 1 }));
+    shell.draw(0);
+    expect(elements.play.hidden).toBe(false);
+    expect(dialogOpen(elements)).toBe(false);
+    expect(elements.confirm.childElementCount).toBe(0);
+  });
+
+  it('ロビーへ移る前に断られたら、LAN の画面に留まって理由を出す。また押せて、押すと新しい接続でつなぐ', () => {
+    const { shell, elements, links, audio } = mount();
+    shell.showMenu();
+    connectByMouse(shell, elements);
+    links[0]!.handlers.onClose(1013, true);
+    shell.draw(0);
+    expect(screenOf(elements)).toBe('lan');
+    expect(lanStatusOf(elements)).toBe('前の試合が続いているか、定員いっぱいで入れなかった');
+    expect(links[0]!.closed).toBe(1);
+    // 断られた理由は帯に出さない。止まった接続の START_OVER（「設定へ」でタイトルへ）も添えない。
+    expect(elements.menu.textContent).not.toContain('もう一度遊ぶときは');
+    expect(elements.lanStatus.hidden).toBe(true);
+    expect(elements.menu.querySelectorAll('.menu > .mbtn')).toHaveLength(2);
+    press(elements.menu, '[data-action="join"]');
+    shell.draw(0);
+    expect(links).toHaveLength(2);
+    expect(lanStatusOf(elements)).toBe('接続しています…');
+    links[1]!.handlers.onClose(1006, false);
+    shell.draw(0);
+    expect(lanStatusOf(elements)).toBe('中継（relay.local:8777）につなげなかった');
+    // LAN の画面の B は、つないでいないのでタイトルへ戻る（確認を出さない）。1つ前の画面へ戻ったので、操作の音を鳴らす。
+    audio.length = 0;
+    shell.navigate('back');
+    expect(dialogOpen(elements)).toBe(false);
+    expect(screenOf(elements)).toBe('title');
+    expect(audio).toEqual(['unlock', 'ui']);
+  });
+
+  it('つないでいる最中に開いた確認の画面は、ロビーへ移る前に断られたら畳む。また押してつないだロビーにも残さない', () => {
+    const { shell, elements, links } = mount();
+    shell.showMenu();
+    connectByMouse(shell, elements);
+    shell.navigate('back');
+    expect(dialogOpen(elements)).toBe(true);
+    // 開いたまま断られる。接続を手放すので、切るかを聞く画面を残さない（原型にこの道は無い。タイトルへ戻る道と同じく畳む）。
+    links[0]!.handlers.onClose(1013, true);
+    shell.draw(0);
+    expect(dialogOpen(elements)).toBe(false);
+    expect(elements.confirm.childElementCount).toBe(0);
+    expect(screenOf(elements)).toBe('lan');
+    expect(lanStatusOf(elements)).toBe('前の試合が続いているか、定員いっぱいで入れなかった');
+    // また押してつなぎ、ロビーへ移っても、前の接続で開いた確認の画面は出ない。
+    press(elements.menu, '[data-action="join"]');
+    links[1]!.handlers.onMessage(message({ t: 'welcome', seat: 1, role: 'guest', seats: [0] }));
+    shell.draw(0);
+    expect(screenOf(elements)).toBe('lobby');
+    expect(dialogOpen(elements)).toBe(false);
+  });
+
+  it('ロビーへ移ったあとに中継との接続が切れたら、タイトルへ戻して「サーバとの接続が切れました」を出す（試合の最中も。原型の onclose）', () => {
+    const lobby = mount();
+    lobby.shell.showMenu();
+    connectByMouse(lobby.shell, lobby.elements);
+    lobby.links[0]!.handlers.onMessage(message({ t: 'welcome', seat: 1, role: 'guest', seats: [0] }));
+    lobby.shell.draw(0);
+    lobby.links[0]!.handlers.onClose(1006, true);
+    lobby.shell.draw(0);
+    expect(screenOf(lobby.elements)).toBe('title');
+    expect(lobby.elements.toast.textContent).toBe('サーバとの接続が切れました');
+
+    document.body.replaceChildren();
+    const { shell, elements, links } = mount();
+    shell.showMenu();
+    connectByMouse(shell, elements);
+    links[0]!.handlers.onMessage(message({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
+    links[0]!.handlers.onMessage(message({ t: 'start', seats: [0], config, match: 1 }));
+    shell.draw(0);
+    for (let i = 0; i < 5; i += 1) shell.tick();
+    expect(elements.play.hidden).toBe(false);
+    links[0]!.handlers.onClose(1006, true);
+    shell.draw(0);
+    expect(elements.play.hidden).toBe(true);
+    expect(screenOf(elements)).toBe('title');
+    expect(elements.toast.textContent).toBe('サーバとの接続が切れました');
+    expect(elements.side.childElementCount).toBe(0);
+    expect(elements.lanStatus.hidden).toBe(true);
+    expect(cursorOf(elements.menu)).toBeNull();
+  });
+
+  it('ロビーでホストが抜けたら、タイトルへ戻して「ホストとの接続が切れました」を出す（原型 L3779-3789）', () => {
+    const { shell, elements, links } = mount();
+    shell.showMenu();
+    connectByMouse(shell, elements, 'join');
+    links[0]!.handlers.onMessage(message({ t: 'welcome', seat: 1, role: 'guest', seats: [0] }));
+    shell.draw(0);
+    links[0]!.handlers.onMessage(message({ t: 'peer_left', seat: 0, lastTick: -1 }));
+    shell.draw(0);
+    expect(screenOf(elements)).toBe('title');
+    expect(elements.toast.textContent).toBe('ホストとの接続が切れました');
+    expect(links[0]!.closed).toBe(1);
+  });
+
+  it('URL の ?relay で開いたときと同じく、startLan はすぐ LAN の画面を出してつなぐ（起動の幕からタイトルを通らない）', () => {
+    const { shell, elements, links } = mount();
+    shell.startLan('other.local:9000');
+    expect(screenOf(elements)).toBe('lan');
+    expect(lanStatusOf(elements)).toBe('接続しています…');
+    expect(links.map((link) => link.url)).toEqual(['ws://other.local:9000/lockstep']);
+  });
+
+  it('通信対戦の試合が始まって盤面へ移るときは、ページの先頭へ戻す。つないだときには戻さない（原型の startGame → showScreen と joinLan）', () => {
+    const scrolled = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+    try {
+      const { shell, elements, links } = mount();
+      shell.showMenu();
+      press(elements.menu, '[data-choice="lan"]');
+      const beforeConnect = scrolled.mock.calls.length;
+      press(elements.menu, '[data-action="host"]');
+      shell.draw(0);
+      expect(scrolled.mock.calls.length).toBe(beforeConnect);
+      links[0]!.handlers.onMessage(message({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
+      shell.draw(0);
+      // ロビーへ移ったとき（原型の showScreen('lobby')）。
+      expect(scrolled.mock.calls.length).toBe(beforeConnect + 1);
+      links[0]!.handlers.onMessage(message({ t: 'start', seats: [0], config, match: 1 }));
+      shell.draw(0);
+      expect(scrolled.mock.calls.length).toBe(beforeConnect + 2);
+      expect(scrolled).toHaveBeenLastCalledWith(0, 0);
+    } finally {
+      scrolled.mockRestore();
+    }
+  });
+
+  it('試合の途中で抜けたプレイヤーを CPU が引き継いだら、通知を出し、名札をすぐ作り直す（原型 L3793）', () => {
+    const { shell, elements, links } = mount();
+    shell.showMenu();
+    connectByMouse(shell, elements);
+    links[0]!.handlers.onMessage(message({ t: 'welcome', seat: 0, role: 'host', seats: [1] }));
+    links[0]!.handlers.onMessage(message({ t: 'start', seats: [0, 1], config, match: 1 }));
+    shell.draw(0);
+    const tagOf = (index: number): string => elements.side.querySelectorAll('.pcard')[index]?.textContent ?? '';
+    expect(tagOf(1)).toContain('2P');
+    // 2P は1通も送らずに抜けた。次の tick から CPU が受け持つ。
+    links[0]!.handlers.onMessage(message({ t: 'peer_left', seat: 1, lastTick: -1 }));
+    shell.draw(0);
+    expect(elements.toast.textContent).toBe('');
+    shell.tick();
+    expect(elements.toast.textContent).toBe('かえる の回線が切れた → CPU が引き継ぐ');
+    // 名札の作り直しの区切り（15 tick）を待たずに、次に描くときに札を替える。
+    shell.draw(0);
+    expect(tagOf(1)).toContain('CPU1・つよい');
+  });
 });
 
 describe('押してすぐ離したキーとボタン（押した瞬間を忘れる時）', () => {
@@ -2192,7 +2575,7 @@ describe('確認の画面（原型の askConfirm）', () => {
 
   it('通信対戦の「設定へもどる」は抜ける（横の板の「設定へ」と同じ）', () => {
     const pad = heldPad();
-    const { shell, relay, left } = mount('both', () => [], pad.read);
+    const { shell, elements, relay, links } = mount('both', () => [], pad.read);
     const config = {
       match: { roundLimit: 600, winsToTake: 3, suddenDeath: true, startingHp: [6, 6, 6, 6], seed: 1, animals: ['rabbit', 'fox', 'frog', 'mole'] },
       cpu: ['easy', 'easy', 'easy', 'easy'],
@@ -2204,14 +2587,15 @@ describe('確認の画面（原型の askConfirm）', () => {
     tap(shell, pad, SELECT);
     shell.navigate('right');
     shell.navigate('confirm');
-    expect(left.count).toBe(1);
+    expect(links.map((link) => link.closed)).toEqual([1]);
+    expect(screenOf(elements)).toBe('title');
   });
 
   /**
-   * 通信対戦のホスト（ほかの枠は CPU）で、試合の最中にパッドの Select で確認の画面を開き、開いたまま優勝の幕が
-   * 出るまで進める（通信対戦は止めずに開けるので、開いたまま試合が決まることがある）。
+   * 通信対戦のホスト（ほかの枠は CPU）で、優勝の幕が出るまで進める。`withDialog` なら、試合の最中にパッドの Select で
+   * 確認の画面を開き、開いたまま進める（通信対戦は止めずに開けるので、開いたまま試合が決まることがある）。
    */
-  function lanChampionWithDialog(): ReturnType<typeof mount> & { pad: ReturnType<typeof heldPad>; starts: () => number } {
+  function lanChampion(withDialog: boolean): ReturnType<typeof mount> & { pad: ReturnType<typeof heldPad>; starts: () => number } {
     const pad = heldPad();
     const mounted = mount('both', () => [], pad.read);
     const { shell, elements, relay, sent } = mounted;
@@ -2223,8 +2607,10 @@ describe('確認の画面（原型の askConfirm）', () => {
     relay().onMessage(JSON.stringify({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
     relay().onMessage(JSON.stringify({ t: 'start', seats: [0], config, match: 1 }));
     shell.draw(0);
-    tap(shell, pad, SELECT);
-    expect(dialogOf(elements).open).toBe(true);
+    if (withDialog) {
+      tap(shell, pad, SELECT);
+      expect(dialogOf(elements).open).toBe(true);
+    }
     let ticks = 0;
     while (elements.banner.hidden || !elements.banner.textContent?.includes('優勝')) {
       shell.tick();
@@ -2233,13 +2619,23 @@ describe('確認の画面（原型の askConfirm）', () => {
       if (ticks > 200_000) throw new Error('試合が決まらない');
     }
     shell.draw(0);
-    expect(dialogOf(elements).open).toBe(true);
+    expect(dialogOf(elements).open).toBe(withDialog);
     expect([...elements.banner.querySelectorAll('button')].map((button) => button.dataset['action'])).toEqual(['advance', 'setup']);
     return { ...mounted, pad, starts: () => sent.filter((message) => message.t === 'start').length };
   }
 
+  it('通信対戦の幕でパッドの B を押しても、「せつぞくを切ります。よいですか？」を開かない（原型の MENU_BACK に幕が無い）', () => {
+    // 盤面がまだ無い間（ロビー・つないでいる最中）の B だけが、切るかの確認の画面を開く。
+    const { shell, elements, pad, links } = lanChampion(false);
+    tap(shell, pad, 1);
+    expect(dialogOf(elements).open).toBe(false);
+    expect(elements.confirm.childElementCount).toBe(0);
+    expect(elements.banner.hidden).toBe(false);
+    expect(links.map((link) => link.closed)).toEqual([0]);
+  }, 120_000);
+
   it('開いたまま優勝の幕が出ても、キーの Enter は確認の画面を動かし、幕を送らない（原型の keydown は確認の画面を先に見る。L3074-3078）', () => {
-    const { shell, elements, starts } = lanChampionWithDialog();
+    const { shell, elements, starts } = lanChampion(true);
     const before = starts();
     shell.navigate('confirm');
     // カーソルは「やめる」にあるので、Enter は確認の画面を閉じるだけ。次の試合の合図は送らない。
@@ -2252,7 +2648,7 @@ describe('確認の画面（原型の askConfirm）', () => {
   }, 120_000);
 
   it('開いたまま優勝の幕が出たら、パッドの Start は確認の画面が開いていても幕を送る（原型の pollGamepads は幕の分かれ道で先に Start を見る。L3631）', () => {
-    const { shell, elements, pad, starts } = lanChampionWithDialog();
+    const { shell, elements, pad, starts } = lanChampion(true);
     const before = starts();
     tap(shell, pad, START);
     expect(starts()).toBe(before + 1);

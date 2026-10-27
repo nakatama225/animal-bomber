@@ -14,12 +14,16 @@ import {
 } from '../../presentation/menu/manual.js';
 import {
   BACK_LABEL,
+  CONNECTING,
   CPU_HEADING,
   CPU_NOTE,
   cpuTag,
   HIT_LABELS,
   HIT_NOTE,
   hitsLabel,
+  LAN_HEADING,
+  LAN_ITEMS,
+  LAN_NOTE,
   LOG_LABEL,
   LOGO,
   MANUAL_HEADING,
@@ -55,8 +59,13 @@ export interface MenuHooks {
   readonly start: (setup: LocalSetup) => void;
   /** 音の設定が変わった。 */
   readonly soundChanged: (sound: SoundSetting) => void;
-  /** LAN対戦を選んだ。 */
-  readonly openLan: () => void;
+  /**
+   * LAN の画面の「たてる」か「さんかする」が押された。どちらも、ページを配った端末の中継（`?relay=名前` で開いたページ
+   * なら、その中継）につなぐ。ホストかゲストかは中継が決める（原型の `joinLan`。L5728-5741）。
+   */
+  readonly connectLan: () => void;
+  /** つないでいる最中の LAN の画面の「← もどる」が押された。切るかの確認の画面を出す（原型の `askDisconnect`）。 */
+  readonly askDisconnect: () => void;
   /**
    * 画面の操作の音を鳴らす（原型の `A.init(); A.resume(); SE.ui();`）。音を出せるようにする（解錠）のも、
    * 呼ぶ側がここで行う。
@@ -70,12 +79,12 @@ export interface MenuHooks {
 const CPU_TAG_STYLE = 'margin:0 8px 0 0;opacity:.8;align-self:center';
 
 /**
- * 試合の前の画面（タイトル・キャラ選び・ルール・設定とマニュアルと更新履歴）。
+ * 試合の前の画面（タイトル・キャラ選び・ルール・設定とマニュアルと更新履歴・LAN の画面）。
  *
  * どの画面にいて何を選んだかは `MenuFlow` が持つ。ここはそれを写し、押されたら
  * `MenuFlow` を呼んで写し直すだけ。文は `presentation/menu/menuText.ts`（と `manual.ts`・`keyHints.ts`・
  * `content/animals.ts`）から読む。要素の並びとクラス名は原型の HTML（L245-511）と同じにして、原型の CSS を
- * そのまま当てる（`style.css`）。
+ * そのまま当てる（`style.css`）。通信対戦のロビーは `LobbyView` が同じ場所に写す。
  *
  * ⚠️ ボタンは全部 `pointerButton`（キーボードで起きたクリックを捨てる）で作る。
  * キーボードやパッドで動かすときは、メニューのカーソル（`MenuNavigator`）が同じ中身を呼ぶ。
@@ -84,9 +93,9 @@ const CPU_TAG_STYLE = 'margin:0 8px 0 0;opacity:.8;align-self:center';
  *
  * ## 画面の操作の音
  *
- * 原型と同じ所で鳴らす：タイトルの5つ・「← もどる」・「つぎへ ▶」・チップ全部・動物のカード・B で1つ前の
- * 画面へ戻ったとき（原型 L5706・L5642・L6014・L3337）。カーソルで決めたときも同じ中身を呼ぶので同じく鳴る。
- * 「はじめる」は鳴らさない（原型 L6027）。
+ * 原型と同じ所で鳴らす：タイトルの5つ・「← もどる」・「つぎへ ▶」・チップ全部・動物のカード・LAN の画面の
+ * 「たてる」「さんかする」・B で1つ前の画面へ戻ったとき（原型 L5706・L5642・L6014・L3337）。カーソルで決めたときも
+ * 同じ中身を呼ぶので同じく鳴る。「はじめる」は鳴らさない（原型 L6027）。
  * 音のチップは、選んだあとの設定で聞こえ方が決まる（原型と同じ）。「無音」は鳴らしてから音を切り（ほとんど聞こえない）、
  * 「無音」から戻すときは音を戻してから鳴らす（`#chooseSound`）。
  */
@@ -115,7 +124,11 @@ export class MenuView {
     const body =
       screen === 'title'
         ? el('div', { data: { screen } }, this.#title())
-        : el('div', { className: 'card', data: { screen } }, { pick: () => this.#pick(), rules: () => this.#rules(), manual: () => this.#manual() }[screen]());
+        : el(
+            'div',
+            { className: 'card', data: { screen } },
+            { pick: () => this.#pick(), rules: () => this.#rules(), manual: () => this.#manual(), lan: () => this.#lan() }[screen](),
+          );
     this.#root.replaceChildren(body);
     if (screen === this.#shown) return;
     this.#shown = screen;
@@ -166,18 +179,58 @@ export class MenuView {
   }
 
   #choose(choice: TitleChoice): void {
-    if (choice === 'lan') this.#hooks.openLan();
+    if (choice === 'lan') this.#flow.openLan();
     else if (choice === 'manual') this.#flow.openManual();
     else this.#flow.chooseMode(choice);
   }
 
-  /** 画面の頭（原型の `.shead`）。「← もどる」はカーソルに載せない（戻るは Escape・B）。 */
-  #head(title: string, step?: string): HTMLElement {
+  /**
+   * 画面の頭（原型の `.shead`）。「← もどる」はカーソルに載せない（戻るは Escape・B）。
+   *
+   * @param back 「← もどる」を押したとき（音を鳴らしたあと）。省くと1つ前の画面へ
+   */
+  #head(title: string, step?: string, back: () => void = () => this.#flow.back()): HTMLElement {
     return el('div', { className: 'shead' }, [
-      pointerButton(BACK_LABEL, this.#press(() => this.#flow.back()), { className: 'backb', data: { action: 'back' } }),
+      pointerButton(BACK_LABEL, this.#press(back), { className: 'backb', data: { action: 'back' } }),
       el('h2', { text: title }),
       step === undefined ? null : el('span', { className: 'step', text: step }),
     ]);
+  }
+
+  /**
+   * LAN の画面（原型 L266-282）。注記・「たてる」「さんかする」・つないでいる様子の1行。
+   *
+   * つないでいる最中は「たてる」「さんかする」を出さない（接続は1本しか持たない。原型は出したままで、押すたびに
+   * もう1本つないだ）。様子の行は、つないでいる最中は「接続しています…」、つなげなかったあとは理由、ほかは空。
+   * 「← もどる」は、つないでいる最中なら切るかの確認の画面を出し、そうでなければタイトルへ戻る（原型 L5745）。
+   * どちらも操作の音を鳴らしてから（原型の `on()`）。
+   */
+  #lan(): HTMLElement[] {
+    const connecting = this.#flow.connecting;
+    const back = (): void => (this.#flow.connecting ? this.#hooks.askDisconnect() : this.#flow.back());
+    return [
+      this.#head(LAN_HEADING, undefined, back),
+      el('div', { className: 'note', text: LAN_NOTE }),
+      el(
+        'div',
+        { className: 'menu' },
+        connecting
+          ? []
+          : LAN_ITEMS.map((item) => {
+              // 縦に並ぶので、1つずつ別のグループにする（原型の `lan: ['m0','m1']`）。
+              const button = pointerButton('', this.#press(() => this.#hooks.connectLan()), {
+                className: 'mbtn',
+                data: { action: item.action, nav: `lan-${item.action}` },
+              });
+              button.append(
+                el('span', { className: 'mi', text: item.icon }),
+                el('span', {}, [document.createTextNode(item.title), el('span', { className: 'md', text: item.detail })]),
+              );
+              return button;
+            }),
+      ),
+      el('div', { className: 'note', data: { lanStatus: '' }, text: connecting ? CONNECTING : this.#flow.failure }),
+    ];
   }
 
   /** 下のボタンの列（原型の `.navbar`）。 */

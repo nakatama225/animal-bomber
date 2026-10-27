@@ -101,9 +101,13 @@ MEASURE=1 npx vitest run tests/ai/balance.test.ts
   足さないでください
 - `platform/ui/` に書いてよいのは、画面の固定の文言（ボタンの名前・注記）と、どの行を並べるか
   （遊び方の人数で行を出し分ける、など）です。試合の外の画面（起動の幕・タイトル・キャラ選び・ルール・
-  設定とマニュアルと更新履歴）の文は Python 版の文が正で、`presentation/menu/menuText.ts` に置き、写す側は
-  そこを読みます。キャラ選びの動物のカードの説明は `content/animals.ts` の `description`（Python 版の
-  `animal_description` と同じ文）です。マニュアルと更新履歴の文（`presentation/menu/manual.ts`）は Python 版の
+  設定とマニュアルと更新履歴・LAN の画面・ロビー）と確認の画面の固定の文（見出し・項目・注記・ボタンの名前・
+  「接続しています…」）は Python 版の文が正で、`presentation/menu/menuText.ts` に置き、写す側はそこを読みます
+  （例外は LAN の画面の注記の2文目で、Python 版はブラウザのページでないために書き換えたので、原型の文に戻してあります）。
+  LAN の画面の様子の行に出す、つなげなかった理由の文（断られた・中継に届かなかった・切れた）は、Python 版と同じく
+  接続を扱う側に置きます（`app/LanMatch.ts` の `REFUSED`・`unreachable`、`net/LockstepClient.ts` の既定の文）。
+  `?relay` の値が読めないときの文は起動の入口（`app/main.ts`）にあります。キャラ選びの動物のカードの説明は
+  `content/animals.ts` の `description`（Python 版の `animal_description` と同じ文）です。マニュアルと更新履歴の文（`presentation/menu/manual.ts`）は Python 版の
   `manual.py` から機械的に書き出したものなので、手で修正しないでください。Python 版の文を変えたら、
   `tools/gen_manual.py` で書き出し直します（リポジトリのいちばん上で `uv --directory py run python ../ts/tools/gen_manual.py`。
   標準出力に書かれる SHA-256 の値を `tests/presentation/manual.test.ts` の期待値に写します）。試合のキーの案内（キャラ選び・横の板）は原型と同じ

@@ -11,7 +11,8 @@ import { lockstepUrl, WebSocketLink, type WebSocketLinkHandlers } from '../platf
 import { describeLanPhase, WaitingNotice } from '../presentation/hud/lanStatus.js';
 import { lanRoster } from '../presentation/hud/roster.js';
 import type { HudSource } from '../presentation/hud/scoreboard.js';
-import { lanSettingsFrom, lanSetupFrom, LobbyChoices } from '../presentation/menu/lanSetup.js';
+import { lanSettingsFrom, lanSetupFrom, type LobbyChoices } from '../presentation/menu/lanSetup.js';
+import { HOST_LOST, SERVER_LOST } from '../presentation/notices.js';
 import { GameSession } from './GameSession.js';
 import type { MatchRunner } from './MatchRunner.js';
 
@@ -32,14 +33,53 @@ export interface LanMatchOptions {
   readonly status: HTMLElement;
   /** 試合の種を作る。ホストが始めるときに使う。 */
   readonly newSeed: () => number;
-  /** 「ぬける」が押された。 */
-  readonly leave: () => void;
+  /**
+   * ロビーでホストが選ぶもの。接続をまたいで持つ（切ってつなぎ直しても、前に選んだ動物とルールのまま。原型も
+   * `CFG` に持ち、`backToSetup` で消さない）ので、`Shell` が1つ持って渡す。
+   */
+  readonly choices: LobbyChoices;
+  /** ロビーの「← せつぞくを切る」が押された（切るかの確認の画面を出す。原型の `askDisconnect`）。 */
+  readonly askDisconnect: () => void;
+  /** 画面の操作の音を鳴らす（ロビーのチップ・「← せつぞくを切る」・「はじめる ▶」。音の解錠も呼ぶ側が行う）。 */
+  readonly uiSound: () => void;
+  /** ロビーへ移った（初めてロビーを写した。原型の `showScreen('lobby')`）。 */
+  readonly enteredLobby: () => void;
   /**
    * 中継につなぐ。省くとブラウザの WebSocket を使う。
    *
    * テストでは、メッセージを手で届ける接続に差し替える。
    */
   readonly connect?: (url: string, handlers: WebSocketLinkHandlers) => LanLink;
+}
+
+/**
+ * 接続の段階。`Shell` はこれを見て、どの画面を出すかと、いつタイトルへ戻すかを決める。
+ *
+ * - `connecting`：LAN の画面に「接続しています…」（ロビーへ移るのは、中継から番号を受け取ってから）
+ * - `lobby`：ロビー
+ * - `playing`：試合の画面（試合が決まったあとも）
+ * - `cannotJoin`：ロビーへ移る前に止まった（断られた・中継に届かなかった）。LAN の画面に留まり、`reason` を出す
+ *   （また押せる）。原型は何も出さずにタイトルへ戻るが、ロックステップの中継には原型の中継に無い「試合中だから断る」が
+ *   あり、理由を出さないと、断られた端末は押し続ける
+ * - `lost`：ロビーへ移ったあとに止まった（中継との接続が切れた・ロビーでホストが抜けた）。`notice` を通知に出して
+ *   タイトルへ戻る（原型 L3734-3747・L3779-3789。Python 版と同じ文と出す条件）
+ */
+export type LanStage =
+  | { readonly kind: 'connecting' }
+  | { readonly kind: 'lobby' }
+  | { readonly kind: 'playing' }
+  | { readonly kind: 'cannotJoin'; readonly reason: string }
+  | { readonly kind: 'lost'; readonly notice: string };
+
+/** 中継に断られたとき（閉じた番号が `REFUSED_CLOSE_CODE`）の理由（Python 版の `app/lan.py` の `REFUSED` と同じ文）。 */
+export const REFUSED = '前の試合が続いているか、定員いっぱいで入れなかった';
+
+/**
+ * 中継に一度もつながらずに閉じたときの理由（Python 版の `app/lan.py` と同じ文。Python 版が末尾に添える詳しい理由は、
+ * ブラウザの WebSocket が知らせないので添えない）。
+ */
+export function unreachable(address: string): string {
+  return `中継（${address}）につなげなかった`;
 }
 
 /**
@@ -57,9 +97,12 @@ function connectWebSocket(url: string, handlers: WebSocketLinkHandlers): LanLink
  *
  * 流れは `LockstepClient`、進め方は `LockstepDriver`、ロビーで選ぶものは `LobbyChoices` が持っている。
  * ここでは、それぞれに WebSocket・キーボード・ゲームパッド・CPU の作り方を渡し、
- * 接続の様子を画面に出す。
+ * 接続の様子を画面に出す（ロビーと案内の帯。LAN の画面と、タイトルへ戻すかは `stage` を見た `Shell`）。
  *
- * 1台で遊ぶ試合と違い、止められない（1人だけ止めると、ほかの全員がその人の入力を待って止まる）。
+ * 1つの接続に1つ作る。抜けたら（`close`）捨て、もう一度つなぐときは作り直す（前の接続の段階・試合・案内の帯の文を
+ * 持ち越さない。ロビーで選んだものだけは、`Shell` が持って次の接続にも渡す）。
+ *
+ * 1台で遊ぶ試合と違い、止められない（1台だけ止めると、ほかの全端末がその端末の入力を待って止まる）。
  */
 export class LanMatch implements MatchRunner {
   readonly paused = false;
@@ -69,24 +112,28 @@ export class LanMatch implements MatchRunner {
   readonly #lobby: LobbyView;
   readonly #status: HTMLElement;
   readonly #waiting = new WaitingNotice();
-  readonly #choices = new LobbyChoices();
   readonly #newSeed: () => number;
   /** 始まった試合。`LockstepClient` の段階は試合を窓口の形でしか持たないので、作ったときに控える。 */
   #game: GameSession | null = null;
   /** 作った試合の数。同じ接続で次の試合を始めるたびに増える。 */
   #generation = 0;
   #shown: string | null = null;
+  /** ロビーへ移ったか（中継から番号を受け取ったか）。止まったときに、LAN の画面に留まるかタイトルへ戻るかを分ける。 */
+  #reachedLobby = false;
+  /** ロビーでホスト（1P）がつながっているのを見たか。見たあとでいなくなったら、ホストが抜けた。 */
+  #hostSeen = false;
 
   constructor(options: LanMatchOptions) {
     const connect = options.connect ?? connectWebSocket;
     this.#link = connect(lockstepUrl(options.address), {
-      onMessage: (text) => this.#client.receive(text),
-      onClose: (code) => {
-        if (code === REFUSED_CLOSE_CODE) {
-          this.#client.disconnected('前の試合が続いているか、定員いっぱいで入れなかった');
-        } else {
-          this.#client.disconnected();
-        }
+      onMessage: (text) => {
+        this.#client.receive(text);
+        this.#observe();
+      },
+      onClose: (code, opened) => {
+        if (code === REFUSED_CLOSE_CODE) this.#client.disconnected(REFUSED);
+        else if (!opened) this.#client.disconnected(unreachable(options.address));
+        else this.#client.disconnected();
       },
     });
     this.#client = new LockstepClient(this.#link, {
@@ -104,17 +151,35 @@ export class LanMatch implements MatchRunner {
       // 強さと種は、ホストが配った設定から取得する。全員の端末で同じ CPU が同じ手を指す。
       cpuSource: lanCpuSource,
     });
-    const choices = this.#choices;
+    const choices = options.choices;
     this.#newSeed = options.newSeed;
     this.#lobby = new LobbyView(options.lobby, choices, {
       start: (setup) => this.#client.requestStart(lanSettingsFrom(setup, options.newSeed())),
       changed: (setup) => this.#client.shareSettings(lanSettingsFrom(setup, PREVIEW_SEED)),
-      leave: options.leave,
+      disconnect: options.askDisconnect,
+      uiSound: options.uiSound,
+      entered: options.enteredLobby,
     });
-    // 選び直す前の設定も控えておく。ホストと分かったとき・人が入ってきたときに配る。
+    // 選び直す前の設定も控えておく。ホストと分かったとき・端末が入ってきたときに配る。
     this.#client.shareSettings(lanSettingsFrom(choices.setup, PREVIEW_SEED));
     this.#status = options.status;
     this.#showStatus('');
+  }
+
+  /** 接続の段階（`LanStage`）。 */
+  get stage(): LanStage {
+    const phase = this.#client.phase;
+    switch (phase.kind) {
+      case 'connecting':
+        return CONNECTING_STAGE;
+      case 'lobby':
+        return this.#hostSeen && !phase.present.includes(0) ? HOST_LOST_STAGE : LOBBY_STAGE;
+      case 'playing':
+        return PLAYING_STAGE;
+      case 'failed':
+        // 試合の最中に止まったときも、ロビーへ移ったあとなのでタイトルへ戻す（原型と同じ。止まった試合の盤面は残さない）。
+        return this.#reachedLobby ? SERVER_LOST_STAGE : { kind: 'cannotJoin', reason: phase.reason };
+    }
   }
 
   get world(): WorldState | null {
@@ -196,11 +261,15 @@ export class LanMatch implements MatchRunner {
     return this.#client.step() ?? [];
   }
 
+  /**
+   * ロビーの間はロビーを写し、試合が始まったあとは案内の帯を書き換える。つないでいる最中と、ロビーへ移る前に止まったときは
+   * 何も写さない（LAN の画面は `MenuView` が写す）。
+   */
   afterDraw(): void {
     const phase = this.#client.phase;
-    const lobby = lobbyStateOf(phase);
-    if (lobby !== null) {
-      this.#lobby.show(lobby);
+    if (phase.kind === 'connecting') return;
+    if (phase.kind === 'lobby') {
+      if (this.stage.kind === 'lobby') this.#lobby.show(lobbyStateOf(phase));
       return;
     }
     const waiting = this.#waiting.observe(phase.kind === 'playing' ? phase.driver.waitingFor() : []);
@@ -226,6 +295,19 @@ export class LanMatch implements MatchRunner {
   }
 
   /**
+   * 中継から1通届くたびに、ロビーへ移ったかと、ロビーでホストを見たかを控える（`stage` が使う）。
+   *
+   * 描くたびでなく届くたびに見るのは、番号を受け取った直後に切れたとき（同じフレームの中で届いても）も、ロビーへ移った
+   * あととして扱うため。
+   */
+  #observe(): void {
+    const phase = this.#client.phase;
+    if (phase.kind !== 'lobby') return;
+    this.#reachedLobby = true;
+    if (phase.present.includes(0)) this.#hostSeen = true;
+  }
+
+  /**
    * 始まった試合と、その段階。まだ始まっていなければ null。
    *
    * 試合の最中に止まった（ずれ・切断）ときも、止まる直前の段階を返す。盤面と名札を残したまま
@@ -237,26 +319,16 @@ export class LanMatch implements MatchRunner {
   }
 }
 
-/**
- * ロビーの画面に出す様子。試合が始まったあとは null（試合の画面に出す）。
- *
- * 始まる前に止まった（断られた・つなげなかった）ときは、ロビーの画面で理由を出す。
- * 始まったあとに止まったときは、盤面を残したまま試合の画面の案内で出す。
- */
-function lobbyStateOf(phase: LanPhase): LobbyState | null {
-  switch (phase.kind) {
-    case 'connecting':
-      return { kind: 'connecting' };
-    case 'lobby': {
-      const shared = phase.hostSettings === undefined ? null : lanSetupFrom(phase.hostSettings);
-      return { kind: 'lobby', seat: phase.seat, present: phase.present, ...(shared === null ? {} : { hostSettings: shared }) };
-    }
-    case 'playing':
-      return null;
-    case 'failed':
-      // ⚠️ 試合を作ったあとの人数の確認で止まったときも、ここは始まる前として扱う（盤面が無い）。
-      return phase.played === undefined ? { kind: 'failed', reason: phase.reason } : null;
-  }
+const CONNECTING_STAGE: LanStage = { kind: 'connecting' };
+const LOBBY_STAGE: LanStage = { kind: 'lobby' };
+const PLAYING_STAGE: LanStage = { kind: 'playing' };
+const SERVER_LOST_STAGE: LanStage = { kind: 'lost', notice: SERVER_LOST };
+const HOST_LOST_STAGE: LanStage = { kind: 'lost', notice: HOST_LOST };
+
+/** ロビーの画面に出す様子。 */
+function lobbyStateOf(phase: Extract<LanPhase, { kind: 'lobby' }>): LobbyState {
+  const shared = phase.hostSettings === undefined ? null : lanSetupFrom(phase.hostSettings);
+  return { seat: phase.seat, present: phase.present, ...(shared === null ? {} : { hostSettings: shared }) };
 }
 
 /** 試合の最中の段階か、試合の最中に止まったときの止まる直前の段階。 */

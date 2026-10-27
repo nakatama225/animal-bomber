@@ -12,14 +12,19 @@ import { DEFAULT_SETUP, MODE_SIZES, type LocalSetup, type PlayMode } from './loc
  * | `pick` | 人間ごとに動物を選ぶ | `title` |
  * | `rules` | 体力・CPU の強さ・勝ち数・制限時間・延長戦 | `pick` |
  * | `manual` | 音の設定・マニュアル・更新履歴 | `title` |
+ * | `lan` | 「たてる」「さんかする」（通信対戦の中継につなぐ） | `title`（つないでいる最中は、切るかの確認を出す） |
+ *
+ * 通信対戦のロビーと試合の画面は、ここには含めない。どちらも中継との接続（`app/LanMatch.ts`）が持ち、
+ * `app/Shell.ts` が接続の段階を見て出し分ける。
  */
-export type MenuScreen = 'title' | 'pick' | 'rules' | 'manual';
+export type MenuScreen = 'title' | 'pick' | 'rules' | 'manual' | 'lan';
 
-/** 1つ前の画面。 */
+/** 1つ前の画面（原型の `MENU_BACK`。L3181）。 */
 const BACK: Readonly<Record<Exclude<MenuScreen, 'title'>, MenuScreen>> = {
   pick: 'title',
   rules: 'pick',
   manual: 'title',
+  lan: 'title',
 };
 
 /** 音の設定。 */
@@ -39,8 +44,13 @@ export class MenuFlow {
   #screen: MenuScreen = 'title';
   #setup: LocalSetup;
   #sound: SoundSetting;
+  #connecting = false;
+  #failure = '';
 
-  /** @param sound 前に選んだ音の設定。起動の入口が、ブラウザに残した値を読んで渡す */
+  /**
+   * @param sound 起動したときの音の設定。原型と同じく起動の間だけ持ち、ブラウザには残さない（通信対戦へ移るときも
+   *   抜けるときもページを開き直さないので、残さなくても選んだものは消えない）
+   */
   constructor(setup: LocalSetup = DEFAULT_SETUP, sound: SoundSetting = 'both') {
     this.#setup = setup;
     this.#sound = sound;
@@ -48,6 +58,19 @@ export class MenuFlow {
 
   get screen(): MenuScreen {
     return this.#screen;
+  }
+
+  /**
+   * 中継との接続を持っているか（LAN の画面で「たてる」か「さんかする」を押してから、タイトルへ戻るか、つなげなかったと
+   * 分かるまで）。LAN の画面は、この間「たてる」「さんかする」を出さずに「接続しています…」を出す。
+   */
+  get connecting(): boolean {
+    return this.#connecting;
+  }
+
+  /** LAN の画面の「接続しています…」の行に出す、つなげなかった理由。無ければ空。 */
+  get failure(): string {
+    return this.#failure;
   }
 
   get setup(): LocalSetup {
@@ -66,21 +89,51 @@ export class MenuFlow {
   /** 遊び方を選んで、動物を選ぶ画面へ進む。 */
   chooseMode(mode: PlayMode): void {
     this.#setup = { ...this.#setup, mode };
-    this.#screen = 'pick';
+    this.#show('pick');
   }
 
   openManual(): void {
-    this.#screen = 'manual';
+    this.#show('manual');
   }
 
-  /** 1つ前の画面へもどる。タイトルでは何もしない。 */
+  /** LAN の画面へ移る（タイトルの「LAN対戦」。原型 L5721）。 */
+  openLan(): void {
+    this.#show('lan');
+  }
+
+  /**
+   * 中継につなぎ始めた（LAN の画面の「たてる」「さんかする」と、URL の `?relay` で開いたとき）。LAN の画面へ移る。
+   *
+   * @returns つなぎ始めてよいか。もう接続を持っていれば false（接続は1本しか持たない。原型は押すたびにもう1本つないだ）
+   */
+  startConnecting(): boolean {
+    if (this.#connecting) return false;
+    this.#show('lan');
+    this.#connecting = true;
+    return true;
+  }
+
+  /**
+   * 中継につなげなかった（ロビーへ移る前に止まった）。LAN の画面に留まり、「接続しています…」の行に理由を出す。
+   * また押せる（「たてる」「さんかする」を出す）。
+   */
+  connectionFailed(reason: string): void {
+    this.#connecting = false;
+    this.#failure = reason;
+  }
+
+  /**
+   * 1つ前の画面へもどる。タイトルでは何もしない。
+   *
+   * つないでいる最中の LAN の画面では呼ばない（戻ると接続が切れるので、呼ぶ側が先に確認の画面を出す）。
+   */
   back(): void {
-    if (this.#screen !== 'title') this.#screen = BACK[this.#screen];
+    if (this.#screen !== 'title') this.#show(BACK[this.#screen]);
   }
 
   /** 動物を選ぶ画面から、ルールを決める画面へ進む。 */
   next(): void {
-    if (this.#screen === 'pick') this.#screen = 'rules';
+    if (this.#screen === 'pick') this.#show('rules');
   }
 
   /** 人間の動物を選ぶ。 */
@@ -125,8 +178,20 @@ export class MenuFlow {
     this.#sound = sound;
   }
 
-  /** 試合から戻ってきたとき。選んだものは残し、タイトルから始める。 */
+  /**
+   * 試合や通信対戦から戻ってきたとき（原型の `backToSetup`）。選んだものは残し、タイトルから始める。
+   *
+   * 中継との接続は手放したものとして、「接続しています…」も消す（原型は消さずに残し、次に LAN の画面を開いても
+   * 出ていた。表示の不具合なので写さない。Python 版と同じ）。
+   */
   returnToTitle(): void {
-    this.#screen = 'title';
+    this.#connecting = false;
+    this.#show('title');
+  }
+
+  /** 画面を替える。つなげなかった理由は、画面を替えたら消す（LAN の画面を出たら残さない）。 */
+  #show(screen: MenuScreen): void {
+    this.#screen = screen;
+    this.#failure = '';
   }
 }

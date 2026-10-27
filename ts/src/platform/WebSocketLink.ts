@@ -7,8 +7,9 @@ export interface WebSocketLinkHandlers {
    * 接続が切れた（つなげなかった場合も含む）。
    *
    * @param code 閉じたときの番号。中継に断られたときは `REFUSED_CLOSE_CODE`
+   * @param opened 一度でもつながったか。false なら、中継に届かなかった（中継が立っていない・名前が違う、など）
    */
-  readonly onClose: (code: number) => void;
+  readonly onClose: (code: number, opened: boolean) => void;
 }
 
 /**
@@ -19,13 +20,18 @@ export interface WebSocketLinkHandlers {
  */
 export class WebSocketLink implements PeerLink {
   readonly #socket: WebSocket;
+  /** 一度でもつながったか（`open` が届いたか）。 */
+  #opened = false;
 
   constructor(url: string, handlers: WebSocketLinkHandlers) {
     this.#socket = new WebSocket(url);
+    this.#socket.addEventListener('open', () => {
+      this.#opened = true;
+    });
     this.#socket.addEventListener('message', (event: MessageEvent<unknown>) => {
       if (typeof event.data === 'string') handlers.onMessage(event.data);
     });
-    this.#socket.addEventListener('close', (event: CloseEvent) => handlers.onClose(event.code));
+    this.#socket.addEventListener('close', (event: CloseEvent) => handlers.onClose(event.code, this.#opened));
   }
 
   /**
@@ -38,7 +44,7 @@ export class WebSocketLink implements PeerLink {
     if (this.#socket.readyState === WebSocket.OPEN) this.#socket.send(encodePeerMessage(message));
   };
 
-  /** 閉じる。中継は、この人が抜けたものとして扱う。 */
+  /** 閉じる。中継は、この端末が抜けたものとして扱う。 */
   close(): void {
     this.#socket.close(1000, 'left');
   }
@@ -57,7 +63,8 @@ export function lockstepUrl(address: string): string {
 const DEFAULT_RELAY_PORT = 8777;
 
 /**
- * `?relay` の値を省いたときにつなぐ中継の「ホスト名:ポート」。このページを配っている端末の中継を指す。
+ * LAN の画面の「たてる」「さんかする」と、値を省いた `?relay` でつなぐ中継の「ホスト名:ポート」。このページを配っている
+ * 端末の中継を指す（原型も、開いたページのアドレスにつなぐ。L3727-3731）。
  *
  * - 中継が `/ts/` の下で配ったページ：ページと同じポート。中継は `--port` で別のポートに立てられ、
  *   そのときはページもそのポートから届く。8777 番に決め打ちすると、そこにいない中継（または別の中継）へ

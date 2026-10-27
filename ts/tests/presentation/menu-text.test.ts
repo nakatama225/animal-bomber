@@ -1,14 +1,32 @@
 import { describe, expect, it } from 'vitest';
 
 import { ANIMAL_LOOKS } from '../../src/content/animals.js';
+import { DEFAULT_LAN_SETUP } from '../../src/presentation/menu/lanSetup.js';
 import {
+  CONNECTED,
+  CONNECTING,
   CPU_HEADING,
   CPU_NOTE,
   cpuTag,
   DIALOG_NO,
   DIALOG_TEXTS,
+  DISCONNECT_LABEL,
   HIT_LABELS,
   HIT_NOTE,
+  LAN_HEADING,
+  LAN_ITEMS,
+  LAN_NOTE,
+  LOBBY_HEADING,
+  LOBBY_HITS_LABEL,
+  LOBBY_START,
+  LOBBY_SUDDEN_LABEL,
+  LOBBY_TIME_LABEL,
+  LOBBY_WAIT,
+  LOBBY_WINS_LABEL,
+  lobbyMe,
+  lobbySharedLine,
+  lobbySharedRules,
+  lobbySlotName,
   LOG_LABEL,
   LOGO,
   MANUAL_HEADING,
@@ -23,6 +41,7 @@ import {
   TIME_LABEL,
   TIME_NOTE,
   TITLE_ITEMS,
+  VACANT,
   WINS_LABEL,
   WINS_NOTE,
 } from '../../src/presentation/menu/menuText.js';
@@ -118,5 +137,41 @@ describe('試合の外の画面の文', () => {
       disconnect: { message: 'せつぞくを切ります。よいですか？', yes: 'せつぞくを切る' },
     });
     expect(DIALOG_NO).toBe('やめる');
+  });
+
+  it('LAN の画面の文は原型の文。注記の2文目は原型の文に戻す（Python 版の2文目は、ブラウザのページでない版のための書き換え）', () => {
+    expect(LAN_HEADING).toBe('LAN対戦');
+    expect(LAN_NOTE).toBe('同じ Wi-Fi（LAN）につながっている Mac 同士で対戦する。 あらかじめ表示された URL をブラウザで開いていること。');
+    expect(LAN_NOTE).not.toContain('中継サーバを立てておく');
+    expect(LAN_ITEMS.map((item) => [item.action, item.icon, item.title, item.detail])).toEqual([
+      ['host', '🏠', 'たてる', 'この端末が試合を進める（ホスト）'],
+      ['join', '🚪', 'さんかする', '別の端末の試合に参加する（ゲスト）'],
+    ]);
+    expect(CONNECTING).toBe('接続しています…');
+  });
+
+  it('ロビーの文は Python 版の lobby_view と同じ（原型の文。「CPU」「🤖」の枠は無い）', () => {
+    expect(DISCONNECT_LABEL).toBe('← せつぞくを切る');
+    expect(LOBBY_HEADING).toBe('ロビー');
+    expect(LOBBY_START).toBe('はじめる ▶');
+    expect(LOBBY_WAIT).toEqual(['ルールはホストが決めます（上に出ている内容ではじまります）。', 'ホストが「はじめる」を押すのを待っています…']);
+    expect([LOBBY_HITS_LABEL, LOBBY_WINS_LABEL, LOBBY_TIME_LABEL, LOBBY_SUDDEN_LABEL]).toEqual([
+      'たいりょく（爆風にたえる回数）',
+      '何勝先取',
+      'じかん',
+      'サドンデス',
+    ]);
+    expect([CONNECTED, VACANT]).toEqual(['🟢 接続済み', '⚪ 空き・待機中']);
+    expect(codePoints(VACANT)[0]).toBe(0x26aa);
+    expect([lobbyMe(0), lobbyMe(2)]).toEqual(['あなたは 1P（ホスト）', 'あなたは 3P（ゲスト）']);
+    expect([lobbySlotName(0, 0), lobbySlotName(1, 0), lobbySlotName(3, 3)]).toEqual(['1P（あなた）', '2P', '4P（あなた）']);
+    const setup = { ...DEFAULT_LAN_SETUP, cpuLevels: ['easy', 'hard', 'normal', 'oni'] as const, hits: [1, 2, 3, 6] as const };
+    expect([0, 1, 2, 3].map((slot) => lobbySharedLine(setup, slot as 0 | 1 | 2 | 3, slot < 2))).toEqual([
+      '🐰うさぎ ／ たいりょく 1回',
+      '🐸かえる ／ たいりょく 2回',
+      '🦊きつね ／ ふつう ／ たいりょく 3回',
+      '🐘ぞう ／ おに ／ たいりょく 6回',
+    ]);
+    expect(lobbySharedRules({ ...setup, winsToTake: 5, roundSeconds: 60, suddenDeath: false })).toBe('5勝先取 ／ じかん 1:00 ／ サドンデス OFF');
   });
 });

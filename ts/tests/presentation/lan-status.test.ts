@@ -38,7 +38,7 @@ describe('通信対戦の案内', () => {
     expect(describeLanPhase(c.phase)).toBe('');
   });
 
-  it('ずれたとき・止めたときは、全員がタイトルへ戻ってからつなぎ直すよう出す（Python 版の lan_status.py の文）', () => {
+  it('ずれたとき・試合の最中に止まったときは、全員がタイトルへ戻ってからつなぎ直すよう出す（Python 版の lan_status.py の文）', () => {
     // 自分だけつなぎ直しても、ほかの端末がつながっている間は中継に断られる。
     const c = client();
     c.receive(text({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
@@ -49,14 +49,23 @@ describe('通信対戦の案内', () => {
     );
 
     const lost = client();
+    lost.receive(text({ t: 'welcome', seat: 0, role: 'host', seats: [] }));
+    lost.receive(text({ t: 'start', seats: [0, 1], config: SETTINGS, match: 1 }));
     lost.disconnected();
     expect(describeLanPhase(lost.phase)).toBe(
       '中継との接続が切れた。もう一度遊ぶときは、全員が「設定へ」でタイトルへ戻ってから、つなぎ直す',
     );
+  });
 
+  it('始まる前に止まったとき（断られた・切れた）は帯に出さない（LAN の画面かタイトルへ戻った画面が出す。Python 版と同じ）', () => {
     const refused = client();
     refused.disconnected('前の試合が続いているか、定員いっぱいで入れなかった');
-    expect(describeLanPhase(refused.phase)).toMatch(/^前の試合が続いているか/);
+    expect(describeLanPhase(refused.phase)).toBe('');
+
+    const inLobby = client();
+    inLobby.receive(text({ t: 'welcome', seat: 1, role: 'guest', seats: [0] }));
+    inLobby.disconnected();
+    expect(describeLanPhase(inLobby.phase)).toBe('');
   });
 
   it('試合が終わったら、次の試合の始め方を出す。始められるのはホストだけ', () => {
