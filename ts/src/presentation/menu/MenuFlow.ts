@@ -11,7 +11,7 @@ import { DEFAULT_SETUP, MODE_SIZES, type LocalSetup, type PlayMode } from './loc
  * | `title` | 遊び方を選ぶ | — |
  * | `pick` | 人間ごとに動物を選ぶ | `title` |
  * | `rules` | 体力・CPU の強さ・勝ち数・制限時間・延長戦 | `pick` |
- * | `manual` | 音の設定と遊び方の説明 | `title` |
+ * | `manual` | 音の設定・マニュアル・更新履歴 | `title` |
  */
 export type MenuScreen = 'title' | 'pick' | 'rules' | 'manual';
 

@@ -100,10 +100,15 @@ MEASURE=1 npx vitest run tests/ai/balance.test.ts
   `presentation/` に、純粋な関数とクラスで書いてください。試合の状態を読む判断を `platform/ui/` に
   足さないでください
 - `platform/ui/` に書いてよいのは、画面の固定の文言（ボタンの名前・注記）と、どの行を並べるか
-  （遊び方の人数で行を出し分ける、など）です。メニューの操作の表を使う説明（`platform/keyHelp.ts` の `menuHelp`）も、
-  表が `platform/` にあるのでここに置きます。試合のキーの案内（キャラ選び・横の板）は原型と同じ固定の文で、
-  `presentation/menu/keyHints.ts`・`presentation/hud/keyHelp.ts` にあります（割り当ての表から作らない。原型の案内は
-  割り当てた全部のキーを書かない）
+  （遊び方の人数で行を出し分ける、など）です。試合の外の画面（起動の幕・タイトル・キャラ選び・ルール・
+  設定とマニュアルと更新履歴）の文は Python 版の文が正で、`presentation/menu/menuText.ts` に置き、写す側は
+  そこを読みます。キャラ選びの動物のカードの説明は `content/animals.ts` の `description`（Python 版の
+  `animal_description` と同じ文）です。マニュアルと更新履歴の文（`presentation/menu/manual.ts`）は Python 版の
+  `manual.py` から機械的に書き出したものなので、手で修正しないでください。Python 版の文を変えたら、
+  `tools/gen_manual.py` で書き出し直します（リポジトリのいちばん上で `uv --directory py run python ../ts/tools/gen_manual.py`。
+  標準出力に書かれる SHA-256 の値を `tests/presentation/manual.test.ts` の期待値に写します）。試合のキーの案内（キャラ選び・横の板）は原型と同じ
+  固定の文で、`presentation/menu/keyHints.ts`・`presentation/hud/keyHelp.ts` にあります（割り当ての表から作らない。
+  原型の案内は割り当てた全部のキーを書かない）
 - 画面のボタンは `pointerButton`（`platform/ui/dom.ts`）で作ってください。キーボードで起きたクリックを
   捨てます。マウスで押したボタンにフォーカスが残ると、試合中の Space や Enter（爆弾のキー）でブラウザが
   そのボタンをもう一度押すためです

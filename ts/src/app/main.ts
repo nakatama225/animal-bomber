@@ -2,6 +2,7 @@ import { FrameLoop } from '../platform/FrameLoop.js';
 import { readBrowserGamepads } from '../platform/GamepadInput.js';
 import { KeyboardWatcher, navCommandOf } from '../platform/Keyboard.js';
 import { loadSound, saveSound } from '../platform/preferences.js';
+import { Splash } from '../platform/ui/Splash.js';
 import { defaultRelayAddress, parseRelayAddress } from '../platform/WebSocketLink.js';
 import { Music } from '../presentation/audio/Music.js';
 import { Synth } from '../presentation/audio/Synth.js';
@@ -19,7 +20,7 @@ import { Shell } from './Shell.js';
  * 2. 画面の切り替えと試合の組み立て（`Shell`）に渡す
  * 3. 実時間のループを tick に換えて実行する
  *
- * 通信対戦にするには、URL に `?relay` を付ける（タイトルの「通信対戦」も同じことをする）。
+ * 通信対戦にするには、URL に `?relay` を付ける（タイトルの「LAN対戦」も同じことをする）。
  * このページを配っている端末の中継サーバにつなぐ（中継から `/ts/` の下で配られたページなら同じポート、
  * 開発サーバから開いたページなら 8777 番。`defaultRelayAddress`）。別の場所の中継なら
  * `?relay=端末名.local:8777` と書く。
@@ -83,6 +84,7 @@ function main(): void {
       keyboard,
       gamepads: readBrowserGamepads,
       sounds: new WebAudioSoundBank(synth),
+      unlockAudio: () => synth.unlock(),
       music,
       sound,
       setSound: (chosen) => {
@@ -119,6 +121,9 @@ function main(): void {
   const relay = relayParameter();
   if (relay === null) {
     shell.showMenu();
+    // 起動の幕。キーの合図はメニューのキーとは別に登録するので、幕を消したキーは下のタイトルにも届く（原型と同じ）。
+    // `?relay` で開いたとき（タイトルの「LAN対戦」で開き直したときも）は出さない。
+    new Splash(findElement('splash', HTMLElement), (callback, ms) => window.setTimeout(callback, ms)).show(window);
   } else {
     const address = parseRelayAddress(relay);
     if (address === null) {

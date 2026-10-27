@@ -26,4 +26,15 @@ describe('画面の要素', () => {
   it('見た目の指定を読み込んでいる', () => {
     expect(read('../../index.html')).toContain('href="/src/style.css"');
   });
+
+  it('起動の幕は、出すまで隠してある（index.html の hidden と、それを見た目に反映する CSS の両方）', () => {
+    // `?relay` で開いたページは幕を出さない（`Splash.show` を呼ばない）。`#splash { display: flex }` は id の決まりなので
+    // ブラウザの `[hidden] { display: none }` に勝つ。どちらか一方が欠けると、空の幕が全面を覆ったまま消えない。
+    const splash = read('../../index.html').match(/<div id="splash"[^>]*>/)?.[0];
+    expect(splash).toBeDefined();
+    expect(splash).toMatch(/\shidden[\s>]/);
+    const css = read('../../src/style.css');
+    expect(css).toMatch(/#splash\[hidden\]\s*\{[^}]*display:\s*none/);
+    expect(css).toMatch(/#splash\s*\{[^}]*display:\s*flex/);
+  });
 });

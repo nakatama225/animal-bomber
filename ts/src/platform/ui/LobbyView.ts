@@ -62,9 +62,9 @@ export class LobbyView {
   render(): void {
     const state = this.#state;
     this.#root.replaceChildren(
-      el('div', { className: 'menu-card', data: { screen: 'lobby' } }, [
-        el('div', { className: 'menu-head' }, [
-          pointerButton('← ぬける', () => this.#hooks.leave(), { className: 'small-button', data: { action: 'leave' } }),
+      el('div', { className: 'card', data: { screen: 'lobby' } }, [
+        el('div', { className: 'shead' }, [
+          pointerButton('← ぬける', () => this.#hooks.leave(), { className: 'backb', data: { action: 'leave' } }),
           el('h2', { text: '通信対戦のロビー' }),
         ]),
         ...this.#body(state),
@@ -104,8 +104,8 @@ export class LobbyView {
    */
   #sharedTable(seat: PlayerId, present: readonly PlayerId[], setup: LanSetup): HTMLElement[] {
     const line = (label: string, id: string, value: string): HTMLElement =>
-      el('div', { className: 'field', data: { sharedField: id } }, [
-        el('span', { className: 'field-label', text: label }),
+      el('div', { className: 'row', data: { sharedField: id } }, [
+        el('label', { className: 'lb', text: label }),
         el('span', { text: value }),
       ]);
     const slots = PLAYER_IDS.map((slot) => {

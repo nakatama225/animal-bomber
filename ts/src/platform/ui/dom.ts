@@ -16,6 +16,8 @@ export interface ElementOptions {
   /** `data-*` 属性。テストで要素を探す目印にも使う。 */
   readonly data?: Readonly<Record<string, string>>;
   readonly hidden?: boolean;
+  /** 要素に直に付ける見た目（`style` 属性の中身）。原型が要素に直に書いた値を写すときだけ使う。 */
+  readonly style?: string;
 }
 
 /** 要素を1つ作る。 */
@@ -28,9 +30,21 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   if (options.className !== undefined) element.className = options.className;
   if (options.text !== undefined) element.textContent = options.text;
   if (options.hidden !== undefined) element.hidden = options.hidden;
+  if (options.style !== undefined) element.style.cssText = options.style;
   for (const [key, value] of Object.entries(options.data ?? {})) element.dataset[key] = value;
   for (const child of children) if (child !== null) element.append(child);
   return element;
+}
+
+/**
+ * ページの先頭へ戻す（原型の `showScreen` の `window.scrollTo(0,0)`。L5697）。試合の前の画面を替えたときと、
+ * 試合を始めたときに呼ぶ。
+ *
+ * 窓は、渡した要素の文書から読む（ファイルの一番外側で `window` に触れない）。`scrollTo` の無い環境では何もしない。
+ */
+export function scrollToTop(element: Element): void {
+  const view = element.ownerDocument.defaultView;
+  if (typeof view?.scrollTo === 'function') view.scrollTo(0, 0);
 }
 
 /** `pointerButton` で作ったボタンと、押されたときに呼ぶもの。メニューのカーソルで決めたときも同じものを呼ぶ。 */
@@ -74,10 +88,38 @@ export function activate(element: HTMLElement): boolean {
 }
 
 /**
- * 選択肢を横に並べた1行。選ばれているものに印（`on`）を付ける。
+ * 選択肢のチップを横に並べた箱（原型の `.chips`）。選ばれているものに印（`on`）を付ける。
  *
- * @param id 行の目印（`data-field`）。テストで行を探すのに使う
+ * @param id 箱の目印（`data-field`。テストで行を探すのに使う）と、メニューのカーソルのグループの名前
  * @param choose 選ばれたときに呼ぶ。画面の写し直しも、呼ぶ側がここで行う
+ * @param style 箱に直に付ける見た目（原型がチップの箱に直に書いた下の空きなど）
+ */
+export function chipBox<T>(
+  id: string,
+  choices: readonly T[],
+  current: T,
+  text: (value: T) => string,
+  choose: (value: T) => void,
+  style?: string,
+): HTMLElement {
+  return el(
+    'div',
+    { className: 'chips', data: { field: id }, ...(style === undefined ? {} : { style }) },
+    choices.map((value) =>
+      pointerButton(text(value), () => choose(value), {
+        className: `chip${value === current ? ' on' : ''}`,
+        // 1行を、メニューのカーソルの1グループにする（左右で選ぶ）。
+        data: { value: String(value), nav: id },
+      }),
+    ),
+  );
+}
+
+/**
+ * 見出しとチップの箱を、1つの行（原型の `.row`）に入れる。
+ *
+ * 見出しは原型と同じ `label.lb`。原型の CSS は `label` の要素にだけ当たるので、`span.lb`（ルールの画面の
+ * CPU の行の札）とは見た目が違う。
  */
 export function chipRow<T>(
   label: string,
@@ -87,18 +129,8 @@ export function chipRow<T>(
   text: (value: T) => string,
   choose: (value: T) => void,
 ): HTMLElement {
-  return el('div', { className: 'field', data: { field: id } }, [
-    el('span', { className: 'field-label', text: label }),
-    el(
-      'div',
-      { className: 'chips' },
-      choices.map((value) =>
-        pointerButton(text(value), () => choose(value), {
-          className: `chip${value === current ? ' on' : ''}`,
-          // 1行を、メニューのカーソルの1グループにする（左右で選ぶ）。
-          data: { value: String(value), nav: id },
-        }),
-      ),
-    ),
+  return el('div', { className: 'row' }, [
+    el('label', { className: 'lb', text: label }),
+    chipBox(id, choices, current, text, choose),
   ]);
 }

@@ -60,8 +60,9 @@ function clockElement(clock: ClockView): HTMLElement {
   ]);
 }
 
+/** 名札1枚。クラス名は原型の `.pcard`（原型の `.card` は設定の画面の箱の名前）。 */
 function cardElement(card: PlayerCardView): HTMLElement {
-  return el('div', { className: `card ${card.state}`, data: { player: String(card.id) } }, [
+  return el('div', { className: `pcard ${card.state}`, data: { player: String(card.id) } }, [
     el('div', { className: 'emoji', text: card.emoji }),
     el('div', { className: 'info' }, [
       el('div', { className: 'name' }, [

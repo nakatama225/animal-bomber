@@ -122,6 +122,22 @@ describe('通信対戦のロビー', () => {
     expect(root.textContent).toContain('全員が「設定へ」でタイトルへ戻ってから');
   });
 
+  it('箱・頭・「← ぬける」・行の見出しは、試合の前の画面と同じクラス名（同じ見た目が当たる）', () => {
+    // 見た目の指定（`style.css`）は原型の名前で書いてある。名前が外れると、ロビーだけ素のままの表示になる。
+    const { root, view } = mount();
+    view.show({ kind: 'lobby', seat: 0, present: [0] });
+    const screen = root.querySelector('[data-screen="lobby"]');
+    expect(screen?.classList.contains('card')).toBe(true);
+    expect(screen?.firstElementChild?.classList.contains('shead')).toBe(true);
+    expect(root.querySelector('.shead > [data-action="leave"]')?.classList.contains('backb')).toBe(true);
+    // 選ぶ行は `.row` の中に、見出しの `label.lb` とチップの箱を並べる。
+    const row = root.querySelector('[data-field="wins"]')?.parentElement;
+    expect(row?.classList.contains('row')).toBe(true);
+    expect(row?.firstElementChild?.tagName).toBe('LABEL');
+    expect(row?.firstElementChild?.classList.contains('lb')).toBe(true);
+    expect(row?.querySelector('.field-label')).toBeNull();
+  });
+
   it('ぬけるを押したら知らせる', () => {
     const { root, view, left } = mount();
     view.show({ kind: 'connecting' });

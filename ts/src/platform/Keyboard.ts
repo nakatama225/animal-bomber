@@ -110,13 +110,6 @@ const NAV_COMMANDS: Readonly<Record<string, NavCommand>> = {
   Backspace: 'back',
 };
 
-/** その操作に当たるキー（表の順）。遊び方の説明に使う。 */
-export function navKeysOf(command: NavCommand): string[] {
-  return Object.entries(NAV_COMMANDS)
-    .filter(([, bound]) => bound === command)
-    .map(([code]) => code);
-}
-
 /**
  * キーを押したことを、メニューの操作に翻訳する。メニューの操作に使わないキーなら null。
  *

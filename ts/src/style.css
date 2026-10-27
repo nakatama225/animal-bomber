@@ -2,15 +2,21 @@
  * 画面の見た目。色と形は原型から持ってきた。
  *
  * 画面の部品は `src/platform/ui/` が組み立てる。ここにあるクラス名は、そちらで付けているもの。
+ * 試合の外の画面（起動の幕・タイトル・キャラ選び・ルール・設定とマニュアルと更新履歴）は、要素の並びと
+ * クラス名を原型の HTML と同じにして、原型の CSS（legacy/animal-bomber.html の L8-238）をそのまま写した。
+ * ⚠️ 写した部分は、決まりの並びも原型のまま（`.sub` を `.mbtn` より前に置く、など）。並べ替えると、同じ強さの
+ *    決まりの勝ち負けが変わって見た目が変わる。
  */
 
 :root {
   --bg: #2a1d16;
+  --bg2: #3a2a20;
   --ink: #fff6ec;
   --dim: #c9ab97;
   --accent: #ff8a3d;
   --accent2: #ffd23f;
-  --warn: #ff5f5f;
+  --ok: #7bd88f;
+  --ng: #ff5f5f;
   --panel: #402e23;
   --line: #5c4433;
 }
@@ -39,13 +45,182 @@ body {
 
 #app {
   width: 100%;
-  max-width: 1220px;
+  max-width: 1140px;
 }
 
+/* この版はボタンを全部 `button` で作る（原型の動物のカードは div）。ブラウザの既定の字と色を外す */
 button {
   font: inherit;
   color: inherit;
   cursor: pointer;
+}
+
+/* ------------------------------------------------------------ 設定の画面（原型 L25-59） */
+
+.sub {
+  color: var(--dim);
+  font-size: 13px;
+  margin: 0 0 20px;
+}
+
+.row {
+  margin: 0 0 18px;
+}
+
+/* .row の中でも外でも同じ見た目にする（外に置いた時に色が乗らず白くなる事故があった。原型の注記）。
+   ⚠️ label の要素にだけ当たる。ルールの画面の CPU の行の札（span.lb）には当たらない（原型と同じ） */
+label.lb,
+.row > label.lb {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent2);
+  letter-spacing: 0.08em;
+  margin: 0 0 8px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.note {
+  font-size: 11.5px;
+  color: var(--dim);
+  margin-top: 7px;
+  line-height: 1.55;
+}
+
+.note b {
+  color: var(--accent2);
+}
+
+.chip {
+  appearance: none;
+  cursor: pointer;
+  border: 2px solid var(--line);
+  background: #2d2019;
+  color: var(--ink);
+  padding: 9px 14px;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 14px;
+  transition: 0.12s;
+}
+
+.chip:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.chip.on {
+  background: linear-gradient(180deg, var(--accent), #e0651f);
+  border-color: var(--accent2);
+  color: #2a1206;
+  font-weight: 800;
+  box-shadow: 0 4px 0 #8a3d12;
+}
+
+.animals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  gap: 10px;
+}
+
+.acard {
+  cursor: pointer;
+  border: 2px solid var(--line);
+  background: #2d2019;
+  border-radius: 14px;
+  padding: 12px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  transition: 0.12s;
+}
+
+/* 原型の動物のカードは div なので、字は左に寄る。この版は button なので、既定の中央寄せを外す */
+button.acard {
+  text-align: left;
+}
+
+.acard:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.acard.on {
+  border-color: var(--accent2);
+  background: #4a3120;
+  box-shadow: 0 4px 0 #8a3d12;
+}
+
+.acard .ae {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.acard .an {
+  font-weight: 800;
+  font-size: 15px;
+  margin-bottom: 3px;
+}
+
+.acard .ad {
+  font-size: 11.5px;
+  color: var(--dim);
+  line-height: 1.45;
+}
+
+.pickhdr {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+}
+
+.pickhdr .who {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--accent2);
+}
+
+.pickhdr .keys {
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.go {
+  width: 100%;
+  margin-top: 6px;
+  cursor: pointer;
+  border: none;
+  border-radius: 16px;
+  padding: 16px;
+  font: inherit;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  background: linear-gradient(180deg, #ffd23f, #ff9b1e);
+  color: #3a1a02;
+  box-shadow:
+    0 6px 0 #b56411,
+    0 12px 30px rgba(255, 150, 40, 0.28);
+  transition: 0.1s;
+}
+
+.go:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 8px 0 #b56411,
+    0 16px 34px rgba(255, 150, 40, 0.34);
+}
+
+.go:active {
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 #b56411;
 }
 
 /* ------------------------------------------------------------ 試合の画面 */
@@ -109,7 +284,7 @@ button {
 }
 
 .clock.warn .time {
-  color: var(--warn);
+  color: var(--ng);
 }
 
 .cards {
@@ -118,7 +293,7 @@ button {
   gap: 8px;
 }
 
-.card {
+.pcard {
   display: flex;
   gap: 8px;
   background: var(--panel);
@@ -127,43 +302,43 @@ button {
   padding: 8px 10px;
 }
 
-.card.out {
+.pcard.out {
   opacity: 0.45;
 }
 
-.card.negibon {
+.pcard.negibon {
   border-color: #7bd88f;
 }
 
-.card .emoji {
+.pcard .emoji {
   font-size: 28px;
   line-height: 1;
 }
 
-.card .info {
+.pcard .info {
   flex: 1;
   min-width: 0;
   font-size: 12px;
   line-height: 1.5;
 }
 
-.card .name {
+.pcard .name {
   font-weight: 800;
   font-size: 14px;
 }
 
-.card .tag {
+.pcard .tag {
   font-size: 11px;
   font-weight: 700;
   color: var(--accent2);
 }
 
-.card .stars {
+.pcard .stars {
   color: var(--accent2);
   letter-spacing: 0.1em;
 }
 
-.card .effects {
+.pcard .effects {
   color: var(--dim);
   min-height: 1.5em;
 }
@@ -274,8 +449,7 @@ button {
 }
 
 .toolbar button,
-.banner-actions button,
-.small-button {
+.banner-actions button {
   border: 2px solid var(--line);
   background: #2d2019;
   border-radius: 10px;
@@ -283,8 +457,7 @@ button {
 }
 
 .toolbar button:hover,
-.banner-actions button:hover,
-.small-button:hover {
+.banner-actions button:hover {
   border-color: var(--accent);
 }
 
@@ -365,11 +538,197 @@ button {
   display: none;
 }
 
-/* ------------------------------------------------------------ メニューの画面 */
+/* ------------------------------------------------------------ 起動の幕・タイトル（原型 L80・L161-205） */
+
+/* 点滅（起動の幕の案内。原型は試合の時計の残り時間の明滅にも使う） */
+@keyframes pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* Nakatando ロゴ。丸ゴシックの極太を横に詰めて、レトロなゲーム機の銘板っぽく。
+   外部フォントは使わない（原型の注記） */
+.logo {
+  font-family: 'Hiragino Maru Gothic ProN', 'Avenir Next', 'Futura', system-ui, sans-serif;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-size: clamp(40px, 9vw, 86px);
+  color: #fff6ec;
+  text-shadow:
+    0 4px 0 #8f2b1c,
+    0 9px 0 #5d1a10,
+    0 16px 26px rgba(0, 0, 0, 0.6);
+}
+
+.logoPlate {
+  display: inline-block;
+  padding: 14px 34px 18px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #e0452c, #b8301c);
+  border: 3px solid #ffd9c9;
+  box-shadow:
+    0 12px 34px rgba(0, 0, 0, 0.55),
+    0 0 0 6px rgba(224, 69, 44, 0.18);
+}
+
+.logoSub {
+  margin-top: 14px;
+  font-size: clamp(17px, 2.6vw, 26px);
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: var(--accent2);
+  text-shadow:
+    0 3px 0 #8a3d12,
+    0 6px 16px rgba(0, 0, 0, 0.5);
+}
+
+.ver {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--dim);
+  letter-spacing: 0.14em;
+}
+
+#splash {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  background: radial-gradient(700px 500px at 50% 40%, #4a3527, #1a110d 75%);
+  transition: opacity 0.45s;
+}
+
+/* 出さないとき・消え終わったとき（原型は display:none を直に書く） */
+#splash[hidden] {
+  display: none;
+}
+
+#splash.off {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#splash .tap {
+  margin-top: 26px;
+  font-size: 12.5px;
+  color: var(--dim);
+  animation: pulse 1.4s infinite;
+}
+
+.card {
+  background: linear-gradient(180deg, #4a3527, #33241b);
+  border: 2px solid var(--line);
+  border-radius: 20px;
+  padding: 20px 22px 22px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+
+.titleWrap {
+  text-align: center;
+  padding: 6px 0 2px;
+}
+
+.menu {
+  display: grid;
+  gap: 10px;
+  max-width: 520px;
+  margin: 22px auto 0;
+}
+
+.mbtn {
+  cursor: pointer;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #4a3527, #33241b);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 800;
+  padding: 15px 18px;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: 0.12s;
+}
+
+.mbtn:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.mbtn .mi {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.mbtn .md {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--dim);
+  margin-top: 3px;
+}
+
+.mbtn.sub {
+  font-size: 13.5px;
+  padding: 11px 16px;
+}
+
+/* 画面の頭に置く「もどる」＋見出し。ここが常に見えるので迷子にならない（原型の注記） */
+.shead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 16px;
+}
+
+.shead h2 {
+  font-size: 19px;
+  margin: 0;
+  flex: 1;
+}
+
+.shead .step {
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+}
+
+.backb {
+  cursor: pointer;
+  border: 2px solid var(--line);
+  background: #2d2019;
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 7px 13px;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.backb:hover {
+  border-color: var(--accent);
+}
+
+/* 「つぎへ / はじめる」は常に下に貼り付けてスクロールしなくても押せる（原型の注記） */
+.navbar {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.navbar .go {
+  margin: 0;
+}
 
 /*
  * メニューのカーソル（キーボード・パッドで動かしたときだけ出す。src/platform/ui/MenuNavigator.ts）。
- * ⚠️ border-color と box-shadow は使わない。「いま選ばれている」表示（.animal.on・.chip.on）が
+ * ⚠️ border-color と box-shadow は使わない。「いま選ばれている」表示（.acard.on・.chip.on）が
  *    その2つで描かれているので、上書きすると、どれを選んだかが見えなくなる。outline は空いている
  * ⚠️ outline-offset を大きくしない。.chips の間は 8px なので、5px 以上にすると枠が隣に触る
  * （どちらも原型の注意書き）
@@ -379,198 +738,64 @@ button {
   outline-offset: 2px;
 }
 
-.menu-card {
-  max-width: 860px;
-  margin: 0 auto;
-  background: rgba(64, 46, 35, 0.85);
-  border: 2px solid var(--line);
-  border-radius: 20px;
-  padding: 22px 26px;
-}
-
-.menu-card h2 {
-  margin: 0;
-  font-size: 22px;
-}
-
-.menu-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.menu-head .step {
-  margin-left: auto;
-  font-size: 12px;
-  color: var(--dim);
-}
-
-.logo {
-  text-align: center;
-  margin-bottom: 18px;
-}
-
-.logo-plate {
-  font-size: 44px;
-  font-weight: 900;
-  letter-spacing: 0.06em;
-  text-shadow: 0 3px 0 #8a3d12, 0 6px 18px rgba(0, 0, 0, 0.5);
-}
-
-.logo-sub {
-  color: var(--dim);
-}
-
-.menu-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.menu-button {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  text-align: left;
-  border: 2px solid var(--line);
-  background: #2d2019;
-  border-radius: 14px;
-  padding: 12px 16px;
-}
-
-.menu-button:hover {
-  border-color: var(--accent);
-}
-
-.menu-button .icon {
-  font-size: 28px;
-}
-
-.menu-button .title {
-  font-weight: 800;
-  font-size: 16px;
-}
-
-.menu-button .detail {
-  display: block;
-  font-size: 12px;
-  color: var(--dim);
-}
-
-.field {
-  margin-bottom: 16px;
-}
-
-.field-label {
-  display: block;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--accent2);
-  letter-spacing: 0.08em;
-  margin-bottom: 8px;
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.chip {
-  border: 2px solid var(--line);
-  background: #2d2019;
-  padding: 7px 13px;
-  border-radius: 12px;
-  font-size: 14px;
-}
-
-.chip:hover {
-  border-color: var(--accent);
-}
-
-.chip.on {
-  background: linear-gradient(180deg, var(--accent), #e0651f);
-  border-color: var(--accent2);
-  color: #2a1206;
-  font-weight: 800;
-}
-
-.note {
-  font-size: 12px;
-  color: var(--dim);
-  margin-top: 6px;
-  line-height: 1.55;
-}
-
-.animals {
+/* ルールの画面は2列にして1画面に収める（原型の注記） */
+.cols {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px;
-}
-
-.animal {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  text-align: left;
-  border: 2px solid var(--line);
-  background: #2d2019;
-  border-radius: 14px;
-  padding: 10px;
-}
-
-.animal:hover {
-  border-color: var(--accent);
-}
-
-.animal.on {
-  border-color: var(--accent2);
-  background: #4a3120;
-}
-
-.animal .emoji {
-  font-size: 30px;
-  line-height: 1;
-}
-
-.animal .name {
-  font-weight: 800;
-}
-
-.animal .description {
-  font-size: 11.5px;
-  color: var(--dim);
-  line-height: 1.45;
-}
-
-.go {
-  width: 100%;
-  margin-top: 8px;
-  border: none;
-  border-radius: 16px;
-  padding: 14px;
-  font-size: 20px;
-  font-weight: 900;
-  letter-spacing: 0.1em;
-  background: linear-gradient(180deg, #ffd23f, #ff9b1e);
-  color: #3a1a02;
+  grid-template-columns: repeat(auto-fit, minmax(268px, 1fr));
+  gap: 0 22px;
 }
 
 .manual {
-  font-size: 13px;
-  line-height: 1.8;
+  max-height: 52vh;
+  overflow: auto;
+  padding-right: 6px;
 }
 
-.manual h3 {
-  font-size: 14px;
+/* 設定 / マニュアル / 更新履歴 の間に区切りを入れて、くっついて見えないようにする（原型の注記） */
+.msec {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 2px dashed var(--line);
+}
+
+/* 更新履歴。MINOR/MAJOR は目立たせ、PATCH は1段下げて淡く（原型の注記） */
+.log {
+  max-height: 38vh;
+  overflow: auto;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: #2d2019;
+  padding: 10px 12px;
+}
+
+.log .lg {
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 7px 0 3px;
+  color: var(--ink);
+}
+
+.log .lp {
+  font-size: 11px;
+  line-height: 1.55;
+  margin: 2px 0 2px 16px;
+  color: var(--dim);
+}
+
+.vmaj {
+  color: var(--ng);
+}
+
+.vmin {
   color: var(--accent2);
-  margin: 14px 0 4px;
 }
 
-.manual p {
-  margin: 0 0 6px;
+.vpat {
+  color: var(--dim);
+  font-weight: 700;
 }
+
+/* ------------------------------------------------------------ 通信対戦のロビー */
 
 .slot {
   border-top: 1px dashed var(--line);

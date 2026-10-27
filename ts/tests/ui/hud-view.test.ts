@@ -68,7 +68,7 @@ describe('横の板', () => {
     expect(root.querySelector('[data-part="clock"] .time')?.textContent).toBe('3:00');
     expect(root.querySelector('[data-part="clock"] .round')?.textContent).toBe('ROUND 1\u30003勝先取');
     expect(root.querySelector('[data-part="clock"] .label')?.textContent).toBe('TIME');
-    expect(root.querySelectorAll('.card')).toHaveLength(2);
+    expect(root.querySelectorAll('.pcard')).toHaveLength(2);
     // 原型の名札は「（あなた）」を付けない（L5508）。CPU は何体目かと強さ（L5507）。
     expect(root.querySelector('[data-player="0"] .tag')?.textContent).toBe('1P');
     expect(root.querySelector('[data-player="1"] .tag')?.textContent).toBe('CPU1・ふつう');
@@ -103,14 +103,14 @@ describe('横の板', () => {
     const panel = new SidePanel(root, () => []);
     const { session, source } = hud();
     panel.update(source());
-    const before = root.querySelector('.card');
+    const before = root.querySelector('.pcard');
 
     panel.update(source());
-    expect(root.querySelector('.card')).toBe(before);
+    expect(root.querySelector('.pcard')).toBe(before);
 
     session.world.players[1]!.hp -= 2;
     panel.update(source());
-    expect(root.querySelector('.card')).not.toBe(before);
+    expect(root.querySelector('.pcard')).not.toBe(before);
   });
 
   it('人間が葱ボンになったら、いちばん上に葱ボンの段を出す（CPU がなっても出さない）', () => {
@@ -150,7 +150,7 @@ describe('横の板', () => {
     const panel = new SidePanel(root, () => []);
     panel.update(hud().source());
     panel.update(null);
-    expect(root.querySelector('.card')).toBeNull();
+    expect(root.querySelector('.pcard')).toBeNull();
     expect(root.querySelector('[data-part="clock"]')).toBeNull();
   });
 });

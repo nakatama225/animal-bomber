@@ -8,7 +8,7 @@
   </head>
   <body>
     <div id="app">
-      <!-- 試合の前の画面（タイトル・動物を選ぶ・ルール・遊び方）と、通信対戦のロビー。中身はスクリプトが組み立てる -->
+      <!-- 試合の前の画面（タイトル・キャラ選び・ルール・設定とマニュアルと更新履歴）と、通信対戦のロビー。中身はスクリプトが組み立てる -->
       <section id="menu"></section>
 
       <!-- 試合の画面 -->
@@ -30,6 +30,9 @@
         </div>
       </section>
     </div>
+
+    <!-- 起動の幕。全面を覆うので #app の外に置く（原型と同じ）。中身はスクリプトが組み立て、出すときだけ hidden を外す -->
+    <div id="splash" hidden></div>
     <script type="module" src="/src/app/main.ts"></script>
   </body>
 </html>

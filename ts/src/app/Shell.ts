@@ -14,7 +14,7 @@ import {
   type KeyboardState,
 } from '../platform/Keyboard.js';
 import { BannerOverlay } from '../platform/ui/BannerOverlay.js';
-import { pointerButton } from '../platform/ui/dom.js';
+import { pointerButton, scrollToTop } from '../platform/ui/dom.js';
 import { MenuNavigator } from '../platform/ui/MenuNavigator.js';
 import { MenuView } from '../platform/ui/MenuView.js';
 import { SidePanel, type KeyHelpFor } from '../platform/ui/SidePanel.js';
@@ -65,6 +65,13 @@ export interface ShellTools {
   readonly keyboard: KeyboardState;
   readonly gamepads: () => readonly (PadSnapshot | null)[];
   readonly sounds: SoundBank;
+  /**
+   * 音を出せるようにする（ブラウザの音の解錠。何度呼んでもよい）。画面の操作の音を鳴らす前に呼ぶ。
+   *
+   * 起動の入口はキーとクリックのたびにも解錠するが、パッドだけで遊ぶと、それが一度も起きない
+   * （原型も、操作の音を鳴らすボタンの中で解錠する。L5706）。
+   */
+  readonly unlockAudio: () => void;
   readonly music: MusicControl;
   /** 起動したときの音の設定（前に選んだもの）。 */
   readonly sound: SoundSetting;
@@ -167,7 +174,14 @@ export class Shell {
       start: (setup) => this.startLocal(setup),
       soundChanged: (sound) => tools.setSound(sound),
       openLan: () => tools.openLan(),
+      uiSound: () => this.#uiSound(),
     });
+  }
+
+  /** 画面の操作の音（原型の `A.init(); A.resume(); SE.ui();`）。解錠してから鳴らす（解錠の前に鳴らしても鳴らない）。 */
+  #uiSound(): void {
+    this.#tools.unlockAudio();
+    this.#tools.sounds.play('ui');
   }
 
   /** 試合の前の画面を出す。 */
@@ -382,6 +396,11 @@ export class Shell {
       padOnBanner,
     };
     this.#showBoard(runner.world !== null);
+    // 試合を始めるたびにページの先頭へ戻す（原型の startGame → showScreen('play')。幕の「もういっかい」も同じ）。
+    // 窓より縦に長いルールの画面を下まで動かして「はじめる」を押すと、盤面の上と時計が窓の外に残るため。
+    // ⚠️ 盤面を出したかどうか（`#showBoard`）では決めない。「もういっかい」は試合の画面のまま次の試合になる。
+    // 通信対戦でここを通るのは、つないだとき（ロビーを出すとき）だけ。試合が始まって盤面へ移るときは、まだ戻さない。
+    scrollToTop(this.#elements.play);
   }
 
   #partsFor(runner: MatchRunner): MatchParts {

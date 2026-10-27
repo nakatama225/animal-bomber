@@ -61,6 +61,8 @@ function mount(
   shell: Shell;
   elements: ShellElements;
   played: SoundName[];
+  /** 音の解錠（`unlock`）と鳴らした音の名前を、起きた順に。 */
+  audio: string[];
   music: { started: number; stopped: number; speeds: number[] };
   relay: () => WebSocketLinkHandlers;
   sent: PeerMessage[];
@@ -87,6 +89,7 @@ function mount(
     lanStatus: make('lan-status'),
   };
   const played: SoundName[] = [];
+  const audio: string[] = [];
   const music = { started: 0, stopped: 0, speeds: [] as number[] };
   const sent: PeerMessage[] = [];
   const left = { count: 0 };
@@ -96,7 +99,13 @@ function mount(
     context: fakeCanvas({ keepLog: false }).context,
     keyboard: keyboard ?? { anyOf: pressed, buttonAnyOf: pressed, forgetTaps: () => undefined },
     gamepads: pads,
-    sounds: { play: (name) => played.push(name) },
+    sounds: {
+      play: (name) => {
+        played.push(name);
+        audio.push(name);
+      },
+    },
+    unlockAudio: () => audio.push('unlock'),
     music: {
       start: () => (music.started += 1),
       stop: () => (music.stopped += 1),
@@ -116,7 +125,7 @@ function mount(
     if (relay === null) throw new Error('つないでいない');
     return relay;
   };
-  return { shell: new Shell(elements, tools), elements, played, music, relay: connected, sent, left };
+  return { shell: new Shell(elements, tools), elements, played, audio, music, relay: connected, sent, left };
 }
 
 afterEach(() => document.body.replaceChildren());
@@ -136,7 +145,7 @@ describe('画面の切り替え', () => {
     shell.draw(0);
     expect(elements.menu.hidden).toBe(true);
     expect(elements.play.hidden).toBe(false);
-    expect(elements.side.querySelectorAll('.card')).toHaveLength(4);
+    expect(elements.side.querySelectorAll('.pcard')).toHaveLength(4);
 
     // 人間は操作しない（キーは何も押されていない）。CPU どうしで決まるまで進める。
     let ticks = 0;
@@ -188,7 +197,7 @@ describe('画面の切り替え', () => {
   });
 
   it('前に選んだ音の設定を、設定の画面に出す', () => {
-    // 開き直す前に「無音」を選んでいた。画面が「曲 + 効果音」のままだと、実際と食い違う。
+    // 開き直す前に「無音」を選んでいた。画面が「BGM + 効果音」のままだと、実際と食い違う。
     const { shell, elements } = mount('off');
     shell.showMenu();
     press(elements.menu, '[data-choice="manual"]');
@@ -233,8 +242,36 @@ describe('画面の切り替え', () => {
     shell.restart();
     shell.draw(0);
     // 同じ遊び方（2人だけ）で、時計が頭から始まっている。
-    expect(elements.side.querySelectorAll('.card')).toHaveLength(2);
+    expect(elements.side.querySelectorAll('.pcard')).toHaveLength(2);
     expect(elements.side.querySelector('.time')?.textContent).toBe('3:00');
+  });
+
+  it('試合を始めるたびに（はじめる・もういっかい）ページの先頭へ戻す（原型の startGame → showScreen）', () => {
+    // ルールの画面を下まで動かして「はじめる」を押したとき、盤面の上と時計を窓の外に残さない。
+    const toTop = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+    try {
+      const { shell, elements } = mount();
+      shell.showMenu();
+      press(elements.menu, '[data-choice="solo"]');
+      press(elements.menu, '[data-action="next"]');
+      press(elements.menu, '[data-field="wins"] [data-value="5"]');
+      const before = toTop.mock.calls.length;
+      press(elements.menu, '[data-action="start"]');
+      expect(toTop.mock.calls.length).toBe(before + 1);
+      expect(toTop).toHaveBeenLastCalledWith(0, 0);
+      // 試合を進めている間は戻さない。
+      for (let i = 0; i < 60; i += 1) shell.tick();
+      shell.draw(0);
+      expect(toTop.mock.calls.length).toBe(before + 1);
+      // 「もういっかい」は試合の画面のまま次の試合になる。それでも戻す。
+      shell.restart();
+      shell.draw(0);
+      expect(elements.play.hidden).toBe(false);
+      expect(toTop.mock.calls.length).toBe(before + 2);
+      expect(toTop).toHaveBeenLastCalledWith(0, 0);
+    } finally {
+      toTop.mockRestore();
+    }
   });
 
   it('試合を進めると、残り10秒から秒読みが鳴る', () => {
@@ -391,7 +428,7 @@ describe('キーボードでメニューを動かす', () => {
     shell.navigate('confirm');
     shell.draw(0);
     expect(elements.play.hidden).toBe(false);
-    const names = [...elements.side.querySelectorAll('.card .name')].map((name) => name.textContent);
+    const names = [...elements.side.querySelectorAll('.pcard .name')].map((name) => name.textContent);
     expect(names.slice(0, 2)).toEqual([`${second.name} 1P`, `${third.name} 2P`]);
   });
 
@@ -436,29 +473,59 @@ describe('キーボードでメニューを動かす', () => {
     expect(cursorOf(elements.menu)?.dataset['choice']).toBe('duo');
   });
 
-  it('遊び方の画面で↑↓を押しても、指す項目が替わらなければページを動かさない', () => {
-    // 遊び方の画面でカーソルに載るのは、上の音の設定の1行だけ。↑↓は同じ行へ回るだけなので、
-    // そのたびに見える所まで動かすと、下の説明を読んでいる途中でページが上へ引き戻される。
-    const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView');
+  it('カーソルを動かしても、ページは動かさない（原型と同じ。画面を替えたときに先頭へ戻すだけ）', () => {
+    // 原型は、指す項目が替わっても見える所まで動かさない。窓より縦に長い画面では、窓の外の項目は
+    // ホイールで動かしたときに見える。
+    const intoView = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => undefined);
+    const toTop = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
     try {
       const { shell, elements } = mount();
       shell.showMenu();
-      press(elements.menu, '[data-choice="manual"]');
+      shell.navigate('down');
+      shell.navigate('confirm');
+      expect(screenOf(elements)).toBe('pick');
+      const screens = toTop.mock.calls.length;
+      for (const command of ['right', 'right', 'down', 'left', 'down', 'up', 'up'] as const) shell.navigate(command);
       shell.draw(0);
-      expect(screenOf(elements)).toBe('manual');
-      // 最初の1押しは枠を出す。出した所へは動かす。
-      shell.navigate('down');
-      const shown = scrolled.mock.calls.length;
-      expect(shown).toBe(1);
-      shell.navigate('down');
-      shell.navigate('up');
-      expect(scrolled.mock.calls.length).toBe(shown);
-      // 行の中を移ったときは、見える所まで動かす。
-      shell.navigate('right');
-      expect(scrolled.mock.calls.length).toBe(shown + 1);
+      expect(cursorOf(elements.menu)).not.toBeNull();
+      expect(intoView).not.toHaveBeenCalled();
+      // 同じ画面の中で動かしただけなら、ページの先頭へも戻さない。
+      expect(toTop.mock.calls.length).toBe(screens);
+      // 画面を替えたら、ページの先頭へ戻す。
+      shell.navigate('back');
+      expect(screenOf(elements)).toBe('title');
+      expect(toTop.mock.calls.length).toBe(screens + 1);
+      expect(toTop).toHaveBeenLastCalledWith(0, 0);
     } finally {
-      scrolled.mockRestore();
+      intoView.mockRestore();
+      toTop.mockRestore();
     }
+  });
+
+  it('キーボードで決めても画面の操作の音を鳴らし、鳴らす前に音を出せるようにする。「はじめる」は鳴らさない', () => {
+    const { shell, elements, audio } = mount();
+    shell.showMenu();
+    shell.navigate('confirm');
+    expect(audio).toEqual([]);
+    shell.navigate('confirm');
+    expect(screenOf(elements)).toBe('pick');
+    expect(audio).toEqual(['unlock', 'ui']);
+    // B で戻ると鳴らす。タイトルの B は何もせず、鳴らさない。
+    shell.navigate('back');
+    expect(audio).toEqual(['unlock', 'ui', 'unlock', 'ui']);
+    shell.navigate('back');
+    expect(audio).toHaveLength(4);
+    // 「はじめる」は鳴らさない（原型 L6027）。
+    shell.navigate('confirm');
+    shell.navigate('up');
+    shell.navigate('confirm');
+    expect(screenOf(elements)).toBe('rules');
+    audio.length = 0;
+    shell.navigate('up');
+    expect(cursorOf(elements.menu)?.dataset['action']).toBe('start');
+    shell.navigate('confirm');
+    expect(elements.menu.hidden).toBe(true);
+    expect(audio.filter((name) => name === 'ui')).toEqual([]);
   });
 
   it('Escape で1つ前の画面へ戻り、タイトルでは何もしない。「← もどる」にはカーソルが乗らない', () => {
@@ -792,6 +859,17 @@ describe('ゲームパッドとロビーでメニューを動かす', () => {
     tap(shell, pad, A);
     expect(screenOf(elements)).toBe('pick');
     expect(elements.menu.querySelectorAll('[data-nav="pick-1"]').length).toBeGreaterThan(0);
+  });
+
+  it('パッドだけで決めても、画面の操作の音を鳴らす前に音を出せるようにする（キーもクリックも無いので、ここでしか解錠しない）', () => {
+    const pad = fakePad();
+    const { shell, elements, audio } = mount('both', () => [], pad.read);
+    shell.showMenu();
+    tap(shell, pad, DOWN);
+    expect(audio).toEqual([]);
+    tap(shell, pad, A);
+    expect(screenOf(elements)).toBe('pick');
+    expect(audio).toEqual(['unlock', 'ui']);
   });
 
   it('A を押したまま次の画面へ移っても、離すまで次の決定は起きない', () => {
@@ -1168,7 +1246,7 @@ describe('通知（配線）', () => {
       while (lane.human.size === 0 || lane.cpu.size === 0) {
         shell.tick();
         shell.draw(0);
-        for (const card of elements.side.querySelectorAll('.card.negibon')) {
+        for (const card of elements.side.querySelectorAll('.pcard.negibon')) {
           const name = card.querySelector('.name')?.firstChild?.textContent?.trim() ?? '';
           const cpu = [...card.querySelectorAll('.tag')].some((tag) => tag.textContent?.startsWith('CPU'));
           (cpu ? lane.cpu : lane.human).add(name);
