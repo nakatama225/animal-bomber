@@ -17,6 +17,39 @@ class Test折り返し:
     def test_閉じかっこと句点は前に_開きかっこは後ろに付ける(self) -> None:
         assert break_units("（例）。あ「い」") == ["（例）。", "あ", "「い」"]
 
+    def test_中の無いかっこでも_字の順を変えない(self) -> None:
+        """開きかっこを控えている間に来た閉じかっこは、控えにつなぐ。
+
+        前の単位に付けると、「あ（）い」が「あ）」「（い」になり、つなぐと字の順が
+        入れ替わる。
+        """
+        for text, units in [
+            ("あ（）い", ["あ", "（）", "い"]),
+            ("あ「」い", ["あ", "「」", "い"]),
+            ("あ「」。い", ["あ", "「」。", "い"]),
+        ]:
+            assert break_units(text) == units
+            assert "".join(units) == text
+
+    def test_開きかっこの直後の空白は_開きかっこと一緒に後ろに付ける(self) -> None:
+        """原型のブラウザは、開きかっこのあとを空白をはさんでも折り返さない。
+
+        Unicode の行分けの規則（UAX #14）の LB14。空白で切ると「（ 」が1つの単位に
+        なり、空白として落とされずに行の終わりに残る。
+        """
+        assert break_units("あ（ い") == ["あ", "（ い"]
+        assert break_units("あ（  い） う") == ["あ", "（  い）", " ", "う"]
+
+        def measure(line: Sequence[str]) -> float:
+            return len("".join(line)) * 10.0
+
+        # 「あい（ 」は幅 40 にちょうど収まるが、開きかっこを行の終わりに残さない。
+        units = break_units("あい（ え")
+        assert fill_lines(units, 40, measure, lambda u: u == " ") == [
+            ["あ", "い"],
+            ["（ え"],
+        ]
+
     def test_見え方の印は前の字に付ける(self) -> None:
         assert break_units("❤️❤️") == ["❤️", "❤️"]
 
