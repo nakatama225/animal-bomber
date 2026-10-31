@@ -30,6 +30,7 @@ def break_units(text: str) -> list[str]:
     英数字の続き（ASCII の空白でない字）は1つにまとめ、空白は1つずつ、ほかの字（日本語・
     絵文字）は1字ずつに切る。行の頭に置かない字（`NO_BREAK_BEFORE`）は前に付け、行の
     終わりに置かない字（`NO_BREAK_AFTER`）は後ろに付ける。描かない字は前の字に付ける。
+    描かない字が続いた開きかっこも、単位の先頭の字で見て後ろに付ける。
 
     後ろに付ける字を控えている間は、直後の空白も控えに足す（原型の文はブラウザが折り
     返し、開きかっこのあとは空白をはさんでも折り返さない。Unicode の行分けの規則 UAX #14
@@ -61,7 +62,7 @@ def break_units(text: str) -> list[str]:
         joins = char in INVISIBLE or (unit[0] in NO_BREAK_BEFORE and not after_space)
         if joins and units and not opening:
             units[-1] += unit
-        elif unit in NO_BREAK_AFTER or (opening and unit == " "):
+        elif char in NO_BREAK_AFTER or (opening and unit == " "):
             opening += unit
         else:
             units.append(opening + unit)
