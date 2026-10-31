@@ -51,6 +51,33 @@ class Test折り返し:
             ["（ え"],
         ]
 
+    def test_空白の直後の閉じかっこと句読点は_空白ごと前に付ける(self) -> None:
+        """閉じかっこ・句読点・感嘆符と疑問符の前は、空白をはさんでも折り返さない。
+
+        原型の文はブラウザが折り返し、Unicode の行分けの規則（UAX #14）の LB13 で
+        こう決まっている。字だけを空白に付けると、「 。」が行の頭に来る。空白の前に
+        単位が無ければ付けない。
+        """
+        assert break_units("あ 。い") == ["あ 。", "い"]
+        assert break_units("あ  」！") == ["あ  」！"]
+        assert break_units("OK ？") == ["OK ？"]
+        assert break_units(" 。") == [" ", "。"]
+
+        def measure(line: Sequence[str]) -> float:
+            return len("".join(line)) * 10.0
+
+        # 空白で折り返すと、「。」が次の行の頭に来る。
+        units = break_units("あい 。")
+        assert fill_lines(units, 30, measure, lambda u: u == " ") == [
+            ["あ"],
+            ["い 。"],
+        ]
+
+    def test_空白の直後のコロンや中黒は_前に付けない(self) -> None:
+        """空白のあとでは折り返してよい字（UAX #14 の LB18 が LB21 より先に当たる）。"""
+        assert break_units("あ ・い") == ["あ", " ", "・", "い"]
+        assert break_units("あ ：") == ["あ", " ", "："]
+
     def test_見え方の印は前の字に付ける(self) -> None:
         assert break_units("❤️❤️") == ["❤️", "❤️"]
 
