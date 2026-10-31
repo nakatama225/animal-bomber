@@ -161,6 +161,68 @@ class Test区切りのある文:
         image = rgb(_on_black(wide))
         assert np.all(image == np.array(KEY_FILL), axis=2).sum() > 20
 
+    def test_枠のあるキーの前後は_禁則の字が隣でも折る(self) -> None:
+        """原型のキーの案内の `.k` は inline-block（CSS Text Level 3 の 5.5 節）。
+
+        CSS は inline-block の前後を、禁則の字が隣にあっても折り返せる所にする（隣が
+        分類 GL・WJ・ZWJ の字のときを除く）。幅 1 で詰めると、単位ごとに1行になる。
+        """
+        painter = TextPainter()
+        spans = [
+            HelpSpan("る（", SpanKind.TEXT),
+            HelpSpan("Shift", SpanKind.KEY),
+            HelpSpan("）", SpanKind.TEXT),
+        ]
+        assert painter.rich_lines(spans, 1, KEYS) == [
+            [("る", SpanKind.TEXT)],
+            [("（", SpanKind.TEXT)],
+            [("Shift", SpanKind.KEY)],
+            [("）", SpanKind.TEXT)],
+        ]
+
+    def test_枠の無い区切りは_つないだ文で切り_境目にも禁則を当てる(self) -> None:
+        """区切りごとに切ると、区切りの境目で禁則が当たらない。
+
+        原型のマニュアルの `kbd` は inline で、ブラウザは区切りをまたいで禁則を当てる
+        （マニュアルの「使える（」「Shift」「）」）。空白のあとの句点（UAX #14 の LB13）
+        も、区切りをまたいで前に付ける。幅 1 で詰めると、単位ごとに1行になる。
+        """
+        painter = TextPainter()
+        plain = RichStyle(KEYS.text, KEYS.bold, KEYS.key, KEYS.code, 18)
+        spans = [
+            HelpSpan("る（", SpanKind.TEXT),
+            HelpSpan("Shift", SpanKind.KEY),
+            HelpSpan("）", SpanKind.TEXT),
+        ]
+        assert painter.rich_lines(spans, 1, plain) == [
+            [("る", SpanKind.TEXT)],
+            [("（", SpanKind.TEXT), ("Shift", SpanKind.KEY), ("）", SpanKind.TEXT)],
+        ]
+        spans = [HelpSpan("あ ", SpanKind.TEXT), HelpSpan("。い", SpanKind.BOLD)]
+        assert painter.rich_lines(spans, 1, plain) == [
+            [("あ ", SpanKind.TEXT), ("。", SpanKind.BOLD)],
+            [("い", SpanKind.BOLD)],
+        ]
+        # 空白をはさまないキーの続きは、英数字の続きなので折らない（ブラウザも同じ）。
+        spans = [HelpSpan(key, SpanKind.KEY) for key in ("W", "A", "S", "D")]
+        assert painter.rich_lines(spans, 1, plain) == [[("WASD", SpanKind.KEY)]]
+
+    def test_行の頭と終わりの空白は落とし_キーの区切りの空白は落とさない(self) -> None:
+        """同じ行の同じ種類の字はつないで返す。キーの区切りの空白は、文の空白と違い残す。"""
+        painter = TextPainter()
+        plain = RichStyle(KEYS.text, KEYS.bold, KEYS.key, KEYS.code, 18)
+        spans = [HelpSpan("あ ", SpanKind.TEXT), HelpSpan("い", SpanKind.BOLD)]
+        assert painter.rich_lines(spans, 1, plain) == [
+            [("あ", SpanKind.TEXT)],
+            [("い", SpanKind.BOLD)],
+        ]
+        spans = [HelpSpan("あい", SpanKind.TEXT), HelpSpan("う", SpanKind.BOLD)]
+        assert painter.rich_lines(spans, 400, plain) == [
+            [("あい", SpanKind.TEXT), ("う", SpanKind.BOLD)]
+        ]
+        spans = [HelpSpan(" ", SpanKind.KEY)]
+        assert painter.rich_lines(spans, 400, plain) == [[(" ", SpanKind.KEY)]]
+
     def test_キーの形が無ければ_キーも文として描く(self) -> None:
         painter = TextPainter()
         white = TextStyle(24, (255, 255, 255), True)

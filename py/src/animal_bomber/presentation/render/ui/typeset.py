@@ -114,7 +114,13 @@ class RichStyle:
 
 
 RichUnit: TypeAlias = tuple[str, SpanKind]
-"""折り返しの単位（文と区切りの種類）。"""
+"""区切りの文（文と区切りの種類）。折り返した1行は、この並び。"""
+
+RichBreak: TypeAlias = tuple[RichUnit, ...]
+"""折り返しの単位（区切りをまたぐことがあるので、区切りの文の並び）。
+
+枠を描くキーはキーの文1つ、ほかは1字ずつの（字, 種類）の並び。
+"""
 
 
 class TextPainter:
@@ -294,20 +300,34 @@ class TextPainter:
     def rich_lines(
         self, spans: Sequence[HelpSpan], width: int, rich: RichStyle
     ) -> list[list[RichUnit]]:
-        """区切りのある文を折り返した行（行ごとの、文と種類の並び）。"""
-        units: list[RichUnit] = []
+        """区切りのある文を折り返した行（行ごとの、文と種類の並び）。
+
+        枠を描くキーは1つの単位にし、前後で折ってよい。原型のキーの案内の `.k` は
+        inline-block で、CSS Text Level 3（5.5 節）は、その前後を、禁則の字が隣に
+        あっても折り返せる所にする（規格は、隣が分類 GL・WJ・ZWJ の字のときを除くが、
+        この版は除かずに折る。画面の文に、この並びは無い）。ほかの区切りが続く所は、
+        文をつないで `break_units` で切り、区切りの境目にも禁則を当てる。原型の
+        マニュアルの `kbd` は inline で、ブラウザは区切りをまたいで禁則を当てる
+        （「使える（」「Shift」「）」の開きかっこと閉じかっこは、キーと同じ行に置く）。
+        区切りごとに切ると、境目で禁則が当たらない。
+        """
+        units: list[RichBreak] = []
+        run: list[HelpSpan] = []
         for span in spans:
             if span.kind is SpanKind.KEY and rich.key_look is not None:
-                units.append((span.text, span.kind))
+                units.extend(_run_units(run))
+                run = []
+                units.append(((span.text, span.kind),))
             else:
-                units.extend((unit, span.kind) for unit in break_units(span.text))
+                run.append(span)
+        units.extend(_run_units(run))
         lines = fill_lines(
             units,
             width,
-            lambda line: self._line_width(_merged(line, rich), rich),
-            lambda unit: unit[0] == " " and unit[1] is not SpanKind.KEY,
+            lambda line: self._line_width(_flattened(line, rich), rich),
+            _is_space,
         )
-        return [_merged(line, rich) for line in lines]
+        return [_flattened(line, rich) for line in lines]
 
     def _unit_width(self, unit: RichUnit, rich: RichStyle) -> int:
         text, kind = unit
@@ -472,6 +492,31 @@ class TextPainter:
             image = _straight(scaled)
         self._emoji[key] = image
         return image
+
+
+def _run_units(spans: Sequence[HelpSpan]) -> list[RichBreak]:
+    """続いた区切りの文をつないで切り、単位を1字ずつの（字, 種類）の並びにする。
+
+    同じ種類が続く字は、行にしてから `_flattened` でつなぐ。
+    """
+    kinds = [span.kind for span in spans for _ in span.text]
+    units: list[RichBreak] = []
+    start = 0
+    for unit in break_units("".join(span.text for span in spans)):
+        end = start + len(unit)
+        units.append(tuple(zip(unit, kinds[start:end], strict=True)))
+        start = end
+    return units
+
+
+def _flattened(line: Sequence[RichBreak], rich: RichStyle) -> list[RichUnit]:
+    """折り返しの単位の並びを、同じ種類が続く所をつないだ区切りの文の並びにする。"""
+    return _merged([piece for unit in line for piece in unit], rich)
+
+
+def _is_space(unit: RichBreak) -> bool:
+    """行の頭と終わりで落とす空白か（キーの区切りの空白は落とさない）。"""
+    return len(unit) == 1 and unit[0][0] == " " and unit[0][1] is not SpanKind.KEY
 
 
 def _merged(line: Sequence[RichUnit], rich: RichStyle) -> list[RichUnit]:
