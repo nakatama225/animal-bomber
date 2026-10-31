@@ -42,7 +42,9 @@ def break_units(text: str) -> list[str]:
     英数字の続き（ASCII の空白でない字）は1つにまとめ、空白は1つずつ、ほかの字（日本語・
     絵文字）は1字ずつに切る。行の頭に置かない字（`NO_BREAK_BEFORE`）は前に付け、行の
     終わりに置かない字（`NO_BREAK_AFTER`）は後ろに付ける。描かない字は前の字に付ける。
-    描かない字が続いた開きかっこも、単位の先頭の字で見て後ろに付ける。
+    描かない字が続いた開きかっこも、単位の先頭の字で見て後ろに付ける。空白の直後の描かない
+    字は空白に付けず、描かない字から新しい単位を始める（UAX #14 の LB9 は空白に印を
+    付けない。描かない字の後ろで折るかは、UAX #14 に合わせていない）。
 
     前の単位が空白のときは、`NO_BREAK_BEFORE_EVEN_AFTER_SPACE` の字だけを、空白ごと
     空白の前の単位に付ける（「あ 。い」は「あ 。」「い」。UAX #14 の LB13）。空白の前に
@@ -52,7 +54,7 @@ def break_units(text: str) -> list[str]:
     返し、開きかっこのあとは空白をはさんでも折り返さない。Unicode の行分けの規則 UAX #14
     の LB14）。控えている間に来た行の頭に置かない字は、前の単位でなく控えにつなぐ。
     前に付けると、閉じかっこが開きかっこより前に置かれ、字の順が入れ替わる（「あ（）い」
-    が「あ）」「（い」になる）。
+    が「あ）」「（い」になる）。文の終わりで控えに残った空白は、空白の単位に戻す。
     """
     units: list[str] = []
     opening = ""
@@ -82,7 +84,11 @@ def break_units(text: str) -> list[str]:
             units.append(opening + unit)
             opening = ""
     if opening:
-        units.append(opening)
+        # 空白を控えに残すと「（ 」が1つの単位になり、空白として除かれず、最後の行が
+        # 空白で終わる。控えの先頭は開きかっこなので、空白を除いても空にならない。
+        head = opening.rstrip(" ")
+        units.append(head)
+        units.extend([" "] * (len(opening) - len(head)))
     return units
 
 
@@ -91,11 +97,14 @@ def _attach_to_previous(units: list[str], unit: str) -> bool:
 
     行の頭に置かない字は、前の単位が空白なら、`NO_BREAK_BEFORE_EVEN_AFTER_SPACE` の字
     だけを、続く空白ごと、空白の前の単位に付ける。字だけを空白に付けると、「 。」が
-    行の頭に来る。
+    行の頭に来る。描かない字は、前の単位が空白なら付けない。付けると空白と描かない字が
+    1つの単位になり、空白として除かれず、行の頭に空白が残る。
     """
     if not units:
         return False
     if unit[0] in INVISIBLE:
+        if units[-1] == " ":
+            return False
         units[-1] += unit
         return True
     if unit[0] not in NO_BREAK_BEFORE:

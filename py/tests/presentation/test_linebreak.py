@@ -89,6 +89,41 @@ class Test折り返し:
         assert break_units("あ（\ufe0fい") == ["あ", "（\ufe0fい"]
         assert break_units("あ「\u200dい」") == ["あ", "「\u200dい」"]
 
+    def test_空白の直後の印は_空白に付けず_印から新しい単位を始める(self) -> None:
+        """空白に付けると、空白と印が1つの単位になり、空白として落とされない。
+
+        UAX #14 の LB9 は空白に印を付けず、LB10 で残った印をふつうの字として扱う。
+        空白と印の単位が行の頭に来ると、行の頭に空白が残る。
+        """
+        assert break_units("あ \ufe0fい") == ["あ", " ", "\ufe0f", "い"]
+        assert break_units(" \u200d。") == [" ", "\u200d。"]
+
+        def measure(line: Sequence[str]) -> float:
+            return len("".join(line)) * 10.0
+
+        # 「あい 」は幅 30 に収まり、印から次の行になる。空白は行の終わりで落とす。
+        units = break_units("あい \ufe0fう")
+        assert fill_lines(units, 30, measure, lambda u: u == " ") == [
+            ["あ", "い"],
+            ["\ufe0f", "う"],
+        ]
+
+    def test_文の終わりの控えの空白は_空白の単位に戻す(self) -> None:
+        """控えに残すと「（ 」が1つの単位になり、空白として落とされない。
+
+        最後の行が空白で終わる。
+        """
+        assert break_units("あ（ ") == ["あ", "（", " "]
+        assert break_units("あ（ 「  ") == ["あ", "（ 「", " ", " "]
+
+        def measure(line: Sequence[str]) -> float:
+            return len("".join(line)) * 10.0
+
+        units = break_units("あい（ ")
+        assert fill_lines(units, 30, measure, lambda u: u == " ") == [
+            ["あ", "い", "（"]
+        ]
+
     def test_行の幅は_行のまま測って詰める(self) -> None:
         """単位ごとの幅を足すと広く出る測り方でも、行の全体の幅で決める。
 
