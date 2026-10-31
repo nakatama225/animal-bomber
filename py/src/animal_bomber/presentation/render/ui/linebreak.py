@@ -28,7 +28,8 @@ NO_BREAK_BEFORE: Final = NO_BREAK_BEFORE_EVEN_AFTER_SPACE | frozenset("：；ー
 """行の頭に置かない字（直前の字と離さない）。
 
 上の表にない字（コロン・長音・三点リーダー・中黒・％）は、空白のあとでは前に付けない
-（UAX #14 でも空白のあとは折り返せる。LB18）。
+（UAX #14 でも空白のあとは折り返せる。LB18）。閉じかっこ・句読点と空白のあとの
+コロン・セミコロン・中黒・長音の前では折り返さない規則（LB16）は扱わない。
 """
 
 NO_BREAK_AFTER: Final = frozenset("（「『【〔〈《")
